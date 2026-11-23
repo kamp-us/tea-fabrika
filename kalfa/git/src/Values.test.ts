@@ -8,6 +8,11 @@ import * as CommitId from "./CommitId.ts";
 import * as Diff from "./Diff.ts";
 import checkRefFormat from "./fixtures/check-ref-format-2.40.1.json" with { type: "json" };
 import {
+  COMMITTER_ACCEPT_CLASSES,
+  COMMITTER_REFUSE_CLASSES,
+  committerAccepted,
+  committerFrom,
+  committerRefused,
   DOT_GIT_FORMS,
   MODE_ACCEPT,
   MODE_REFUSALS,
@@ -31,12 +36,13 @@ import {
   refRefused,
   SIGNATURE_CLASSES,
   signatureRefusals,
+  settingsArb,
   signatureVariants,
   toPlain,
   wordArb,
 } from "./History.test-support.ts";
 import * as Ref from "./Ref.ts";
-import { expectFailure } from "./Repository.test-support.ts";
+import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Settings from "./Settings.ts";
 import * as Tree from "./Tree.ts";
 
@@ -337,31 +343,101 @@ it.prop(
       time: limits.time,
     };
 
-    expect(Result.isSuccess(decoded({ limits: good })), `${limits.time} is accepted`).toBe(true);
+    expect(Result.isSuccess(decoded({ limits: good, committer: COMMITTER })), `${limits.time} is accepted`).toBe(true);
 
     for (const key of KEYS) {
       const { [key]: _gone, ...without } = good;
-      expect(Result.isFailure(decoded({ limits: without })), `${key} missing is refused`).toBe(true);
+      expect(Result.isFailure(decoded({ limits: without, committer: COMMITTER })), `${key} missing is refused`).toBe(
+        true,
+      );
 
       if (key !== "time") {
         for (const bad of [0, -limits.commits, limits.commits + 0.5]) {
-          expect(Result.isFailure(decoded({ limits: { ...good, [key]: bad } })), `${key} of ${bad} is refused`).toBe(
-            true,
-          );
+          expect(
+            Result.isFailure(decoded({ limits: { ...good, [key]: bad }, committer: COMMITTER })),
+            `${key} of ${bad} is refused`,
+          ).toBe(true);
         }
       }
     }
 
     for (const [label, bad] of NOT_A_TIME) {
-      expect(Result.isFailure(decoded({ limits: { ...good, time: bad } })), `${label} is refused as a time`).toBe(true);
+      expect(
+        Result.isFailure(decoded({ limits: { ...good, time: bad }, committer: COMMITTER })),
+        `${label} is refused as a time`,
+      ).toBe(true);
     }
 
     expect(
-      Result.isFailure(decoded({ limits: { ...good, time: `-${limits.time}` } })),
+      Result.isFailure(decoded({ limits: { ...good, time: `-${limits.time}` }, committer: COMMITTER })),
       "the negative of a good time",
     ).toBe(true);
-    expect(Result.isFailure(decoded({})), "{} has no default").toBe(true);
-    expect(Result.isFailure(decoded({ limits: {} })), "{ limits: {} } has no default").toBe(true);
+    expect(Result.isFailure(decoded({ committer: COMMITTER })), "no limits has no default").toBe(true);
+    expect(Result.isFailure(decoded({ limits: {}, committer: COMMITTER })), "{ limits: {} } has no default").toBe(true);
+  },
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// Plant: drop NUL from the name's rule in `Commit.ts`, so a NUL name is accepted by the setting and by a signature;
+// give `committer` a default, so `{ limits }` decodes.
+it.prop(
+  "G8 the committer setting: Settings requires a committer, its name and email take what a Signature's take and refuse < > a line break and NUL",
+  { settings: settingsArb, base: flatSignatureArb },
+  ({ settings, base }) => {
+    const accepted = committerAccepted(base);
+    const refused = committerRefused(committerFrom(base));
+    expect(
+      accepted.map(([label]) => label),
+      "the generator reaches every accepted class",
+    ).toEqual(COMMITTER_ACCEPT_CLASSES);
+    expect(
+      refused.map(([label]) => label),
+      "the generator reaches every refused class",
+    ).toEqual(COMMITTER_REFUSE_CLASSES);
+
+    const read = decoded(settings);
+    expect(Result.isSuccess(read), "drawn settings with a committer are accepted").toBe(true);
+
+    if (Result.isSuccess(read)) {
+      expect(Schema.encodeSync(Settings.Settings)(read.success).committer, "the committer is plain data").toEqual(
+        settings.committer,
+      );
+    }
+
+    const signed = (person: { readonly name: string; readonly email: string }) =>
+      Schema.decodeUnknownResult(Commit.Signature)({ ...person, at: { seconds: 1, offset: "+0000" } });
+
+    for (const [label, person] of accepted) {
+      const result = decoded({ limits: settings.limits, committer: person });
+      expect(Result.isSuccess(result), `${label} is accepted as a committer`).toBe(true);
+      expect(Result.isSuccess(signed(person)), `${label} is accepted in a signature`).toBe(true);
+
+      if (Result.isSuccess(result)) {
+        expect(Schema.encodeSync(Settings.Settings)(result.success).committer, `${label} comes back whole`).toEqual(
+          person,
+        );
+      }
+    }
+
+    for (const [label, person] of refused) {
+      expect(
+        Result.isFailure(decoded({ limits: settings.limits, committer: person })),
+        `${label} is refused as a committer`,
+      ).toBe(true);
+      expect(Result.isFailure(signed(person)), `${label} is refused in a signature`).toBe(true);
+    }
+
+    const { name, email } = settings.committer;
+
+    for (const [label, bad] of [
+      ["no committer", { limits: settings.limits }],
+      ["a committer of text", { limits: settings.limits, committer: name }],
+      ["a committer with no name", { limits: settings.limits, committer: { email } }],
+      ["a committer with no email", { limits: settings.limits, committer: { name } }],
+      ["a committer with a name that is no text", { limits: settings.limits, committer: { name: 5, email } }],
+    ] as const) {
+      expect(Result.isFailure(decoded(bad)), `${label} is refused`).toBe(true);
+    }
   },
   { arbitrary: { runs: 100, seed: 119120 } },
 );

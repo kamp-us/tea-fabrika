@@ -1,10 +1,12 @@
 # @kalfa/git
 
-Read commits, refs and changes from a git repository that has no working copy. One service, `Repository`, with six read
-calls, two adapters that answer them, and the laws both adapters pass.
+Read commits, refs and changes from a git repository that has no working copy, write a commit and move a ref. One
+service, `Repository`, with six read calls and two write calls, two adapters that answer them, and the laws both
+adapters pass.
 
-It never reads HEAD, never writes and never changes the repository it reads. It imports no other package of its repo,
-no Node module and no GitHub entry point, so anything can import it.
+It never reads HEAD and never touches a working copy. Only `writeCommit` and `moveRef` change the repository, and
+neither sends anything to a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
+so anything can import it.
 
 ## The six calls
 
@@ -41,20 +43,44 @@ A call never answers a guess. A shallow repository fails `walk`, `mergeBases` an
 `HistoryTooShort`. An answer past a limit fails with `TooMany`, `TooLarge` or `DiffTooLarge`, never a cut list. A ref that is
 symbolic, or points at a tag, a tree or a blob, fails `readRefs` with `RefNotCommit`.
 
+## Write a commit and move a ref
+
+```ts
+const program = Effect.gen(function* () {
+  const repo = yield* Repository.Repository;
+  const commit = yield* repo.writeCommit({ tree, parents: [parent], author, message: "Add a file\n" }); // Commit
+  const none = Option.none<CommitId.CommitId>(); // the ref must not exist yet
+  yield* repo.moveRef({ ref: candidate, from: none, to: commit.id }); // void
+  return commit;
+});
+```
+
+- `writeCommit({ tree, parents, author, message })` writes one commit and answers it. Its committer is the setting's
+  name and email, at the clock's whole second and offset `+0000`, so a caller never gives one. It moves no ref. It fails
+  `NoSuchTree` when `tree` is no tree of the repository, `NoSuchCommit` naming the first parent that is no commit,
+  `NulInMessage` when the message holds a NUL byte (git refuses to write it) and `TooLargeToWrite` when the object
+  would pass `limits.bytes`, so every commit written can be read back.
+- `moveRef({ ref, from, to })` points `ref` at the commit `to`, making the ref or moving it, only if the ref is at
+  `from` now. `Option.none()` means the ref must not exist. It is a compare and swap: a ref anywhere else fails
+  `RefMoved`, and a ref that git cannot hold beside another ref (`refs/heads/a/b` beside `refs/heads/a`) fails
+  `RefInTheWay` naming the other ref. A failed call leaves every ref as it was. A call that ends in `TimedOut` may have
+  moved the ref, so read it again. In the git adapter, a symbolic ref whose target is at `from` becomes a plain ref, and its target stays where it was.
+
 ## Two adapters
 
 - `@kalfa/git/memory` keeps a store as a plain value of commits, trees, blobs, refs and shallow commits. A commit's id
   and a tree's id are computed as git computes them, so the same commit with the same files has the same id here and
   in a real repository.
 - `@kalfa/git/process` runs the git binary (2.38 or newer) on a bare repository, through Effect's
-  `ChildProcessSpawner`. The app provides the Node spawner at the top. Every command runs with `--git-dir`, with no
+  `ChildProcessSpawner`. It writes a commit with `hash-object -t commit -w --stdin`, from the same bytes the memory
+  adapter hashes, so one commit has one id in both, and moves a ref with `update-ref --no-deref`. The app provides the Node spawner at the top. Every command runs with `--git-dir`, with no
   replacement objects, no hooks and no config of the machine, and with only `PATH` and a pinned set of variables.
 
 ```ts
 ProcessRepository.layer({ path: "repo.git", settings });
 // Layer<Repository, GitTooOld | NoRepository | GitUnavailable | TimedOut, ChildProcessSpawner>
 MemoryRepository.layer(store, settings);
-// Layer<Repository | MemoryStore>
+// Layer<Repository | MemoryStore, never, Digest>
 ```
 
 ## Commits hold trees
@@ -115,12 +141,18 @@ bytes = 1000000
 files = 1000
 diff = 10000000
 time = "10 seconds"
+
+[committer]
+name = "Delivery Bot"
+email = "bot@example.test"
 ```
 
 `commits` is the most commits a walk or a merge-base answer holds. `refs` is the most refs one `readRefs` answer
-holds. `bytes` is the most bytes one commit object holds, and the most stderr an error keeps. `files` is the most
-files one diff names, and `diff` is the most bytes of file content one diff compares. `time` is the longest
-one call may take. A setting's value is plain data, so the time is duration text, which the package decodes. When a
+holds. `bytes` is the most bytes one commit object holds, to read or to write, and the most stderr an error keeps.
+`files` is the most files one diff names, and `diff` is the most bytes of file content one diff compares. `time` is the
+longest one call may take. `committer` is the name and email every commit the package writes names as its
+committer. A name takes what a signature's name takes (no `<`, `>`, line break or NUL) and an email what its email
+takes. A setting's value is plain data, so the time is duration text, which the package decodes. When a
 call runs out of time, git is asked to stop, and a git that ignores that is killed a fixed five seconds later, so the
 call always ends.
 
@@ -135,6 +167,7 @@ optional peers, needed only by `/test`.
 
 ## What it never does
 
-It has no working copy and no HEAD. It imports no Node module and no package of its repo. It puts no message, name,
-email, path, line or file content in a span. The range's patch id, the diff itself, writing a commit, moving a ref,
-reading a file, fetch and push come in later tickets of this package.
+It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and sends nothing
+to a remote. It imports no Node module and no package of its repo. It puts no message, name, email, path, line or file
+content in a span. The range's patch id, the diff itself, merging, reading a file, fetch and push come in later tickets
+of this package.

@@ -370,3 +370,37 @@ it.effect(
       );
     }).pipe(Effect.provide(NodeServices.layer)),
 );
+
+// Plant (I6): drop `--no-deref` from `update-ref`, so git follows the symbolic ref and moves its target.
+it.effect(
+  "I6 scenario: moveRef of a symbolic ref whose target is at `from` makes it a plain ref at `to` and leaves the target where it was",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bareRepository;
+
+      const [first, second] = yield* fastImport(
+        dir,
+        bytes(
+          "commit refs/heads/main\nmark :1\n",
+          `author ${ADA}\ncommitter ${ADA}\n`,
+          "data 3\nhi\n\n",
+          "commit refs/heads/other\nmark :2\n",
+          `author ${ADA}\ncommitter ${ADA}\n`,
+          "data 3\nyo\n\n",
+        ),
+      );
+
+      yield* git(dir, ["symbolic-ref", "refs/heads/alias", "refs/heads/main"]);
+      const repo = yield* openRepository(dir, settings);
+      const [x, y] = [commitIdFrom(first ?? ""), commitIdFrom(second ?? "")];
+
+      yield* repo.moveRef({ ref: refNameFrom("refs/heads/alias"), from: Option.some(x), to: y });
+
+      const listed = yield* git(dir, ["for-each-ref", "--format=%(refname)|%(objectname)|%(symref)"]);
+
+      expect(
+        listed.trim().split("\n").toSorted(),
+        "the alias is a plain ref at `to`, the target is where it was",
+      ).toEqual([`refs/heads/alias|${y}|`, `refs/heads/main|${x}|`, `refs/heads/other|${y}|`]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+);

@@ -4,10 +4,26 @@
 // History.test-support.ts. A subject that passes these laws answers as every other one does.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Result, Schema, type Scope, Tracer } from "effect";
+import { TestClock } from "effect/testing";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
 import {
+  MESSAGE_CLASSES,
+  SIGNATURE_CLASSES,
+  asWritten,
   basesModel,
+  committerAccepted,
+  committerFrom,
+  edgeMessages,
+  messageVariants,
+  MOVE,
+  moveCarrier,
+  NUL_CLASSES,
+  nulMessages,
+  signatureVariants,
+  writeSpecs,
+  WRITE_SHAPE_CLASSES,
+  writtenSize,
   changedFiles,
   comparedBytes,
   EDIT_CLASSES,
@@ -42,15 +58,17 @@ import {
   walkModel,
   CRISS,
   type EditCarrier,
+  type Committer,
+  type FlatSignature,
   type History,
   type Shape,
   type Texture,
 } from "./History.test-support.ts";
 import * as Ref from "./Ref.ts";
-import { expectFailure } from "./Repository.test-support.ts";
+import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
-import type * as Tree from "./Tree.ts";
+import * as Tree from "./Tree.ts";
 
 /** A seeded store: the service to ask, the id each history commit got, and what the laws may look at. */
 export interface Seeded {
@@ -76,7 +94,7 @@ export interface SuiteOptions {
   readonly timeout: number;
 }
 
-/** Settings with generous limits, and the ones a law wants to push set. */
+/** Settings with generous limits, the ones a law wants to push set, and the committer every written commit names. */
 export const settings = (
   limits: {
     readonly commits?: number;
@@ -85,6 +103,7 @@ export const settings = (
     readonly files?: number;
     readonly diff?: number;
   } = {},
+  committer: Committer = COMMITTER,
 ): Settings.Settings =>
   Schema.decodeUnknownSync(Settings.Settings)({
     limits: {
@@ -96,6 +115,7 @@ export const settings = (
       time: "10 seconds",
       ...limits,
     },
+    committer,
   });
 
 const commitIdFrom = (text: string): CommitId.CommitId => Schema.decodeUnknownSync(CommitId.CommitId)(text);
@@ -203,6 +223,34 @@ const everyShape = (texture: Texture): ReadonlyArray<Shape> => {
 
 const DEFAULT = settings();
 
+/** The refusals S12 reaches in every run, one for each check a write passes before the store is touched. */
+const REFUSAL_CLASSES = [
+  ...NUL_CLASSES,
+  "a tree the store lacks",
+  "a commit's id given as the tree",
+  "a parent the store lacks",
+  "a tree's id given as a parent",
+  "a parent the store lacks, second of two",
+  "a parent the store lacks, first of two",
+];
+
+/** What S13 reaches in every run: the moves that succeed, then the moves refused. */
+const MOVE_CLASSES = [
+  "making a candidate ref",
+  "making a remote ref",
+  "moving a branch forward",
+  "moving a branch back to an older commit",
+  "moving a branch to the commit it is at",
+  "from none while the ref exists",
+  "from a commit while the ref is at another",
+  "from a commit while the ref is gone",
+  "making a ref inside a ref's name",
+  "making a ref above two refs, which names the first by bytes",
+  "to a commit the store lacks",
+  "to a tree's id",
+  "two moves from one commit at once",
+];
+
 // ---------------------------------------------------------------------------------------------------------
 // The checks a few laws share
 // ---------------------------------------------------------------------------------------------------------
@@ -280,6 +328,169 @@ const everyEditClass = (carrier: EditCarrier): EditCarrier => {
   expect(reachedEditClasses(carrier), "the generator reaches every edit class").toEqual(EDIT_CLASSES);
 
   return carrier;
+};
+
+// ---------------------------------------------------------------------------------------------------------
+// The checks the write laws share
+// ---------------------------------------------------------------------------------------------------------
+
+const treeIdFrom = (text: string): Tree.TreeId => Schema.decodeUnknownSync(Tree.TreeId)(text);
+
+const toSignature = (flat: FlatSignature): Commit.Signature =>
+  new Commit.Signature({ name: flat.name, email: flat.email, at: { seconds: flat.seconds, offset: flat.offset } });
+
+const flatAt = (texture: Texture, k: number): FlatSignature => {
+  const flat = texture.signatures[k % texture.signatures.length];
+
+  if (flat === undefined) {
+    throw new Error("the texture holds no signature");
+  }
+
+  return flat;
+};
+
+const numAt = (texture: Texture, k: number): number => texture.nums[k % texture.nums.length] ?? 0;
+
+/** The clock at a whole second and a drawn part of the next, so a committer's second is the one below, never rounded up. */
+const clockAt = (seconds: number, texture: Texture, k: number): Effect.Effect<void> =>
+  TestClock.setTime(seconds * 1000 + (numAt(texture, k) % 1000));
+
+/** The failure of a call that must fail: an answer is a defect with the law's words. */
+const failed = <A, E>(effect: Effect.Effect<A, E>, place: string): Effect.Effect<E, never> =>
+  Effect.flatMap(Effect.result(effect), (result) =>
+    Result.isFailure(result)
+      ? Effect.succeed(result.failure)
+      : Effect.die(new Error(`${place}: the call answered, and it must fail`)),
+  );
+
+interface Fields {
+  readonly tree: Tree.TreeId;
+  readonly parents: ReadonlyArray<CommitId.CommitId>;
+  readonly author: FlatSignature;
+  readonly message: string;
+}
+
+const writeCall = (repo: Repository.Repository["Service"], fields: Fields) =>
+  repo.writeCommit({
+    tree: fields.tree,
+    parents: fields.parents,
+    author: toSignature(fields.author),
+    message: fields.message,
+  });
+
+/** What a commit written at `seconds` must read back as, for the settings' committer: its fields, and the committer at +0000. */
+const expectedWrite = (
+  id: CommitId.CommitId,
+  fields: Fields,
+  committer: Committer,
+  seconds: number,
+): typeof Commit.Commit.Encoded => ({
+  id,
+  tree: fields.tree,
+  parents: fields.parents,
+  author: toPlain(fields.author),
+  committer: { name: committer.name, email: committer.email, at: { seconds, offset: "+0000" } },
+  message: fields.message,
+});
+
+/** Writes a commit and reads it back: the answer and the read both hold the fields and the committer of the settings. */
+const writeAndRead = (
+  repo: Repository.Repository["Service"],
+  fields: Fields,
+  committer: Committer,
+  seconds: number,
+  place: string,
+) =>
+  Effect.gen(function* () {
+    const commit = yield* writeCall(repo, fields);
+    const expected = expectedWrite(commit.id, fields, committer, seconds);
+    expect(encodeCommit(commit), `${place}: what was written`).toEqual(expected);
+    expect(encodeCommit(yield* repo.readCommit(commit.id)), `${place}: read back`).toEqual(expected);
+
+    return commit;
+  });
+
+/** A write that fails with `kind` holding `held`, and leaves the store as it was. */
+const refusedWrite = (
+  seeded: Seeded,
+  fields: Fields,
+  kind: abstract new (...args: never[]) => object,
+  held: object,
+  place: string,
+) =>
+  Effect.gen(function* () {
+    const before = yield* seeded.fingerprint;
+    expectFailure(yield* failed(writeCall(seeded.repository, fields), place), kind, held, place);
+    expect(yield* seeded.fingerprint, `${place}: nothing was written`).toEqual(before);
+  });
+
+/** Every ref the model holds, asked for in every way a caller asks: each ref, each folder, and the places a wrong move would leave one. */
+const readModelBack = (
+  seeded: Seeded,
+  history: History,
+  model: ReadonlyMap<string, number>,
+  extra: ReadonlyArray<string>,
+  place: string,
+): Effect.Effect<void, unknown> => {
+  const now: History = { ...history, refs: [...model].map(([name, commit]) => ({ name, commit })) };
+
+  return Effect.forEach(
+    [...new Set([...refQueries(now), ...extra])],
+    (under) =>
+      Effect.map(seeded.repository.readRefs(refNameFrom(under)), (refs) => {
+        expect(plainRefs(refs), `${place}: refs under ${under}`).toEqual(expectedRefs(now, seeded.ids, under));
+      }),
+    { concurrency: 1 },
+  );
+};
+
+const traced = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<{ answer: A; spans: Array<Tracer.NativeSpan> }, E> =>
+  Effect.gen(function* () {
+    const spans: Array<Tracer.NativeSpan> = [];
+
+    const tracer = Tracer.make({
+      span: (options) => {
+        const span = new Tracer.NativeSpan(options);
+        spans.push(span);
+
+        return span;
+      },
+    });
+
+    const answer = yield* effect.pipe(Effect.withTracer(tracer));
+
+    return { answer, spans };
+  });
+
+/** One span named `git.<call>`, ended, with the attributes, none of them a bare key and none holding a secret. */
+const expectSpan = (
+  place: string,
+  spans: ReadonlyArray<Tracer.NativeSpan>,
+  call: string,
+  expected: Record<string, unknown>,
+  secrets: ReadonlyArray<string>,
+): Record<string, unknown> => {
+  const gits = spans.filter((span) => span.name.startsWith("git."));
+  expect(
+    gits.map((span) => span.name),
+    `${place}: one span`,
+  ).toEqual([`git.${call}`]);
+  const span = gits[0];
+  expect(span?.status._tag, `${place}: the span ended`).toBe("Ended");
+  const attributes = Object.fromEntries(span?.attributes ?? []);
+  expect(attributes, `${place}: the attributes`).toMatchObject(expected);
+
+  for (const key of Object.keys(attributes)) {
+    expect(["id", "ref", "count"], `${place}: the key ${key} is not bare`).not.toContain(key);
+  }
+
+  const text = JSON.stringify(Object.values(attributes));
+
+  for (const secret of secrets) {
+    expect(text.includes(secret), `${place}: no attribute holds ${secret}`).toBe(false);
+  }
+
+  return attributes;
 };
 
 // ---------------------------------------------------------------------------------------------------------
@@ -739,9 +950,11 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
       run,
     );
 
-    // Plant: name a span `Repository.walk`; annotate the author's name; put the walk's ids under a bare `include`.
+    // Plant: name a span `Repository.walk`; annotate the author's name; put the walk's ids under a bare `include`; name
+    // the span of `writeCommit` `Repository.writeCommit`; annotate the written message or the settings' committer;
+    // leave `kalfa.git.from` out of `moveRef`, or put it in when `from` is none.
     it.effect.prop(
-      "S9 spans: each call ends one span named git.<call> with the attributes the plan gives, and leaks nothing",
+      "S9 spans: each call, the write calls too, ends one span named git.<call> with the attributes the plan gives, and leaks nothing",
       { texture: textureArb },
       ({ texture }) =>
         Effect.gen(function* () {
@@ -749,7 +962,10 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             .filter((shape) => shape.history.nodes.length > 0)
             .map((shape) => ({ label: shape.label, history: withCanary(shape.history) }));
 
-          yield* seedEach(subject, seen, DEFAULT, (seeded, shape) =>
+          // The committer of the settings is a canary too, so a span that names the committer is seen.
+          const config = settings({}, { name: `${CANARY}-bot`, email: `${CANARY}-bot@example.test` });
+
+          yield* seedEach(subject, seen, config, (seeded, shape) =>
             Effect.gen(function* () {
               const ids = seeded.ids;
               const a = idAt(ids, 0);
@@ -813,54 +1029,73 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 },
               ];
 
+              const secrets = [CANARY, ...seeded.hidden];
+
               for (const { call, note, run: effect, expected } of calls) {
-                const spans: Array<Tracer.NativeSpan> = [];
-
-                const tracer = Tracer.make({
-                  span: (options) => {
-                    const span = new Tracer.NativeSpan(options);
-                    spans.push(span);
-
-                    return span;
-                  },
-                });
-
-                const extra = yield* effect.pipe(Effect.withTracer(tracer));
+                const { answer: extra, spans } = yield* traced(effect);
                 const place = `${shape.label}, ${call}${note === undefined ? "" : ` (${note})`}`;
-                const gits = spans.filter((span) => span.name.startsWith("git."));
-                expect(
-                  gits.map((span) => span.name),
-                  `${place}: one span`,
-                ).toEqual([`git.${call}`]);
-                const span = gits[0];
-                expect(span?.status._tag, `${place}: the span ended`).toBe("Ended");
-                const attributes = Object.fromEntries(span?.attributes ?? []);
-                expect(attributes, `${place}: the attributes`).toMatchObject({ ...expected, ...extra.present });
+                const attributes = expectSpan(place, spans, call, { ...expected, ...extra.present }, secrets);
 
                 for (const key of extra.absent) {
                   expect(Object.keys(attributes), `${place}: no ${key} attribute`).not.toContain(key);
                 }
-
-                for (const key of Object.keys(attributes)) {
-                  expect(["id", "ref", "count"], `${place}: the key ${key} is not bare`).not.toContain(key);
-                }
-
-                const text = JSON.stringify(Object.values(attributes));
-
-                for (const secret of [CANARY, ...seeded.hidden]) {
-                  expect(text.includes(secret), `${place}: no attribute holds ${secret}`).toBe(false);
-                }
               }
+
+              // The write calls: a commit written and a ref made and moved, each ending one span.
+              const tree = treeAt(seeded.trees, 0);
+
+              const author = new Commit.Signature({
+                name: `${CANARY}-writer`,
+                email: `${CANARY}-writer@example.test`,
+                at: { seconds: 1, offset: "+0000" },
+              });
+
+              const wrote = yield* traced(
+                seeded.repository.writeCommit({ tree, parents: [a], author, message: `${CANARY}-new\n` }),
+              );
+
+              expectSpan(
+                `${shape.label}, writeCommit`,
+                wrote.spans,
+                "writeCommit",
+                { "kalfa.git.tree": tree, "kalfa.git.parents": [a], "kalfa.git.commit": wrote.answer.id },
+                secrets,
+              );
+
+              const ref = refNameFrom("refs/remotes/origin/s9");
+              const made = yield* traced(seeded.repository.moveRef({ ref, from: Option.none(), to: b }));
+
+              const madeAttributes = expectSpan(
+                `${shape.label}, moveRef making a ref`,
+                made.spans,
+                "moveRef",
+                { "vcs.ref.head.name": ref, "vcs.ref.head.revision": b },
+                secrets,
+              );
+
+              expect(Object.keys(madeAttributes), `${shape.label}: a move from none has no expected id`).not.toContain(
+                "kalfa.git.from",
+              );
+
+              const moved = yield* traced(seeded.repository.moveRef({ ref, from: Option.some(b), to: a }));
+
+              expectSpan(
+                `${shape.label}, moveRef moving a ref`,
+                moved.spans,
+                "moveRef",
+                { "vcs.ref.head.name": ref, "vcs.ref.head.revision": a, "kalfa.git.from": b },
+                secrets,
+              );
             }),
           );
         }),
       run,
     );
 
-    // Plant: add a `head` key to the service; let `readRefs` pack refs, so the object count changes. Slice 1 (ticket 1933)
-    // adds `patchId`, so six keys; the range and the diff add `rangePatchId` and `diff` later.
+    // Plant: add a `head` key to the service; let `readRefs` pack refs, so the object count changes; let `writeCommit`
+    // point `refs/heads/main` at the commit it wrote.
     it.effect.prop(
-      "S10 no working copy: the service has six keys, and no list of calls changes the store",
+      "S10 no working copy: the service has the six read calls and the two write calls, no list of reads changes the store, and no list of writes moves a ref",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), DEFAULT, (seeded, shape) =>
@@ -868,10 +1103,12 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             expect(Object.keys(seeded.repository).sort(), `${shape.label}: the keys`).toEqual([
               "isAncestor",
               "mergeBases",
+              "moveRef",
               "patchId",
               "readCommit",
               "readRefs",
               "walk",
+              "writeCommit",
             ]);
             const before = yield* seeded.fingerprint;
             const n = shape.history.nodes.length;
@@ -898,6 +1135,22 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             }
 
             expect(yield* seeded.fingerprint, `${shape.label}: the store is as it was`).toEqual(before);
+
+            // Writes, some of them refused: a commit is made, and no ref is moved by it.
+            const lacking = treeIdFrom(missingId(texture, 5, []));
+
+            for (let k = 0; k < 12; k++) {
+              yield* Effect.exit(
+                writeCall(seeded.repository, {
+                  tree: k % 4 === 3 ? lacking : n === 0 ? treeIdFrom(TREE_ID) : treeAt(seeded.trees, k % n),
+                  parents: n === 0 ? [] : [pick(k + 12)],
+                  author: flatAt(texture, k),
+                  message: `write ${k}\n`,
+                }),
+              );
+            }
+
+            yield* readRefsBack(seeded, shape.history, `${shape.label}: after writes`);
           }),
         ),
       run,
@@ -1200,6 +1453,385 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             }
           }),
         ),
+      run,
+    );
+
+    // Plant: delete the NUL check in `make`, so memory writes the message; delete the size check; count the object's
+    // characters and not its bytes, so the wide row passes at one byte over; delete the check of the tree; check only
+    // the first parent; take the committer from the author; round the clock's second up; write the offset as the
+    // machine's zone; trim the message; let `writeCommit` point `refs/heads/main` at the commit.
+    it.effect.prop(
+      "S12 write a commit: it reads back field for field with the settings' committer at the clock's second and +0000, a seeded commit's own fields give its id, a refusal writes nothing, no ref moves",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const committer = committerFrom(flatAt(texture, 4));
+          const config = settings({}, committer);
+          const word = texture.words[0] ?? "w";
+          const reached = new Set<string>();
+          const refused = new Set<string>();
+
+          const histories = [
+            ...everyShape(texture).filter((shape) => shape.history.nodes.length > 0),
+            { label: "tree carrier", history: treeCarrier(texture).history },
+          ].map(({ label, history }) => ({ label, history: asWritten(history, committer) }));
+
+          // Every shape: each class of write, a seeded commit's own fields, and each class of refusal.
+          yield* seedEach(subject, histories, config, (seeded, shape) =>
+            Effect.gen(function* () {
+              const { ids, trees, repository } = seeded;
+              const history = shape.history;
+              const n = history.nodes.length;
+              const author = flatAt(texture, 1);
+
+              for (const [k, spec] of writeSpecs(history, texture).entries()) {
+                reached.add(spec.label);
+                const seconds = 1_000_000 + numAt(texture, k);
+                yield* clockAt(seconds, texture, k + 20);
+
+                yield* writeAndRead(
+                  repository,
+                  {
+                    tree: spec.tree === "empty" ? treeIdFrom(TREE_ID) : treeAt(trees, spec.tree),
+                    parents: spec.parents.map((parent) => idAt(ids, parent)),
+                    author,
+                    message: `${spec.label}\n`,
+                  },
+                  committer,
+                  seconds,
+                  `${shape.label}, ${spec.label}`,
+                );
+              }
+
+              // The first, the last and two drawn commits, written from their own fields: the same commit, so the same id.
+              for (const i of new Set([0, n - 1, numAt(texture, 30) % n, numAt(texture, 31) % n])) {
+                const node = nodeAt(history, i);
+                yield* clockAt(node.committer.seconds, texture, 32 + i);
+
+                const commit = yield* writeCall(repository, {
+                  tree: treeAt(trees, i),
+                  parents: node.parents.map((parent) => idAt(ids, parent)),
+                  author: node.author,
+                  message: node.message,
+                });
+
+                expect(encodeCommit(commit), `${shape.label}: commit ${i} written from its own fields`).toEqual(
+                  expectedCommit(history, ids, trees, i),
+                );
+              }
+
+              // Each refusal has a sound tree, sound parents and a small message but the one thing it breaks, so each
+              // check is reached; nothing is written, and the clock is whatever it was.
+              const sound: Fields = {
+                tree: treeAt(trees, 0),
+                parents: [idAt(ids, 0)],
+                author,
+                message: `${word}\n`,
+              };
+
+              const lacking = treeIdFrom(missingId(texture, 0, [...ids, ...trees]));
+              const gone = commitIdFrom(missingId(texture, 1, [...ids, ...trees]));
+              const place = (label: string): string => `${shape.label}, ${label}`;
+
+              for (const [label, message] of nulMessages(word)) {
+                refused.add(label);
+                yield* refusedWrite(seeded, { ...sound, message }, Repository.NulInMessage, {}, place(label));
+              }
+
+              for (const [label, bad] of [
+                ["a tree the store lacks", lacking],
+                ["a commit's id given as the tree", treeIdFrom(idAt(ids, n - 1))],
+              ] as const) {
+                refused.add(label);
+                yield* refusedWrite(seeded, { ...sound, tree: bad }, Repository.NoSuchTree, { id: bad }, place(label));
+              }
+
+              for (const [label, parents, bad] of [
+                ["a parent the store lacks", [gone], gone],
+                [
+                  "a tree's id given as a parent",
+                  [commitIdFrom(treeAt(trees, n - 1))],
+                  commitIdFrom(treeAt(trees, n - 1)),
+                ],
+                ["a parent the store lacks, second of two", [idAt(ids, 0), gone], gone],
+                ["a parent the store lacks, first of two", [gone, idAt(ids, 0)], gone],
+              ] as const) {
+                refused.add(label);
+                yield* refusedWrite(seeded, { ...sound, parents }, Repository.NoSuchCommit, { id: bad }, place(label));
+              }
+
+              yield* readRefsBack(seeded, history, `${shape.label}: after every write and refusal`);
+            }),
+          );
+
+          expect([...reached].sort(), "the generator reaches every write class").toEqual(
+            [...WRITE_SHAPE_CLASSES].sort(),
+          );
+          expect([...refused].sort(), "the generator reaches every refusal class").toEqual([...REFUSAL_CLASSES].sort());
+
+          const root = everyShape(texture).find((shape) => shape.label === "one root");
+
+          if (root === undefined) {
+            return yield* Effect.die("the generator made no root");
+          }
+
+          // The committer is the settings' one, whatever it holds, at each clock: the start of time, a drawn day, a second past 2^32.
+          const clocks = [0, 1_700_000_000 + numAt(texture, 40), 4_294_967_296 + numAt(texture, 41)];
+          expect(committerAccepted(flatAt(texture, 2)).length, "the committer classes").toBeGreaterThan(8);
+
+          for (const [label, person] of committerAccepted(flatAt(texture, 2))) {
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const seeded = yield* subject.seed(root.history, settings({}, person));
+
+                for (const [k, seconds] of clocks.entries()) {
+                  yield* clockAt(seconds, texture, 50 + k);
+
+                  yield* writeAndRead(
+                    seeded.repository,
+                    {
+                      tree: treeAt(seeded.trees, 0),
+                      parents: [idAt(seeded.ids, 0)],
+                      author: flatAt(texture, 3),
+                      message: `${word}\n`,
+                    },
+                    person,
+                    seconds,
+                    `committer ${label}, second ${seconds}`,
+                  );
+                }
+              }),
+            );
+          }
+
+          // Every class of message and of author goes in and comes back whole (a NUL is the refusal above).
+          expect(
+            messageVariants(word).map(([label]) => label),
+            "the generator reaches every message class",
+          ).toEqual(MESSAGE_CLASSES);
+          expect(
+            signatureVariants(flatAt(texture, 1)).map(([label]) => label),
+            "the generator reaches every signature class",
+          ).toEqual(SIGNATURE_CLASSES);
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(root.history, config);
+              const second = 1_700_000_000;
+              const target = { tree: treeAt(seeded.trees, 0), parents: [idAt(seeded.ids, 0)] };
+              yield* clockAt(second, texture, 60);
+
+              for (const [label, message] of messageVariants(word)) {
+                if (label !== "a NUL") {
+                  yield* writeAndRead(
+                    seeded.repository,
+                    { ...target, author: flatAt(texture, 1), message },
+                    committer,
+                    second,
+                    `message ${label}`,
+                  );
+                }
+              }
+
+              for (const [label, author] of signatureVariants(flatAt(texture, 1))) {
+                yield* writeAndRead(
+                  seeded.repository,
+                  { ...target, author, message: `${word}\n` },
+                  committer,
+                  second,
+                  `author ${label}`,
+                );
+              }
+            }),
+          );
+
+          // The limit is on the object's bytes: exactly `limits.bytes` is written and read back, one byte more is refused,
+          // with a one-byte, a three-byte and a four-byte character at the edge.
+          const second = 1_700_000_000;
+          const author = flatAt(texture, 1);
+
+          for (const [label, message] of edgeMessages(word)) {
+            const exact = writtenSize({
+              tree: TREE_ID,
+              parents: ["0".repeat(40)],
+              author,
+              committer,
+              seconds: second,
+              message,
+            });
+
+            for (const [limit, over] of [
+              [exact, false],
+              [exact - 1, true],
+            ] as const) {
+              yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const seeded = yield* subject.seed(root.history, settings({ bytes: limit }, committer));
+                  const fields = { tree: treeAt(seeded.trees, 0), parents: [idAt(seeded.ids, 0)], author, message };
+                  const at = `${label}, a limit of ${limit} bytes`;
+                  yield* clockAt(second, texture, 61);
+
+                  if (over) {
+                    yield* refusedWrite(seeded, fields, Repository.TooLargeToWrite, { most: limit }, at);
+                  } else {
+                    yield* writeAndRead(seeded.repository, fields, committer, second, at);
+                  }
+                }),
+              );
+            }
+          }
+        }),
+      run,
+    );
+
+    // Plant: refuse a ref outside `refs/heads/`; refuse a move that drops commits; delete the compare with `from`;
+    // compare only when `from` is some; delete the check of a ref in the way; delete the check on `to`; read `to` as
+    // a commit when it is a tree's id; move the ref before the compare; keep the first `from` for a second move.
+    it.effect.prop(
+      "S13 move a ref: each move that succeeds leaves the ref at `to` and every other ref as it was, each stale move, ref in the way or missing commit fails with its error and leaves every ref as it was",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const { history, names } = moveCarrier(texture);
+          const classes = new Set<string>();
+          const extra = [...Object.values(names), "refs/heads", "refs/kalfa/candidates", "refs/remotes/origin"];
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(history, DEFAULT);
+              const repo = seeded.repository;
+              const model = new Map<string, number>(history.refs.map((ref) => [ref.name, ref.commit]));
+              const check = (place: string) => readModelBack(seeded, history, model, extra, place);
+              const at = (index: number): CommitId.CommitId => idAt(seeded.ids, index);
+
+              const move = (ref: string, from: Option.Option<number>, to: number) =>
+                repo.moveRef({ ref: refNameFrom(ref), from: Option.map(from, at), to: at(to) });
+
+              // Refused moves first, on the store as the history made it.
+              for (const [label, ref, from, to] of [
+                ["from none while the ref exists", names.side, Option.none(), MOVE.three],
+                ["from a commit while the ref is at another", names.side, Option.some(MOVE.three), MOVE.merge],
+                ["from a commit while the ref is gone", names.gone, Option.some(MOVE.three), MOVE.merge],
+              ] as const) {
+                classes.add(label);
+                expectFailure(yield* failed(move(ref, from, to), label), Repository.RefMoved, { ref }, label);
+                yield* check(`${label}: no ref moved`);
+              }
+
+              for (const [label, ref, other] of [
+                ["making a ref inside a ref's name", `${names.main}/x`, names.main],
+                ["making a ref above two refs, which names the first by bytes", "refs/kalfa/candidates", names.earlier],
+              ] as const) {
+                classes.add(label);
+
+                expectFailure(
+                  yield* failed(move(ref, Option.none(), MOVE.merge), label),
+                  Repository.RefInTheWay,
+                  { ref, other },
+                  label,
+                );
+                yield* check(`${label}: no ref moved`);
+              }
+
+              for (const [label, to] of [
+                ["to a commit the store lacks", missingId(texture, 5, [...seeded.ids, ...seeded.trees])],
+                ["to a tree's id", treeAt(seeded.trees, 1)],
+              ] as const) {
+                classes.add(label);
+
+                expectFailure(
+                  yield* failed(
+                    repo.moveRef({ ref: refNameFrom(names.branch), from: Option.none(), to: commitIdFrom(to) }),
+                    label,
+                  ),
+                  Repository.NoSuchCommit,
+                  { id: to },
+                  label,
+                );
+                yield* check(`${label}: no ref moved`);
+              }
+
+              // Moves that succeed, one after the other: each leaves the ref at `to`, and no other ref moves.
+              for (const [label, ref, from, to] of [
+                ["making a candidate ref", names.fresh, Option.none(), MOVE.merge],
+                ["making a remote ref", names.remote, Option.none(), MOVE.side],
+                ["moving a branch forward", names.main, Option.some(MOVE.main), MOVE.merge],
+                ["moving a branch back to an older commit", names.main, Option.some(MOVE.merge), MOVE.one],
+                ["moving a branch to the commit it is at", names.main, Option.some(MOVE.one), MOVE.one],
+              ] as const) {
+                classes.add(label);
+                yield* move(ref, from, to);
+                model.set(ref, to);
+                expect(
+                  plainRefs(yield* repo.readRefs(refNameFrom(ref))),
+                  `${label}: the ref is at its new commit`,
+                ).toEqual([{ name: ref, commit: at(to) }]);
+                yield* check(`${label}: every other ref is as it was`);
+              }
+
+              // Two moves from the commit the ref is at, run at once: one wins and the other finds the ref moved.
+              classes.add("two moves from one commit at once");
+              const racers = [MOVE.merge, MOVE.side];
+
+              const raced = yield* Effect.forEach(
+                racers,
+                (to) => Effect.result(move(names.main, Option.some(MOVE.one), to)),
+                { concurrency: "unbounded" },
+              );
+
+              expect(raced.filter(Result.isSuccess).length, "exactly one of two moves from one commit wins").toBe(1);
+
+              for (const result of raced.filter(Result.isFailure)) {
+                expectFailure(result.failure, Repository.RefMoved, { ref: names.main }, "the move that lost");
+              }
+
+              const [landed] = yield* repo.readRefs(refNameFrom(names.main));
+              const winner = racers.find((to) => at(to) === landed?.commit);
+              expect(winner, "the ref is at the commit of the move that won").toBeDefined();
+              model.set(names.main, winner ?? MOVE.one);
+              yield* check("two moves from one commit at once: the ref is where the winner put it");
+
+              expect([...classes].sort(), "the generator reaches every move class").toEqual([...MOVE_CLASSES].sort());
+
+              // A walk: each step reads where its ref is now, and a third of the steps ask from a commit that is wrong.
+              const pool = [
+                names.main,
+                names.side,
+                names.candidate,
+                names.fresh,
+                names.remote,
+                names.branch,
+                names.gone,
+              ];
+
+              const count = history.nodes.length;
+
+              for (let k = 0; k < 18; k++) {
+                const ref = pool[numAt(texture, 3 * k) % pool.length] ?? names.main;
+                const to = numAt(texture, 3 * k + 1) % count;
+                const current = model.get(ref);
+
+                const wrong: Option.Option<number> =
+                  current === undefined
+                    ? Option.some((to + 1) % count)
+                    : numAt(texture, 3 * k + 2) % 2 === 1
+                      ? Option.none()
+                      : Option.some((current + 1) % count);
+
+                const place = `walk ${k}, ${ref}`;
+
+                if (k % 3 === 0) {
+                  expectFailure(yield* failed(move(ref, wrong, to), place), Repository.RefMoved, { ref }, place);
+                } else {
+                  yield* move(ref, Option.fromNullishOr(current), to);
+                  model.set(ref, to);
+                }
+
+                yield* check(place);
+              }
+            }),
+          );
+        }),
       run,
     );
   });

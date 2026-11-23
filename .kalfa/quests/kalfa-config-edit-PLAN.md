@@ -1,4 +1,4 @@
-Approved by the lead agent, builds issues 1749, 1806, 1843, 0063, 0088, 0089; body f2ef78e71528
+Approved by the lead agent, builds issues 1749, 1806, 1843, 0063, 0088, 0089; body b6f9a62f4be8
 Plancheck-Version: 3
 
 # Plan: edit one setting in a configuration file's text, in memory or on disk (ticket 1843)
@@ -745,3 +745,14 @@ The review of slice 1 found two gaps.
    `internal/`, each refused when it imports the parser. Plant: widen the exemption to `internal/**`: L2 red.
 
 Also: "Effect 4.1.3 has no `Result.try`" was wrong; `Result.try` exists, and `internal/toml.ts` uses it.
+
+## Amendment 2 (2026-11-22): a missing `$<APP>_HOME` is not made
+
+Slice 3's tests step found the plan saying two things. Doubt 3 says a `$DEMO_HOME` set to a folder that does not exist
+fails; the disk sketch makes "the app's own folder", which for `$DEMO_HOME` is `$DEMO_HOME` itself. The lead's call,
+following doubt 3: a set makes only a `.<app>/` folder (under the repo folder, or under `HOME` when no `$<APP>_HOME`
+is set). When `$<APP>_HOME` names a folder that does not exist, the set fails `write` naming `$<APP>_HOME`, and nothing
+is made: a person who set the variable chose the place, and a typo there should not quietly make a new folder. D5's
+generator covers it as a missing `$DEMO_HOME` (fails `write`) beside a missing `.demo/` (made). Messages name a file as
+the start does (`.demo/demo.toml`, `~/.demo/demo.toml`, `$DEMO_HOME/demo.toml`) and the lock as that name plus
+`.lock`, never an absolute path. 80% sure.

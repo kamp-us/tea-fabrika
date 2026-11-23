@@ -2,7 +2,8 @@
 // its first commit (every commit is pushed when it is made, with a draft pull request from the first commit). Today's lead tooling, run on our own laptop; it is not product.
 //
 //   publish   leak grep on origin/main..head, fail closed -> push, never forced -> the branch's open
-//             pull request, or a new draft when it has none
+//             pull request, or a new draft when it has none; a title or body given on the command line
+//             is leak-grepped too, and sets the title and body of an open pull request (its draft state stays)
 //   ready     publish, then the pull request's title and description from the quest brief, then
 //             marked ready: a quest's steps have passed
 //
@@ -10,6 +11,7 @@
 // step's commit comes out of the box, and `ready` where the quest used to open its pull request.
 // Read through its module: `Publish.publish(...)`.
 import { Effect, Schema } from "effect";
+import { words as squashWords } from "./Leaks.ts";
 import { PullRequests, type Text } from "./PullRequests.ts";
 import { Pushes } from "./Pushes.ts";
 
@@ -65,8 +67,13 @@ export class NoBranch extends Schema.TaggedError<NoBranch, { readonly brand: uni
   reason: Schema.String,
 }) {}
 
-/** What one publish did: the branch's pull request, whether this publish opened it, and if a draft. */
-export type Published = { readonly pr: number; readonly opened: boolean; readonly draft: boolean };
+/** What one publish did: the branch's pull request, whether this publish opened it, and if a draft. `edited` is there only when it rewrote an open pull request's title or body. */
+export type Published = {
+  readonly pr: number;
+  readonly opened: boolean;
+  readonly draft: boolean;
+  readonly edited?: true;
+};
 
 export type Ask = {
   /** The checkout the commit is in. */
@@ -74,8 +81,10 @@ export type Ask = {
   readonly branch: string;
   /** The exact commit SHA to push and use when opening a draft. */
   readonly head: string;
-  /** What a new draft says. A pull request already open keeps its own words. */
+  /** What a new draft says. A pull request already open keeps its own words, except for those in `given`. */
   readonly text: Text;
+  /** The title and the body that were asked for by name. A part left out stays as the open pull request has it. */
+  readonly given?: Partial<Text>;
 };
 
 const checked = (branch: string) =>
@@ -90,11 +99,28 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
   const pushes = yield* Pushes;
   const prs = yield* PullRequests;
   yield* pushes.leakGrep(a.dir, a.head);
+
+  const given = a.given !== undefined && (a.given.title !== undefined || a.given.body !== undefined) ? a.given : null;
+
+  if (given !== null) {
+    yield* pushes.leakText(a.dir, squashWords({ title: given.title ?? "", body: given.body ?? "" }));
+  }
+
   yield* pushes.push(a.dir, branch, a.head);
   const open = yield* prs.openOn(branch);
 
   if (open._tag === "Some") {
-    return { pr: open.value.number, opened: false, draft: open.value.draft } satisfies Published;
+    const number = open.value.number;
+
+    if (given === null) {
+      return { pr: number, opened: false, draft: open.value.draft } satisfies Published;
+    }
+
+    // `edit` sets both fields, so a part that was not given is read back from the pull request.
+    const now = yield* prs.view(number);
+    yield* prs.edit(number, { title: given.title ?? now.title, body: given.body ?? now.body });
+
+    return { pr: number, opened: false, draft: open.value.draft, edited: true } satisfies Published;
   }
 
   const pr = yield* prs.draft(branch, a.text, a.head);
@@ -117,4 +143,8 @@ export const ready = Effect.fn("Publish.ready")(function* (a: Ask) {
 
 /** One line for a log: what the publish did, with the pull request's number. */
 export const line = (branch: string, p: Published): string =>
-  p.opened ? `pushed ${branch} and opened draft PR ${p.pr}` : `pushed ${branch}; PR ${p.pr} was already open`;
+  p.opened
+    ? `pushed ${branch} and opened draft PR ${p.pr}`
+    : p.edited === true
+      ? `pushed ${branch}; PR ${p.pr} was already open, and its title and body are updated`
+      : `pushed ${branch}; PR ${p.pr} was already open`;

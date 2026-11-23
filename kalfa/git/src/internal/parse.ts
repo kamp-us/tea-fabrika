@@ -77,6 +77,36 @@ export const ids = (output: string): Result.Result<ReadonlyArray<CommitId>, Repo
       .map((line) => commitId(line, "a listed line")),
   );
 
+const refName = (name: string): Result.Result<Ref.RefName, Repository.GitUnavailable> =>
+  Result.mapError(Schema.decodeUnknownResult(Ref.RefName)(name), () =>
+    unreadable("a for-each-ref line names a ref that is not a ref name"),
+  );
+
+/**
+ * Reads `for-each-ref` printed as `%(objectname) %(refname)`: each ref with the id it points at, whatever the id is.
+ *
+ * **Details**
+ *
+ * It does not look at what a ref points at, so a symbolic ref or a ref at a tag is read like any other.
+ *
+ * @internal
+ */
+export const refIds = (
+  output: string,
+): Result.Result<ReadonlyArray<{ readonly id: string; readonly name: Ref.RefName }>, Repository.GitUnavailable> =>
+  Result.all(
+    output
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line) => {
+        const [id, name, ...rest] = line.split(" ");
+
+        return id === undefined || name === undefined || rest.length > 0
+          ? Result.fail(unreadable("a for-each-ref line has an unexpected form"))
+          : Result.map(refName(name), (named) => ({ id, name: named }));
+      }),
+  );
+
 /**
  * Reads `for-each-ref` printed as `%(objectname) %(objecttype) %(symref) %(refname)`.
  *
@@ -100,16 +130,14 @@ export const refs = (
         return yield* Result.fail(unreadable("a for-each-ref line has an unexpected form"));
       }
 
-      const refName = yield* Result.mapError(Schema.decodeUnknownResult(Ref.RefName)(name), () =>
-        unreadable("a for-each-ref line names a ref that is not a ref name"),
-      );
+      const named = yield* refName(name);
 
       if (symref !== "") {
-        return yield* Result.fail(new Repository.RefNotCommit({ ref: refName, points: "symbolic" }));
+        return yield* Result.fail(new Repository.RefNotCommit({ ref: named, points: "symbolic" }));
       }
 
       if (type === "tag" || type === "tree" || type === "blob") {
-        return yield* Result.fail(new Repository.RefNotCommit({ ref: refName, points: type }));
+        return yield* Result.fail(new Repository.RefNotCommit({ ref: named, points: type }));
       }
 
       if (type !== "commit") {

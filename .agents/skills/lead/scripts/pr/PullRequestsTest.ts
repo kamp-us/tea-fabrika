@@ -33,6 +33,7 @@ export type Failing = Partial<
     | "view"
     | "enqueue"
     | "queue"
+    | "openIssues"
     | "files"
     | "patches"
     | "arm"
@@ -51,6 +52,8 @@ export type World = {
   readonly more: Map<number, More>;
   /** What each read of the merge queue answers, in order; the last answer repeats. Empty, the default, is an empty queue. */
   readonly queue: Array<ReadonlyArray<QueueEntry>>;
+  /** The GitHub issues that are open, by number (no pull request among them). */
+  readonly issues: Set<number>;
   /** The files each pull request changes, by number: none when absent. */
   readonly files: Map<number, ReadonlyArray<string>>;
   /** The diff hunks of each file a pull request changes, by number: none when absent. */
@@ -63,6 +66,7 @@ export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({
   calls: [],
   more: new Map(),
   queue: [],
+  issues: new Set(),
   files: new Map(),
   patches: new Map(),
 });
@@ -124,6 +128,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
           w.calls.push(Call.cases.enqueue.make({ number, oid }));
         }),
       queue: Effect.map(fails("queue"), () => (w.queue.length > 1 ? w.queue.shift() : w.queue[0]) ?? []),
+      openIssues: Effect.map(fails("openIssues"), () => [...w.issues]),
       files: (number) => Effect.map(fails("files"), () => w.files.get(number) ?? []),
       patches: (number) => Effect.map(fails("patches"), () => w.patches.get(number) ?? []),
       arm: (number, oid) =>

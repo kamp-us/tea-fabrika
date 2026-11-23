@@ -3,7 +3,7 @@
  *
  * **Details**
  *
- * A program reads its settings by yielding the group, which needs the group's layer, so a program that forgot it does not compile. A restart setting reads as its plain value. A live setting reads as a `Live`, which is yielded for the value now.
+ * A program reads its settings by yielding the group, which needs the group's layer, so a program that forgot it does not compile. A restart setting reads as its plain value. A live setting reads as a `Live`: yield it for the value now, or read its `changes` for the value now and then each new value, which the layer publishes when a configuration file changes while the program runs.
  */
 import { Context, Effect, Layer } from "effect";
 import * as Effectable from "effect/Effectable";
@@ -12,7 +12,8 @@ import * as Option from "effect/Option";
 import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Setting from "./Declaration.ts";
-import { remove, set } from "./internal/change.ts";
+import * as change from "./internal/change.ts";
+import * as disk from "./internal/disk.ts";
 import { SettingsError } from "./internal/error.ts";
 import { type FlagValues, type Flags, make as build } from "./internal/flags.ts";
 import { frozen } from "./internal/frozen.ts";
@@ -21,6 +22,7 @@ import { field, variable } from "./internal/names.ts";
 import { shown } from "./internal/place.ts";
 import { type Resolved, start } from "./internal/start.ts";
 import { toml } from "./internal/toml.ts";
+import { debounce, type Watched, watched } from "./internal/window.ts";
 import type { Origin } from "./Sources.ts";
 
 export {
@@ -46,7 +48,7 @@ export type {
    */
   Flags,
   /**
-   * The value of a live setting, an Effect to yield for the value now, a different type from the plain value of a restart setting.
+   * The value of a live setting, an Effect to yield for the value now with a `changes` stream of each new value, a different type from the plain value of a restart setting.
    *
    * @category models
    */
@@ -81,7 +83,7 @@ export type Values<R extends ReadonlyArray<Setting.Any>> = {
  *
  * @category models
  */
-export type Origins<R extends ReadonlyArray<Setting.Any>> = Readonly<Record<R[number]["name"], Origin>>;
+export type Origins<R extends ReadonlyArray<Setting.Any>> = Readonly<Record<Watched<R>[number]["name"], Origin>>;
 
 /**
  * What a program that reads a group needs: the group's layer.
@@ -108,7 +110,8 @@ export interface SettingGroup<App extends string, R extends ReadonlyArray<Settin
 
 interface Started<R extends ReadonlyArray<Setting.Any>> {
   readonly values: Values<R>;
-  readonly origins: Origins<R>;
+  /** The origins as they are now: a live setting's origin follows its value. */
+  readonly origins: Effect.Effect<Origins<R>>;
 }
 
 // The key is its app and the names of its settings, so two groups of one app with different settings never share a slot.
@@ -170,18 +173,20 @@ const clashes = (app: string, a: Setting.Any, b: Setting.Any) => {
     return "are one name, or a value and its table";
   }
 
-  if (field(a.name) === field(b.name)) {
+  // The window is read by its setting name and never as a field of the program's values, so only the program's own fields can clash.
+  if (a !== debounce && b !== debounce && field(a.name) === field(b.name)) {
     return `are read as one field, ${field(a.name)}`;
   }
 
   return variable(app, a.name) === variable(app, b.name) ? `share ${variable(app, a.name)}` : undefined;
 };
 
-// SAFETY: `start` fills one field of `values` for each setting, named by `field`, with that setting's value, and one
-// origin for each, named by the setting's name. `Values` and `Origins` are those same keys, written as types.
+// SAFETY: `start` fills one field of `values` for each setting the program declared, named by `field`, with that
+// setting's value, and one origin for each setting read, named by the setting's name, the quiet window included for a
+// group with a live setting. `Values` and `Origins` are those same keys, written as types.
 const typed = <R extends ReadonlyArray<Setting.Any>>(started: Resolved): Started<R> => ({
   values: started.values as Values<R>,
-  origins: started.origins as Origins<R>,
+  origins: Effect.map(started.origins, (origins) => origins as Origins<R>),
 });
 
 /**
@@ -197,7 +202,8 @@ export const make = <const App extends string, const R extends ReadonlyArray<Set
   app: App,
   ...settings: R
 ): SettingGroup<App, R> => {
-  const refused = refusal(app, settings);
+  // A group with a live setting is read with the quiet window too, so a name of its own for that is a clash.
+  const refused = refusal(app, watched(settings));
 
   if (refused !== undefined) {
     throw new Error(`Settings cannot be declared: ${refused}.`);
@@ -225,16 +231,18 @@ export const make = <const App extends string, const R extends ReadonlyArray<Set
 export const flags = <App extends string, R extends ReadonlyArray<Setting.Any>>(
   group: SettingGroup<App, R>,
 ): Flags<R> =>
-  // SAFETY: `build` gives one key for each setting that is not file-only, named by the setting, which is `Flags`
-  // written as a type.
-  build(group.settings) as Flags<R>;
+  // SAFETY: `build` gives one key for each setting that is not file-only, named by the setting, and the quiet window's
+  // for a group with a live setting, which is `Flags` written as a type.
+  build(watched(group.settings)) as Flags<R>;
 
 /**
  * Starts a group's settings once and provides them to every program that reads the group.
  *
  * **Details**
  *
- * It runs in a span named `config.layer` with the attribute `kalfa.config.app`, and no value goes in the span. In order: it reads the repo configuration at `<repo>/.<app>/<app>.toml`, checks the minimum version `<app>-version` against `version`, checks the repo configuration whole, then finds, reads and checks the user configuration whole, and only then resolves each setting by precedence: command-line flag, environment variable, repo configuration, user configuration, default. Fails with one `SettingsError`, the repo configuration's first. `repo` is the folder that holds `.<app>/`, the current folder by default. `flags` is what the command's handler got for `flags(group)`: a flag's text is read as the variable's text is, and with no `flags`, no flag was given.
+ * It runs in a span named `config.layer` with the attribute `kalfa.config.app`, and no value goes in the span. A group with a live setting also gets the restart setting `config.watch.debounce`, the quiet window, 100 milliseconds by default. In order: it reads the repo configuration at `<repo>/.<app>/<app>.toml`, checks the minimum version `<app>-version` against `version`, checks the repo configuration whole, then finds, reads and checks the user configuration whole, and only then resolves each setting by precedence: command-line flag, environment variable, repo configuration, user configuration, default. Fails with one `SettingsError`, the repo configuration's first. `repo` is the folder that holds `.<app>/`, the current folder by default. `flags` is what the command's handler got for `flags(group)`: a flag's text is read as the variable's text is, and with no `flags`, no flag was given.
+ *
+ * A group with a live setting then watches the folder of each configuration file for as long as the layer lives. A file that has been quiet for the window is read again and checked whole as the start does, every setting is resolved again, and each live value that differs is published to its `changes`. A refused file is logged as a warning with its file and line, the last good values hold, and nothing fails. A restart setting whose value changed is logged once and applies at the next start. A file that cannot be watched is logged once and followed only at a restart. The watch ends with the layer.
  *
  * @category layers
  */
@@ -244,7 +252,7 @@ export const layer = <App extends string, R extends ReadonlyArray<Setting.Any>>(
 ): Layer.Layer<Identifier<App, R>, SettingsError, FileSystem.FileSystem | Path.Path> =>
   Layer.effect(
     key(group.app, group.settings),
-    start(group, toml, options).pipe(
+    start({ app: group.app, settings: watched(group.settings) }, toml, options).pipe(
       Effect.map(typed<R>),
       Effect.withSpan("config.layer", { attributes: { "kalfa.config.app": group.app } }),
     ),
@@ -255,14 +263,14 @@ export const layer = <App extends string, R extends ReadonlyArray<Setting.Any>>(
  *
  * **Details**
  *
- * An origin is the default, a command-line flag by name, an environment variable by name, or a file and line. It holds no value, so it holds no secret.
+ * An origin is the default, a command-line flag by name, an environment variable by name, or a file and line. It holds no value, so it holds no secret. A live setting's origin follows its value: it is read as it is now.
  *
  * @category combinators
  */
 export const origins = <App extends string, R extends ReadonlyArray<Setting.Any>>(
   group: SettingGroup<App, R>,
 ): Effect.Effect<Origins<R>, never, Identifier<App, R>> =>
-  Effect.map(key(group.app, group.settings), (started) => started.origins);
+  Effect.flatMap(key(group.app, group.settings), (started) => started.origins);
 
 /**
  * One edit of one configuration file's text: set one setting of the group, or take it out.
@@ -301,9 +309,51 @@ export const edit = <App extends string, R extends ReadonlyArray<Setting.Any>>(
   file: Setting.File,
 ): Edit<R> => {
   const place = { file, names: shown(group.app, toml) };
+  const read = { app: group.app, settings: watched(group.settings) };
 
   return {
-    set: (setting, value) => set(group, toml, place, text, setting, value),
-    remove: (setting) => remove(group, toml, place, text, setting),
+    set: (setting, value) => change.set(read, toml, place, text, setting, value),
+    remove: (setting) => change.remove(read, toml, place, text, setting),
   };
 };
+
+/**
+ * Sets one setting in a configuration file on disk: reads the file, makes the same edit as `edit`, and writes the answer back with one rename.
+ *
+ * **Details**
+ *
+ * `file` says which file, `"repo"` or `"user"`. The repo configuration is `<repo>/.<app>/<app>.toml`, and `repo` is the folder that holds `.<app>/`, the current folder by default. The user configuration is found as the start finds it: `$<APP>_HOME/<app>.toml`, else `$HOME/.<app>/<app>.toml`. Errors name a file as the start does, as `.demo/demo.toml`, `~/.demo/demo.toml` or `$DEMO_HOME/demo.toml`, never by an absolute path.
+ *
+ * The new text goes into `<file>.lock`, which is made only if none is there, and one rename puts it over the file: a reader never sees half a file, and a second writer fails at once with `write`, as `git config` does. A link is followed to its target, so a file kept in a dotfiles repo stays a link. A value the file already holds changes nothing: no lock is left and nothing is renamed. The call ends one span, `config.set`, with the attributes `kalfa.config.app`, `kalfa.config.setting`, `kalfa.config.file` and `kalfa.config.changed`, and no value.
+ *
+ * **Gotchas**
+ *
+ * Fails `write` when the file or its lock cannot be written, when another change holds the lock (after a crash, remove the lock file by hand), and for a user configuration when neither `$<APP>_HOME` nor `HOME` is set. A set makes the app's own folder, `.<app>/`, and no folder above it: a missing parent fails `write`, and so does a `$<APP>_HOME` that names a folder that is not there. Fails `read` when the file exists and cannot be read. Every other fault is the edit's: the file is as it was.
+ *
+ * @category combinators
+ */
+export const set = <App extends string, R extends ReadonlyArray<Setting.Any>, S extends R[number]>(
+  group: SettingGroup<App, R>,
+  setting: S,
+  value: Setting.Type<S>,
+  file: Setting.File,
+  options?: { readonly repo?: string },
+): Effect.Effect<void, SettingsError, FileSystem.FileSystem | Path.Path> =>
+  disk.set(group, toml, setting, value, file, options?.repo ?? ".");
+
+/**
+ * Takes one setting out of a configuration file on disk, the same way `set` writes: the same file, lock and rename.
+ *
+ * **Details**
+ *
+ * A remove of a key the file lacks, or of a file or folder that is not there, succeeds and writes nothing. With no home there is no user configuration, and a remove of its setting succeeds with nothing to take out. The call ends one span, `config.remove`.
+ *
+ * @category combinators
+ */
+export const remove = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+  group: SettingGroup<App, R>,
+  setting: R[number],
+  file: Setting.File,
+  options?: { readonly repo?: string },
+): Effect.Effect<void, SettingsError, FileSystem.FileSystem | Path.Path> =>
+  disk.remove(group, toml, setting, file, options?.repo ?? ".");

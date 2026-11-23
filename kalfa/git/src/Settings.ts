@@ -1,11 +1,12 @@
 /**
- * The settings of the git package: the limits every call keeps.
+ * The settings of the git package: the limits every call keeps, and who the commits it writes name as their committer.
  *
  * **Details**
  *
  * Every value is required, with no default: the app gives each one where it builds the layer. A setting's value is plain data, so the time limit is duration text such as `"10 seconds"`, and `timeLimit` decodes it.
  */
 import { Duration, Option, Schema } from "effect";
+import * as Commit from "./Commit.ts";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
@@ -38,12 +39,20 @@ export const Limits = Schema.Struct({
   time: TimeText,
 });
 
+// Who a written commit names as its committer: a name and an email, which take what a signature's take. The time is no
+// setting: it comes from the clock, at offset `+0000`.
+const Committer = Schema.Struct({ name: Commit.Name, email: Commit.Email });
+
 /**
  * Schema for the settings of the git package.
  *
+ * **Details**
+ *
+ * `committer` is the name and email every commit the package writes names as its committer, with the clock's time.
+ *
  * @category models
  */
-export const Settings = Schema.Struct({ limits: Limits });
+export const Settings = Schema.Struct({ limits: Limits, committer: Committer });
 
 export type Settings = typeof Settings.Type;
 

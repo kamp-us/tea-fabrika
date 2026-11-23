@@ -5,7 +5,8 @@
 // line that must not compile (a plant that lets it compile leaves the directive unused, which fails the typecheck).
 // The runtime laws F2 to F12 are in SettingGroup.flags.test.ts.
 //
-// Plant (run once, never kept), F1: key `FlagValues` by the value's field in place of the setting's name, so the
+// Plants (run once, never kept), F1: (a) give `Flags` the window for every group, so the group with no live setting holds it
+// and its `keyof` line is red; (b) key `FlagValues` by the value's field in place of the setting's name, so the
 // handler's input no longer fits `layer`'s `flags` option and the names are lost.
 import { expectTypeOf, it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
@@ -38,7 +39,15 @@ const group = SettingGroup.make("demo", port, carry, secret);
 
 type Settings = typeof group.settings;
 
-type Names = "instance.port" | "delivery.carry-rule" | "net.key-file";
+// A group with a live setting is read with the quiet window too, so its flags and flag values hold that name beside the
+// three declared ones (ticket 1841). A group with no live setting holds exactly what it declared.
+type Names = "instance.port" | "delivery.carry-rule" | "net.key-file" | "config.watch.debounce";
+
+const quiet = SettingGroup.make("demo", port, secret);
+
+type QuietNames = "instance.port" | "net.key-file";
+
+const quietFlags = SettingGroup.flags(quiet);
 
 const flags = SettingGroup.flags(group);
 
@@ -94,6 +103,10 @@ it("F1 type: the flags fit a command's config and shared flags with no cast, the
     readonly [K in Names]?: Flag.Flag<Option.Option<string>>;
   }>();
   expectTypeOf<keyof typeof flags>().toEqualTypeOf<Names>();
+
+  // A group with no live setting has exactly the flags it declared.
+  expectTypeOf<keyof typeof quietFlags>().toEqualTypeOf<QuietNames>();
+  expectTypeOf<keyof SettingGroup.FlagValues<typeof quiet.settings>>().toEqualTypeOf<QuietNames>();
 
   // The handler's input for the nested record is exactly the flag values, and it fits the layer's option as it is.
   type Input = Command.Command.Config.Infer<{ readonly settings: SettingGroup.Flags<Settings> }>["settings"];

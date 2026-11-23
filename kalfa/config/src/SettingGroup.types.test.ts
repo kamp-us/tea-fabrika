@@ -11,9 +11,11 @@
 // - T3: make the group a `Config` that reads the current provider, so its requirements are `never`.
 // - T4: type `Setting.files` as `(files: ReadonlyArray<string>)`.
 // - T5: add `"person"` to `Setting.File`; ticket 1843 slice 2 (the reasons are eight, `edit` added): leave `"edit"` out
-//   of `SettingsError`'s literals.
+//   of `SettingsError`'s literals; ticket 1843 slice 3 (the reasons are nine, `write` added): leave `"write"` out of them.
 // - T7 (ticket 1843, slice 2): type `SettingGroup.edit`'s `set` as taking `setting: Setting.Any`, so the
 //   `@ts-expect-error` for another group's setting is unused.
+// - T9 (ticket 1843, slice 3): type the disk `set`'s value as `unknown`, so the `@ts-expect-error` for a wrong value is
+//   unused.
 // - T6, one at a time, each on `Declaration.ts`: (a) type `make`'s schema as `C` again; (b) drop the brand line of
 //   `NotPlain`; (c) drop its "met before" check; (d) compare with "assignable one way" in place of `Same`; (e) answer
 //   `T` whole at the record line.
@@ -191,11 +193,11 @@ it("T4 type: a default of the wrong type, an empty or misnamed file list, a seco
   expectTypeOf<typeof Setting.files>().parameter(0).toEqualTypeOf<Setting.Files>();
 });
 
-it("T5 type: the layer's only error is SettingsError with its eight reasons, and a file is the repo's or the user's", () => {
+it("T5 type: the layer's only error is SettingsError with its nine reasons, and a file is the repo's or the user's", () => {
   expectTypeOf<Layer.Error<typeof demoLayer>>().toEqualTypeOf<SettingGroup.SettingsError>();
   expectTypeOf<Layer.Services<typeof demoLayer>>().toEqualTypeOf<FileSystem.FileSystem | Path.Path>();
   expectTypeOf<SettingGroup.SettingsError["reason"]>().toEqualTypeOf<
-    "version" | "syntax" | "unknown" | "scope" | "invalid" | "missing" | "read" | "edit"
+    "version" | "syntax" | "unknown" | "scope" | "invalid" | "missing" | "read" | "edit" | "write"
   >();
   expectTypeOf<Setting.File>().toEqualTypeOf<"repo" | "user">();
 });
@@ -334,5 +336,42 @@ it("T7 type: a set and a remove each answer an Effect of the text, failing only 
   expectTypeOf<Effect.Services<ReturnType<typeof editing.remove>>>().toEqualTypeOf<never>();
   expectTypeOf<ReturnType<typeof SettingGroup.edit<"demo", typeof group.settings>>>().toEqualTypeOf<
     SettingGroup.Edit<typeof group.settings>
+  >();
+});
+
+// T9: the disk calls. `SettingGroup.set` and `SettingGroup.remove` each answer an Effect of nothing that fails only with
+// `SettingsError` and needs the file system and the path service. A setting of another group, a value of the wrong type
+// and a file that is not the repo's or the user's are lines that must not compile; this function is never called, and
+// it hands every expression back.
+const onDisk = () => [
+  // @ts-expect-error T9: a setting of another group is not set through this group's disk call
+  SettingGroup.set(group, elsewhere, 1, "repo"),
+
+  // @ts-expect-error T9: a setting of another group is not removed through this group's disk call
+  SettingGroup.remove(group, elsewhere, "repo"),
+
+  // @ts-expect-error T9: a port is a number, not text
+  SettingGroup.set(group, port, "eighteen", "user"),
+
+  // @ts-expect-error T9: a live setting of the group takes its own value type
+  SettingGroup.set(group, carry, 18, "repo"),
+
+  // @ts-expect-error T9: a file is the repo's or the user's, never a person's
+  SettingGroup.remove(group, port, "person"),
+
+  // @ts-expect-error T9: the folder that holds `.demo/` is a path, not a number
+  SettingGroup.set(group, port, 18800, "user", { repo: 3 }),
+];
+
+it("T9 type: a disk set and remove each answer an Effect of nothing, failing only with SettingsError and needing the file system and the path service, and the wrong setting, value or file does not compile", () => {
+  expectTypeOf(onDisk).toBeFunction();
+  expectTypeOf<ReturnType<typeof SettingGroup.set<"demo", typeof group.settings, typeof port>>>().toEqualTypeOf<
+    Effect.Effect<void, SettingGroup.SettingsError, FileSystem.FileSystem | Path.Path>
+  >();
+  expectTypeOf<ReturnType<typeof SettingGroup.set<"demo", typeof group.settings, typeof carry>>>().toEqualTypeOf<
+    Effect.Effect<void, SettingGroup.SettingsError, FileSystem.FileSystem | Path.Path>
+  >();
+  expectTypeOf<ReturnType<typeof SettingGroup.remove<"demo", typeof group.settings>>>().toEqualTypeOf<
+    Effect.Effect<void, SettingGroup.SettingsError, FileSystem.FileSystem | Path.Path>
   >();
 });
