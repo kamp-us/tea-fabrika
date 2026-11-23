@@ -1,4 +1,4 @@
-// The laws of the git-binary adapter on a stand-in spawner (P2 to P11): what each exit code means, the time
+// The laws of the git-binary adapter on a stand-in spawner (P2 to P14): what each exit code means, the time
 // limit, git's version, the command's environment, the arguments of each call, that sizes are read before objects,
 // how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, that no
 // call reaches a remote, and the commands of a patch id. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
@@ -820,7 +820,7 @@ const asked = (call: Call | undefined): ReadonlySet<string> =>
 // red; delete the files check or the size check, (h) red; run the later commands after an empty raw list, red; delete the check
 // that both commits are known, (i) red.
 it.effect.prop(
-  "P11 a patch id's commands: known, the raw list, the sizes, the patch and `patch-id --verbatim`, in that order, with the limits checked before the content is read",
+  "P14 a patch id's commands: known, the raw list, the sizes, the patch and `patch-id --verbatim`, in that order, with the limits checked before the content is read",
   SPEC,
   (spec) =>
     Effect.gen(function* () {
@@ -970,7 +970,7 @@ const patching = (
 // Plant: delete the check that each blob of the raw list is a blob git found (a missing one counts as 0 bytes); accept any type
 // of object as a blob.
 it.effect.prop(
-  "P11b a blob git cannot size: a blob it does not find, or finds as another object, fails the call and no patch is printed",
+  "P14b a blob git cannot size: a blob it does not find, or finds as another object, fails the call and no patch is printed",
   SPEC,
   (spec) =>
     Effect.gen(function* () {
@@ -1009,7 +1009,7 @@ it.effect.prop(
 
 // Plant: accept a `patch-id` line with no commit id after the patch id, or with more than one; accept a text that is no patch id.
 it.effect.prop(
-  "P11c a patch-id line: a patch id, a space and one commit id is read; any other line is no answer",
+  "P14c a patch-id line: a patch id, a space and one commit id is read; any other line is no answer",
   SPEC,
   (spec) =>
     Effect.gen(function* () {

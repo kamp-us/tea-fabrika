@@ -259,11 +259,11 @@ const idAt = (ids: ReadonlyArray<CommitId.CommitId>, index: number): CommitId.Co
 const patchIdOrUndefined = (repo: Repository.Repository["Service"], from: CommitId.CommitId, to: CommitId.CommitId) =>
   Effect.map(repo.patchId(from, to), Option.getOrUndefined);
 
-// Plant (I6): run porcelain `git diff` in place of `diff-tree`, which reads `diff.noprefix` and `diff.orderFile`; drop
+// Plant (I8): run porcelain `git diff` in place of `diff-tree`, which reads `diff.noprefix` and `diff.orderFile`; drop
 // `--verbatim`, which `patchid.stable` would change; leave `--no-renames` out. The ids of every edit of the generator, asked of one
 // bare repository, are the same before and after its config gets the four lines.
 it.effect.prop(
-  "I6 scenario: a repository's own config steers nothing: diff.noprefix, diff.orderFile, diff.algorithm=patience and patchid.stable=true change no patch id",
+  "I8 scenario: a repository's own config steers nothing: diff.noprefix, diff.orderFile, diff.algorithm=patience and patchid.stable=true change no patch id",
   { texture: textureArb },
   ({ texture }) =>
     Effect.gen(function* () {

@@ -1281,7 +1281,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // characters of a path together, (k) red; hash a file's first change block only, (g) red; read a NUL at byte 8000 as text or a
     // file as binary only when both sides have a NUL, (c) red.
     it.effect.prop(
-      "S12 a different edit gives a different id: one line changed (its text, a trailing space, its line end), the mode, the path, the line, a binary byte, the other way round",
+      "S20 a different edit gives a different id: one line changed (its text, a trailing space, its line end), the mode, the path, the line, a binary byte, the other way round",
       { texture: textureArb },
       ({ texture }) =>
         Effect.gen(function* () {
@@ -1327,7 +1327,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // Plant: answer an id for no change, (f) red; answer none for a mode-only change, (b) red; answer none for an empty new file,
     // (f) red; fail on bytes that are not UTF-8, (e) red; read the history, so a shallow repository fails, red.
     it.effect.prop(
-      "S13 none means no change: patchId of a commit with itself, or with another commit of the same files, is none; a mode-only change, an empty new file and a latin-1 file each have an id, in a shallow repository too",
+      "S21 none means no change: patchId of a commit with itself, or with another commit of the same files, is none; a mode-only change, an empty new file and a latin-1 file each have an id, in a shallow repository too",
       { texture: textureArb },
       ({ texture }) =>
         Effect.gen(function* () {

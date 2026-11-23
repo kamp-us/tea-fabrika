@@ -310,20 +310,20 @@ Laws use `it.effect.prop` from `@effect/vitest` 4.1.3 with Effect's own `Arbitra
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | G5, settings, now with `files` and `diff` (slice 1): both required whole counts of 1 or more; limits without either do not decode | test | Effect Arbitrary: limits | give `diff` a default: red; accept `files: 0`: red | kalfa/git/src/Values.test.ts |
-| G8, patch ids (slice 1): `PatchId` accepts and refuses as `CommitId` does. 200 runs | test | Effect Arbitrary: commitIdArb | accept uppercase hex: red | kalfa/git/src/Values.test.ts |
+| G9, patch ids (slice 1): `PatchId` accepts and refuses as `CommitId` does. 200 runs | test | Effect Arbitrary: commitIdArb | accept uppercase hex: red | kalfa/git/src/Values.test.ts |
 | T4, the brand (slice 1): a `PatchId` is not a `CommitId`, a `TreeId` or a `BlobId`, and a plain string is not a `PatchId` | type | type | drop the brand on `PatchId`: an `@ts-expect-error` is unused, red | kalfa/git/src/Values.types.test.ts |
 | M5, memory's line diff is a smallest one (slice 1): for any two byte texts, applying the answer to the first gives the second, and it holds `n + m - 2 * LCS` lines, the LCS from a plain table in the test. 300 runs | test | Effect Arbitrary: linesArb | match lines greedily from the top: red | kalfa/git/src/internal/lines.test.ts |
 | S11, the same edit gives the same id (slice 1): for each base pair the class draws, `patchId(base, base + edit)` is equal on both. memory 100 runs, process 10 | test | Effect Arbitrary: rebaseArb | hash each line's number, (l) red; hash the base's mode where it does not change, (l) red | kalfa/git/src/RepositoryTest.ts |
-| S12, a different edit gives a different id (slice 1): each changed edit the classes draw gives an id unlike the drawn edit's | test | Effect Arbitrary: rebaseArb | strip whitespace before hashing, (m) red; drop each line's end, (m) red; hash a binary file by its path alone, (n) red; leave modes out, (n) red | kalfa/git/src/RepositoryTest.ts |
-| S13, none means no change (slice 1): `patchId(x, x)` is none; a mode-only change, an empty new file and a latin-1 file each have an id. memory 100 runs, process 10 | test | Effect Arbitrary: editArb | answer an id for no change, (f) red; answer none for a mode-only change, (b) red; fail on bytes that are not UTF-8, (e) red | kalfa/git/src/RepositoryTest.ts |
+| S20, a different edit gives a different id (slice 1): each changed edit the classes draw gives an id unlike the drawn edit's | test | Effect Arbitrary: rebaseArb | strip whitespace before hashing, (m) red; drop each line's end, (m) red; hash a binary file by its path alone, (n) red; leave modes out, (n) red | kalfa/git/src/RepositoryTest.ts |
+| S21, none means no change (slice 1): `patchId(x, x)` is none; a mode-only change, an empty new file and a latin-1 file each have an id. memory 100 runs, process 10 | test | Effect Arbitrary: editArb | answer an id for no change, (f) red; answer none for a mode-only change, (b) red; fail on bytes that are not UTF-8, (e) red | kalfa/git/src/RepositoryTest.ts |
 | S15, limits never cut (slice 1, and `diff` in slice 2): at exactly `limits.files` files and exactly `limits.diff` bytes the call answers; one more fails with `TooMany` (`limit: "files"`) or `DiffTooLarge`; over both is `TooMany`. memory 100 runs, process 10 | test | Effect Arbitrary: limits | delete the files check, (h) red; delete the size check, (h) red; count `>=` for `>`: red; check the size before the files: red | kalfa/git/src/RepositoryTest.ts |
 | S16, unknown ids (slice 1, and `diff` in slice 2): an id the store lacks, or a tree's id, on either side fails with `NoSuchCommit` naming it, never none or `[]`. memory 100 runs, process 10 | test | Effect Arbitrary: range | answer none for an unknown `from`, (i) red | kalfa/git/src/RepositoryTest.ts |
 | S9 and S10, spans and keys, extended (both slices): each new call ends one `git.` span with the attributes the spans table gives, and none holds a seeded path, line or content; the service's keys are the five, `patchId`, then `rangePatchId` and `diff` | test | Effect Arbitrary: history | annotate the path, (k) red; let `rangePatchId` call the wrapped calls, three spans: red | kalfa/git/src/RepositoryTest.ts |
-| P10, the raw list (slice 1): `parse.changes` reads each entry of a recorded `diff-tree -r -z` output: statuses A, D, M and T, a path with a space, a tab and `é`, and a submodule entry kept apart as a gitlink | test | vector: git 2.40.1 diff-tree raw output | split entries on spaces, not NUL: the spaced path red; read 160000 as a file and ask `cat-file` its size, (j) red | kalfa/git/src/internal/parse.test.ts |
-| P11, `/process`'s patch id on the stand-in (slice 1): the commands are exactly `cat-file --batch-check`, `diff-tree -r -z --no-renames`, `cat-file --batch-check`, `diff-tree -r -p -U0 --no-renames --no-ext-diff --no-textconv --full-index`, `patch-id --verbatim`, and the patch reaches `patch-id` byte for byte; an empty raw list answers none with no later command; `files + 1` entries is `TooMany` with no size check run; sizes over the limit are `DiffTooLarge` with no `diff-tree -p` run; `patch-id` printing nothing after a raw list with entries is `GitUnavailable` reason `Unreadable`. 100 runs | test | Effect Arbitrary: patchScript | read empty `patch-id` output as none: red; add `--stable`: red; run `diff-tree -p` before the size check: red; pipe `diff-tree` into `patch-id`: the stand-in sees one piped command, red | kalfa/git/src/ProcessRepository.test.ts |
+| P13, the raw list (slice 1): `parse.changes` reads each entry of a recorded `diff-tree -r -z` output: statuses A, D, M and T, a path with a space, a tab and `é`, and a submodule entry kept apart as a gitlink | test | vector: git 2.40.1 diff-tree raw output | split entries on spaces, not NUL: the spaced path red; read 160000 as a file and ask `cat-file` its size, (j) red | kalfa/git/src/internal/parse.test.ts |
+| P14, `/process`'s patch id on the stand-in (slice 1): the commands are exactly `cat-file --batch-check`, `diff-tree -r -z --no-renames`, `cat-file --batch-check`, `diff-tree -r -p -U0 --no-renames --no-ext-diff --no-textconv --full-index`, `patch-id --verbatim`, and the patch reaches `patch-id` byte for byte; an empty raw list answers none with no later command; `files + 1` entries is `TooMany` with no size check run; sizes over the limit are `DiffTooLarge` with no `diff-tree -p` run; `patch-id` printing nothing after a raw list with entries is `GitUnavailable` reason `Unreadable`. 100 runs | test | Effect Arbitrary: patchScript | read empty `patch-id` output as none: red; add `--stable`: red; run `diff-tree -p` before the size check: red; pipe `diff-tree` into `patch-id`: the stand-in sees one piped command, red | kalfa/git/src/ProcessRepository.test.ts |
 | T5, the calls' types (both slices): `patchId`, `rangePatchId` and `diff` have exactly the answer and error unions this plan's sketch gives, with `never` as their requirement; `Raw` has no `rangePatchId` | type | type | add `NotUtf8` to `patchId`'s errors: red; require `rangePatchId` of an adapter: red | kalfa/git/src/Repository.types.test.ts |
 | I5, a repository's config steers nothing (slice 1, and `diff` in slice 2): with `diff.noprefix`, `diff.orderFile`, `diff.algorithm=patience` and `patchid.stable=true` in the bare repository's config, each call answers what it answers without it | test | scenario: one bare repository, its config with and without those four lines | run porcelain `git diff`, which reads them, in place of `diff-tree`: red | kalfa/git/src/ProcessRepository.integration.test.ts |
-| I6, a submodule on real git (slice 1, and `diff` in slice 2): a commit with a gitlink entry, made with fast-import, gets a patch id, and `diff` over it fails with `NotAFile` naming it | test | scenario: one fast-import commit with a 160000 entry, since `/memory` cannot hold one | ask `cat-file` the gitlink's size: `patchId` fails, red; read 160000 as a file in `diff`: red | kalfa/git/src/ProcessRepository.integration.test.ts |
+| I8, a submodule on real git (slice 1, and `diff` in slice 2): a commit with a gitlink entry, made with fast-import, gets a patch id, and `diff` over it fails with `NotAFile` naming it | test | scenario: one fast-import commit with a 160000 entry, since `/memory` cannot hold one | ask `cat-file` the gitlink's size: `patchId` fails, red; read 160000 as a file in `diff`: red | kalfa/git/src/ProcessRepository.integration.test.ts |
 | K1, the manifest (slice 1): `kalfa/git/package.json` exports `./Diff`, and still has no `dependencies` | test | scenario: the package's own manifest at head | add a `diff` package from npm to `dependencies`: red | kalfa/git/src/Package.test.ts |
 | S14, the range (slice 2): `rangePatchId` equals `patchId(base, commit)` for the one merge base; a branch with the upstream merged in gives the rebased branch's id; a tip that is its own merge base is none; no common history and a criss-cross fail with `UnclearBase` naming the bases; a shallow store fails with `HistoryTooShort`. memory 100 runs, process 10 | test | Effect Arbitrary: rangeArb | use `upstream` itself as the base, (o) red; take the first of two merge bases, (p) red; read the merge bases without the shallow check, (q) red; refuse a merge base equal to the commit, (r) red | kalfa/git/src/RepositoryTest.ts |
 | S17, the diff (slice 2): for every edit the classes draw, `diff(base, base + edit)` is the model's answer exactly: the files in path byte order, each tag, entries and lines with their `at`, and `[]` for no change. memory 100 runs, process 10 | test | Effect Arbitrary: editArb | report a type change as two files, (a) red; drop mode-only changes, (b) red; strip each line's end, (d) red; fail on an empty new file, (f) red; join two change blocks into one, (g) red; sort paths with JavaScript's `<`, (k) red | kalfa/git/src/RepositoryTest.ts |
@@ -340,7 +340,7 @@ every check before its own, and each plant deletes that check. 2013's checks (pa
 
 - G, T, M, P and K laws, and every S law on `/memory`: plain files, on every pull request their change reaches, and on
   the laptop with a narrow path. T laws run under `pnpm typecheck`.
-- I1 (the S laws on `/process`), I5 and I6 run the real git binary in temp folders, so they are
+- I1 (the S laws on `/process`), I5 and I8 run the real git binary in temp folders, so they are
   `ProcessRepository.integration.test.ts`. A stand-in cannot do their job: they are the thin proof that real git
   answers what the stand-in and `/memory` answer, and every behavior they check has a plain law above. The laptop
   refuses that file by name, and pull requests and the merge queue run no `.integration.` law, so the lead starts a
@@ -367,16 +367,16 @@ Slice 2 branches from main after slice 1 lands. A file touched in both slices ha
 | 1 | kalfa/git/GLOSSARY.md | build | docs | **Binary file**; **Patch id** gains its rule |
 | 1 | kalfa/git/package.json | tests | tests | export `./Diff` |
 | 1 | kalfa/git/src/History.test-support.ts | tests | tests | edits with one smallest diff, classes (a) to (n), the model's patch id relation |
-| 1 | kalfa/git/src/RepositoryTest.ts | tests | tests | S9, S10, S11 to S13, S15, S16; `settings()` gains `files` and `diff` |
-| 1 | kalfa/git/src/ProcessSeed.test-support.ts | tests | tests | a gitlink entry for I6, if fast-import's `M 160000` needs a helper |
+| 1 | kalfa/git/src/RepositoryTest.ts | tests | tests | S9, S10, S11, S20, S21, S15, S16; `settings()` gains `files` and `diff` |
+| 1 | kalfa/git/src/ProcessSeed.test-support.ts | tests | tests | a gitlink entry for I8, if fast-import's `M 160000` needs a helper |
 | 1 | kalfa/git/src/internal/lines.test.ts | tests | tests | new: M5 |
-| 1 | kalfa/git/src/internal/parse.test.ts | tests | tests | P10 |
-| 1 | kalfa/git/src/ProcessRepository.test.ts | tests | tests | P11 |
+| 1 | kalfa/git/src/internal/parse.test.ts | tests | tests | P13 |
+| 1 | kalfa/git/src/ProcessRepository.test.ts | tests | tests | P14 |
 | 1 | kalfa/git/src/StandIn.test-support.ts | tests | tests | records each command's input bytes, and a piped command as one |
 | 1 | kalfa/git/src/Repository.types.test.ts | tests | tests | T5 for `patchId` |
-| 1 | kalfa/git/src/Values.test.ts | tests | tests | G5, G8 |
+| 1 | kalfa/git/src/Values.test.ts | tests | tests | G5, G9 |
 | 1 | kalfa/git/src/Values.types.test.ts | tests | tests | T4 |
-| 1 | kalfa/git/src/ProcessRepository.integration.test.ts | tests | tests | I5, I6 for `patchId` |
+| 1 | kalfa/git/src/ProcessRepository.integration.test.ts | tests | tests | I5, I8 for `patchId` |
 | 1 | kalfa/git/src/Package.test.ts | tests | tests | K1's export list |
 | 1 | kalfa/git/src/fixtures/diff-tree-raw-2.40.1.json | tests | tests | new: `vector:` raw `-z` output with a note per entry |
 | 2 | kalfa/git/src/Repository.ts | build | 60 | `rangePatchId` written once in `make` with its span and one time limit, `UnclearBase`; `diff` in the contract and its span, `NotUtf8`, `NotAFile` |
@@ -390,7 +390,7 @@ Slice 2 branches from main after slice 1 lands. A file touched in both slices ha
 | 2 | kalfa/git/src/History.test-support.ts | tests | tests | the model's diff, classes (o) to (r) |
 | 2 | kalfa/git/src/internal/parse.test.ts | tests | tests | P12 |
 | 2 | kalfa/git/src/Repository.types.test.ts | tests | tests | T5 for `rangePatchId` and `diff` |
-| 2 | kalfa/git/src/ProcessRepository.integration.test.ts | tests | tests | I5, I6 for `diff` |
+| 2 | kalfa/git/src/ProcessRepository.integration.test.ts | tests | tests | I5, I8 for `diff` |
 | 2 | kalfa/git/src/fixtures/diff-tree-patch-2.40.1.json | tests | tests | new: `vector:` `-U0` patch output with a note per section |
 | both | package.json | tests | tests | no change: the root manifest; `@kalfa/git` is already a root dev dependency |
 
@@ -431,7 +431,7 @@ already held by the overrides and the Effect block).
   `src/NodeChildProcessSpawner.ts`, the `PipedCommand` case: `exitCode: handle.exitCode` of
   `handles[handles.length - 1]`). So with `diff-tree | patch-id`, a failing `diff-tree` hands `patch-id` empty input,
   `patch-id` exits 0 and prints nothing, and the call would answer "no change" from a failure. `/process` runs
-  `diff-tree`, keeps its output (bounded by the limits), and gives it to `patch-id` as input. P11's plant holds it.
+  `diff-tree`, keeps its output (bounded by the limits), and gives it to `patch-id` as input. P14's plant holds it.
   The proof is a read of the source, not a run, so no upstream issue yet; a repro would show whether it is a bug or a
   shell's choice without `pipefail`.
 - **The range is measured from its one merge base, 80%.** The glossary's patch id names "a range's changes", and

@@ -1,4 +1,4 @@
-// The laws of the values (G1 to G8): a commit id, a ref name, a branch name, a commit and its signatures,
+// The laws of the values (G1 to G9): a commit id, a ref name, a branch name, a commit and its signatures,
 // the settings, a path in a tree, a tree id, a blob id and a file mode, and a patch id. Every class a generator must reach is applied to each run's drawn value, and the law
 // names the classes it needs, so a class dropped from a generator fails here loudly.
 import { expect, it } from "@effect/vitest";
@@ -692,7 +692,7 @@ it.prop(
 
 // Plant: allow `{40}|{64}` in the pattern; add the `i` flag; drop the pattern from `PatchId` and keep its brand.
 it.prop(
-  "G8 patch ids: PatchId accepts 40 lowercase hex and refuses each other form, and keeps the text",
+  "G9 patch ids: PatchId accepts 40 lowercase hex and refuses each other form, and keeps the text",
   { id: commitIdArb },
   ({ id }) => {
     const refusals = idRefusals(id);
