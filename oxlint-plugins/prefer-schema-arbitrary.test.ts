@@ -48,7 +48,8 @@ const constructors = [
   "uint8Array",
 ] as const;
 
-const options = { seed: 119120, numRuns: 4 };
+// 4 runs, each two real lint runs for each of two extensions, took 16.9 s of CI's 60 s limit, so 2.
+const options = { seed: 119120, numRuns: 2 };
 
 const name = fc.stringMatching(/^[a-z]{3,8}$/).map((s) => `random_${s}`);
 

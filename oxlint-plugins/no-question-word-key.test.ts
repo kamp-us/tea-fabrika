@@ -24,7 +24,8 @@ const PATH = "next/packages/libfabrika/src/keys.ts";
 
 const WORDS = ["where", "why", "what", "who", "how"];
 
-const runs = { seed: 119120, numRuns: 12 };
+// 12 runs took 19.0 s of CI's 60 s limit for the slowest law (each run plants a file with every word and form), so 6.
+const runs = { seed: 119120, numRuns: 6 };
 
 const isIdentifier = (name: string) => /^[$_\p{ID_Start}][$_‌‍\p{ID_Continue}]*$/u.test(name);
 

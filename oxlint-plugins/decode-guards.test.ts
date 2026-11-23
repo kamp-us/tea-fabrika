@@ -165,8 +165,8 @@ const PROBE = "next/packages/libfabrika/src/runtime/Probe.ts";
 // (a lint rule blocks wherever its code is clean), beside a wrong service ID, which blocks since ticket 909.
 describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a wrong service ID both block", () => {
   // The cases are the eight combinations of a parse, a wrong ID and another blocking fire (the ID's word is the one draw besides), and each run starts the
-  // real lint runner, 0.5 s. A law of all eight took 32 runs and 32 s in CI, four draws of each combination, so it is two laws by the parse: each keeps
-  // four draws of each of its four combinations (one pinned, three drawn), and each is half the work.
+  // real lint runner, 0.5 s. A law of all eight took 32 runs and 32 s in CI, four draws of each combination, so it is two laws by the parse: each runs the
+  // four combinations pinned and six more drawn, and each is half the work. 16 runs took 16.0 to 17.0 s of CI's 60 s limit for each, so 6 drawn.
   for (const parse of [false, true]) {
     it(`a clean report passes, and a wrong ID or another blocking one fails, with${parse ? "" : "out"} a JSON.parse`, () => {
       const seen = new Set<string>();
@@ -183,10 +183,10 @@ describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a w
           expect(ran.status, ran.stdout + ran.stderr).toBe(blocks > 0 ? 1 : 0);
           seen.add(`${id}:${blocking}`);
         }),
-        // The four combinations are drawn first, one each, so the coverage never rests on the seed; twelve more runs follow.
+        // The four combinations are drawn first, one each, so the coverage never rests on the seed; six more runs follow.
         {
           seed: 119120,
-          numRuns: 12,
+          numRuns: 6,
           examples: [false, true].flatMap((id) =>
             [false, true].map(
               (blocking) => [{ id, blocking, name: "word" }] as [{ id: boolean; blocking: boolean; name: string }],

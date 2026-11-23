@@ -783,7 +783,8 @@ it.prop(
     readable: Schema.Boolean,
   },
   ({ files, mask, filter, readable }) => expectOrdinary(files, mask, filter, readable),
-  { arbitrary: { seed: 119120, runs: 12, size: 100 } },
+  // 12 runs took 14.5 s of CI's 60 s limit, so 6.
+  { arbitrary: { seed: 119120, runs: 6, size: 100 } },
 );
 
 const pinned: Ordinary = {

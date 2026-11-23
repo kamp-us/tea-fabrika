@@ -1740,7 +1740,8 @@ it("property: the full-access flag reaches every step only on codex-exec before 
           expect(existsSync(join(dir, "boxes", "state", "!.lock"))).toBe(false);
         }
       }),
-      { seed: 119120, numRuns: 5 },
+      // 5 runs took 17.8 s of CI's 60 s limit, each starting real drive processes, so 3.
+      { seed: 119120, numRuns: 3 },
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

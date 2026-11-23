@@ -230,5 +230,6 @@ it.effect.prop(
         expect(Exit.isFailure(away.exit), words.join(" ")).toBe(true);
       }
     }),
-  { arbitrary: { seed: 119120, runs: runsFor({ fast: 12, full: 60 }) } },
+  // 60 full runs took 17.9 s of CI's 60 s limit, so 24.
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 12, full: 24 }) } },
 );

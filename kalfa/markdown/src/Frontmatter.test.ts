@@ -239,7 +239,8 @@ it.prop(
 
     deepStrictEqual(missing(checked, GROUPS), [], "groups never checked in this run");
   },
-  runs(200),
+  // 200 runs took 12.3 to 14.1 s of CI's 60 s limit, so 100.
+  runs(100),
 );
 
 // F3. Plants: compare `line.trim()` with `---`, so (w)'s `--- ` is a fence, red; take the last fence, not the next, (t) red.

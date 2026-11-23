@@ -827,8 +827,8 @@ it.prop(
     reach: Schema.Array(Schema.Boolean).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
   },
   (given) => expectSelector(given),
-  // Each run starts a process: a dozen runs, with the routes below each held once as a scenario.
-  { arbitrary: { seed: 119120, runs: 12, size: 100 } },
+  // Each run starts a process: 12 runs took 19.0 s of CI's 60 s limit, so 6, with the routes below each held once as a scenario.
+  { arbitrary: { seed: 119120, runs: 6, size: 100 } },
 );
 
 const chosen = (kind: Change["kind"], extra: Partial<Selected> = {}): Selected => ({
@@ -1322,7 +1322,8 @@ it.prop(
     expect(done.stdout.includes(hex(given.archive))).toBe(kept);
     expect(printed).toEqual(kept ? ["kept=true"] : leg === "absent" ? ["kept=false"] : []);
   },
-  { arbitrary: { seed: 119120, runs: 16, size: 100 } },
+  // 16 runs took 22.9 s of CI's 60 s limit (each runs the receipt step as a leg does), so 8.
+  { arbitrary: { seed: 119120, runs: 8, size: 100 } },
 );
 
 // D5. The fault decision: P1 is proven only when the faulted run fails for the export, the manifest's

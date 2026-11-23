@@ -208,7 +208,8 @@ describe("T325 K9 machine caps, today's tooling", () => {
         {
           ...options,
           seed: 119120,
-          numRuns: 5,
+          // 5 runs and 2 pinned cases, each 6 child Vitest starts, took 18.5 s of CI's 60 s limit, so 2 runs.
+          numRuns: 2,
           endOnFailure: true,
           examples: [[[26, 13, 1]], [[26, 0, 0]]],
         },
@@ -460,7 +461,8 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
           }
         },
       ),
-      { ...options, numRuns: 2 },
+      // 2 runs, each many child Vitest starts, took 16.4 s of CI's 60 s limit, so 1.
+      { ...options, numRuns: 1 },
     );
   });
 

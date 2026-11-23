@@ -1543,13 +1543,13 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 
   // Plant: pass any merge commit, or any note that verifies somewhere. The law that must not get
   // weaker: a merge nobody signed, or one carrying a link made for another commit, stops fetch.
-  it("K1 scenario: an unsigned or foreign lead merge still stops the next step's fetch", () => {
-    each(["unsigned", "foreign"] as const, (lead) =>
+  for (const lead of ["unsigned", "foreign"] as const) {
+    it(`K1 scenario: an ${lead} lead merge still stops the next step's fetch`, () => {
       fixture((b) => {
         refused(afterLeadMerge(b, lead, false), /commits check failed: (unsigned_commit|unlinked_commit) [0-9a-f]{8}/);
-      }),
-    );
-  });
+      });
+    });
+  }
 
   // Plants: say only "commits check failed"; drop the commit, the step or the count past five.
   // 18 fetches on 2026-11-09 stopped with no rule named, so nobody knew where to send them (T429).
@@ -1677,17 +1677,81 @@ describe("T321 K3 step order and rows, today's tooling", () => {
   // only the box's own rows, not the quest's where drive writes them (review boxes, 2026-11-09); read
   // from the box's base when the quest's root is saved (layers build, 2026-11-09: each step's box
   // starts at the last step's head, so its tests link sat before that box's base).
-  for (const part of [0, 1, 2]) {
-    it(`K3 gates build on a verified tests link since base and review on mutation or a recorded skip, run ${part + 1}`, () => {
+  // One law ran the twelve kinds as 3 runs of one fixture each, 12 to 18 s of CI's 60 s limit for each of the three. Each kind is a law of its own with the 3 runs.
+  for (const kind of [
+    "absent",
+    "before-base",
+    "since-root",
+    "bad-note",
+    "tests",
+    "review-absent",
+    "mutation",
+    "skip",
+    "quest-row",
+    "quest-row-skip",
+    "quest-row-stuck",
+    "quest-row-lane-key",
+  ]) {
+    it(`K3 gates build on a verified tests link since base and review on mutation or a recorded skip, ${kind}`, () => {
       fc.assert(
-        fc.property(word, (text) => {
-          each(
-            [
-              "absent",
-              "before-base",
-              "since-root",
-              "bad-note",
-              "tests",
+        fc.property(word, (text) =>
+          fixture((b) => {
+            if (["before-base", "since-root", "bad-note", "tests"].includes(kind)) {
+              const sha = b.commit(b.work, "src/a.ts", `${text}\n`);
+
+              if (kind === "bad-note") {
+                b.git(b.work, "notes", "--ref=fabrika", "add", "-m", '{"step":"tests"}', sha);
+              } else {
+                b.sign(b.work, "tests");
+              }
+
+              b.git(b.main, "fetch", "-q", b.work, `${b.branch}:${b.branch}`, "refs/notes/fabrika:refs/notes/fabrika");
+
+              if (kind === "before-base") {
+                b.state(sha);
+              }
+
+              if (kind === "since-root") {
+                b.state(sha);
+                appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
+              }
+            }
+
+            if (kind === "mutation" || kind === "skip") {
+              write(
+                join(b.boxes, "state/one.rows.jsonl"),
+                `${JSON.stringify({
+                  run: "mutation-321",
+                  ticket: "321",
+                  step: "mutation",
+                  role: "mutation",
+                  outcome: kind === "skip" ? "skip" : "done",
+                  why: "recorded fixture result",
+                })}\n`,
+              );
+            }
+
+            if (kind.startsWith("quest-row")) {
+              // Where drive writes a step's row: BOXES/<quest>-rows.jsonl, not the box's own.
+              // A box made before the rule that a lane is called a quest names its quest under `lane:`, read as well.
+              const key = kind === "quest-row-lane-key" ? "lane" : "quest";
+              appendFileSync(join(b.boxes, "state/one.box"), `${key}: onequest\n`);
+              write(
+                join(b.boxes, "onequest-rows.jsonl"),
+                `${JSON.stringify({
+                  run: "t321-mutation1",
+                  ticket: "321",
+                  role: "hand",
+                  step: "mutation",
+                  // drive writes `skip` for a mutation step that answered skip (ticket 423).
+                  outcome:
+                    { "quest-row": "pass", "quest-row-skip": "skip", "quest-row-lane-key": "pass" }[kind] ?? "stopped",
+                  why: "drive.ts mutation fixture row",
+                })}\n`,
+              );
+            }
+
+            const review = [
               "review-absent",
               "mutation",
               "skip",
@@ -1695,105 +1759,30 @@ describe("T321 K3 step order and rows, today's tooling", () => {
               "quest-row-skip",
               "quest-row-stuck",
               "quest-row-lane-key",
-            ],
-            (kind) =>
-              fixture((b) => {
-                if (["before-base", "since-root", "bad-note", "tests"].includes(kind)) {
-                  const sha = b.commit(b.work, "src/a.ts", `${text}\n`);
+            ].includes(kind);
 
-                  if (kind === "bad-note") {
-                    b.git(b.work, "notes", "--ref=fabrika", "add", "-m", '{"step":"tests"}', sha);
-                  } else {
-                    b.sign(b.work, "tests");
-                  }
+            const pass = [
+              "tests",
+              "since-root",
+              "mutation",
+              "skip",
+              "quest-row",
+              "quest-row-skip",
+              "quest-row-lane-key",
+            ].includes(kind);
 
-                  b.git(
-                    b.main,
-                    "fetch",
-                    "-q",
-                    b.work,
-                    `${b.branch}:${b.branch}`,
-                    "refs/notes/fabrika:refs/notes/fabrika",
-                  );
+            const got = b.run(review ? "review" : "build");
+            expect(got.code).not.toBeNull();
 
-                  if (kind === "before-base") {
-                    b.state(sha);
-                  }
-
-                  if (kind === "since-root") {
-                    b.state(sha);
-                    appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
-                  }
-                }
-
-                if (kind === "mutation" || kind === "skip") {
-                  write(
-                    join(b.boxes, "state/one.rows.jsonl"),
-                    `${JSON.stringify({
-                      run: "mutation-321",
-                      ticket: "321",
-                      step: "mutation",
-                      role: "mutation",
-                      outcome: kind === "skip" ? "skip" : "done",
-                      why: "recorded fixture result",
-                    })}\n`,
-                  );
-                }
-
-                if (kind.startsWith("quest-row")) {
-                  // Where drive writes a step's row: BOXES/<quest>-rows.jsonl, not the box's own.
-                  // A box made before the rule that a lane is called a quest names its quest under `lane:`, read as well.
-                  const key = kind === "quest-row-lane-key" ? "lane" : "quest";
-                  appendFileSync(join(b.boxes, "state/one.box"), `${key}: onequest\n`);
-                  write(
-                    join(b.boxes, "onequest-rows.jsonl"),
-                    `${JSON.stringify({
-                      run: "t321-mutation1",
-                      ticket: "321",
-                      role: "hand",
-                      step: "mutation",
-                      // drive writes `skip` for a mutation step that answered skip (ticket 423).
-                      outcome:
-                        { "quest-row": "pass", "quest-row-skip": "skip", "quest-row-lane-key": "pass" }[kind] ??
-                        "stopped",
-                      why: "drive.ts mutation fixture row",
-                    })}\n`,
-                  );
-                }
-
-                const review = [
-                  "review-absent",
-                  "mutation",
-                  "skip",
-                  "quest-row",
-                  "quest-row-skip",
-                  "quest-row-stuck",
-                  "quest-row-lane-key",
-                ].includes(kind);
-
-                const pass = [
-                  "tests",
-                  "since-root",
-                  "mutation",
-                  "skip",
-                  "quest-row",
-                  "quest-row-skip",
-                  "quest-row-lane-key",
-                ].includes(kind);
-
-                const got = b.run(review ? "review" : "build");
-                expect(got.code).not.toBeNull();
-
-                if (pass) {
-                  expect(got.code, got.text).toBe(0);
-                } else {
-                  refused(got, /step_out_of_order|tests|mutation/);
-                  expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
-                }
-              }),
-          );
-        }),
-        { ...options, numRuns: 1, seed: options.seed + part },
+            if (pass) {
+              expect(got.code, got.text).toBe(0);
+            } else {
+              refused(got, /step_out_of_order|tests|mutation/);
+              expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
+            }
+          }),
+        ),
+        options,
       );
     });
   }
@@ -1840,45 +1829,51 @@ describe("T321 K3 step order and rows, today's tooling", () => {
   });
 
   // Plants: drop failed/missing-usage runs, leave a pid behind, or append a row on every fetch.
-  it("K3 every exit saves one run with bounds, status and nullable usage; collection is idempotent", () => {
-    fc.assert(
-      fc.property(fc.record({ exit: fc.constantFrom(0, 7), signal: fc.boolean(), usage: fc.boolean() }), (setup) =>
-        fixture((b) => {
-          const start = b.commit(b.work, "src/a.ts", "before this run\n");
-          b.sign(b.work, "tests");
-          b.git(b.main, "fetch", "-q", b.work, `${b.branch}:${b.branch}`, "refs/notes/fabrika:refs/notes/fabrika");
-          b.setup(setup);
-          const got = b.run();
-          expect(got.code, got.text).toBe(setup.signal ? 143 : setup.exit);
-          const rows = b.rows();
-          expect(rows).toHaveLength(1);
-          expect(rows[0]).toMatchObject({
-            ticket: "321",
-            step: "tests",
-            outcome: setup.signal || setup.exit ? "stuck" : "done",
-          });
-          expect(rows[0]!.run).toEqual(expect.any(String));
-          expect(rows[0]!.started).toEqual(expect.any(String));
-          expect(rows[0]!.ended).toEqual(expect.any(String));
-          expect(rows[0]!.billed).toBe(setup.usage ? 110 : null);
-          const state = readFileSync(join(b.boxes, "state/one.box"), "utf8");
-          expect(state).toContain(start);
-          expect(state).toContain(String(rows[0]!.run));
-          expect(state).toContain("tests");
-          expect(existsSync(join(b.boxes, "state/one.pid"))).toBe(false);
-          b.fetch();
-          b.fetch();
-          expect(b.rows()).toEqual(rows);
-        }),
-      ),
-      {
-        ...options,
-        // pinned: the dropped-row plants: no row for a failed run with no usage, or for an
-        // interrupted run that exited 0.
-        examples: [[{ exit: 7, signal: false, usage: false }], [{ exit: 0, signal: true, usage: true }]],
-      },
-    );
-  });
+  // One law ran 3 draws and 2 pinned cases, a fixture and a real run each: 17.8 s of CI's 60 s limit. It is two laws by the signal, each with its pinned case and 1 draw.
+  for (const signal of [false, true]) {
+    it(`K3 every exit saves one run with bounds, status and nullable usage; collection is idempotent, ${signal ? "interrupted" : "exited"}`, () => {
+      fc.assert(
+        fc.property(
+          fc.record({ exit: fc.constantFrom(0, 7), signal: fc.constant(signal), usage: fc.boolean() }),
+          (setup) =>
+            fixture((b) => {
+              const start = b.commit(b.work, "src/a.ts", "before this run\n");
+              b.sign(b.work, "tests");
+              b.git(b.main, "fetch", "-q", b.work, `${b.branch}:${b.branch}`, "refs/notes/fabrika:refs/notes/fabrika");
+              b.setup(setup);
+              const got = b.run();
+              expect(got.code, got.text).toBe(setup.signal ? 143 : setup.exit);
+              const rows = b.rows();
+              expect(rows).toHaveLength(1);
+              expect(rows[0]).toMatchObject({
+                ticket: "321",
+                step: "tests",
+                outcome: setup.signal || setup.exit ? "stuck" : "done",
+              });
+              expect(rows[0]!.run).toEqual(expect.any(String));
+              expect(rows[0]!.started).toEqual(expect.any(String));
+              expect(rows[0]!.ended).toEqual(expect.any(String));
+              expect(rows[0]!.billed).toBe(setup.usage ? 110 : null);
+              const state = readFileSync(join(b.boxes, "state/one.box"), "utf8");
+              expect(state).toContain(start);
+              expect(state).toContain(String(rows[0]!.run));
+              expect(state).toContain("tests");
+              expect(existsSync(join(b.boxes, "state/one.pid"))).toBe(false);
+              b.fetch();
+              b.fetch();
+              expect(b.rows()).toEqual(rows);
+            }),
+        ),
+        {
+          ...options,
+          numRuns: 1,
+          // pinned: the dropped-row plants: no row for a failed run with no usage, or for an
+          // interrupted run that exited 0.
+          examples: signal ? [[{ exit: 0, signal: true, usage: true }]] : [[{ exit: 7, signal: false, usage: false }]],
+        },
+      );
+    });
+  }
 
   // Plant: reset usage totals at each completed turn, retaining only the last turn.
   it("K3 fieldrow sums usage across completed turns and ignores partial events", () => {
