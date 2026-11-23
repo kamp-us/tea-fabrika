@@ -714,7 +714,8 @@ const Cell = Schema.Struct({
 
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(3), Schema.isMaxLength(10));
 
-const options = { timeout: 300_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } };
+// 25 full runs, not 40: Q12's first law took 25 s of CI's 60 s limit at 40.
+const options = { timeout: 300_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 25 }) } };
 
 const accepted = { _tag: "ok", result: { _tag: "accepted" } };
 

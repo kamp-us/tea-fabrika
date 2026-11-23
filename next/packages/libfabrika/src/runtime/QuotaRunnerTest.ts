@@ -96,9 +96,16 @@ const History = Schema.Array(
     ...Cell.fields,
     length: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1001 })),
   }),
-).check(Schema.isMinLength(1), Schema.isMaxLength(3));
+).check(Schema.isMinLength(1), Schema.isMaxLength(2));
 
 const options = { timeout: 600_000, arbitrary: { seed: 119120, runs: 40, size: 100 } };
+
+// Q18 replays histories of up to 1,001 accepted messages, about a millisecond and a half each, so a run costs seconds. At 40 runs of up to
+// three histories it took 205 s in CI. It keeps the 1,001 bound, the real limit, and takes at most two histories in each of 6 runs.
+const history = { ...options, arbitrary: { ...options.arbitrary, runs: 6 } };
+
+// Q19 took 34 s of CI's 60 s limit at 40 runs.
+const timers = { ...options, arbitrary: { ...options.arbitrary, runs: 25 } };
 
 const names = ["alpha:1", "alpha:2", "beta:1"];
 
@@ -508,7 +515,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             }
           }),
         ),
-      options,
+      history,
     );
 
     it.effect.prop(
@@ -553,6 +560,6 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             }
           }),
         ),
-      options,
+      timers,
     );
   });

@@ -71,6 +71,10 @@ import {
 
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
 
+// D4 and D9 run each change of a draw through several disk calls on a watched disk, so a run costs the most: at 100 runs they took 44 s and
+// 34 s of CI's 60 s limit. Each run still reaches every class the law names.
+const heavy = { arbitrary: { ...check.arbitrary, runs: runsFor({ fast: 25, full: 40 }) } };
+
 // ---------------------------------------------------------------------------------------------
 // The harness: one disk call on a disk in memory, watched.
 // ---------------------------------------------------------------------------------------------
@@ -449,7 +453,7 @@ it.effect.prop(
 
       reach.done();
     }),
-  check,
+  heavy,
 );
 
 // ---------------------------------------------------------------------------------------------
@@ -824,7 +828,7 @@ it.effect.prop(
 
       reach.done();
     }),
-  check,
+  heavy,
 );
 
 // ---------------------------------------------------------------------------------------------

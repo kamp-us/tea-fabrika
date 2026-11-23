@@ -101,7 +101,8 @@ it.effect.prop(
 
       deepStrictEqual(missing(checked, GROUPS), [], "groups never checked in this run");
     }),
-  runs(300),
+  // 120 runs, not 300: F1 writes and reads every shape in each run, and at 300 runs it took 40 s of CI's 60 s limit.
+  runs(120),
 );
 
 const FENCES = new Set(["---", "---\r", "..."]);

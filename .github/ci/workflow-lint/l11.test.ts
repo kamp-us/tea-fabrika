@@ -159,35 +159,75 @@ it.prop(
   options,
 );
 
+// Plants (each run once, restored): drop any one of these controls from the lint. These mutations use no generated value, so they run once here and
+// not again in each of the property's 100 runs, where all of them together took 22 s of CI's 60 s limit.
+it("pinned: workflow policy refuses caller controls, weak trust and raw uploads", () => {
+  const mutations: Array<(value: ReturnType<typeof workflow>) => void> = [
+    (value) => {
+      allSteps(job(value, "inputs"))[4]!["run"] = "true";
+    },
+    (value) => {
+      const steps = allSteps(job(value, "output"));
+      [steps[4], steps[5]] = [steps[5]!, steps[4]!];
+      job(value, "output")["steps"] = steps;
+    },
+    (value) => {
+      map(allSteps(job(value, "output"))[2]!["with"])["path"] = "source-uncached";
+    },
+    (value) => {
+      map(value.on)["pull_request"] = {};
+    },
+    (value) => {
+      map(value.permissions)["id-token"] = "write";
+    },
+    (value) => {
+      job(value, "output")["name"] = `\${{ github.token }}`;
+    },
+    (value) => {
+      job(value, "compare")["strategy"] = { "max-parallel": 2, matrix: { variant: ["cached", "uncached"] } };
+    },
+    (value) => {
+      execute(value, "output")["timeout-minutes"] = 18;
+    },
+    (value) => {
+      map(execute(value, "inputs")["env"])["CI"] = "true";
+    },
+    (value) => {
+      allSteps(job(value, "inputs"))[1]!["run"] = "true";
+    },
+    (value) => {
+      map(allSteps(job(value, "output"))[0]!["with"])["persist-credentials"] = true;
+    },
+    (value) => {
+      map(allSteps(job(value, "output")).at(-1)!["with"])["path"] = `\${{ runner.temp }}/**`;
+    },
+    (value) => {
+      map(allSteps(job(value, "output")).at(-1)!["with"])["name"] = `l11-exercise-\${{ toJSON(secrets) }}`;
+    },
+    (value) => {
+      job(value, "collect")["needs"] = ["slot-10"];
+    },
+    (value) => {
+      job(value, "collect")["if"] = "success()";
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const changed = structuredClone(workflow());
+    mutate(changed);
+    expect(lintL11(JSON.stringify(changed)).length).toBeGreaterThan(0);
+  }
+});
+
 it.prop(
-  "workflow policy refuses caller controls, parallel slots, weak trust and raw uploads",
+  "workflow policy refuses generated text as a caller command or run, and a slot given needs, a condition or a matrix",
   { slot: integer(2, 10), text: Text },
   ({ slot, text }) => {
     // Plant: stop checking slot needs. Mutations are policy data, never executed fault scripts.
 
     const mutations: Array<(value: ReturnType<typeof workflow>) => void> = [
       (value) => {
-        allSteps(job(value, "inputs"))[4]!["run"] = "true";
-      },
-      (value) => {
-        const steps = allSteps(job(value, "output"));
-        [steps[4], steps[5]] = [steps[5]!, steps[4]!];
-        job(value, "output")["steps"] = steps;
-      },
-      (value) => {
-        map(allSteps(job(value, "output"))[2]!["with"])["path"] = "source-uncached";
-      },
-      (value) => {
         map(value.on.workflow_dispatch.inputs)["command"] = { type: "string", default: text };
-      },
-      (value) => {
-        map(value.on)["pull_request"] = {};
-      },
-      (value) => {
-        map(value.permissions)["id-token"] = "write";
-      },
-      (value) => {
-        job(value, "output")["name"] = `\${{ github.token }}`;
       },
       (value) => {
         job(value, `slot-${slot}`)["needs"] = ["manifest"];
@@ -199,34 +239,7 @@ it.prop(
         job(value, `slot-${slot}`)["strategy"] = { matrix: { replacement: [1, 2] } };
       },
       (value) => {
-        job(value, "compare")["strategy"] = { "max-parallel": 2, matrix: { variant: ["cached", "uncached"] } };
-      },
-      (value) => {
-        execute(value, "output")["timeout-minutes"] = 18;
-      },
-      (value) => {
         execute(value, "output")["run"] = text;
-      },
-      (value) => {
-        map(execute(value, "inputs")["env"])["CI"] = "true";
-      },
-      (value) => {
-        allSteps(job(value, "inputs"))[1]!["run"] = "true";
-      },
-      (value) => {
-        map(allSteps(job(value, "output"))[0]!["with"])["persist-credentials"] = true;
-      },
-      (value) => {
-        map(allSteps(job(value, "output")).at(-1)!["with"])["path"] = `\${{ runner.temp }}/**`;
-      },
-      (value) => {
-        map(allSteps(job(value, "output")).at(-1)!["with"])["name"] = `l11-exercise-\${{ toJSON(secrets) }}`;
-      },
-      (value) => {
-        job(value, "collect")["needs"] = ["slot-10"];
-      },
-      (value) => {
-        job(value, "collect")["if"] = "success()";
       },
     ];
 

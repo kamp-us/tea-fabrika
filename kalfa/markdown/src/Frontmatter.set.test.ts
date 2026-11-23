@@ -130,7 +130,9 @@ it.effect.prop(
 
       deepStrictEqual(Support.unreached(seen, OLD_AND_VALUES), [], "classes never checked in this run");
     }),
-  runs(300),
+  // 150 runs, not 300: each run checks 30 cases (one for every class), a case costs a yaml read, an edit and a re-read, and at 300 runs
+  // the law took 29 s of CI's 60 s limit.
+  runs(150),
 );
 
 // E3. Plants: end a value's text at its first space, (a) red; for a quoted value, end its text at its start plus its read text's length, (b) red;
@@ -176,7 +178,8 @@ it.effect.prop(
 
       deepStrictEqual(Support.unreached(seen, OLD_AND_VALUES), [], "classes never checked in this run");
     }),
-  runs(300),
+  // 110 runs, not 300: this law also reads each answer again, and at 300 runs it took 34 s of CI's 60 s limit.
+  runs(110),
 );
 
 // E4. Plant: find the closing fence by the last fence line, not the next, (z) red.
