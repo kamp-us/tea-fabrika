@@ -5,7 +5,7 @@
  *
  * A commit's id and a tree's id are computed as git computes them, so the same commit with the same files has the same id here and in a real repository. The store holds only what git's format can hold: a message is a `string`, so a commit that is not UTF-8 cannot be put in memory, and a path is a `Path`, so one git refuses cannot be put in a tree.
  */
-import { Context, Effect, Layer, Ref as Cell, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Ref as Cell, Result, Schema } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
@@ -368,22 +368,74 @@ const isAncestor = (
 ): Result.Result<boolean, Repository.NoSuchCommit | Repository.HistoryTooShort> =>
   Result.map(history(store, [ancestor, descendant]), () => reach(store, [descendant]).has(ancestor));
 
+// What a write to the store answers, and the store after it: a call that fails leaves the store as it was.
+type Written<A, E> = readonly [Result.Result<A, E>, Store];
+
+// A commit put in the store. Its tree is in the store, then each parent is, in order: the error names the first that is not.
+const written = (
+  store: Store,
+  made: Commit.Commit,
+): Written<Commit.Commit, Repository.NoSuchTree | Repository.NoSuchCommit> => {
+  if (!store.trees.has(made.tree)) {
+    return [Result.fail(new Repository.NoSuchTree({ id: made.tree })), store];
+  }
+
+  const lacking = made.parents.find((parent) => !store.commits.has(parent));
+
+  if (lacking !== undefined) {
+    return [Result.fail(new Repository.NoSuchCommit({ id: lacking })), store];
+  }
+
+  return [Result.succeed(made), { ...store, commits: new Map(store.commits).set(made.id, made) }];
+};
+
+// A ref pointed at a commit of the store, checked as git's `update-ref` checks: the commit is in the store, the ref is at
+// `from` now (none means it is not there), and no other ref is a folder of it or sits in its folder.
+const moved = (
+  store: Store,
+  move: { readonly ref: Ref.RefName; readonly from: Option.Option<CommitId>; readonly to: CommitId },
+): Written<void, Repository.NoSuchCommit | Repository.RefMoved | Repository.RefInTheWay> => {
+  if (!store.commits.has(move.to)) {
+    return [Result.fail(new Repository.NoSuchCommit({ id: move.to })), store];
+  }
+
+  if (Option.getOrUndefined(move.from) !== store.refs.get(move.ref)) {
+    return [Result.fail(new Repository.RefMoved({ ref: move.ref })), store];
+  }
+
+  const other = [...store.refs.keys()].filter((name) => isBeside(name, move.ref)).sort(byBytes)[0];
+
+  if (other !== undefined) {
+    return [Result.fail(new Repository.RefInTheWay({ ref: move.ref, other })), store];
+  }
+
+  return [Result.succeed(undefined), { ...store, refs: new Map(store.refs).set(move.ref, move.to) }];
+};
+
 /**
  * Layer that provides `Repository` over a store held in memory, and `MemoryStore` to read it and move it.
  *
  * **Details**
  *
- * Each call reads the store as it is then. The calls answer as git does and fail as the shared laws say.
+ * Each call reads the store as it is then. The calls answer as git does and fail as the shared laws say. A write is one step on the store, so two writes never interleave. It needs a `Digest`, which gives a written commit its id.
  *
  * @category layers
  */
-export const layer = (store: Store, settings: Settings.Settings): Layer.Layer<Repository.Repository | MemoryStore> =>
+export const layer = (
+  store: Store,
+  settings: Settings.Settings,
+): Layer.Layer<Repository.Repository | MemoryStore, never, Digest.Digest> =>
   Layer.effectContext(
-    Effect.map(Cell.make(store), (cell) => {
+    Effect.gen(function* () {
+      const digest = yield* Digest.Digest;
+      const cell = yield* Cell.make(store);
       const { limits } = settings;
 
       const read = <A, E>(call: (held: Store) => Result.Result<A, E>): Effect.Effect<A, E> =>
         Effect.flatMap(Cell.get(cell), (held) => Effect.fromResult(call(held)));
+
+      const write = <A, E>(call: (held: Store) => Written<A, E>): Effect.Effect<A, E> =>
+        Effect.flatMap(Cell.modify(cell, call), Effect.fromResult);
 
       return Context.make(
         Repository.Repository,
@@ -394,6 +446,12 @@ export const layer = (store: Store, settings: Settings.Settings): Layer.Layer<Re
             walk: (range) => read((held) => walk(held, limits, range)),
             mergeBases: (a, b) => read((held) => mergeBases(held, limits, a, b)),
             isAncestor: (ancestor, descendant) => read((held) => isAncestor(held, ancestor, descendant)),
+            writeCommit: (fields) =>
+              commit(fields).pipe(
+                Effect.provideService(Digest.Digest, digest),
+                Effect.flatMap((made) => write((held) => written(held, made))),
+              ),
+            moveRef: (move) => write((held) => moved(held, move)),
           },
           settings,
         ),

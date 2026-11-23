@@ -3,13 +3,15 @@
  *
  * **Details**
  *
- * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a read. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`.
+ * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a call. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`, and a ref that could not be moved is read again with `for-each-ref`. It writes with `hash-object` and `update-ref` and runs no command that reaches a remote.
  */
-import { Config, Duration, Effect, Layer, Stream } from "effect";
+import { Config, Duration, Effect, Layer, Option, Predicate, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Commit from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
+import { bytes } from "./internal/object.ts";
 import * as Parse from "./internal/parse.ts";
-import type * as Ref from "./Ref.ts";
+import * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
 
@@ -54,7 +56,10 @@ interface Output {
   readonly stderr: string;
 }
 
-type Run = (args: ReadonlyArray<string>, input?: string) => Effect.Effect<Output, Repository.GitUnavailable>;
+type Run = (
+  args: ReadonlyArray<string>,
+  input?: string | Uint8Array,
+) => Effect.Effect<Output, Repository.GitUnavailable>;
 
 // The first `most` bytes of what a stream says, the rest read and left out so a full pipe never stalls git.
 const firstBytes = (most: number) => (kept: Uint8Array, chunk: Uint8Array) => {
@@ -86,7 +91,8 @@ const runner = (
               extendEnv: false,
               env,
               forceKillAfter: KILL_AFTER,
-              stdin: input === undefined ? "ignore" : Stream.make(encoder.encode(input)),
+              stdin:
+                input === undefined ? "ignore" : Stream.make(Predicate.isString(input) ? encoder.encode(input) : input),
             }),
           )
           .pipe(Effect.mapError((cause) => unavailable(new Repository.NotStarted({ cause }))));
@@ -105,22 +111,32 @@ const runner = (
     );
   });
 
+const exited = (output: Output): Repository.GitUnavailable =>
+  unavailable(new Repository.Exited({ code: output.code, stderr: output.stderr }));
+
 // A command whose only good ending is exit code 0.
 const succeeded = (output: Output): Effect.Effect<Output, Repository.GitUnavailable> =>
-  output.code === 0
-    ? Effect.succeed(output)
-    : Effect.fail(unavailable(new Repository.Exited({ code: output.code, stderr: output.stderr })));
+  output.code === 0 ? Effect.succeed(output) : Effect.fail(exited(output));
 
 const stdoutText = (output: Output): Effect.Effect<string, Repository.GitUnavailable> =>
   Effect.fromResult(Parse.lossless(output.stdout));
 
-const lines = (ids: ReadonlyArray<CommitId>): string => ids.map((id) => `${id}\n`).join("");
+const lines = (ids: ReadonlyArray<string>): string => ids.map((id) => `${id}\n`).join("");
+
+// What the repository holds under each id, from one `cat-file --batch-check`: its type, and nothing for an id it lacks.
+const held = Effect.fnUntraced(function* (
+  run: Run,
+  ids: ReadonlyArray<string>,
+): Effect.fn.Return<ReadonlyMap<string, Parse.Checked>, Repository.GitUnavailable> {
+  const output = yield* Effect.flatMap(run(["cat-file", "--batch-check"], lines(ids)), succeeded);
+
+  return yield* Effect.fromResult(Parse.checks(yield* stdoutText(output)));
+});
 
 // Every id is a commit the repository holds, asked before any call that names commits, so an exit code of 128 later
 // is never a missing commit. A tree, a blob or a tag with that id is not a commit either.
 const known = Effect.fnUntraced(function* (run: Run, ids: ReadonlyArray<CommitId>) {
-  const output = yield* Effect.flatMap(run(["cat-file", "--batch-check"], lines(ids)), succeeded);
-  const checked = yield* Effect.fromResult(Parse.checks(yield* stdoutText(output)));
+  const checked = yield* held(run, ids);
 
   for (const id of ids) {
     if (checked.get(id)?.type !== "commit") {
@@ -145,7 +161,87 @@ const whole = Effect.fnUntraced(function* (run: Run) {
   }
 });
 
-const calls = (run: Run, settings: Settings.Settings): Repository.Repository["Service"] => {
+// The ref names a `for-each-ref` printed as `%(objectname) %(refname)` holds, each with the id it points at.
+const listing = (output: string): Result.Result<ReadonlyArray<Listed>, Repository.GitUnavailable> =>
+  Result.all(
+    output
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line) => {
+        const [id, name, ...rest] = line.split(" ");
+
+        return id === undefined || name === undefined || rest.length > 0
+          ? Result.fail(
+              unavailable(
+                new Repository.Unreadable({ cause: new Error("a for-each-ref line has an unexpected form") }),
+              ),
+            )
+          : Result.succeed({ id, name });
+      }),
+  );
+
+interface Listed {
+  readonly id: string;
+  readonly name: string;
+}
+
+// Every folder a ref would sit in, shortest first: `refs/heads/a/b` has `refs/heads` and `refs/heads/a`.
+const folders = (ref: Ref.RefName): ReadonlyArray<string> => {
+  const parts = ref.split("/");
+
+  return parts.slice(1, -1).map((_, at) => parts.slice(0, at + 2).join("/"));
+};
+
+// Up to `count` refs at or below `under`, sorted by name: the ref itself first when it exists.
+const listed = Effect.fnUntraced(function* (run: Run, under: string, count: number) {
+  const output = yield* Effect.flatMap(
+    run(["for-each-ref", `--count=${count}`, "--format=%(objectname) %(refname)", under]),
+    succeeded,
+  );
+
+  return yield* Effect.fromResult(listing(yield* stdoutText(output)));
+});
+
+const refNamed = (name: string): Result.Result<Ref.RefName, Repository.GitUnavailable> =>
+  Result.mapError(Schema.decodeUnknownResult(Ref.RefName)(name), () =>
+    unavailable(
+      new Repository.Unreadable({ cause: new Error("a for-each-ref line names a ref that is not a ref name") }),
+    ),
+  );
+
+// Why `update-ref` failed, read from the repository and never from what git said: the ref is not where the caller said
+// it was (`RefMoved`), or another ref is in its way (`RefInTheWay`), else git ended with a code no call reads as an answer.
+const failed = Effect.fnUntraced(function* (
+  run: Run,
+  move: { readonly ref: Ref.RefName; readonly from: Option.Option<CommitId> },
+  output: Output,
+) {
+  // The ref sorts first, then what is below it, so two refs show both.
+  const [first, second] = yield* listed(run, move.ref, 2);
+  const at = first?.name === move.ref ? first.id : undefined;
+
+  if (at !== Option.getOrUndefined(move.from)) {
+    return yield* new Repository.RefMoved({ ref: move.ref });
+  }
+
+  const below = at === undefined ? first : second;
+
+  if (below !== undefined) {
+    return yield* new Repository.RefInTheWay({ ref: move.ref, other: yield* Effect.fromResult(refNamed(below.name)) });
+  }
+
+  for (const folder of folders(move.ref)) {
+    const [other] = yield* listed(run, folder, 1);
+
+    if (other?.name === folder) {
+      return yield* new Repository.RefInTheWay({ ref: move.ref, other: yield* Effect.fromResult(refNamed(folder)) });
+    }
+  }
+
+  return yield* exited(output);
+});
+
+const calls = (run: Run, settings: Settings.Settings): Repository.Raw => {
   const { limits } = settings;
 
   // The objects of commits whose sizes are within `limits.bytes`, read with one `cat-file --batch`.
@@ -237,6 +333,49 @@ const calls = (run: Run, settings: Settings.Settings): Repository.Repository["Se
       yield* succeeded(output);
 
       return true;
+    }),
+    writeCommit: Effect.fnUntraced(function* (commit) {
+      const checked = yield* held(run, [commit.tree, ...commit.parents]);
+
+      if (checked.get(commit.tree)?.type !== "tree") {
+        return yield* new Repository.NoSuchTree({ id: commit.tree });
+      }
+
+      for (const parent of commit.parents) {
+        if (checked.get(parent)?.type !== "commit") {
+          return yield* new Repository.NoSuchCommit({ id: parent });
+        }
+      }
+
+      // The same bytes the memory adapter hashes, so one commit has one id in both.
+      const output = yield* Effect.flatMap(
+        run(["hash-object", "-t", "commit", "-w", "--stdin"], bytes(commit)),
+        succeeded,
+      );
+
+      const [id, ...more] = yield* Effect.fromResult(Parse.ids(yield* stdoutText(output)));
+
+      if (id === undefined || more.length > 0) {
+        return yield* unavailable(new Repository.Unreadable({ cause: new Error("git printed no single commit id") }));
+      }
+
+      return new Commit.Commit({ ...commit, id });
+    }),
+    moveRef: Effect.fnUntraced(function* (move) {
+      yield* known(run, [move.to]);
+
+      // `--no-deref` replaces a symbolic ref with a plain one and never moves its target. An id of zeros means the ref must not exist.
+      const output = yield* run([
+        "update-ref",
+        "--no-deref",
+        move.ref,
+        move.to,
+        Option.getOrElse(move.from, () => "0".repeat(move.to.length)),
+      ]);
+
+      if (output.code !== 0) {
+        return yield* failed(run, move, output);
+      }
     }),
   };
 };

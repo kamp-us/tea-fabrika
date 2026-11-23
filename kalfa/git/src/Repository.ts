@@ -1,16 +1,18 @@
 /**
- * The service that reads commits and refs from one repository with no working copy, the failures it names, and `make`.
+ * The service that reads commits and refs from one repository with no working copy, writes a commit and moves a ref, the failures it names, and `make`.
  *
  * **Details**
  *
- * This file holds the contract and the one wrap every adapter gets, and nothing that runs git. A call never reads HEAD, never writes and never changes the repository. Each adapter is its own entry point, `memory` and `process`, and `test` holds the laws they all pass.
+ * This file holds the contract and the one wrap every adapter gets, and nothing that runs git. A call never reads HEAD and never changes the files of a working copy. `writeCommit` adds one commit and `moveRef` moves one ref, and no other call writes. Each adapter is its own entry point, `memory` and `process`, and `test` holds the laws they all pass.
  */
-import { Context, Effect, Schema } from "effect";
+import { Clock, Context, Effect, Option, Schema } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
-import type * as Commit from "./Commit.ts";
+import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
+import { bytes } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
 import * as Settings from "./Settings.ts";
+import { TreeId } from "./Tree.ts";
 
 /**
  * The repository holds no commit with that id: it is missing, or it names a tree, a blob or a tag.
@@ -21,6 +23,15 @@ export class NoSuchCommit extends Schema.TaggedError<NoSuchCommit, { readonly br
   "NoSuchCommit",
   { id: CommitId },
 ) {}
+
+/**
+ * The repository holds no tree with that id: it is missing, or it names a commit, a blob or a tag.
+ *
+ * @category errors
+ */
+export class NoSuchTree extends Schema.TaggedError<NoSuchTree, { readonly brand: unique symbol }>()("NoSuchTree", {
+  id: TreeId,
+}) {}
 
 /**
  * A ref under the asked name points at something that is not a commit.
@@ -84,6 +95,49 @@ export class TooMany extends Schema.TaggedError<TooMany, { readonly brand: uniqu
 export class TooLarge extends Schema.TaggedError<TooLarge, { readonly brand: unique symbol }>()("TooLarge", {
   id: CommitId,
   most: Schema.Int,
+}) {}
+
+/**
+ * A commit's message holds a NUL byte, which git refuses to write.
+ *
+ * @category errors
+ */
+export class NulInMessage extends Schema.TaggedError<NulInMessage, { readonly brand: unique symbol }>()(
+  "NulInMessage",
+  {},
+) {}
+
+/**
+ * A commit to write would be larger than `limits.bytes`, so it could not be read back.
+ *
+ * @category errors
+ */
+export class TooLargeToWrite extends Schema.TaggedError<TooLargeToWrite, { readonly brand: unique symbol }>()(
+  "TooLargeToWrite",
+  { most: Schema.Int },
+) {}
+
+/**
+ * A ref is not where the caller said it was: it is at another commit, it is gone, or it exists when the caller said it did not.
+ *
+ * @category errors
+ */
+export class RefMoved extends Schema.TaggedError<RefMoved, { readonly brand: unique symbol }>()("RefMoved", {
+  ref: Ref.RefName,
+}) {}
+
+/**
+ * A ref cannot be made because another ref is in the way: git holds a ref as a file, so a ref cannot sit below a ref or be a folder of one.
+ *
+ * **Details**
+ *
+ * `other` is a ref that is in the way: one below `ref`, or one that `ref` would sit below.
+ *
+ * @category errors
+ */
+export class RefInTheWay extends Schema.TaggedError<RefInTheWay, { readonly brand: unique symbol }>()("RefInTheWay", {
+  ref: Ref.RefName,
+  other: Ref.RefName,
 }) {}
 
 /**
@@ -164,8 +218,16 @@ export class NoRepository extends Schema.TaggedError<NoRepository, { readonly br
 
 type Fails = GitUnavailable | TimedOut;
 
+// What a caller says to write a commit: the committer is the settings' and the clock's, never the caller's.
+type Written = {
+  readonly tree: TreeId;
+  readonly parents: ReadonlyArray<CommitId>;
+  readonly author: Commit.Signature;
+  readonly message: string;
+};
+
 /**
- * Service that reads commits and refs from one repository.
+ * Service that reads commits and refs from one repository, writes a commit and moves a ref.
  *
  * **Details**
  *
@@ -174,6 +236,9 @@ type Fails = GitUnavailable | TimedOut;
  * - `walk` answers every commit an `include` commit reaches, itself included, that no `exclude` commit reaches, oldest first: each commit comes after its parents.
  * - `mergeBases` answers the best common ancestors of two commits, sorted by id. `[]` means the two share no history.
  * - `isAncestor` answers whether `descendant` reaches `ancestor`. A commit is its own ancestor.
+ *
+ * - `writeCommit` writes one commit and answers it. Its committer is the settings' one, at the clock's second and offset `+0000`. It fails when the message holds a NUL byte, when the object would pass `limits.bytes`, and when the tree is no tree or a parent is no commit. It moves no ref.
+ * - `moveRef` points `ref` at `to`, making it or moving it, only if the ref is at `from` now: `Option.none()` means it must not exist. It fails `RefMoved` when it is elsewhere and `RefInTheWay` when another ref is in the way, and then leaves every ref as it was. A call that ends in `TimedOut` may have moved the ref, so read it again.
  *
  * In a shallow repository `walk`, `mergeBases` and `isAncestor` fail with `HistoryTooShort`.
  *
@@ -201,11 +266,30 @@ export class Repository extends Context.Service<
       ancestor: CommitId,
       descendant: CommitId,
     ) => Effect.Effect<boolean, NoSuchCommit | HistoryTooShort | Fails>;
+    readonly writeCommit: (
+      commit: Written,
+    ) => Effect.Effect<Commit.Commit, NoSuchTree | NoSuchCommit | NulInMessage | TooLargeToWrite | Fails>;
+    readonly moveRef: (move: {
+      readonly ref: Ref.RefName;
+      readonly from: Option.Option<CommitId>;
+      readonly to: CommitId;
+    }) => Effect.Effect<void, NoSuchCommit | RefMoved | RefInTheWay | Fails>;
   }
 >()("@kalfa/git/Repository") {}
 
 /**
- * Wraps an adapter's five calls with a span each and the time limit.
+ * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets.
+ *
+ * @category models
+ */
+export type Raw = Omit<Repository["Service"], "writeCommit"> & {
+  readonly writeCommit: (
+    commit: Written & { readonly committer: Commit.Signature },
+  ) => ReturnType<Repository["Service"]["writeCommit"]>;
+};
+
+/**
+ * Wraps an adapter's seven calls with a span each and the time limit, and gives each commit written its committer.
  *
  * **When to use**
  *
@@ -213,11 +297,11 @@ export class Repository extends Context.Service<
  *
  * **Details**
  *
- * A span is named `git.<call>`. Its attributes follow OpenTelemetry's version control names where they exist and `kalfa.git.*` where they do not. No message, name, email or path is ever an attribute. A call that runs past the time limit is interrupted and fails with `TimedOut`.
+ * A span is named `git.<call>`. Its attributes follow OpenTelemetry's version control names where they exist and `kalfa.git.*` where they do not. No message, name, email or path is ever an attribute. A call that runs past the time limit is interrupted and fails with `TimedOut`. `writeCommit` fails before the adapter runs when the message holds a NUL byte or the object would pass `limits.bytes`, so every commit written can be read back, and it hands the adapter the settings' committer at the clock's whole second and offset `+0000`.
  *
  * @category constructors
  */
-export const make = (raw: Repository["Service"], settings: Settings.Settings): Repository["Service"] => {
+export const make = (raw: Raw, settings: Settings.Settings): Repository["Service"] => {
   const after = Settings.timeLimit(settings);
 
   const limited = <A, E, R>(call: Effect.Effect<A, E, R>): Effect.Effect<A, E | TimedOut, R> =>
@@ -259,6 +343,42 @@ export const make = (raw: Repository["Service"], settings: Settings.Settings): R
       yield* Effect.annotateCurrentSpan({ "kalfa.git.ancestor": answer });
 
       return answer;
+    }),
+    writeCommit: Effect.fn("git.writeCommit")(function* (commit: Written) {
+      yield* Effect.annotateCurrentSpan({ "kalfa.git.tree": commit.tree, "kalfa.git.parents": commit.parents });
+
+      if (commit.message.includes("\0")) {
+        return yield* new NulInMessage();
+      }
+
+      const seconds = Math.floor((yield* Clock.currentTimeMillis) / 1000);
+
+      const written = {
+        ...commit,
+        committer: new Commit.Signature({ ...settings.committer, at: { seconds, offset: "+0000" } }),
+      };
+
+      if (bytes(written).length > settings.limits.bytes) {
+        return yield* new TooLargeToWrite({ most: settings.limits.bytes });
+      }
+
+      const made = yield* limited(raw.writeCommit(written));
+      yield* Effect.annotateCurrentSpan({ "kalfa.git.commit": made.id });
+
+      return made;
+    }),
+    moveRef: Effect.fn("git.moveRef")(function* (move: {
+      readonly ref: Ref.RefName;
+      readonly from: Option.Option<CommitId>;
+      readonly to: CommitId;
+    }) {
+      yield* Effect.annotateCurrentSpan({ "vcs.ref.head.name": move.ref, "vcs.ref.head.revision": move.to });
+
+      if (Option.isSome(move.from)) {
+        yield* Effect.annotateCurrentSpan({ "kalfa.git.from": move.from.value });
+      }
+
+      return yield* limited(raw.moveRef(move));
     }),
   };
 };
