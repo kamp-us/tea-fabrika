@@ -1,0 +1,48 @@
+{
+  "name": "@kalfa/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The kalfa command, and the shape a package exports to give it a subcommand.",
+  "scripts": {
+    "build": "rslib build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kalfa/diagnostics": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@rslib/core": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "files": [
+    "dist",
+    "!dist/.rsbuild"
+  ],
+  "exports": {
+    "./Subcommand": "./src/Subcommand.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      "./Subcommand": {
+        "types": "./dist/Subcommand.d.ts",
+        "default": "./dist/Subcommand.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "peerDependencies": {
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:"
+  }
+}

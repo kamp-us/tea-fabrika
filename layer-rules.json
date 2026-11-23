@@ -420,6 +420,12 @@
       "imports": ["kalfa-config"]
     },
     {
+      "name": "kalfa-cli",
+      "layer": 2,
+      "paths": ["kalfa/cli/src"],
+      "imports": ["kalfa-diagnostics"]
+    },
+    {
       "name": "kalfa-secrets",
       "layer": 2,
       "paths": ["kalfa/secrets/src"],
@@ -533,6 +539,7 @@
     "next/packages/libfabrika/src",
     "next/packages/tuval/src",
     "next/packages/vitest/src",
+    "kalfa/cli/src",
     "kalfa/config/src",
     "kalfa/diagnostics/src",
     "kalfa/git/src",

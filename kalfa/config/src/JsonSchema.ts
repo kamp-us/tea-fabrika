@@ -10,8 +10,16 @@ import * as Rec from "effect/Record";
 
 const DIALECT = "https://json-schema.org/draft/2020-12/schema";
 
-/** Whether a representation holds a node Effect writes as a looser JSON Schema than it decodes. */
-const loose = (node: unknown, seen: Set<unknown>): boolean => {
+/** The JSON Schema type a representation node is written as, which each check of the node is asked for its form by. */
+const written: Readonly<Record<string, string>> = {
+  String: "string",
+  Number: "number",
+  Arrays: "array",
+  Objects: "object",
+};
+
+/** Whether a representation holds a node Effect writes as a looser JSON Schema than it decodes. `type` is the type of the node whose checks are read, as Effect asks each check. */
+const loose = (node: unknown, seen: Set<unknown>, type?: string): boolean => {
   if (!Predicate.isObjectOrArray(node) || seen.has(node)) {
     return false;
   }
@@ -26,12 +34,21 @@ const loose = (node: unknown, seen: Set<unknown>): boolean => {
   if (!Array.isArray(node) && (node._tag === "Filter" || node._tag === "FilterGroup")) {
     const write = Predicate.isObject(node.annotations) ? node.annotations.toJsonSchema : undefined;
 
-    if (!Predicate.isFunction(write) || Array.isArray(write({ type: undefined, schemas: [] }))) {
+    if (!Predicate.isFunction(write) || Array.isArray(write({ type, schemas: [] }))) {
       return true;
     }
   }
 
-  return (Array.isArray(node) ? node : Rec.values(node)).some((value) => loose(value, seen));
+  // A node's checks are read by the node's own type; a check group reads its checks by the type it was read by.
+  const inner = Array.isArray(node)
+    ? type
+    : Object.hasOwn(written, String(node._tag))
+      ? written[String(node._tag)]
+      : node._tag === "FilterGroup"
+        ? type
+        : undefined;
+
+  return (Array.isArray(node) ? node : Rec.values(node)).some((value) => loose(value, seen, inner));
 };
 
 /**

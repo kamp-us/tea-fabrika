@@ -22,6 +22,8 @@ import type { Live } from "./internal/live.ts";
 import { field, variable } from "./internal/names.ts";
 import { shown } from "./internal/place.ts";
 import { receive } from "./internal/receive.ts";
+import * as references from "./internal/reference.ts";
+import * as schema from "./internal/schema.ts";
 import { make as snapshot, same, type Snapshot } from "./internal/snapshot.ts";
 import { type Resolved, start } from "./internal/start.ts";
 import { toml } from "./internal/toml.ts";
@@ -142,7 +144,7 @@ const refusal = (app: string, settings: ReadonlyArray<Setting.Any>) => {
       return `${name} is not a setting name: each word is lowercase letters and digits, with single hyphens between`;
     }
 
-    if (setting.description === undefined) {
+    if (setting.description === "") {
       return `${name} has no description`;
     }
 
@@ -305,6 +307,37 @@ export type {
 };
 
 /**
+ * The editor's JSON Schema of the repo or the user configuration, as the text a repo commits.
+ *
+ * **Details**
+ *
+ * It holds the settings the file's scope allows, each with its description and encoded default, and nothing else: a key no setting names is refused. The repo's also holds `<app>-version`, as a pattern. The quiet window is in it for a group with a live setting. The text is two-space JSON as `pnpm format` prints it, with one final line break, and is the same for a group with its settings in another order.
+ *
+ * **Gotchas**
+ *
+ * Throws an `Error` when a setting's schema cannot be written as JSON Schema without loosening it, as a bare `Schema.makeFilter` cannot.
+ *
+ * @category combinators
+ */
+export const jsonSchema = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+  group: SettingGroup<App, R>,
+  file: Setting.File,
+): string => schema.text({ app: group.app, settings: watched(group.settings) }, file);
+
+/**
+ * The settings reference as Markdown: one section per setting, by name, the quiet window included.
+ *
+ * **Details**
+ *
+ * Each section holds the setting's description, and a table of its files, its environment variable and flag (`none: file-only` for a file-only setting), its default (`none: required` for a required one) and whether a change applies live or at a restart. It is made from the declarations alone, and ends in one line break.
+ *
+ * @category combinators
+ */
+export const reference = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+  group: SettingGroup<App, R>,
+): string => references.text({ app: group.app, settings: watched(group.settings) });
+
+/**
  * Starts a group from a stream of snapshots, in a process that cannot read files. The first snapshot starts it; each later one updates its live settings.
  *
  * **Details**
@@ -396,7 +429,7 @@ export const set = <App extends string, R extends ReadonlyArray<Setting.Any>, S 
   file: Setting.File,
   options?: { readonly repo?: string },
 ): Effect.Effect<void, SettingsError, FileSystem.FileSystem | Path.Path> =>
-  disk.set(group, toml, setting, value, file, options?.repo ?? ".");
+  disk.set({ app: group.app, settings: watched(group.settings) }, toml, setting, value, file, options?.repo ?? ".");
 
 /**
  * Takes one setting out of a configuration file on disk, the same way `set` writes: the same file, lock and rename.
@@ -413,4 +446,4 @@ export const remove = <App extends string, R extends ReadonlyArray<Setting.Any>>
   file: Setting.File,
   options?: { readonly repo?: string },
 ): Effect.Effect<void, SettingsError, FileSystem.FileSystem | Path.Path> =>
-  disk.remove(group, toml, setting, file, options?.repo ?? ".");
+  disk.remove({ app: group.app, settings: watched(group.settings) }, toml, setting, file, options?.repo ?? ".");

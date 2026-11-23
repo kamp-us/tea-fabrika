@@ -250,6 +250,37 @@ values hold. A live setting gets each new value. A restart setting that changed 
 when <app> starts again.`, and its value and origin stay as the start gave them. A stream that ends is logged once. The
 carrier's own failures are the app's to handle: the stream cannot fail.
 
+## The schema and the reference
+
+`SettingGroup.jsonSchema(group, file)` is the editor's JSON Schema of one configuration file, as the text a repo
+commits: `"repo"` for `.<app>/<app>.toml` and `"user"` for the person's file. It holds the settings that file's scope
+allows, each with its description and its default, and the repo's also holds `<app>-version`. A key no setting names is
+refused. The text is the same for a group with its settings in another order, and it ends in one line break.
+`SettingGroup.reference(group)` is the Markdown reference: one section per setting, by name, with its description, its
+files, its variable and flag, its default and whether a change applies live or at a restart. A file-only setting says
+`none: file-only` for its variable and flag, and a required one says `none: required` for its default.
+
+```ts
+import { Setting, SettingGroup } from "@kalfa/config";
+import { Schema } from "effect";
+
+const port = Setting.make("instance.port", Schema.Int).pipe(
+  Setting.withDefault(18800),
+  Setting.withDescription("The port the service listens on."),
+);
+
+const Demo = SettingGroup.make("demo", port);
+
+const schema = SettingGroup.jsonSchema(Demo, "repo"); // the text of .demo/demo.toml's schema
+const page = SettingGroup.reference(Demo); // the Markdown page
+```
+
+Both are made from the declarations alone, so a package can check a committed copy against them in a test.
+`jsonSchema` throws for a setting whose schema JSON Schema cannot hold exactly, as a bare `Schema.makeFilter` cannot:
+write a check as a pattern or a bound. A text's length check is exact only for a minimum of one character, because
+Effect counts UTF-16 units and JSON Schema counts code points. The `<app>-version` pattern reads a version as a start
+does, a number up to the largest safe integer included. The quiet window of a group with a live setting is in both.
+
 ## Public modules
 
 Import these explicit subpaths: `App`, `Setting`, `Sources`, `Toml`, `TomlParser`, `Codec`,

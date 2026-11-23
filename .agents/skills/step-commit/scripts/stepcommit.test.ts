@@ -1714,3 +1714,60 @@ describe("a commit that names a .ts file runs its package's typecheck, as CI doe
     }
   });
 });
+
+describe("a slice PR opens with a signed lead commit, today's tooling", () => {
+  const empty = (r: Repo, step: Step, flags: string[], ...paths: string[]) =>
+    r.call("sh", [script, ...flags, step, "321", "T321 lead: open the slice", ...paths]);
+
+  // Plants: let --empty commit nothing (no --allow-empty), sign with --commit-only, skip the signer or the push without it, or make more than one commit.
+  it("--empty makes one commit with no files; with --commit-only it signs nothing, without it it signs and publishes", () => {
+    each([true, false], (only) =>
+      withRepo([], (r) => {
+        const got = empty(r, "lead", [...(only ? ["--commit-only"] : []), "--empty"]);
+        expect(got.code, got.text).toBe(0);
+        expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
+        expect(r.git("diff", "--name-only", `${r.base}..HEAD`).trim()).toBe("");
+        expect(r.git("log", "-1", "--format=%s").trim()).toBe("T321 lead: open the slice");
+        expect(r.signs().map((s) => s.slice(0, 5))).toEqual(
+          only ? [] : [["commits", "sign", "--step", "lead", "--ticket"]],
+        );
+        expect(r.published()).toHaveLength(only ? 0 : 1);
+      }),
+    );
+  });
+
+  // Plants: allow --empty for another step, allow it with named files, or drop the lead ticket gate.
+  it("--empty is refused for every step but lead, with named files, and for a ticket that is not open; nothing is committed", () => {
+    withRepo([["src/owned.ts", "build"]], (r) => {
+      r.changed("src/owned.ts");
+
+      const cases: Array<[Step, string[], string[], string]> = [
+        ["tests", ["--commit-only", "--empty"], [], "lead step only"],
+        ["build", ["--commit-only", "--empty"], [], "lead step only"],
+        ["fix", ["--empty"], [], "lead step only"],
+        ["lead", ["--commit-only", "--empty"], ["src/owned.ts"], "no files"],
+      ];
+
+      for (const [step, flags, paths, said] of cases) {
+        const got = empty(r, step, flags, ...paths);
+        expect(got.code, got.text).toBe(2);
+        expect(got.text).toContain(said);
+        expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      }
+
+      r.env.T_TICKETS = "999";
+      const unknown = empty(r, "lead", ["--empty"]);
+      expect(unknown.code, unknown.text).toBe(5);
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+    });
+  });
+
+  // Plant: let a lead commit with no files and no --empty through as an empty commit.
+  it("a commit that names no files still needs --empty", () => {
+    withRepo([], (r) => {
+      const got = empty(r, "lead", ["--commit-only"]);
+      expect(got.code, got.text).toBe(2);
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+    });
+  });
+});
