@@ -103,10 +103,7 @@ layer starts empty.
 import * as TestDiagnostics from "@kalfa/diagnostics/TestDiagnostics";
 import { Effect } from "effect";
 
-const program = found.pipe(
-  Effect.andThen(TestDiagnostics.reported),
-  Effect.provide(TestDiagnostics.layer),
-);
+const program = found.pipe(Effect.andThen(TestDiagnostics.reported), Effect.provide(TestDiagnostics.layer));
 // [{ code: "config/unknown-setting", severity: "error", message: "...", place: { ... }, hint: "..." }]
 ```
 

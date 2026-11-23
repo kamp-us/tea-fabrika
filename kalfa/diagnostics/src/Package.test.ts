@@ -4,8 +4,7 @@
 // pieces below, so this file is not itself a hit.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Path, Schema, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { Effect, FileSystem, Path, Schema } from "effect";
 import * as TestDiagnostics from "./TestDiagnostics.ts";
 
 const Manifest = Schema.Struct({
@@ -139,74 +138,38 @@ it.effect("D24 scenario: the README shows each kind of place with its text form"
   }).pipe(Effect.provide(NodeServices.layer)),
 );
 
-// The README's code blocks, one after the other, as one module: an import line a later block repeats is left out, so
-// the blocks share what the first ones declare, as a reader reads them.
-const readmeModule = (readme: string): string => {
-  const seen = new Set<string>();
-
-  const blocks = [...readme.matchAll(/```ts\n([\s\S]*?)```/g)].map(([, code = ""]) =>
+// The README's code blocks, as written, without their import lines (the types file holds each import once, at its
+// top), and with runs of whitespace made one space, so a formatter's line breaks do not matter.
+const readmeBlocks = (readme: string): ReadonlyArray<string> =>
+  [...readme.matchAll(/```ts\n([\s\S]*?)```/g)].map(([, code = ""]) =>
     code
       .split("\n")
-      .filter((line) => {
-        if (!line.startsWith("import ")) {
-          return true;
-        }
-
-        const repeated = seen.has(line);
-        seen.add(line);
-
-        return !repeated;
-      })
-      .join("\n"),
+      .filter((line) => !line.startsWith("import "))
+      .join("\n")
+      .replace(/\s+/g, " ")
+      .trim(),
   );
 
-  return blocks.join("\n");
-};
+// D24, the README's examples compile. They are kept word for word in README.types.test.ts, which the package's own
+// compiler checks (`tsc`, and the root `typecheck`), as it checks the other type laws. This law runs in memory: it
+// reads both files and checks that every code block of the README is in that file, so an example cannot change in the
+// README without the compiler seeing it, and a block cannot leave the file.
+// Plant: edit one README block so it no longer matches the types file, and that block is in the failure. And in the
+// types file: drop `: Diagnostic.Place` from one example, and `tsc` refuses `formatPlace` on it.
+it.effect("D24 scenario: every code block of the README is in the file the compiler checks, each place typed", () =>
+  Effect.gen(function* () {
+    // scenario: the package's own README and types file at head; no generated input says what a README example holds.
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* packageDir;
 
-// D24, the README's examples compile. The code blocks are written to a scratch module inside the package, so
-// `@kalfa/diagnostics/...` and `effect` resolve as they do for a reader, and the package's own `tsc` compiles it with
-// the package's own settings. A place written without its type is an object whose `_tag` is a plain string, and
-// `formatPlace` then refuses it.
-// Plant: drop the `Diagnostic.Place` type from one example, and the compiler's refusal is in the failure.
-it.effect(
-  "D24 scenario: every code block of the README compiles, each place typed as Diagnostic.Place",
-  () =>
-    Effect.gen(function* () {
-      // scenario: the package's own README at head, compiled by the package's own compiler; no generated input says what a README example compiles to.
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const root = yield* packageDir;
+    const readme = yield* fs.readFileString(path.join(root, "README.md"));
+    const checked = (yield* fs.readFileString(path.join(root, "src", "README.types.test.ts"))).replace(/\s+/g, " ");
+    const blocks = readmeBlocks(readme);
 
-      const code = readmeModule(yield* fs.readFileString(path.join(root, "README.md")));
-
-      expect(code).toContain("Diagnostic.formatPlace(");
-
-      const scratch = yield* fs.makeTempDirectoryScoped({ directory: root, prefix: ".readme-check-" });
-
-      yield* fs.writeFileString(path.join(scratch, "examples.ts"), `${code}\n`);
-
-      yield* fs.writeFileString(
-        path.join(scratch, "tsconfig.json"),
-        JSON.stringify({ extends: "../tsconfig.json", include: ["examples.ts"] }),
-      );
-
-      const handle = yield* spawner.spawn(
-        ChildProcess.make(path.join(root, "node_modules", ".bin", "tsc"), ["--noEmit", "-p", scratch], { cwd: root }),
-      );
-
-      const output = yield* handle.all.pipe(
-        Stream.decodeText(),
-        Stream.runFold(
-          () => "",
-          (text, part) => text + part,
-        ),
-      );
-
-      expect(output.trim(), "the README's examples do not compile").toBe("");
-      expect(yield* handle.exitCode).toBe(0);
-      // The compiler alone would pass a place that is only passed on, never read: none is written without its type.
-      expect(code).not.toMatch(/(?:const|let) \w+ = \{\s*_tag:/);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  60_000,
+    expect(blocks.length).toBeGreaterThan(0);
+    expect(blocks.filter((block) => !checked.includes(block))).toEqual([]);
+    // A place written as a bare object is not typed, so the compiler would see only a string for its tag.
+    expect(checked).not.toMatch(/(?:const|let) \w+ = \{ _tag:/);
+  }).pipe(Effect.provide(NodeServices.layer)),
 );
