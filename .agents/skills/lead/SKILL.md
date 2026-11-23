@@ -113,7 +113,7 @@ Plan file: .kalfa/quests/<quest>-PLAN.md
 Read also: <tier rows, notes and code the plan must start from>
 Owner away: <yes or no>
 Already ruled out: <what earlier rounds tried, or none>
-Other open PRs: <none, or their URLs. Naming one adds: run `node oxlint-plugins/law-ids.ts`, and renumber the law ids against any open PR's ids>
+Other open PRs: <none, or their URLs. Naming one adds: `node oxlint-plugins/law-ids.ts` sees only this tree's `kalfa/` ids, so run it on a scratch merge of that PR's branch (`node oxlint-plugins/law-ids.ts <folder>`), and renumber against the ids it reports>
 This quest:
 - <what is decided, what this slice may build, what is out of scope>
 ```
@@ -126,7 +126,7 @@ Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  PR: <full URL>
 Start: <git pull --ff-only, or merge origin/main because ...>
 Approved plan: .kalfa/quests/<quest>-PLAN.md
 Already ruled out: <what earlier rounds tried, or none>
-Other open PRs: <none, or their URLs. Naming one adds: run `node oxlint-plugins/law-ids.ts`, and renumber the law ids against any open PR's ids>
+Other open PRs: <none, or their URLs. The plan brief says what naming one adds>
 This quest:
 - <facts settled after the plan, laws that wait, folders to stay out of>
 ```
