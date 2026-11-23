@@ -30,6 +30,7 @@ import {
   SEED,
   spanText,
   tokenForms,
+  untyped,
   word,
   Zen,
 } from "./GitHub.test-support.ts";
@@ -109,6 +110,8 @@ interface Run<A, E> {
 interface Options {
   readonly login: string;
   readonly apiUrl?: string;
+  /** An address put in past its brand by a cast, as a caller who skipped the types could: the Layer takes it as it is. */
+  readonly unchecked?: string;
   readonly redirects?: number;
 }
 
@@ -116,7 +119,10 @@ interface Options {
 const liveLayer = (options: Options) =>
   GitHubLive.layer({
     login: new GitHub.Login.Token({ token: Redacted.make(options.login) }),
-    settings: liveSettings(options),
+    settings:
+      options.unchecked === undefined
+        ? liveSettings(options)
+        : { ...liveSettings(options), apiUrl: untyped(options.unchecked) },
   }).pipe(Layer.provide(FetchHttpClient.layer));
 
 /** Runs `program` over the live Layer on the stand-in `fetch`, under a recording tracer and a recording logger at every level. */
@@ -625,6 +631,27 @@ describe("H5, an exchange that failed", () => {
                 drawn.marker,
               );
             }
+          }
+
+          // An address no URL parser takes, forced in by a cast: the request cannot be built, so it never left, and a write
+          // that never left may not have applied. No request reaches fetch.
+          const unbuilt = yield* through(
+            send(makeRequest({ method, path: repoPath("o", "r"), auth: GitHub.Auth.Login() })),
+            { login: "ghp_login", unchecked: `https://[::1${drawn.marker}` },
+            () => reply("{}"),
+          );
+
+          const refused = reasonHeld(unbuilt.exit);
+
+          expect(
+            Exit.isFailure(unbuilt.exit) && !Cause.hasDies(unbuilt.exit.cause),
+            `${method}: no address, no defect`,
+          ).toBe(true);
+          expect(refused?.reason._tag, `${method}: no address`).toBe("Unavailable");
+          expect(unbuilt.seen, `${method}: no address, nothing reached fetch`).toHaveLength(0);
+
+          if (refused?.reason._tag === "Unavailable") {
+            expect(refused.reason.mayHaveApplied, `${method}: a request never built never left`).toBe(false);
           }
         }
       }),
