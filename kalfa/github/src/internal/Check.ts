@@ -278,17 +278,15 @@ type Partly<D> =
       ? { readonly [K in keyof D]?: Partly<D[K]> }
       : D;
 
-type Fakeable<R extends RouteName> =
-  IsRunTimeOnly<R> extends true
-    ? Schema.Json
-    : [Answer<R>] extends [never]
-      ? undefined
-      : [Bodiless<R>] extends [never]
-        ? Partly<Answer<R>>
-        : Partly<Answer<R>> | undefined;
+// What a fake may answer with a 2xx status that has a body: part of the description's answer, or any JSON for a route
+// checked at run time only.
+type Fakeable<R extends RouteName> = IsRunTimeOnly<R> extends true ? Schema.Json : Partly<Answer<R>>;
 
-/** What a test's fake may answer for a route: part of the description's answer, or any JSON for a route checked at run time only. */
-export type Faked<R extends RouteName> = Fakeable<R>;
+/**
+ * What a test's fake may answer for a route with the 2xx status `S`: `undefined` exactly when that status has no body, and
+ * otherwise part of the description's answer (any JSON for a route checked at run time only).
+ */
+export type Faked<R extends RouteName, S extends number> = S extends Bodiless<R> ? undefined : Fakeable<R>;
 
 /** `unknown` when the fake's answer `A` names no key the description's answer lacks, at any depth, or a readable refusal. */
 export type ExactFake<R extends RouteName, A> =
@@ -300,13 +298,14 @@ export type ExactFake<R extends RouteName, A> =
         ? unknown
         : Refused<"an answer key the description does not have">;
 
-type FakeStatus<R extends RouteName> = [SuccessStatus<R>] extends [never] ? number : SuccessStatus<R>;
-
-/** The status option of a fake answer: required when 200 is not one of the route's 2xx statuses, and exactly those statuses. */
+/**
+ * The status option of a fake answer: required when 200 is not one of the route's 2xx statuses, and exactly those statuses.
+ * A route with no 2xx status has none to name, so it has no answer, only a refusal.
+ */
 export type StatusOption<R extends RouteName> =
-  200 extends FakeStatus<R>
-    ? [options?: { readonly status: FakeStatus<R> }]
-    : [options: { readonly status: FakeStatus<R> }];
+  200 extends SuccessStatus<R>
+    ? [options?: { readonly status: SuccessStatus<R> }]
+    : [options: { readonly status: SuccessStatus<R> }];
 
 /** What a fake is handed of a request's body: the encoded payload, which is there when the route requires one. */
 export type AskedBody<P extends Schema.Constraint, R extends RouteName> = [P] extends [never]

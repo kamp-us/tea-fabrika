@@ -43,12 +43,13 @@ export interface Asked<Op extends GitHub.AnyRoute> {
 }
 
 /**
- * What a fake's `f` may answer: part of the description's answer for the route, with every key optional at every depth and no
- * key the description lacks; any JSON for a route whose answer is checked at run time only.
+ * What a fake's `f` may answer with the 2xx status `Status`: `undefined` exactly when that status has no body, and otherwise
+ * part of the description's answer, with every key optional at every depth and no key the description lacks (any JSON for a
+ * route whose answer is checked at run time only).
  *
  * @category models
  */
-export type Answered<Op extends GitHub.AnyRoute> = Check.Faked<OperationRoute<Op>>;
+export type Answered<Op extends GitHub.AnyRoute, Status extends number = 200> = Check.Faked<OperationRoute<Op>, Status>;
 
 /**
  * The status option of `answer`: required when 200 is not one of the route's 2xx statuses, and exactly those statuses.
@@ -56,6 +57,8 @@ export type Answered<Op extends GitHub.AnyRoute> = Check.Faked<OperationRoute<Op
  * @category models
  */
 export type StatusOption<Op extends GitHub.AnyRoute> = Check.StatusOption<OperationRoute<Op>>;
+
+type StatusOf<Option> = Option extends readonly [{ readonly status: infer S extends number }] ? S : 200;
 
 type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
@@ -93,10 +96,14 @@ export interface Answer {
  *
  * @category constructors
  */
-export const answer = <Op extends GitHub.AnyRoute, const A extends Answered<Op>>(
+export const answer = <
+  Op extends GitHub.AnyRoute,
+  const Option extends StatusOption<Op>,
+  const A extends Answered<Op, StatusOf<Option>>,
+>(
   op: Op,
   f: (asked: Asked<Op>) => A & Check.ExactFake<OperationRoute<Op>, A>,
-  ...options: StatusOption<Op>
+  ...options: Option
 ): Answer => ({
   route: op.route,
   reply: (request) => {
