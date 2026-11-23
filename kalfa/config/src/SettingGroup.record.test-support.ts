@@ -183,6 +183,10 @@ interface Cx {
   readonly odd: boolean;
   /** Write a list on several lines, with a comment inside. */
   readonly multi: boolean;
+  /** Write the first item of a root-dotted record as one inline table. */
+  readonly inlineFirst: boolean;
+  /** Write the first item of a record under headers as dotted keys at the root, before the headers. */
+  readonly rootFirst: boolean;
   n: number;
 }
 
@@ -289,7 +293,7 @@ const headed = (c: Cx, body: ReadonlyArray<Line>): Unit => {
 const run = (c: Cx, prefix: string, old: Rec): ReadonlyArray<Line> =>
   entries(old).flatMap(([key, child], i) => [
     ...(c.style.inside && i > 0 ? [{ text: note(c), own: STAY }] : []),
-    ...(nonEmpty(child)
+    ...(nonEmpty(child) && !(c.inlineFirst && i === 0)
       ? dotted(c, `${prefix}${bare(key)}.`, [key], child)
       : assignment(c, `${prefix}${bare(key)}`, [key], child)),
   ]);
@@ -313,8 +317,20 @@ const written = (c: Cx, form: Form, old: Rec): ReadonlyArray<ReadonlyArray<Unit>
     case "b":
       return [[headed(c, run(c, "", old))]];
     case "c":
-      return items.map(([key, item]) =>
-        nonEmpty(item) ? blocks(c, [key], item) : [headed(c, assignment(c, bare(key), [key], item))],
+      return items.map(([key, item], i) =>
+        c.rootFirst && i === 0
+          ? [
+              {
+                lines: isRec(item)
+                  ? dotted(c, `${bare(c.table)}.${bare(c.name)}.${bare(key)}.`, [key], item)
+                  : assignment(c, `${bare(c.table)}.${bare(c.name)}.${bare(key)}`, [key], item),
+                below: STAY,
+                above: undefined,
+              },
+            ]
+          : nonEmpty(item)
+            ? blocks(c, [key], item)
+            : [headed(c, assignment(c, bare(key), [key], item))],
       );
     case "d":
       return [
@@ -425,13 +441,21 @@ const joined = (
 interface Slot {
   readonly label: string;
   readonly test: (line: string) => boolean;
+  /** The line break that must follow the line: the old line's own, or the file's first one for a new line. None when it is not known. */
+  readonly brk?: string;
 }
 
-const exact = (text: string): Slot => ({ label: JSON.stringify(text), test: (line) => line === text });
+const exact = (text: string, brk?: string): Slot => ({
+  label: JSON.stringify(text),
+  test: (line) => line === text,
+  // A blank line may be matched by another blank line of the answer, so only a line with text is held to its break.
+  ...(brk === undefined || brk === "" || text.trim() === "" ? {} : { brk }),
+});
 
-const like = (lead: string, tail: string): Slot => ({
+const like = (lead: string, tail: string, brk?: string): Slot => ({
   label: `${JSON.stringify(lead)} ... ${JSON.stringify(tail)}`,
   test: (line) => line.startsWith(lead) && line.endsWith(tail) && line.length > lead.length + tail.length,
+  ...(brk === undefined || brk === "" ? {} : { brk }),
 });
 
 interface Arrival {
@@ -453,7 +477,12 @@ export interface Scene {
   readonly name: string;
   readonly path: Path;
   readonly lines: ReadonlyArray<Line>;
+  /** The file's first line break: the one a new line is written with. */
   readonly eol: string;
+  /** Whether the file mixes the two kinds of line break: then the break of a new line is the writer's own choice. */
+  readonly mixed: boolean;
+  /** The break after each line, as the file has it (they differ in a file of mixed line ends); none after the last when the file has no final one. */
+  readonly breaks: ReadonlyArray<string>;
   readonly final: boolean;
   readonly text: string;
   /** What the file holds. */
@@ -466,6 +495,8 @@ export interface Scene {
   readonly others: ReadonlyArray<Other>;
   /** Lines the answer must still hold, as they were: the header of a table that is now empty. */
   readonly keeps: ReadonlyArray<string>;
+  /** Lines the answer may add anywhere, once each: where a value that changed its kind is written again. */
+  readonly free: ReadonlyArray<Slot>;
 }
 
 export type Id =
@@ -529,8 +560,18 @@ const makeGroup = (app: string, settings: ReadonlyArray<Setting.Any>) => Setting
 
 export const fileName = (app: string) => `.${app}/${app}.toml`;
 
-const render = (lines: ReadonlyArray<Line>, eol: string, final: boolean): string =>
-  lines.map((line) => line.text).join(eol) + (final ? eol : "");
+/** The breaks of a file: its own line break after each line, the other kind after every second one when the file mixes them. */
+const breaksFor = (count: number, eol: string, mixed: boolean, final: boolean): ReadonlyArray<string> =>
+  Array.from({ length: count }, (_, i) => {
+    if (i === count - 1 && !final) {
+      return "";
+    }
+
+    return mixed && i % 2 === 1 ? (eol === "\r\n" ? "\n" : "\r\n") : eol;
+  });
+
+const render = (lines: ReadonlyArray<Line>, breaks: ReadonlyArray<string>): string =>
+  lines.map((line, i) => line.text + (breaks[i] ?? "")).join("");
 
 const quiet = (text: string): boolean => text.trim() === "" || text.trimStart().startsWith("#");
 
@@ -571,7 +612,7 @@ const arrivalFor = (c: Cx, form: Form, lines: ReadonlyArray<Line>, item: readonl
 
     return {
       before: sectionEnd(lines, last),
-      slots: texts.map(exact),
+      slots: texts.map((text) => exact(text)),
       blanks: texts.filter((text) => text.startsWith("[")).length,
       spare: true,
     };
@@ -712,8 +753,18 @@ export interface Spec {
   /** Where the arrival is looked for (a block form or not); none for no arrival. */
   readonly arrive?: boolean;
   readonly top?: boolean;
+  /** One line of another setting above the record and nothing else, so once the record is cut the text holds no line break to copy. */
+  readonly lone?: boolean;
   /** Lines the answer must still hold, as they were. */
   readonly keeps?: ReadonlyArray<string>;
+  /** Lines the answer may add anywhere, once each. */
+  readonly free?: ReadonlyArray<RegExp>;
+  /** The file mixes the two kinds of line break, one after another. */
+  readonly mixed?: boolean;
+  /** The first item is written as one inline table, in a record of dotted keys at the root. */
+  readonly inlineFirst?: boolean;
+  /** The first item is written as dotted keys at the root, before the headers of the others. */
+  readonly rootFirst?: boolean;
 }
 
 /** A scene from a spec: the file as a person types it, and what the call must do to it. */
@@ -732,6 +783,8 @@ export const buildScene = (given: Draw, spec: Spec): Scene => {
     },
     odd: spec.odd === true,
     multi: spec.multi === true,
+    inlineFirst: spec.inlineFirst === true,
+    rootFirst: spec.rootFirst === true,
     n: 0,
   };
 
@@ -766,19 +819,25 @@ export const buildScene = (given: Draw, spec: Spec): Scene => {
     c,
     all,
     (boundary) => gaps[boundary % gaps.length] ?? "",
-    spec.top === true
-      ? [
-          { text: "# top", own: STAY },
-          { text: "", own: STAY },
-        ]
-      : [],
+    spec.lone === true
+      ? [{ text: `instance.port${c.style.gap}4100`, own: STAY }]
+      : spec.top === true
+        ? [
+            { text: "# top", own: STAY },
+            { text: "", own: STAY },
+          ]
+        : [],
   );
 
   const change = spec.change ?? {};
   const next = spec.remove === true ? undefined : (spec.next ?? derive(draw, old, change));
 
   const arrival =
-    change.j === true || spec.arrive === true ? arrivalFor(c, spec.form, lines, freshItem(draw)) : undefined;
+    change.j === true || spec.arrive === true
+      ? arrivalFor(c, spec.rootFirst === true ? "e" : spec.form, lines, freshItem(draw))
+      : undefined;
+
+  const breaks = breaksFor(lines.length, spec.eol, spec.mixed === true, spec.final);
 
   return {
     ids: spec.ids,
@@ -790,14 +849,17 @@ export const buildScene = (given: Draw, spec: Spec): Scene => {
     path: settingPath(c),
     lines,
     eol: spec.eol,
+    breaks,
+    mixed: spec.mixed === true,
     final: spec.final,
-    text: render(lines, spec.eol, spec.final),
+    text: render(lines, breaks),
     old,
     next,
     remove: spec.remove === true,
     arrival,
     others: OTHER_KEYS.filter((which) => lines.some((line) => line.head?.join(".") === which)),
     keeps: spec.keeps ?? [],
+    free: (spec.free ?? []).map((pattern): Slot => ({ label: String(pattern), test: (line) => pattern.test(line) })),
   };
 };
 
@@ -819,7 +881,7 @@ const expected = (
 
   // The value the file already holds, in any spelling or key order: no line changes.
   if (!scene.remove && same(old, next)) {
-    return { slots: lines.map((line) => exact(line.text)), blanks: 0, spare: [] };
+    return { slots: lines.map((line, i) => exact(line.text, scene.breaks[i])), blanks: 0, spare: [] };
   }
 
   const spare: Array<string> = [];
@@ -841,7 +903,7 @@ const expected = (
   };
 
   const arrive = () => {
-    slots.push(...(arrival?.slots ?? []));
+    slots.push(...(arrival?.slots ?? []).map((slot): Slot => (scene.mixed ? slot : { ...slot, brk: scene.eol })));
     blanks += arrival?.blanks ?? 0;
     keep();
   };
@@ -860,11 +922,11 @@ const expected = (
     const own = line.own;
 
     if (own.t === "stay") {
-      slots.push(exact(line.text));
+      slots.push(exact(line.text, scene.breaks[i]));
       keep();
     } else if (own.t === "block") {
       if (present(target, own.path)) {
-        slots.push(exact(line.text));
+        slots.push(exact(line.text, scene.breaks[i]));
         keep();
       } else {
         // A new block written right after the last block's keys leaves behind it the lines that followed them.
@@ -893,20 +955,26 @@ const expected = (
         leave(own, slots.length);
       } else if (read(target, own.path) === undefined) {
         // One key out: its assignment goes; a comment inside its value stays, on a line of its own, and the line's tail stays.
-        slots.push(...notes.map(exact));
+        slots.push(...notes.map((text) => exact(text, scene.mixed ? undefined : scene.eol)));
 
         if (own.tail === "") {
           blanks++;
         } else {
-          slots.push(exact(own.tail));
+          slots.push(exact(own.tail, scene.breaks[end - 1]));
         }
 
         keep();
       } else if (!same(read(old, own.path), read(target, own.path))) {
-        slots.push(...notes.map(exact), like(own.lead, own.tail));
+        slots.push(
+          ...notes.map((text) => exact(text, scene.mixed ? undefined : scene.eol)),
+          like(own.lead, own.tail, scene.breaks[end - 1]),
+        );
         keep();
       } else {
-        slots.push(exact(line.text), ...rest.map((more) => exact(more.text)));
+        slots.push(
+          exact(line.text, scene.breaks[i]),
+          ...rest.map((more, n) => exact(more.text, scene.breaks[i + 1 + n])),
+        );
         keep();
       }
 
@@ -928,26 +996,49 @@ const expected = (
   return { slots, blanks, spare };
 };
 
-/** The lines of an answer, split by the file's own line break, a final one dropped. */
-const splitLines = (text: string, eol: string): ReadonlyArray<string> => {
-  const parts = text.split(eol);
+/** The lines of a text, whatever line break ends each, a final one dropped. */
+const splitLines = (text: string): ReadonlyArray<string> => {
+  const parts = text.split(/\r?\n/u);
 
   return parts[parts.length - 1] === "" ? parts.slice(0, -1) : parts;
 };
 
-/** What is wrong with an answer: each missing line, each line nobody asked for, each stray line break. */
-export const judge = (scene: Scene, answer: string): ReadonlyArray<string> => {
-  const found = splitLines(answer, scene.eol);
-  const problems: Array<string> = [];
+/** The lines of an answer and the break that follows each: none after the last when the text has no final one. */
+const withBreaks = (text: string): ReadonlyArray<readonly [string, string]> => {
+  const pieces = text.split(/(\r?\n)/u);
+  const found: Array<readonly [string, string]> = [];
 
-  // A text that has no final line break answers without one: a cut or a write at its end never adds it.
-  if (!scene.final && /[\r\n]$/u.test(answer)) {
-    problems.push("the file has no final line break, and the answer ends with one");
+  for (let i = 0; i < pieces.length; i += 2) {
+    const line = pieces[i] ?? "";
+    const brk = pieces[i + 1] ?? "";
+
+    if (line !== "" || brk !== "" || i + 2 < pieces.length) {
+      found.push([line, brk]);
+    }
+  }
+
+  return found;
+};
+
+/** What is wrong with an answer: each missing line, each line nobody asked for, each line break that is not the file's own. */
+export const judge = (scene: Scene, answer: string): ReadonlyArray<string> => {
+  const pairs = withBreaks(answer);
+  const found = pairs.map(([line]) => line);
+  const problems: Array<string> = [];
+  const last = pairs.length - 1;
+
+  // The final line break stays as the file had it: a file with none answers with none, one with a final break keeps one.
+  if (pairs.length > 0 && (pairs[last]?.[1] !== "") !== scene.final) {
+    problems.push(
+      scene.final
+        ? "the file has a final line break, and the answer has none"
+        : "the file has no final line break, and the answer ends with one",
+    );
   }
 
   for (const [i, line] of found.entries()) {
-    if (/[\r\n]/u.test(line)) {
-      problems.push(`line ${i + 1} holds a line break that is not the file's own: ${JSON.stringify(line)}`);
+    if (/\r/u.test(line)) {
+      problems.push(`line ${i + 1} holds a stray carriage return: ${JSON.stringify(line)}`);
     }
   }
 
@@ -967,26 +1058,51 @@ export const judge = (scene: Scene, answer: string): ReadonlyArray<string> => {
       break;
     }
 
+    // Every line the call did not touch keeps the break it had: another setting's line is the same bytes.
+    if (slot.brk !== undefined && j < last && pairs[j]?.[1] !== slot.brk) {
+      problems.push(
+        `line ${j + 1} ${slot.label} is followed by ${JSON.stringify(pairs[j]?.[1])}, not ${JSON.stringify(slot.brk)}`,
+      );
+    }
+
     used.add(j);
     at = j + 1;
   }
 
   if (problems.length === 0) {
     const left = [...spare];
+    const free = [...scene.free];
 
     const extra = found
-      .filter((_, j) => !used.has(j))
-      .filter((line) => {
+      .map((line, j) => ({ line, j }))
+      .filter(({ j }) => !used.has(j))
+      .filter(({ line, j }) => {
         const at = left.indexOf(line);
 
-        if (at < 0 || line.trim() === "") {
-          return true;
+        if (at >= 0 && line.trim() !== "") {
+          left.splice(at, 1);
+
+          return false;
         }
 
-        left.splice(at, 1);
+        const own = free.findIndex((slot) => slot.test(line));
 
-        return false;
-      });
+        if (own >= 0 && line.trim() !== "") {
+          free.splice(own, 1);
+
+          // A line the call writes ends with the file's own line break, the first one the text has.
+          if (!scene.mixed && j < last && pairs[j]?.[1] !== scene.eol) {
+            problems.push(
+              `the new line ${j + 1} ${JSON.stringify(line)} is followed by ${JSON.stringify(pairs[j]?.[1])}, not ${JSON.stringify(scene.eol)}`,
+            );
+          }
+
+          return false;
+        }
+
+        return true;
+      })
+      .map(({ line }) => line);
 
     // A line of spaces is a blank line: a removed last line leaves a space so the file does not gain a final line break.
     const loud = extra.filter((line) => line.trim() !== "");
@@ -1002,7 +1118,7 @@ export const judge = (scene: Scene, answer: string): ReadonlyArray<string> => {
     }
   }
 
-  return problems.length === 0 ? [] : [...problems, `the answer:\n${answer}`];
+  return problems.length === 0 ? [] : [...problems, `the answer:\n${JSON.stringify(answer)}`];
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -1018,12 +1134,12 @@ const parts = (text: string): ReadonlyArray<string> =>
   );
 
 /** Every header and every key of a text, with its full path and its line (from 1). */
-const spans = (text: string, eol: string): ReadonlyArray<{ readonly path: Path; readonly line: number }> => {
+const spans = (text: string): ReadonlyArray<{ readonly path: Path; readonly line: number }> => {
   let table: ReadonlyArray<string> = [];
   const found: Array<{ readonly path: Path; readonly line: number }> = [];
   const elements = new Map<string, number>();
 
-  for (const [i, line] of splitLines(text, eol).entries()) {
+  for (const [i, line] of splitLines(text).entries()) {
     const header = /^(\[\[?)\s*(.*?)\s*\]\]?\s*(?:#.*)?$/u.exec(line);
     const key = /^([^#\s[\]{}][^=]*?)\s*=/u.exec(line);
 
@@ -1052,13 +1168,13 @@ const spans = (text: string, eol: string): ReadonlyArray<{ readonly path: Path; 
  * The line the start gives as a setting's origin (Sources.ts `file`): the line of the header or key at exactly its path,
  * or 0 when no line is at exactly that path (a record named only by the headers of its items, or by dotted keys).
  */
-export const originLine = (text: string, eol: string, path: Path): number =>
-  spans(text, eol).find((span) => span.path.length === path.length && span.path.every((word, n) => word === path[n]))
+export const originLine = (text: string, path: Path): number =>
+  spans(text).find((span) => span.path.length === path.length && span.path.every((word, n) => word === path[n]))
     ?.line ?? 0;
 
 /** Whether some line of the text is at or under `path`. */
-export const holds = (text: string, eol: string, path: Path): boolean =>
-  spans(text, eol).some((span) => path.every((word, n) => span.path[n] === word));
+export const holds = (text: string, path: Path): boolean =>
+  spans(text).some((span) => path.every((word, n) => span.path[n] === word));
 
 // ---------------------------------------------------------------------------------------------
 // Arrays: an inline one, and an array of tables written as `[[name]]` blocks.
@@ -1084,6 +1200,10 @@ interface ArraySpec {
   readonly eol: string;
   readonly final: boolean;
   readonly others?: boolean;
+  /** The file mixes the two kinds of line break, one after another. */
+  readonly mixed?: boolean;
+  /** The first block follows another setting's table, so the table it sat in is not its own. */
+  readonly behind?: boolean;
   /** The first block sits right under the header of the table that holds it (`[table]`), not at the root. */
   readonly home?: boolean;
   /** The record setting, for a kind change, instead of the steps setting. */
@@ -1102,7 +1222,18 @@ const elementTexts = (root: Path, element: Rec): ReadonlyArray<string> => [
 
 export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
   const style = draw.styles[spec.style % draw.styles.length] ?? draw.styles[0];
-  const c: Cx = { table: draw.table, name: draw.name, style, odd: false, multi: spec.multi === true, n: 0 };
+
+  const c: Cx = {
+    table: draw.table,
+    name: draw.name,
+    style,
+    odd: false,
+    multi: spec.multi === true,
+    inlineFirst: false,
+    rootFirst: false,
+    n: 0,
+  };
+
   const root = settingPath(c);
   const array = spec.old;
 
@@ -1117,6 +1248,10 @@ export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
   } else {
     if (spec.home === true) {
       lines.push({ text: `[${bare(c.table)}]`, own: STAY, head: [c.table] });
+    }
+
+    if (spec.behind === true) {
+      lines.push(...other(c, "instance").lines, { text: "", own: STAY });
     }
 
     if (spec.above === true) {
@@ -1175,7 +1310,9 @@ export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
       ? asBlocks
         ? {
             before: first,
-            slots: elements.flatMap((element) => (isRec(element) ? elementTexts(root, element).map(exact) : [])),
+            slots: elements.flatMap((element) =>
+              isRec(element) ? elementTexts(root, element).map((text) => exact(text)) : [],
+            ),
             blanks:
               elements.length +
               elements.reduce(
@@ -1185,24 +1322,39 @@ export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
               ),
             spare: false,
           }
-        : {
-            before: first,
-            slots: [
-              {
-                label: "the array on one line",
-                test: (line) =>
-                  new RegExp(
-                    `^${escape(spec.home === true ? bare(c.name) : `${bare(c.table)}.${bare(c.name)}`)} = \\[.*\\]$`,
-                    "u",
-                  ).test(line),
-              },
-            ],
-            blanks: 1,
-            spare: false,
-          }
+        : spec.behind === true
+          ? {
+              // The table the first block sat in is another setting's: the line goes where a new key goes, in a table of its own at the end.
+              before: lines.length,
+              slots: [
+                exact(`[${bare(c.table)}]`),
+                {
+                  label: "the array on one line",
+                  test: (line) => new RegExp(`^${escape(bare(c.name))} = \\[.*\\]$`, "u").test(line),
+                },
+              ],
+              blanks: 1,
+              spare: false,
+            }
+          : {
+              before: first,
+              slots: [
+                {
+                  label: "the array on one line",
+                  test: (line) =>
+                    new RegExp(
+                      `^${escape(spec.home === true ? bare(c.name) : `${bare(c.table)}.${bare(c.name)}`)} = \\[.*\\]$`,
+                      "u",
+                    ).test(line),
+                },
+              ],
+              blanks: 1,
+              spare: false,
+            }
       : undefined;
 
   const setting = spec.rules === true ? rules(`${draw.table}.${draw.name}`) : steps(`${draw.table}.${draw.name}`);
+  const breaks = breaksFor(lines.length, spec.eol, spec.mixed === true, spec.final);
 
   return {
     ids: spec.ids,
@@ -1214,20 +1366,23 @@ export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
     path: root,
     lines,
     eol: spec.eol,
+    breaks,
+    mixed: spec.mixed === true,
     final: spec.final,
-    text: render(lines, spec.eol, spec.final),
+    text: render(lines, breaks),
     old: array,
     next,
     remove: false,
     arrival,
     others: othersIn(lines),
     keeps: [],
+    free: [],
   };
 };
 
 /** How many blank lines stand directly above each `[[name]]` header after the first. */
-export const separators = (text: string, eol: string, root: Path): ReadonlyArray<number> => {
-  const found = splitLines(text, eol);
+export const separators = (text: string, root: Path): ReadonlyArray<number> => {
+  const found = splitLines(text);
   const header = `[[${dots(root)}]]`;
   const at = found.flatMap((line, i) => (line === header ? [i] : []));
 
@@ -1242,8 +1397,8 @@ export const separators = (text: string, eol: string, root: Path): ReadonlyArray
   });
 };
 
-export { rules as rulesSetting, steps as stepsSetting, APPROVER, PORT, LIMIT, makeGroup, render };
+export { rules as rulesSetting, steps as stepsSetting, APPROVER, PORT, LIMIT, makeGroup };
 
 /** A scene as a failure shows it: its label, the file it edits and the record it asks for. */
 export const shown = (scene: Scene): string =>
-  `${scene.label}\nthe file (${JSON.stringify(scene.eol)}):\n${scene.text}\nthe call: ${scene.remove ? "remove" : `set ${JSON.stringify(scene.next)}`}`;
+  `${scene.label}\nthe file: ${JSON.stringify(scene.text)}\nthe call: ${scene.remove ? "remove" : `set ${JSON.stringify(scene.next)}`}`;

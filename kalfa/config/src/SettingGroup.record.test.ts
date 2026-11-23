@@ -169,7 +169,7 @@ it.effect(
 // RC2, only what differs
 // ---------------------------------------------------------------------------------------------
 
-const RC2_IDS: ReadonlyArray<Id> = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "v", "w"];
+const RC2_IDS: ReadonlyArray<Id> = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "l", "m", "v", "w"];
 
 const LF = "\n";
 
@@ -177,7 +177,181 @@ const CRLF = "\r\n";
 
 /** The cases of RC2: each form (a) to (g) with its own change, others around the record, and the three line ends. */
 const record = (draw: Draw): ReadonlyArray<Scene> =>
-  specs.map((spec, k) => buildScene(draw, { leave: (draw.leave + k) % 3, ...spec }));
+  [...specs, ...kinds(draw)].map((spec, k) => buildScene(draw, { leave: (draw.leave + k) % 3, ...spec }));
+
+/**
+ * The cases of (l) and (m) under (w): a table becomes a scalar or an array, a table empties, in a file of CRLF, of mixed
+ * line ends, and with no final line break. Every line the call does not touch is judged byte for byte with its own break.
+ */
+const kinds = (draw: Draw): ReadonlyArray<Spec> => {
+  const old = oldRecord(draw);
+  const [first = "a", second = "b"] = Object.keys(old);
+  const shaped = { [first]: { n: 1, desired: { a: 2 } }, [second]: { n: 3, desired: { a: 4 } } };
+  const became = { [first]: 7, [second]: { n: 3, desired: [1, 2] } };
+  const again = [new RegExp(`(^|\\.)${first} = 7$`, "u"), /(^|\.)desired = \[.*\]$/u];
+
+  // A record that nothing names is written again as `name = {}`, in a table of its own when its table is gone.
+  const empty = [
+    new RegExp(`^\\[${draw.table}\\]$`, "u"),
+    new RegExp(`^(${draw.table}\\.)?${draw.name} = \\{\\}$`, "u"),
+  ];
+
+  const whole = [
+    new RegExp(`^\\[${draw.table}\\]$`, "u"),
+    new RegExp(`^(${draw.table}\\.)?${draw.name} = \\[.*\\]$`, "u"),
+  ];
+
+  return [
+    {
+      ids: ["l", "w"],
+      label: "l a table becomes a scalar and another an array, CRLF, no final break",
+      form: "c",
+      style: 1,
+      eol: CRLF,
+      final: false,
+      old: shaped,
+      next: became,
+      free: again,
+      others: ["before"],
+    },
+    {
+      ids: ["l", "w"],
+      label: "l a table becomes a scalar and another an array, mixed, a final break",
+      form: "c",
+      style: 2,
+      eol: CRLF,
+      mixed: true,
+      final: true,
+      old: shaped,
+      next: became,
+      free: again,
+      others: ["after"],
+    },
+    {
+      ids: ["l", "w"],
+      label: "l a table becomes a scalar and another an array, mixed, no final break",
+      form: "c",
+      style: 3,
+      eol: LF,
+      mixed: true,
+      final: false,
+      old: shaped,
+      next: became,
+      free: again,
+    },
+    {
+      ids: ["m", "w"],
+      label: "m an item becomes empty, mixed, no final break",
+      form: "c",
+      style: 0,
+      eol: CRLF,
+      mixed: true,
+      final: false,
+      next: { ...old, [first]: {} },
+      others: ["before"],
+    },
+    {
+      ids: ["m", "w"],
+      label: "m a record under its own header becomes empty, CRLF, no final break",
+      form: "b",
+      style: 1,
+      eol: CRLF,
+      final: false,
+      next: {},
+      others: ["before"],
+    },
+    {
+      ids: ["m", "w"],
+      label: "m a record of dotted keys becomes empty, mixed, a final break",
+      form: "e",
+      style: 2,
+      eol: LF,
+      mixed: true,
+      final: true,
+      next: {},
+      free: empty,
+      others: ["after"],
+    },
+    {
+      ids: ["m", "w"],
+      label: "m a record under headers becomes empty, no final break",
+      form: "c",
+      style: 3,
+      eol: LF,
+      final: false,
+      next: {},
+      free: empty,
+      others: ["before"],
+    },
+    // A dotted record at the root whose first item is one inline table: the inline item's own line never counts as a dotted key.
+    {
+      ids: ["i", "w"],
+      label: "i a dotted item leaves, an inline item first",
+      form: "e",
+      style: 0,
+      eol: CRLF,
+      final: true,
+      inlineFirst: true,
+      change: { i: true, h: true },
+      others: ["after"],
+    },
+    // The whole record becomes an array, or empties: the other lines keep their breaks, and the final break stays when the record is the whole file.
+    {
+      ids: ["l", "w"],
+      label: "l the whole record becomes an array, another setting before it, CRLF, no final break",
+      form: "c",
+      style: 0,
+      eol: CRLF,
+      final: false,
+      next: [{ n: 1 }],
+      free: whole,
+      others: ["before"],
+    },
+    {
+      ids: ["l", "w"],
+      label: "l the whole record becomes an array under one line of another setting, CRLF, no final break",
+      form: "c",
+      style: 0,
+      eol: CRLF,
+      final: false,
+      next: [{ n: 1 }],
+      free: whole,
+      lone: true,
+    },
+    {
+      ids: ["l", "w"],
+      label: "l the whole record becomes an array and is the whole file, a final break",
+      form: "c",
+      style: 1,
+      eol: CRLF,
+      final: true,
+      next: [{ n: 1 }],
+      free: whole,
+    },
+    {
+      ids: ["m", "w"],
+      label: "m the whole record empties and is the whole file, a final break",
+      form: "c",
+      style: 2,
+      eol: LF,
+      final: true,
+      next: {},
+      free: empty,
+    },
+    // A new item beside a dotted item that no header holds goes in a line of its own, not under a header.
+    {
+      ids: ["c", "j"],
+      label: "c an item arrives beside a dotted item at the root",
+      form: "c",
+      style: 2,
+      eol: LF,
+      final: true,
+      rootFirst: true,
+      change: { j: true },
+      others: ["after"],
+    },
+  ];
+};
 
 const specs: ReadonlyArray<Spec> = [
   {
@@ -185,6 +359,7 @@ const specs: ReadonlyArray<Spec> = [
     label: "a inline items",
     form: "a",
     style: 0,
+    mixed: true,
     eol: LF,
     final: true,
     change: { h: true, i: true, j: true },
@@ -217,6 +392,7 @@ const specs: ReadonlyArray<Spec> = [
     label: "d dotted under the parent",
     form: "d",
     style: 3,
+    mixed: true,
     eol: CRLF,
     final: false,
     change: { h: true, i: true, j: true },
@@ -247,6 +423,7 @@ const specs: ReadonlyArray<Spec> = [
     label: "g inline item over lines",
     form: "g",
     style: 2,
+    mixed: true,
     eol: CRLF,
     final: true,
     change: { h: true, i: true, j: true },
@@ -394,14 +571,14 @@ const readBack = Effect.fnUntraced(function* (scene: Scene, text: string) {
 
     // The origin is the line at exactly the setting's path (Sources.ts `file`), 0 when none is: a record named only by the headers of its items.
     expect(origin?._tag === "file" ? origin.line : origin?._tag, `${scene.label}: the origin's line\n${text}`).toBe(
-      originLine(text, scene.eol, scene.path),
+      originLine(text, scene.path),
     );
     expect(origin?._tag === "file" ? origin.file : undefined, scene.label).toBe(fileName(scene.app));
   }
 
   for (const which of OTHER_KEYS) {
     const { key, name: setting, value } = OTHERS[which];
-    const line = holds(text, scene.eol, [which, key]) ? originLine(text, scene.eol, [which, key]) : undefined;
+    const line = holds(text, [which, key]) ? originLine(text, [which, key]) : undefined;
     const read = exit.value.values[field(setting)];
 
     if (line === undefined) {
@@ -452,8 +629,9 @@ const readable = (draw: Draw): ReadonlyArray<Scene> => {
       label: "l a table becomes a scalar, a table inside an item becomes an array",
       form: "c",
       style: 1,
-      eol: LF,
-      final: true,
+      eol: CRLF,
+      mixed: true,
+      final: false,
       old: { [first]: { n: 1, desired: { a: 2 } }, [second]: { n: 3, desired: { a: 4 } } },
       next: { [first]: 7, [second]: { n: 3, desired: [1, 2] } },
     }),
@@ -489,7 +667,7 @@ const readable = (draw: Draw): ReadonlyArray<Scene> => {
       form: "b",
       style: 0,
       eol: CRLF,
-      final: true,
+      final: false,
       next: {},
       others: ["after"],
     }),
@@ -499,6 +677,7 @@ const readable = (draw: Draw): ReadonlyArray<Scene> => {
       form: "e",
       style: 1,
       eol: LF,
+      mixed: true,
       final: false,
       next: {},
       others: ["after"],
@@ -544,7 +723,7 @@ it.effect.prop(
 
         // A table that a header names keeps its header when its keys go: the header is still a line of the answer.
         for (const line of scene.keeps) {
-          expect(text.split(scene.eol), `${scene.label}: the header stays\n${text}`).toContain(line);
+          expect(text.split(/\r?\n/u), `${scene.label}: the header stays\n${text}`).toContain(line);
         }
 
         yield* readBack(scene, text);
@@ -645,6 +824,21 @@ const leaving = (draw: Draw): ReadonlyArray<{ readonly scene: Scene; readonly st
       }),
     },
     // (y) the whole setting removed, in each form.
+    // (y) a record of dotted keys at the root whose first item is one inline table: the lines of the item are cut once.
+    {
+      start: false,
+      scene: buildScene(draw, {
+        form: "e",
+        ids: ["y"],
+        label: "y a remove of dotted keys with an inline item first",
+        style: 0,
+        eol: LF,
+        final: true,
+        remove: true,
+        inlineFirst: true,
+        others: ["after"],
+      }),
+    },
     ...(["a", "b", "c", "d", "e", "f", "g"] as const).map((form, n) => ({
       start: form === "a" || form === "c" || form === "e",
       scene: buildScene(draw, {
@@ -654,6 +848,7 @@ const leaving = (draw: Draw): ReadonlyArray<{ readonly scene: Scene; readonly st
         style: n,
         eol: n % 2 === 0 ? LF : CRLF,
         final: n !== 4,
+        mixed: n % 3 === 1,
         remove: true,
         inside: n % 2 === 0,
         others: ["before", "after"],
@@ -978,6 +1173,34 @@ const arrays = (draw: Draw): ReadonlyArray<{ readonly scene: Scene; readonly sta
         sep: false,
       }),
     },
+    // (z) the first block follows another setting's table: that table cannot hold the line, so it is written where a new key goes.
+    {
+      start: true,
+      scene: arrayScene(draw, {
+        ...tables,
+        ids: ["z"],
+        behind: true,
+        mixed: true,
+        label: "z a new empty array, the blocks follow another table",
+        old: [{ n: a }, { n: b }],
+        next: [],
+        sep: true,
+      }),
+    },
+    {
+      start: false,
+      scene: arrayScene(draw, {
+        ...tables,
+        ids: ["z"],
+        behind: true,
+        eol: CRLF,
+        final: false,
+        label: "z a new array of plain values, the blocks follow another table",
+        old: [{ n: a }, { n: b }],
+        next: [b, { n: a }],
+        sep: false,
+      }),
+    },
     // (z) an equal array of tables is not touched.
     {
       start: false,
@@ -1025,10 +1248,9 @@ it.effect.prop(
             expect((text.match(/^\[\[/gmu) ?? []).length, `${scene.label}: one block per element\n${text}`).toBe(
               next.length,
             );
-            expect(
-              separators(text, scene.eol, scene.path),
-              `${scene.label}: blank lines between blocks\n${text}`,
-            ).toEqual(next.slice(1).map(() => wanted));
+            expect(separators(text, scene.path), `${scene.label}: blank lines between blocks\n${text}`).toEqual(
+              next.slice(1).map(() => wanted),
+            );
           } else {
             expect(text.includes("[["), `${scene.label}: no block\n${text}`).toBe(false);
           }
