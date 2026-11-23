@@ -22,7 +22,7 @@ const entries: (
 
 How each path uses it:
 
-1. The program runs its guard, then calls the function inside its Ledger transaction and appends what it gives.
+1. The program runs its guard, then calls the function inside its Ledger transaction and appends what it gives (since decision 0090, it reads, calls the function and appends once with an expected revision).
 2. A direct write reads the stream over its `RemoteLedger` (decision 0076), folds the state, calls the function, then signs and appends. Nothing joins the read and the append, as 0076 already accepts.
 3. A direct write runs every check the function makes. Only the program's guard is skipped.
 4. A direct write reads the settings on the device, the usual way through Configuration.

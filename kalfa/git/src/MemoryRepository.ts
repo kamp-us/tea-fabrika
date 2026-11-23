@@ -1,82 +1,189 @@
 /**
- * The in-memory adapter of `Repository`: a store held as a plain value of commits, refs and shallow commits.
+ * The in-memory adapter of `Repository`: a store held as a plain value of commits, trees, blobs, refs and shallow commits.
  *
  * **Details**
  *
- * A commit's id is computed as git computes it, so the same commit has the same id here and in a real repository. The store holds only what git's format can hold: a message is a `string`, so a commit that is not UTF-8 cannot be put in memory.
+ * A commit's id and a tree's id are computed as git computes them, so the same commit with the same files has the same id here and in a real repository. The store holds only what git's format can hold: a message is a `string`, so a commit that is not UTF-8 cannot be put in memory, and a path is a `Path`, so one git refuses cannot be put in a tree.
  */
 import { Context, Effect, Layer, Ref as Cell, Result, Schema } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
-import { bytes, hashed } from "./internal/object.ts";
+import { byBytes, bytes, FOLDER, hashed, treeBytes, type Line } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
 import type * as Settings from "./Settings.ts";
+import * as Tree from "./Tree.ts";
+
+/**
+ * A file to put in a tree: its kind and its bytes, kept exactly and never read as text.
+ *
+ * @category models
+ */
+export interface File {
+  readonly mode: Tree.Mode;
+  readonly content: Uint8Array;
+}
 
 /**
  * What a repository in memory holds.
  *
  * **Details**
  *
- * `shallow` lists the commits whose parents this store lacks, as git's `shallow` file does.
+ * `trees` holds each root tree's files, flat by path: a folder's own tree is hashed and not kept. `blobs` holds each file's bytes by id, one blob for every file with the same bytes. `shallow` lists the commits whose parents this store lacks, as git's `shallow` file does.
  *
  * @category models
  */
 export interface Store {
   readonly commits: ReadonlyMap<CommitId, Commit.Commit>;
+  readonly trees: ReadonlyMap<Tree.TreeId, ReadonlyMap<Tree.Path, Tree.Entry>>;
+  readonly blobs: ReadonlyMap<Tree.BlobId, Uint8Array>;
   readonly refs: ReadonlyMap<Ref.RefName, CommitId>;
   readonly shallow: ReadonlySet<CommitId>;
 }
 
+// The tree of no files, which git knows without any object written.
+const EMPTY_TREE = Schema.decodeSync(Tree.TreeId)("4b825dc642cb6eb9a060e54bf8d69288fbee4904");
+
 /**
- * A store with nothing in it.
+ * A store with nothing in it but git's empty tree, so a commit with no files needs no `tree` call.
  *
  * @category constructors
  */
-export const empty: Store = { commits: new Map(), refs: new Map(), shallow: new Set() };
+export const empty: Store = {
+  commits: new Map(),
+  trees: new Map([[EMPTY_TREE, new Map()]]),
+  blobs: new Map(),
+  refs: new Map(),
+  shallow: new Set(),
+};
 
 /**
  * Builds a commit and computes its id as git does.
  *
  * **Details**
  *
- * The id is the sha-1 of `commit <size>`, a NUL byte and the object's bytes, with git's empty tree until trees come.
+ * The id is the sha-1 of `commit <size>`, a NUL byte and the object's bytes, whose first line names the tree.
  *
  * @category constructors
  */
 export const commit = (
-  fields: Pick<Commit.Commit, "parents" | "author" | "committer" | "message">,
+  fields: Pick<Commit.Commit, "tree" | "parents" | "author" | "committer" | "message">,
 ): Effect.Effect<Commit.Commit, never, Digest.Digest> =>
   Effect.gen(function* () {
     const digest = yield* Digest.Digest;
-    const id = yield* digest.digestHex(Digest.sha1, hashed(bytes(fields)));
+    const id = yield* digest.digestHex(Digest.sha1, hashed("commit", bytes(fields)));
 
     return new Commit.Commit({ ...fields, id: Schema.decodeSync(CommitId)(id) });
   });
 
 /**
- * A store that git would refuse: a commit whose parent is missing, a ref at a missing commit, or a ref beside a ref below it.
+ * A store that git would refuse: a commit whose parent or tree is missing, a ref at a missing commit, a ref beside a ref below it, or a file beside a file below it.
  *
  * @category errors
  */
 export class BadStore extends Schema.TaggedError<BadStore, { readonly brand: unique symbol }>()("BadStore", {
-  reason: Schema.Literals(["missing-parent", "missing-commit", "ref-conflict"]),
+  reason: Schema.Literals(["missing-parent", "missing-commit", "ref-conflict", "missing-tree", "path-conflict"]),
 }) {}
+
+// A folder as it is built: each name holds a file's line or a folder, in a Map so a name like `__proto__` is a name.
+interface Folder {
+  readonly files: Map<string, Tree.Entry>;
+  readonly folders: Map<string, Folder>;
+}
+
+const folderAt = (root: Folder, names: ReadonlyArray<string>): Folder => {
+  let folder = root;
+
+  for (const name of names) {
+    const next = folder.folders.get(name) ?? { files: new Map(), folders: new Map() };
+    folder.folders.set(name, next);
+    folder = next;
+  }
+
+  return folder;
+};
+
+// A path that is a folder of another path, such as a file `a` beside a file `a/b` or `a/b/c`: git cannot hold both.
+const hasFolderOfAnother = (paths: Iterable<string>): boolean => {
+  const taken = new Set(paths);
+
+  return [...taken].some((path) => {
+    const names = path.split("/");
+
+    return names.slice(0, -1).some((_, at) => taken.has(names.slice(0, at + 1).join("/")));
+  });
+};
+
+// A tree's id: each folder below is hashed first, as its entry in the folder above needs its id.
+const treeId = (folder: Folder): Effect.Effect<Tree.TreeId, never, Digest.Digest> =>
+  Effect.gen(function* () {
+    const digest = yield* Digest.Digest;
+    const lines: Array<Line> = [...folder.files].map(([name, entry]) => ({ mode: entry.mode, name, id: entry.blob }));
+
+    for (const [name, below] of folder.folders) {
+      lines.push({ mode: FOLDER, name, id: yield* treeId(below) });
+    }
+
+    return Schema.decodeSync(Tree.TreeId)(yield* digest.digestHex(Digest.sha1, hashed("tree", treeBytes(lines))));
+  });
+
+/**
+ * Puts files and their blobs in a store and gives the id of the tree they make, as git computes it.
+ *
+ * **Details**
+ *
+ * One blob is made for each content, so two paths with the same bytes share one. Each folder is a tree of its own, with its entries in git's order, a folder sorting as if its name ended in `/`. A `Map` goes in, never a plain object, so a path named `__proto__` is a path like any other. It fails `path-conflict` when one path is a folder of another, a file `a` beside a file `a/b`, and the store is then as it was. No files make git's empty tree.
+ *
+ * @category combinators
+ */
+export const tree = (
+  store: Store,
+  files: ReadonlyMap<Tree.Path, File>,
+): Effect.Effect<{ readonly store: Store; readonly id: Tree.TreeId }, BadStore, Digest.Digest> =>
+  Effect.gen(function* () {
+    if (hasFolderOfAnother(files.keys())) {
+      return yield* new BadStore({ reason: "path-conflict" });
+    }
+
+    const digest = yield* Digest.Digest;
+    const root: Folder = { files: new Map(), folders: new Map() };
+    const entries = new Map<Tree.Path, Tree.Entry>();
+    const blobs = new Map(store.blobs);
+
+    for (const [path, file] of files) {
+      const names = path.split("/");
+      const id = Schema.decodeSync(Tree.BlobId)(yield* digest.digestHex(Digest.sha1, hashed("blob", file.content)));
+      const entry = new Tree.Entry({ mode: file.mode, blob: id });
+
+      folderAt(root, names.slice(0, -1)).files.set(names.at(-1) ?? path, entry);
+      entries.set(path, entry);
+      blobs.set(id, file.content.slice());
+    }
+
+    const id = yield* treeId(root);
+
+    return { store: { ...store, trees: new Map(store.trees).set(id, entries), blobs }, id };
+  });
 
 /**
  * Puts a commit in a store.
  *
  * **Details**
  *
- * Its parents are in the store, unless the commit is one of the store's shallow commits.
+ * Its parents are in the store, unless the commit is one of the store's shallow commits, and then its tree is in the store. The parents are checked first.
  *
  * @category combinators
  */
-export const add = (store: Store, added: Commit.Commit): Result.Result<Store, BadStore> =>
-  added.parents.every((parent) => store.commits.has(parent)) || store.shallow.has(added.id)
+export const add = (store: Store, added: Commit.Commit): Result.Result<Store, BadStore> => {
+  if (!added.parents.every((parent) => store.commits.has(parent)) && !store.shallow.has(added.id)) {
+    return Result.fail(new BadStore({ reason: "missing-parent" }));
+  }
+
+  return store.trees.has(added.tree)
     ? Result.succeed({ ...store, commits: new Map(store.commits).set(added.id, added) })
-    : Result.fail(new BadStore({ reason: "missing-parent" }));
+    : Result.fail(new BadStore({ reason: "missing-tree" }));
+};
 
 // git refuses `refs/heads/a/b` beside `refs/heads/a`: a ref is a file, and a folder cannot be one too.
 const isBeside = (a: string, b: string): boolean => a !== b && (a.startsWith(`${b}/`) || b.startsWith(`${a}/`));
@@ -114,24 +221,6 @@ export class MemoryStore extends Context.Service<
     readonly set: (store: Store) => Effect.Effect<void>;
   }
 >()("@kalfa/git/MemoryRepository.MemoryStore") {}
-
-const encoder = new TextEncoder();
-
-// git sorts refs by their UTF-8 bytes. JavaScript's `<` sorts by UTF-16 units, which differ past U+E000.
-const byBytes = (a: string, b: string): number => {
-  const x = encoder.encode(a);
-  const y = encoder.encode(b);
-
-  for (let i = 0; i < Math.min(x.length, y.length); i++) {
-    const delta = (x[i] ?? 0) - (y[i] ?? 0);
-
-    if (delta !== 0) {
-      return delta;
-    }
-  }
-
-  return x.length - y.length;
-};
 
 const found = (store: Store, id: CommitId): Result.Result<Commit.Commit, Repository.NoSuchCommit> => {
   const held = store.commits.get(id);

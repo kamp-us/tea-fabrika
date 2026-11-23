@@ -42,10 +42,11 @@ const Viewed = Schema.fromJsonString(
     title: Schema.String,
     body: Schema.String,
     mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
+    mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
   }),
 );
 
-const VIEW_FIELDS = `${FIELDS},baseRefName,title,body,mergeCommit`;
+const VIEW_FIELDS = `${FIELDS},baseRefName,title,body,mergeCommit,mergeable`;
 
 /** One line of the files list as `patches` asks jq to print it. */
 const PatchRow = Schema.fromJsonString(Patch);
@@ -254,6 +255,7 @@ export const make = (
         title: v.title,
         body: v.body,
         mergeCommit: v.mergeCommit?.oid ?? null,
+        mergeable: v.mergeable,
       } satisfies Detail;
     });
 

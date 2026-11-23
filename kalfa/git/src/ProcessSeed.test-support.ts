@@ -7,11 +7,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as CommitId from "./CommitId.ts";
-import type { FlatSignature, History } from "./History.test-support.ts";
+import type { FileSpec, FlatSignature, History } from "./History.test-support.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Repository from "./Repository.ts";
 import type { Seeded, Subject } from "./RepositoryTest.ts";
 import type { Settings } from "./Settings.ts";
+import * as Tree from "./Tree.ts";
 
 type Needs = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path;
 
@@ -86,7 +87,24 @@ const bytes = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
 const identLine = (flat: FlatSignature): string =>
   `${flat.name}${flat.name === "" ? "" : " "}<${flat.email}> ${flat.seconds} ${flat.offset}`;
 
-/** The fast-import stream of a history: a root starts after `reset`, a merge names its parents in order. */
+// fast-import reads a path to the end of its line, unless it starts with a quote: then it is in C style, with `\\`, `"` and a
+// line break written out. A path that holds a line break must be quoted.
+const quoted = (path: string): string =>
+  path.startsWith('"') || path.includes("\n")
+    ? `"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n")}"`
+    : path;
+
+/** A commit's whole tree: `deleteall`, then one `M` line and the file's bytes for each file. */
+const fileChanges = (files: ReadonlyArray<FileSpec>): ReadonlyArray<string | Uint8Array> => [
+  "deleteall\n",
+  ...files.flatMap((file): ReadonlyArray<string | Uint8Array> => [
+    `M ${file.mode} inline ${quoted(file.path)}\ndata ${file.content.length}\n`,
+    file.content,
+    "\n",
+  ]),
+];
+
+/** The fast-import stream of a history: a root starts after `reset`, a merge names its parents in order, each commit holds its files. */
 const importStream = (history: History): Uint8Array =>
   bytes(
     ...history.nodes.flatMap((node, i): ReadonlyArray<string | Uint8Array> => {
@@ -98,6 +116,7 @@ const importStream = (history: History): Uint8Array =>
         message,
         "\n",
         ...node.parents.map((parent, k) => `${k === 0 ? "from" : "merge"} :${parent + 1}\n`),
+        ...fileChanges(node.files),
         "\n",
       ];
     }),
@@ -149,6 +168,20 @@ export const openRepository = (
     return Context.get(context, Repository.Repository);
   });
 
+/** The tree id of each commit, read from git in one call. */
+const treeIds = (
+  dir: string,
+  ids: ReadonlyArray<CommitId.CommitId>,
+): Effect.Effect<ReadonlyArray<Tree.TreeId>, never, ChildProcessSpawner.ChildProcessSpawner> =>
+  ids.length === 0
+    ? Effect.succeed([])
+    : Effect.map(git(dir, ["rev-parse", ...ids.map((id) => `${id}^{tree}`)]), (output) =>
+        output
+          .split("\n")
+          .filter((line) => line !== "")
+          .map((line) => Schema.decodeUnknownSync(Tree.TreeId)(line)),
+      );
+
 const seed = (history: History, settings: Settings): Effect.Effect<Seeded, never, Needs | Scope.Scope> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -172,7 +205,11 @@ const seed = (history: History, settings: Settings): Effect.Effect<Seeded, never
       { concurrency: 1 },
     ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
 
-    return { repository, ids, fingerprint, hidden: [dir] };
+    const trees = yield* treeIds(dir, ids).pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    );
+
+    return { repository, ids, trees, fingerprint, hidden: [dir] };
   }).pipe(Effect.orDie);
 
 /** A subject for the shared laws: each history becomes a real bare repository. */

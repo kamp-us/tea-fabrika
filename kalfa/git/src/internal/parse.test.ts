@@ -25,6 +25,7 @@ const Side = Schema.Struct({
 const Expected = Schema.Union([
   Schema.Struct({
     id: Schema.String,
+    tree: Schema.String,
     parents: Schema.Array(Schema.String),
     author: Side,
     committer: Side,
@@ -51,11 +52,28 @@ const ForEachRef = Schema.Struct({
   rows: Schema.Array(Schema.Struct({ note: Schema.String, output: Schema.String, expect: Schema.Array(ExpectedRef) })),
 });
 
-// Plant: decode the message with a decoder that replaces bad bytes, so the latin-1 row passes as text.
-it("P1 vector: parse.commits reads every object of each cat-file --batch output recorded from git", () => {
+// The commits of the last four rows are well formed but for their tree line (a real `hash-object --literally` run):
+// none, two, one after the author line, one in uppercase hex. Each must be UnreadableCommit, reason `header`.
+//
+// Plant: decode the message with a decoder that replaces bad bytes, so the latin-1 row passes as text; keep the first of
+// two `tree` lines; take a `tree` line anywhere in the header; skip the `TreeId` decode; read the tree from the second
+// header line; answer git's empty tree whatever the line says.
+it("P1 vector: parse.commits reads every object of each cat-file --batch output recorded from git, with its tree", () => {
   const recorded = Schema.decodeUnknownSync(CatFile)(catFile);
   expect(recorded.git).toContain("git version");
   expect(recorded.rows.length).toBeGreaterThan(15);
+
+  const trees = new Set(
+    recorded.rows.flatMap((row) => row.expect.flatMap((each) => ("tree" in each ? [each.tree] : []))),
+  );
+
+  expect(trees.size, "the rows hold trees besides git's empty tree").toBeGreaterThan(3);
+
+  const header = recorded.rows.filter(
+    (row) => row.expect[0] !== undefined && "reason" in row.expect[0] && row.expect[0].reason === "header",
+  );
+
+  expect(header.length, "the rows hold the objects whose tree line is wrong").toBeGreaterThanOrEqual(4);
 
   for (const row of recorded.rows) {
     const result = Parse.commits(new Uint8Array(Buffer.from(row.output, "base64")));

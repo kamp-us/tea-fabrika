@@ -32,6 +32,22 @@ _Avoid_: revision, version, changeset, snapshot
 The files of one commit, each at its path, without the commit's parents or message.
 _Avoid_: snapshot, folder, working copy
 
+**Tree id**:
+The name git gives a tree from its content, as a commit id is a commit's.
+_Avoid_: tree hash, snapshot id
+
+**Blob**:
+A file's content as git stores it, named by its own id. Two files with the same bytes share one blob.
+_Avoid_: file content, object
+
+**Mode**:
+A file's kind in a tree, as git writes it: a file (100644), an executable file (100755) or a link (120000).
+_Avoid_: permissions, type, flags
+
+**Path**:
+Where a file sits in a tree: its folders and its name, joined by `/`.
+_Avoid_: file name, location, key
+
 **Commit id**:
 The name git gives a commit from its content, also called its sha.
 _Avoid_: revision, version number

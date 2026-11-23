@@ -1,5 +1,5 @@
-// Ticket 1926 P1 and P2: what the package's own files say. Plants: P1, add a workspace test package to the dev dependencies;
-// P2, write a comment with the word `record` in Frontmatter.ts.
+// Ticket 1926 P1 and P2, as ticket 1928 changes P1: what the package's own files say. Plants: P1, add `@kalfa/diagnostics` to the dependencies;
+// P2, write a comment with the word `record` in Markdown.ts.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { expect, it } from "@effect/vitest";
@@ -29,14 +29,23 @@ const files = readdirSync(root, { recursive: true, encoding: "utf8" })
 // A word this package must not hold is built from parts, so this file does not hold it either.
 const part = (...pieces: ReadonlyArray<string>): string => pieces.join("");
 
-it("scenario: P1 the manifest: yaml is the one dependency, effect the one peer, no sibling package, two exports", () => {
-  expect(Object.keys(manifest.dependencies)).toEqual(["yaml"]);
+it("scenario: P1 the manifest: the Markdown reader's four packages and yaml are the dependencies, effect the one peer, no sibling package, three exports", () => {
+  expect(Object.keys(manifest.dependencies).sort()).toEqual([
+    "@types/mdast",
+    "mdast-util-from-markdown",
+    "mdast-util-gfm",
+    "micromark-extension-gfm",
+    "yaml",
+  ]);
   expect(Object.keys(manifest.peerDependencies)).toEqual(["effect"]);
-  expect(Object.keys(manifest.exports).sort()).toEqual(["./Frontmatter", "./package.json"]);
-  expect(manifest.publishConfig.exports["./Frontmatter"]).toEqual({
-    types: "./dist/Frontmatter.d.ts",
-    default: "./dist/Frontmatter.js",
-  });
+  expect(Object.keys(manifest.exports).sort()).toEqual(["./Frontmatter", "./Markdown", "./package.json"]);
+
+  for (const name of ["Frontmatter", "Markdown"]) {
+    expect(manifest.publishConfig.exports[`./${name}`]).toEqual({
+      types: `./dist/${name}.d.ts`,
+      default: `./dist/${name}.js`,
+    });
+  }
 
   const named = [
     ...Object.keys(manifest.dependencies),

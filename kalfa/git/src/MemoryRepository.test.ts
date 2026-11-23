@@ -1,17 +1,32 @@
-// The laws of the in-memory adapter: its ids are git's (M1), its store refuses what git refuses (M2), and it
-// passes the shared laws of Repository (S1 to S10), at 100 runs.
+// The laws of the in-memory adapter: its ids are git's (M1, M3), its store refuses what git refuses (M2, M4), it
+// holds the files it was given (M5), and it passes the shared laws of Repository (S1 to S11), at 100 runs.
 import { expect, it } from "@effect/vitest";
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
 import fastImport from "./fixtures/fast-import-2.40.1.json" with { type: "json" };
-import { missingId, shapes, textureArb, type History, type FlatSignature } from "./History.test-support.ts";
+import treeIds from "./fixtures/tree-ids-2.40.1.json" with { type: "json" };
+import {
+  CONFLICT_CLASSES,
+  conflictClasses,
+  missingId,
+  shapes,
+  textureArb,
+  TREE_CLASSES,
+  TREE_ID,
+  treeArb,
+  treeClasses,
+  type FileSpec,
+  type FlatSignature,
+  type History,
+} from "./History.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
 import * as Ref from "./Ref.ts";
 import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as RepositoryTest from "./RepositoryTest.ts";
+import * as Tree from "./Tree.ts";
 
 const signature = (flat: FlatSignature): Commit.Signature =>
   new Commit.Signature({
@@ -24,6 +39,19 @@ const commitIdFrom = (text: string): CommitId.CommitId => Schema.decodeUnknownSy
 
 const refNameFrom = (text: string): Ref.RefName => Schema.decodeUnknownSync(Ref.RefName)(text);
 
+const treeIdFrom = (text: string): Tree.TreeId => Schema.decodeUnknownSync(Tree.TreeId)(text);
+
+const pathFrom = (text: string): Tree.Path => Schema.decodeUnknownSync(Tree.Path)(text);
+
+const toFile = (mode: string, content: Uint8Array): MemoryRepository.File => ({
+  mode: Schema.decodeUnknownSync(Tree.Mode)(mode),
+  content,
+});
+
+/** The files of a node as the memory store takes them: a Map, so a path named `__proto__` is a path like any other. */
+const toFileMap = (files: ReadonlyArray<FileSpec>): ReadonlyMap<Tree.Path, MemoryRepository.File> =>
+  new Map(files.map((file) => [pathFrom(file.path), toFile(file.mode, file.content)]));
+
 const idAt = (ids: ReadonlyArray<CommitId.CommitId>, index: number): CommitId.CommitId => {
   const id = ids[index];
 
@@ -34,28 +62,37 @@ const idAt = (ids: ReadonlyArray<CommitId.CommitId>, index: number): CommitId.Co
   return id;
 };
 
-/** A store holding the history: ids computed as git computes them, refs pointed, shallow commits marked. */
+/** A store holding the history: trees and ids computed as git computes them, refs pointed, shallow commits marked. */
 const build = (
   history: History,
 ): Effect.Effect<
-  { readonly store: MemoryRepository.Store; readonly ids: ReadonlyArray<CommitId.CommitId> },
+  {
+    readonly store: MemoryRepository.Store;
+    readonly ids: ReadonlyArray<CommitId.CommitId>;
+    readonly trees: ReadonlyArray<Tree.TreeId>;
+  },
   never,
   Digest.Digest
 > =>
   Effect.gen(function* () {
     let store = MemoryRepository.empty;
     const ids: Array<CommitId.CommitId> = [];
+    const trees: Array<Tree.TreeId> = [];
 
     for (const node of history.nodes) {
+      const made = yield* Effect.orDie(MemoryRepository.tree(store, toFileMap(node.files)));
+
       const commit = yield* MemoryRepository.commit({
+        tree: made.id,
         parents: node.parents.map((parent) => idAt(ids, parent)),
         author: signature(node.author),
         committer: signature(node.committer),
         message: node.message,
       });
 
-      store = yield* Effect.orDie(Effect.fromResult(MemoryRepository.add(store, commit)));
+      store = yield* Effect.orDie(Effect.fromResult(MemoryRepository.add(made.store, commit)));
       ids.push(commit.id);
+      trees.push(made.id);
     }
 
     for (const ref of history.refs) {
@@ -64,7 +101,7 @@ const build = (
       );
     }
 
-    return { store: { ...store, shallow: new Set(history.shallow.map((i) => idAt(ids, i))) }, ids };
+    return { store: { ...store, shallow: new Set(history.shallow.map((i) => idAt(ids, i))) }, ids, trees };
   });
 
 const Recorded = Schema.Struct({
@@ -90,7 +127,7 @@ const Recorded = Schema.Struct({
   ),
 });
 
-// vector: git 2.40.1's fast-import gave each commit below its id, and memory computes the same one.
+// vector: git 2.40.1's fast-import gave each commit below its id, with git's empty tree, and memory computes the same one.
 // Plant: drop the blank line before the message; write the offset as `+0000` for `-0000`; put the
 // parents in sorted order.
 it.effect("M1 vector: MemoryRepository.commit computes the id git gave each recorded commit", () =>
@@ -101,6 +138,7 @@ it.effect("M1 vector: MemoryRepository.commit computes the id git gave each reco
 
     for (const row of recorded.rows) {
       const commit = yield* MemoryRepository.commit({
+        tree: treeIdFrom(TREE_ID),
         parents: row.parents.map(commitIdFrom),
         author: new Commit.Signature(row.author),
         committer: new Commit.Signature(row.committer),
@@ -144,6 +182,7 @@ it.effect.prop(
       const gone = commitIdFrom(missingId(texture, 0, ids));
 
       const orphan = yield* MemoryRepository.commit({
+        tree: treeIdFrom(TREE_ID),
         parents: [gone],
         author: signature(flat),
         committer: signature(flat),
@@ -171,15 +210,226 @@ it.effect.prop(
   { arbitrary: { runs: 100, seed: 119120 } },
 );
 
+const RecordedTrees = Schema.Struct({
+  git: Schema.String,
+  command: Schema.String,
+  author: Schema.Struct({
+    name: Schema.String,
+    email: Schema.String,
+    at: Schema.Struct({ seconds: Schema.Finite, offset: Schema.String }),
+  }),
+  committer: Schema.Struct({
+    name: Schema.String,
+    email: Schema.String,
+    at: Schema.Struct({ seconds: Schema.Finite, offset: Schema.String }),
+  }),
+  message: Schema.String,
+  rows: Schema.Array(
+    Schema.Struct({
+      note: Schema.String,
+      files: Schema.Array(Schema.Struct({ path: Schema.String, mode: Schema.String, content: Schema.String })),
+      tree: Schema.String,
+      commit: Schema.String,
+    }),
+  ),
+});
+
+// vector: git 2.40.1's fast-import gave each commit below its files' tree id and its own id (a list of files, never a
+// record keyed by path), and memory computes the same two. The bytes are kept as base64, so none is read as text.
+// Plant: sort a tree's entries as plain strings; write every path into one flat tree; write a link as `100644`; hash
+// a file's content after decoding it as text; keep a tree's files in a plain object; write the empty tree in a commit's
+// bytes whatever `tree` says.
+it.effect("M3 vector: tree and commit give the tree id and the commit id git gave each recorded set of files", () =>
+  Effect.gen(function* () {
+    const recorded = Schema.decodeUnknownSync(RecordedTrees)(treeIds);
+    expect(recorded.git).toContain("git version");
+    expect(recorded.rows.length, "the list is not empty").toBeGreaterThan(15);
+    expect(
+      recorded.rows.filter((row) => row.files.length === 0).map((row) => row.tree),
+      "the row with no files is git's empty tree",
+    ).toEqual([TREE_ID]);
+
+    for (const row of recorded.rows) {
+      const files = new Map(
+        row.files.map((file) => [
+          pathFrom(file.path),
+          toFile(file.mode, Uint8Array.from(Buffer.from(file.content, "base64"))),
+        ]),
+      );
+
+      const { id } = yield* Effect.orDie(MemoryRepository.tree(MemoryRepository.empty, files));
+      expect(id, `${row.note}: the tree`).toBe(row.tree);
+
+      const commit = yield* MemoryRepository.commit({
+        tree: id,
+        parents: [],
+        author: new Commit.Signature(recorded.author),
+        committer: new Commit.Signature(recorded.committer),
+        message: recorded.message,
+      });
+
+      expect(commit.id, `${row.note}: the commit`).toBe(row.commit);
+      expect(commit.tree, `${row.note}: the commit's tree`).toBe(row.tree);
+    }
+  }).pipe(Effect.provide(Digest.layerWebCrypto)),
+);
+
+/** What a store holds, as plain data, so a refused call can be seen to have left it as it was. */
+interface Held {
+  readonly commits: ReadonlyArray<string>;
+  readonly trees: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, unknown]>]>;
+  readonly blobs: ReadonlyArray<readonly [string, ReadonlyArray<number>]>;
+  readonly refs: ReadonlyArray<readonly [string, string]>;
+  readonly shallow: ReadonlyArray<string>;
+}
+
+const held = (store: MemoryRepository.Store): Held => ({
+  commits: [...store.commits.keys()],
+  trees: [...store.trees].map(([id, files]) => [id, [...files]] as const),
+  blobs: [...store.blobs].map(([id, content]) => [id, [...content]] as const),
+  refs: [...store.refs],
+  shallow: [...store.shallow],
+});
+
+// Plant: delete the path-conflict check; check only a file beside its direct child, so a file beside one two folders
+// below it passes; delete the missing-tree check in `add`.
+it.effect.prop(
+  "M4 the store refuses what git cannot hold: a path that is a folder of another, a commit whose tree it lacks",
+  { draw: treeArb, texture: textureArb },
+  ({ draw, texture }) =>
+    Effect.gen(function* () {
+      const conflicts = conflictClasses(draw);
+      expect(
+        conflicts.map(({ label }) => label),
+        "the generator reaches every conflict class",
+      ).toEqual(CONFLICT_CLASSES);
+
+      expect(
+        treeClasses(draw).map(({ label }) => label),
+        "the generator reaches every tree class",
+      ).toEqual(TREE_CLASSES);
+
+      const root = shapes(texture).find((shape) => shape.label === "one root");
+
+      if (root === undefined) {
+        return yield* Effect.die("the generator made no root");
+      }
+
+      const { store, ids } = yield* build(root.history);
+      const before = held(store);
+
+      for (const { label, files } of conflicts) {
+        refusal(yield* Effect.result(MemoryRepository.tree(store, toFileMap(files))), "path-conflict", `${label}`);
+        expect(held(store), `${label}: the store is as it was`).toEqual(before);
+      }
+
+      for (const { label, files } of treeClasses(draw)) {
+        yield* Effect.orDie(MemoryRepository.tree(store, toFileMap(files)));
+        expect(held(store), `${label}: building a tree leaves the store it was given as it was`).toEqual(before);
+      }
+
+      // A commit whose tree the store lacks, its parents all in the store: a root, and a child of the one commit.
+      const lacking = (yield* Effect.orDie(
+        MemoryRepository.tree(MemoryRepository.empty, toFileMap(treeClasses(draw)[0]?.files ?? [])),
+      )).id;
+
+      expect(store.trees.has(lacking), "the store lacks the tree").toBe(false);
+      const flat = texture.signatures[0];
+
+      if (flat === undefined) {
+        return yield* Effect.die("the generator made no signature");
+      }
+
+      const fields = { author: signature(flat), committer: signature(flat), message: "m" };
+
+      for (const parents of [[], [idAt(ids, 0)]]) {
+        const orphan = yield* MemoryRepository.commit({ ...fields, tree: lacking, parents });
+        refusal(
+          MemoryRepository.add(store, orphan),
+          "missing-tree",
+          `a commit with ${parents.length} parents and no tree`,
+        );
+      }
+
+      // The parent check comes first: with both missing, the answer is the missing parent.
+      const gone = commitIdFrom(missingId(texture, 0, ids));
+      const both = yield* MemoryRepository.commit({ ...fields, tree: lacking, parents: [gone] });
+      refusal(MemoryRepository.add(store, both), "missing-parent", "a commit missing its parent and its tree");
+
+      // With its tree built into the store, the same commit goes in, and its tree is kept.
+      const filled = yield* Effect.orDie(MemoryRepository.tree(store, toFileMap(treeClasses(draw)[0]?.files ?? [])));
+      const child = yield* MemoryRepository.commit({ ...fields, tree: filled.id, parents: [idAt(ids, 0)] });
+      const added = yield* Effect.orDie(Effect.fromResult(MemoryRepository.add(filled.store, child)));
+      expect(added.commits.get(child.id)?.tree, "the commit keeps its tree").toBe(filled.id);
+    }).pipe(Effect.provide(Digest.layerWebCrypto)),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+const hex = (content: Uint8Array): string => Buffer.from(content).toString("hex");
+
+// Plant: leave out an empty file; keep the first mode seen for one blob, so a second path takes it; key `blobs` by
+// path, so two paths with one content give two blobs; store the caller's array, not a copy of it.
+it.effect.prop(
+  "M5 a tree reads back: its paths with their modes, each path's bytes byte for byte, and one blob for equal bytes",
+  { draw: treeArb },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      for (const { label, files } of treeClasses(draw)) {
+        const { store, id } = yield* Effect.orDie(MemoryRepository.tree(MemoryRepository.empty, toFileMap(files)));
+        const entries = store.trees.get(id);
+
+        if (entries === undefined) {
+          return yield* Effect.die(`${label}: the store holds no tree ${id}`);
+        }
+
+        expect([...entries.keys()].sort(), `${label}: the paths`).toEqual(files.map((file) => file.path).sort());
+
+        for (const file of files) {
+          const entry = entries.get(pathFrom(file.path));
+          expect(entry?.mode, `${label}: the mode of ${JSON.stringify(file.path)}`).toBe(file.mode);
+          expect(
+            entry === undefined ? undefined : store.blobs.get(entry.blob),
+            `${label}: the bytes of ${JSON.stringify(file.path)}`,
+          ).toEqual(file.content);
+        }
+
+        expect(store.blobs.size, `${label}: one blob for each content`).toBe(
+          new Set(files.map((file) => hex(file.content))).size,
+        );
+        const again = yield* Effect.orDie(MemoryRepository.tree(store, toFileMap(files)));
+        expect(again.id, `${label}: the same files, the same tree`).toBe(id);
+        expect(again.store.blobs.size, `${label}: no new blob the second time`).toBe(store.blobs.size);
+
+        // The store copies the bytes it is given: a caller that changes its array afterwards changes nothing in the store.
+        const given = files.map((file) => ({ ...file, content: Uint8Array.from(file.content) }));
+        const copied = yield* Effect.orDie(MemoryRepository.tree(MemoryRepository.empty, toFileMap(given)));
+
+        for (const file of given) {
+          file.content.fill(0xa5);
+        }
+
+        for (const file of files) {
+          const entry = copied.store.trees.get(copied.id)?.get(pathFrom(file.path));
+          expect(
+            entry === undefined ? undefined : copied.store.blobs.get(entry.blob),
+            `${label}: the bytes of ${JSON.stringify(file.path)} after the caller changed its array`,
+          ).toEqual(file.content);
+        }
+      }
+    }).pipe(Effect.provide(Digest.layerWebCrypto)),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
 const subject: RepositoryTest.Subject = {
   seed: (history, config) =>
     Effect.gen(function* () {
-      const { store, ids } = yield* build(history);
+      const { store, ids, trees } = yield* build(history);
       const context = yield* Layer.build(MemoryRepository.layer(store, config));
 
       return {
         repository: Context.get(context, Repository.Repository),
         ids,
+        trees,
         fingerprint: Context.get(context, MemoryRepository.MemoryStore).get,
         hidden: [],
       };

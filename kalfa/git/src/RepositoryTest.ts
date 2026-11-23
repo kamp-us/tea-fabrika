@@ -1,4 +1,4 @@
-// The laws every adapter of `Repository` passes (S1 to S10), exported as `/test`. A runner gives a
+// The laws every adapter of `Repository` passes (S1 to S11), exported as `/test`. A runner gives a
 // `Subject`: how to seed a history into its own kind of store. The suite draws a texture, makes one
 // history for each shape class from it, seeds each, and compares every answer with the model in
 // History.test-support.ts. A subject that passes these laws answers as every other one does.
@@ -24,10 +24,13 @@ import {
   CANARY,
   SHAPE_CLASSES,
   cutShallow,
+  sameFiles,
   shapes,
   textureArb,
   toPlain,
+  TREE_CARRIER_CLASSES,
   TREE_ID,
+  treeCarrier,
   refQueries,
   walkModel,
   CRISS,
@@ -39,12 +42,15 @@ import * as Ref from "./Ref.ts";
 import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
+import type * as Tree from "./Tree.ts";
 
 /** A seeded store: the service to ask, the id each history commit got, and what the laws may look at. */
 export interface Seeded {
   readonly repository: Repository.Repository["Service"];
   /** The id of each commit of the history, by index. */
   readonly ids: ReadonlyArray<CommitId.CommitId>;
+  /** The tree id of each commit of the history, by index, as the seeder's own store has it. */
+  readonly trees: ReadonlyArray<Tree.TreeId>;
   /** Anything that changes when the store changes: a call must never change it (S10). */
   readonly fingerprint: Effect.Effect<unknown>;
   /** Text that must never appear in a span, such as the repository's path. */
@@ -104,12 +110,23 @@ const nonEmpty = <A>(items: ReadonlyArray<A>): readonly [A, ...Array<A>] => {
   return [first, ...rest];
 };
 
+const treeAt = (trees: ReadonlyArray<Tree.TreeId>, index: number): Tree.TreeId => {
+  const tree = trees[index];
+
+  if (tree === undefined) {
+    throw new Error(`the seeder gave no tree for commit ${index}`);
+  }
+
+  return tree;
+};
+
 const encodeCommit = (commit: Commit.Commit): typeof Commit.Commit.Encoded => Schema.encodeSync(Commit.Commit)(commit);
 
 /** What `readCommit` of commit `i` must answer, as plain data. */
 const expectedCommit = (
   history: History,
   ids: ReadonlyArray<CommitId.CommitId>,
+  trees: ReadonlyArray<Tree.TreeId>,
   i: number,
 ): typeof Commit.Commit.Encoded => {
   const node = history.nodes[i];
@@ -120,6 +137,7 @@ const expectedCommit = (
 
   return {
     id: idAt(ids, i),
+    tree: treeAt(trees, i),
     parents: node.parents.map((parent) => idAt(ids, parent)),
     author: toPlain(node.author),
     committer: toPlain(node.committer),
@@ -172,7 +190,9 @@ const readBack = (seeded: Seeded, history: History, label: string): Effect.Effec
     history.nodes,
     (_, i) =>
       Effect.map(seeded.repository.readCommit(idAt(seeded.ids, i)), (commit) => {
-        expect(encodeCommit(commit), `${label}: commit ${i}`).toEqual(expectedCommit(history, seeded.ids, i));
+        expect(encodeCommit(commit), `${label}: commit ${i}`).toEqual(
+          expectedCommit(history, seeded.ids, seeded.trees, i),
+        );
       }),
     { concurrency: 1 },
   );
@@ -203,21 +223,31 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
   describe(`${name}: the shared laws of Repository`, () => {
     // Plant: each of G4's plants (trim the message, store the offset as a number, refuse an empty name or a
     // space at either end of a name) turns this red too; and in `/process`, take the name up to the last
-    // space before `<`: a name with a trailing space comes back short.
+    // space before `<`: a name with a trailing space comes back short. Trees: `commit` leaves `tree` out of the
+    // value it returns, so it reads back as the empty tree; in the parser, read the tree from the second header line.
     it.effect.prop(
-      "S1 read back: readCommit gives parents in order, author, committer and message byte for byte",
+      "S1 read back: readCommit gives its tree, parents in order, author, committer and message byte for byte",
       { texture: textureArb },
       ({ texture }) =>
         Effect.gen(function* () {
           const made = carrier(texture);
           expect(made.classes, "the generator reaches every message and signature class").toEqual(CARRIER_CLASSES);
-          const histories: ReadonlyArray<Shape> = [...everyShape(texture), { label: "carrier", history: made.history }];
+          const trees = treeCarrier(texture);
+          expect(trees.classes, "the generator reaches every tree class").toEqual(TREE_CARRIER_CLASSES);
+
+          const histories: ReadonlyArray<Shape> = [
+            ...everyShape(texture),
+            { label: "carrier", history: made.history },
+            { label: "tree carrier", history: trees.history },
+          ];
+
           yield* seedEach(subject, histories, DEFAULT, (seeded, shape) => readBack(seeded, shape.history, shape.label));
         }),
       run,
     );
 
-    // Plant: answer `false` or `[]` for an unknown id in `isAncestor`; drop unknown excludes in `walk`.
+    // Plant: answer `false` or `[]` for an unknown id in `isAncestor`; drop unknown excludes in `walk`; in `/process`'s
+    // `known`, accept an object of any type, so a seeded commit's own tree id is read as a commit.
     it.effect.prop(
       "S2 unknown and wrong-type ids fail with NoSuchCommit naming one of them, never [] or false",
       { texture: textureArb },
@@ -229,7 +259,14 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             const second = commitIdFrom(missingId(texture, 1, [...taken, first]));
             const tree = commitIdFrom(TREE_ID);
             const known = seeded.ids[0] ?? second;
-            const missing = [first, second, tree];
+            // A real tree with files, which the repository holds as an object, and which is no commit.
+            const real = seeded.trees.find((id) => id !== TREE_ID);
+
+            if (shape.history.nodes.length > 0) {
+              expect(real, `${shape.label}: a seeded history has a tree with files`).toBeDefined();
+            }
+
+            const missing = [first, second, tree, ...(real === undefined ? [] : [commitIdFrom(real)])];
             const repo = seeded.repository;
             const gone = seeded.ids.length === 0 ? missing : undefined;
 
@@ -773,6 +810,78 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             expect(yield* seeded.fingerprint, `${shape.label}: the store is as it was`).toEqual(before);
           }),
         ),
+      run,
+    );
+
+    // Plant: mix a commit's parents into its tree's id; leave the mode out of a tree's bytes; give every commit the
+    // empty tree.
+    it.effect.prop(
+      "S11 same files, same tree: two commits have one tree id exactly when their paths, modes and bytes are equal",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const made = treeCarrier(texture);
+          expect(made.classes, "the generator reaches every tree class").toEqual(TREE_CARRIER_CLASSES);
+          let same = 0;
+          let apart = 0;
+
+          const histories: ReadonlyArray<Shape> = [
+            ...everyShape(texture),
+            { label: "tree carrier", history: made.history },
+          ];
+
+          yield* seedEach(subject, histories, DEFAULT, (seeded, shape) =>
+            Effect.sync(() => {
+              const nodes = shape.history.nodes;
+
+              nodes.forEach((node, i) => {
+                if (node.files.length === 0) {
+                  expect(treeAt(seeded.trees, i), `${shape.label}: commit ${i} has no files, so git's empty tree`).toBe(
+                    TREE_ID,
+                  );
+                }
+
+                nodes.slice(i + 1).forEach((other, k) => {
+                  const j = i + 1 + k;
+                  const equal = sameFiles(node.files, other.files);
+
+                  if (equal) {
+                    same += 1;
+                  } else {
+                    apart += 1;
+                  }
+
+                  expect(
+                    treeAt(seeded.trees, i) === treeAt(seeded.trees, j),
+                    `${shape.label}: commits ${i} and ${j} ${equal ? "hold the same files" : "differ in their files"}`,
+                  ).toBe(equal);
+                });
+              });
+
+              if (shape.label === "tree carrier") {
+                const first = treeAt(seeded.trees, 0);
+                const place = (label: string): number => made.classes.indexOf(label);
+
+                expect(
+                  treeAt(seeded.trees, place("the same files on another parent")),
+                  "the same files, another parent",
+                ).toBe(first);
+
+                for (const label of [
+                  "one byte differs",
+                  "one path differs",
+                  "one folder level differs",
+                  "one mode differs",
+                ]) {
+                  expect(treeAt(seeded.trees, place(label)), `${label}: a tree one change apart`).not.toBe(first);
+                }
+              }
+            }),
+          );
+
+          expect(same, "the generator reaches commits with equal files").toBeGreaterThan(0);
+          expect(apart, "the generator reaches commits with different files").toBeGreaterThan(0);
+        }),
       run,
     );
   });

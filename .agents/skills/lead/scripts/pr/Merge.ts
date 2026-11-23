@@ -206,7 +206,11 @@ const admin = Effect.fn("Merge.admin")(function* (
   // is what keeps the merge from running ahead of it. It starts only after the push's own CI run has,
   // so no ready event lands in the seconds after a push.
   if (marking) {
-    if (!(yield* Queue.startedAt(found.oid, wait))) {
+    const began = yield* Queue.startedAt(found.oid, wait, found.number).pipe(
+      Effect.catchTag("Conflicting", () => refuse(Queue.conflictLine(found.number))),
+    );
+
+    if (!began) {
       return yield* refuse(Queue.notStarted(found.oid));
     }
 
@@ -216,7 +220,9 @@ const admin = Effect.fn("Merge.admin")(function* (
 
   // Every admin merge, docs included, lands once ci-required is green at the head: it skips the queue,
   // never the check.
-  const required = yield* Queue.requiredAt(found.oid, wait);
+  const required = yield* Queue.requiredAt(found.oid, wait, found.number).pipe(
+    Effect.catchTag("Conflicting", () => refuse(Queue.conflictLine(found.number))),
+  );
 
   if (required._tag === "None" || required.value.status !== "completed" || required.value.conclusion !== "success") {
     const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);

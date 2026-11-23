@@ -18,6 +18,6 @@ Everything in a Markdown file after its frontmatter, or the whole file when it h
 _Avoid_: content, text, prose
 
 **Document**:
-A body read into a tree of its parts: headings, paragraphs, lists, links. Two bodies that differ only in how they
-are typed give the same document.
+A body read into a tree of its parts: headings, paragraphs, lists, links, code and tables. Two bodies that differ only in
+how they are typed give the same document, apart from where each part sits.
 _Avoid_: tree, AST, nodes

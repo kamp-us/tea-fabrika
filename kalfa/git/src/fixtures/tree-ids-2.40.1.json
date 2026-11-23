@@ -1,0 +1,474 @@
+{
+  "git": "git version 2.40.1",
+  "command": "git --no-replace-objects --git-dir=<bare repository> fast-import --date-format=raw --quiet --export-marks=<marks>, one commit per row on refs/seed/tmp after `reset refs/seed/tmp`, with `deleteall` and one `M <mode> inline <path>` per file (a path that starts with a quote or holds a line break in fast-import's C style), then each commit's tree read with `rev-parse <commit>^{tree}`; `git fsck --strict` found nothing wrong",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.test",
+    "at": {
+      "seconds": 1700000000,
+      "offset": "+0000"
+    }
+  },
+  "committer": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.test",
+    "at": {
+      "seconds": 1700000000,
+      "offset": "+0000"
+    }
+  },
+  "message": "files\n",
+  "rows": [
+    {
+      "note": "the plan's trace: a file a.b, a file a/c and a link a0",
+      "files": [
+        {
+          "path": "a.b",
+          "mode": "100644",
+          "content": "eAo="
+        },
+        {
+          "path": "a/c",
+          "mode": "100644",
+          "content": "eQo="
+        },
+        {
+          "path": "a0",
+          "mode": "120000",
+          "content": "YS5i"
+        }
+      ],
+      "tree": "5612ceec9425bdadff0883f93afa96a94c4cd9cf",
+      "commit": "88ea70aaa4147220b1fa7724232648a488292c18"
+    },
+    {
+      "note": "no files: git's empty tree",
+      "files": [],
+      "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      "commit": "8be01dd21805274ce7da97c3ad452ec983a1d0b5"
+    },
+    {
+      "note": "a folder a beside the files a-b, a.b and a0: the folder sorts as a/",
+      "files": [
+        {
+          "path": "a-b",
+          "mode": "100644",
+          "content": "MQo="
+        },
+        {
+          "path": "a.b",
+          "mode": "100644",
+          "content": "Mgo="
+        },
+        {
+          "path": "a0",
+          "mode": "100644",
+          "content": "Mwo="
+        },
+        {
+          "path": "a/c",
+          "mode": "100644",
+          "content": "NAo="
+        }
+      ],
+      "tree": "31be60b0042ee4d66ebf90a1a13e5f9817aa81e7",
+      "commit": "88d79def429857fd98b71f5a5a6bf0ec987deebb"
+    },
+    {
+      "note": "a folder x beside x.y and x-y and x0: x. sorts before x/",
+      "files": [
+        {
+          "path": "x.y",
+          "mode": "100644",
+          "content": "MQ=="
+        },
+        {
+          "path": "x-y",
+          "mode": "100644",
+          "content": "Mg=="
+        },
+        {
+          "path": "x0",
+          "mode": "100644",
+          "content": "Mw=="
+        },
+        {
+          "path": "x/y",
+          "mode": "100644",
+          "content": "NA=="
+        }
+      ],
+      "tree": "96a2ad5e85515ef3806a02e4c19858eb74b3fbbd",
+      "commit": "0ebe81efe5e25458debc014aa2d2b55f2172a552"
+    },
+    {
+      "note": "a file three folders deep beside a file at the top",
+      "files": [
+        {
+          "path": "top",
+          "mode": "100644",
+          "content": "dAo="
+        },
+        {
+          "path": "w/x/y/z",
+          "mode": "100644",
+          "content": "ZGVlcAo="
+        }
+      ],
+      "tree": "1cac43339d6f705e57e7589f93fd44c5e74c1b99",
+      "commit": "1c4163c46903c19b9be66f7e3cf57f3e78230141"
+    },
+    {
+      "note": "a deep tree with files at several levels",
+      "files": [
+        {
+          "path": "d/e/f/g/h",
+          "mode": "100644",
+          "content": "MQo="
+        },
+        {
+          "path": "d/e/z",
+          "mode": "100644",
+          "content": "Mgo="
+        },
+        {
+          "path": "d/e/f/k",
+          "mode": "100644",
+          "content": "Mwo="
+        },
+        {
+          "path": "d/a",
+          "mode": "100644",
+          "content": "NAo="
+        },
+        {
+          "path": "m",
+          "mode": "100644",
+          "content": "NQo="
+        }
+      ],
+      "tree": "1bfd6ec42fc177eb4d6f58d12f0cbd5992e82216",
+      "commit": "19682518c490a619106382df9d123e20927c7e51"
+    },
+    {
+      "note": "an executable file",
+      "files": [
+        {
+          "path": "run.sh",
+          "mode": "100755",
+          "content": "IyEvYmluL3NoCg=="
+        }
+      ],
+      "tree": "4d30b2ddd4dbd82d6ad7ee4d2a4ea360f5d65b61",
+      "commit": "fd8dd0b0b897e6095ae531724242a61bcb8b4651"
+    },
+    {
+      "note": "a link whose content is its target",
+      "files": [
+        {
+          "path": "l",
+          "mode": "120000",
+          "content": "eC95"
+        },
+        {
+          "path": "x/y",
+          "mode": "100644",
+          "content": "dAo="
+        }
+      ],
+      "tree": "498685566567d19fb96525caf1f796ac8bf037c3",
+      "commit": "17f17f962f1ce59dea98d901884c66ebd4fb9d8e"
+    },
+    {
+      "note": "an empty file",
+      "files": [
+        {
+          "path": "empty",
+          "mode": "100644",
+          "content": ""
+        }
+      ],
+      "tree": "417c01c8795a35b8e835113a85a5c0c1c77f67fb",
+      "commit": "4d5413618089211fec45450d3ada625597332b6a"
+    },
+    {
+      "note": "a file with no trailing newline",
+      "files": [
+        {
+          "path": "n",
+          "mode": "100644",
+          "content": "bm8gbmV3bGluZQ=="
+        }
+      ],
+      "tree": "e3b48bb7ec35c36c54f4a9f9bc464f32f90aa21c",
+      "commit": "7aaa77a3f525bd2c8e075817fa0d0cea1e88b57e"
+    },
+    {
+      "note": "a file with a NUL byte inside",
+      "files": [
+        {
+          "path": "nul",
+          "mode": "100644",
+          "content": "YQBiCg=="
+        }
+      ],
+      "tree": "697709705f8e28dc6ae40f3ddd83fa607a848143",
+      "commit": "dd3fb2af3b7b2ffb0d7fa12812f40a526a6c0192"
+    },
+    {
+      "note": "a file whose bytes are not UTF-8",
+      "files": [
+        {
+          "path": "bin",
+          "mode": "100644",
+          "content": "//4AgMMo"
+        }
+      ],
+      "tree": "a2e642b6d1979e2f9932d85703e09f0f4fc88e6a",
+      "commit": "4e1139c7794290644d8767dc12efe9089fc6ab83"
+    },
+    {
+      "note": "a file with CRLF lines",
+      "files": [
+        {
+          "path": "crlf",
+          "mode": "100644",
+          "content": "b25lDQp0d28NCg=="
+        }
+      ],
+      "tree": "8f5ce89b664fbf38a6d51132900d68183b23957f",
+      "commit": "af3f444677cf59e8696e24a6793b4a84087233b5"
+    },
+    {
+      "note": "a file past 1000 bytes",
+      "files": [
+        {
+          "path": "big",
+          "mode": "100644",
+          "content": "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFy"
+        }
+      ],
+      "tree": "793c74c74200d354a4c03a4bd2865920e9e14d73",
+      "commit": "b4abbf8cbf6cb9bc4188d47dbf3d9efb8717b2c1"
+    },
+    {
+      "note": "the same bytes at two paths: one blob",
+      "files": [
+        {
+          "path": "one",
+          "mode": "100644",
+          "content": "c2FtZQo="
+        },
+        {
+          "path": "two/three",
+          "mode": "100644",
+          "content": "c2FtZQo="
+        }
+      ],
+      "tree": "754971a4f972832d2851a81afbefdd9647623df4",
+      "commit": "fc5be5752577df0b7806a7cac8a7d7030a737317"
+    },
+    {
+      "note": "the same bytes at two paths with two modes",
+      "files": [
+        {
+          "path": "plain",
+          "mode": "100644",
+          "content": "c2FtZQo="
+        },
+        {
+          "path": "exec",
+          "mode": "100755",
+          "content": "c2FtZQo="
+        },
+        {
+          "path": "link",
+          "mode": "120000",
+          "content": "c2FtZQo="
+        }
+      ],
+      "tree": "de6b3c4a1979f0c21ca0045af3da2138075e3770",
+      "commit": "62766eb37b2c9a38efc1ce59320de19ae9622e9e"
+    },
+    {
+      "note": "names on JavaScript's object prototype, as files",
+      "files": [
+        {
+          "path": "__proto__",
+          "mode": "100644",
+          "content": "MQo="
+        },
+        {
+          "path": "constructor",
+          "mode": "100644",
+          "content": "Mgo="
+        },
+        {
+          "path": "hasOwnProperty",
+          "mode": "100644",
+          "content": "Mwo="
+        },
+        {
+          "path": "toString",
+          "mode": "100644",
+          "content": "NAo="
+        }
+      ],
+      "tree": "016c93309d3174501aeeecd34644d864d01a1117",
+      "commit": "805279c480cf58291f78ec008bb9bb340e6603a0"
+    },
+    {
+      "note": "names on JavaScript's object prototype, as folders",
+      "files": [
+        {
+          "path": "__proto__/a",
+          "mode": "100644",
+          "content": "MQo="
+        },
+        {
+          "path": "constructor/a",
+          "mode": "100644",
+          "content": "Mgo="
+        },
+        {
+          "path": "hasOwnProperty/a",
+          "mode": "100644",
+          "content": "Mwo="
+        },
+        {
+          "path": "toString/a",
+          "mode": "100644",
+          "content": "NAo="
+        }
+      ],
+      "tree": "5031353d6d2bf8bb629be8470c474f4bc165f37c",
+      "commit": "d2d178d39a00acd7fb47e1bb5ccdf99a556f7b1c"
+    },
+    {
+      "note": "names with a space, a line break, a leading dash and a leading quote",
+      "files": [
+        {
+          "path": "a b",
+          "mode": "100644",
+          "content": "MQo="
+        },
+        {
+          "path": "l\nb",
+          "mode": "100644",
+          "content": "Mgo="
+        },
+        {
+          "path": "-d",
+          "mode": "100644",
+          "content": "Mwo="
+        },
+        {
+          "path": "\"q",
+          "mode": "100644",
+          "content": "NAo="
+        },
+        {
+          "path": "t\\b",
+          "mode": "100644",
+          "content": "NQo="
+        }
+      ],
+      "tree": "7c163240b82023f636846d3811fdf8904b79a54d",
+      "commit": "467326564ba4047fef0610bd7395612cdc2771f5"
+    },
+    {
+      "note": "names past U+024F: U+8BBE, U+FF5A and U+1F600, whose UTF-8 order differs from UTF-16 order",
+      "files": [
+        {
+          "path": "设",
+          "mode": "100644",
+          "content": "MQo="
+        },
+        {
+          "path": "ｚ",
+          "mode": "100644",
+          "content": "Mgo="
+        },
+        {
+          "path": "😀",
+          "mode": "100644",
+          "content": "Mwo="
+        },
+        {
+          "path": "ɐ",
+          "mode": "100644",
+          "content": "NAo="
+        },
+        {
+          "path": "",
+          "mode": "100644",
+          "content": "NQo="
+        }
+      ],
+      "tree": "8bb47818da7df72aa76187cf64af5f77732977ee",
+      "commit": "7350345ffe55f9e7c4c27e9fc926c27c0a862f60"
+    },
+    {
+      "note": "names near .git that git accepts",
+      "files": [
+        {
+          "path": ".gitx",
+          "mode": "100644",
+          "content": "MQo="
+        },
+        {
+          "path": "git",
+          "mode": "100644",
+          "content": "Mgo="
+        },
+        {
+          "path": "..a",
+          "mode": "100644",
+          "content": "Mwo="
+        },
+        {
+          "path": "a.",
+          "mode": "100644",
+          "content": "NAo="
+        },
+        {
+          "path": ".git2",
+          "mode": "100644",
+          "content": "NQo="
+        },
+        {
+          "path": "git~2",
+          "mode": "100644",
+          "content": "Ngo="
+        },
+        {
+          "path": "git~10",
+          "mode": "100644",
+          "content": "Nwo="
+        },
+        {
+          "path": ".g​it",
+          "mode": "100644",
+          "content": "OAo="
+        },
+        {
+          "path": ".git‌ ",
+          "mode": "100644",
+          "content": "OQo="
+        },
+        {
+          "path": "g‌it~1",
+          "mode": "100644",
+          "content": "MTAK"
+        },
+        {
+          "path": ".g‌it.",
+          "mode": "100644",
+          "content": "MTEK"
+        }
+      ],
+      "tree": "8c05c76006d40ccad96a94100a66fbc57ce44304",
+      "commit": "765a4dd195096cd5f1c4402dd729b94342f045fb"
+    }
+  ]
+}

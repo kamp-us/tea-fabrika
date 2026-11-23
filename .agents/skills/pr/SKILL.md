@@ -175,6 +175,7 @@ Our tools read the body, so it also holds:
 
 - **The title** is the first line of the body file, above `## Summary`. It says what is true after the merge.
 - **`## New names`**, when the diff exports a new name: one line per name, what the industry calls it, with a link to a source that says so. The merge queue refuses a PR whose diff exports a name this section does not name.
+- **Run `node .agents/skills/lead/scripts/land.ts check <pr>`** after you write or change the body, before `queue`. It runs the body checks `queue` runs (the leak grep on the title and description, and the `## New names` section), prints each missing name with its file, exits 1 on any, and changes nothing. Fix the body until it exits 0.
 - **`fabrika close ticket <N>`** on a line of its own, only when the merge finishes the ticket. Nothing else closes one.
 - **A quest brief's `## pr` section** writes `### Summary` and `### Evidence`, because a one-word `## ` heading starts a new brief section and cuts the PR body short.
 - **The last line** is `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.

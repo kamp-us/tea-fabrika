@@ -3,17 +3,10 @@
  *
  * **Details**
  *
- * The length lives in one place, `FORMATS`. A sha-256 repository adds its length there and nothing else changes.
+ * The length lives in one place, `FORMATS` in `internal/object.ts`. A sha-256 repository adds its length there and nothing else changes.
  */
 import { Result, Schema } from "effect";
-
-const FORMATS = { sha1: 40 } as const;
-
-const ID = new RegExp(
-  `^(?:${Object.values(FORMATS)
-    .map((length) => `[0-9a-f]{${length}}`)
-    .join("|")})$`,
-);
+import { OBJECT_ID } from "./internal/object.ts";
 
 /**
  * Schema for a commit id: lowercase hex of a length git uses, with nothing around it.
@@ -24,7 +17,7 @@ const ID = new RegExp(
  *
  * @category models
  */
-export const CommitId = Schema.String.check(Schema.isPattern(ID)).pipe(Schema.brand("@kalfa/git/CommitId"));
+export const CommitId = Schema.String.check(Schema.isPattern(OBJECT_ID)).pipe(Schema.brand("@kalfa/git/CommitId"));
 
 export type CommitId = typeof CommitId.Type;
 

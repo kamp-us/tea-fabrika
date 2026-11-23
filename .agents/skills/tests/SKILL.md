@@ -66,6 +66,10 @@ this skill for the law. The reviewer reads that law on its recheck.
      narrowing a law still waits on the owner. A lint rule's own
      planted lines (`oxlint-plugins/plants.test.ts`, `oxlint-plugins/plant.ts`) are its
      test inputs and stay. Each law names its plant in a comment, as the neighbors do.
+   - **Plant each guarding check's deletion.** Before you commit, list each guarding check the plan
+     names (a scope, a re-read, an equality, a schema, an own-key read) and show its deletion plant
+     red, one `Plant:` line each. A class that fails an earlier check never reaches a later one, so it does not
+     count as reaching it.
    - A shape check (an import ban, a naming rule) is a lint rule, not a test.
    - If secrets must stay out of records, URLs or spans, require `[secrets]` in the plan's Law
      cell and a property over generated flows. Generate made-up words, keys and passes,
@@ -154,6 +158,8 @@ These hold in every tests round, so the brief does not repeat them.
   the same commit, and runs `nice -n 15 pnpm exec vitest run --maxWorkers=1 oxlint-plugins/layers.test.ts`
   once. A draft's CI never runs that test, so a missed row first shows red when the pull request is ready.
 - **Do not start subagents.** Do not mark the pull request ready, merge it or wait on CI.
+- **Write scratch files only in your own scratch folder,** the one your brief names. A folder another agent
+  shares is never written.
 - **Fix it properly.** No skip, no `.only`, no raised timeout, no sleep-and-hope, no placeholder or
   weaker assertion, no `as` cast to quiet a type. No allow-list or ledger row added, no lint rule
   turned down, no `oxlint-disable` on wrong code. A law you cannot write as
