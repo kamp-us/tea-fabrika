@@ -33,16 +33,16 @@ what its ports need. `Store.Needs` of a store, or of a union of stores, is what 
 
 - **`holds`** reads an item. It answers `Found`, with the value as a `Redacted` and a `Version`, or `Missing`, with a reason:
   `absent` (nothing is there; an empty text is nothing), `kind` (the other kind of secret is) or `algorithm` (a key of another
-  algorithm). It fails with `StoreFailed` when the store cannot answer. A store's own client may quote a value it read, so the failure holds its
-  cause as a `Redacted` in `held`, which no rendering shows, and its `cause` is a plain error that stands for it. Read the cause
-  on purpose with `Redacted.value(error.held)`.
+  algorithm). It fails with `StoreFailed` when the store cannot answer. A store's own client may quote a value it read, so the
+  failure holds its cause as a `Redacted`, which no rendering shows: make it with `Redacted.make(cause)`, and read it on purpose
+  with `Redacted.value(error.cause)`. A cause that is not a `Redacted` does not compile.
 - **`place`** is where a signing key's private key sits while it signs: `store`, `runtime` or `memory`, tight to loose.
 
 ## The Recorder
 
 A use of a secret leaves a fact. `Fetched` holds the name, the store and the version of one fetch, and nothing else; it is a Schema,
 so a ledger saves exactly those and refuses a name, a store id or a version that is none. The `Recorder` service takes a fact and
-fails with `RecordFailed` when it cannot write, which holds its cause as `StoreFailed` does.
+fails with `RecordFailed` when it cannot write, which holds its cause as a `Redacted`, as `StoreFailed` does.
 
 ## The memory store
 
@@ -69,5 +69,5 @@ a value.
 ## What never shows a value
 
 A value is a `Redacted` from the moment a store hands it out. Nothing this package makes holds it as text: not an answer's display,
-a fact, the contents of the memory store, a log line or a span. A failure's cause may quote a value, so it is held as a `Redacted`
+a fact, the contents of the memory store, a log line or a span. A failure's cause may quote a value, so it is a `Redacted`
 and no rendering of the failure, its properties or the error under it shows it.
