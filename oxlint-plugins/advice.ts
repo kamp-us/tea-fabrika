@@ -111,4 +111,3 @@ export const stale = (lines: ReadonlyArray<WarnLine>, advice: ReadonlyArray<Fire
 
     return held ? [] : [{ _tag: "zero", line }];
   });
-// survey

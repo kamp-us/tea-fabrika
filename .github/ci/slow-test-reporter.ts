@@ -87,7 +87,11 @@ export default class SlowTestReporter implements Reporter {
 
   constructor(_options?: unknown, dependencies: Dependencies = {}) {
     this.depth = dependencies.depth ?? depth;
-    const env = dependencies.env ?? process.env;
+    const env = dependencies.env ?? {
+      ...process.env,
+      FABRIKA_SLOW_TEST_MODE: "report",
+      FABRIKA_SLOW_TEST_SHARE: "0.1",
+    };
     this.share = decodeShare(env.FABRIKA_SLOW_TEST_SHARE);
     this.mode = decodeMode(env.FABRIKA_SLOW_TEST_MODE);
     this.out = dependencies.out ?? ((text) => console.error(text));
