@@ -258,8 +258,10 @@ const unreadable = (result: Result.Result<unknown, Repository.GitUnavailable | R
 // fewer entries than the patch has sections still reads; stop a hunk at a line that looks like a header; name the last file in the
 // raw list and not the failing one; strip the line end of every line; number every line from 1, or a removed line in the new file;
 // decode a line with replacement, so the latin-1 rows read; read a binary file's bytes as lines; read a type change as one section.
-// A cut patch, a marker with no line before it and a section with no header are each unreadable: drop the final-newline check, the
-// no-line-before-the-marker check, or the section-header check.
+// A cut patch, a marker with no line before it, a section with no header, a header that is none, a line that lacks its side's
+// prefix and a path that is no path are each unreadable: drop the final-newline check, the no-line-before-the-marker check, the
+// section-header check, the hunk-header check, either `take` prefix (read it as the empty string) or the path mapper. A raw entry of
+// a tree's mode is unreadable too: drop the entry mapper. A line that starts with a BOM keeps it: decode with `ignoreBOM: false`.
 it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output recorded from git to the value its note gives, one section for each raw entry and two for a type change", () => {
   const recorded = Schema.decodeUnknownSync(DiffTreePatch)(diffTreePatch);
   expect(recorded.git).toContain("git version");
@@ -348,4 +350,89 @@ it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output 
       expect(unreadable(cut), `${row.note}: a patch cut short is unreadable`).toBe(true);
     }
   }
+
+  // Rows made by hand. Git never prints these, so no recording holds them: each is the one-line row of the recording, cut or bent.
+  const before = "de980441c3ab03a8c07dda1ad27b8a11f39deb1e";
+  const after = "7be73ce3c1b1cdaea86e8168dfee8575175953bf";
+  const latin1 = (text: string): Uint8Array => Uint8Array.from(text, (character) => character.charCodeAt(0));
+  const rawEntry = (path: string): Uint8Array => latin1(`:100644 100644 ${before} ${after} M\0${path}\0`);
+
+  const header = (path: string): string =>
+    `diff --git a/${path} b/${path}\nindex ${before}..${after} 100644\n--- a/${path}\n+++ b/${path}\n`;
+
+  const bent: ReadonlyArray<{ readonly note: string; readonly path: string; readonly output: Uint8Array }> = [
+    {
+      note: "hand-made: a patch with a partial row after its last section has no final newline, and that row is not dropped",
+      path: "a",
+      output: latin1(`${header("a")}@@ -2 +2 @@ a\n-b\n+B\nx`),
+    },
+    {
+      note: "hand-made: a `\\ No newline` marker with no line before it, after a hunk side of zero lines",
+      path: "a",
+      output: latin1(`${header("a")}@@ -0,0 +2 @@ a\n\\ No newline at end of file\n+B\n`),
+    },
+    {
+      note: "hand-made: a section that does not start with `diff --git`, its header lines replaced by one line of text",
+      path: "a",
+      output: latin1("garbage\n@@ -2 +2 @@ a\n-b\n+B\n"),
+    },
+    {
+      note: "hand-made: a hunk header that is no header, a line of text that starts with `@@ `",
+      path: "a",
+      output: latin1(`${header("a")}@@ -x +y @@\n-b\n+B\n`),
+    },
+    {
+      note: "hand-made: the new side of a hunk holds a line that is not an added line",
+      path: "a",
+      output: latin1(`${header("a")}@@ -2,0 +2 @@ a\n-b\n`),
+    },
+    {
+      note: "hand-made: the old side of a hunk holds a line that is not a removed line",
+      path: "a",
+      output: latin1(`${header("a")}@@ -2 +2,0 @@ a\n+B\n`),
+    },
+    {
+      note: "hand-made: a line that is not UTF-8 in a file whose raw path is no path of a tree names no file, so it is unreadable",
+      path: ".git",
+      output: latin1(`${header(".git")}@@ -1 +1 @@\n-\u00ff\n+B\n`),
+    },
+  ];
+
+  for (const row of bent) {
+    const listed = Parse.changes(rawEntry(row.path));
+    expect(Result.isSuccess(listed), `${row.note}: the raw list reads`).toBe(true);
+
+    if (Result.isSuccess(listed)) {
+      expect(unreadable(Parse.patch(listed.success, row.output)), `${row.note}: is unreadable`).toBe(true);
+    }
+  }
+
+  // A line that starts with a BOM keeps it: the line is read as it is, and a reader that drops a leading BOM reads another line.
+  const marked = Parse.changes(rawEntry("a"));
+  const bom = new TextEncoder().encode(`${header("a")}@@ -1 +1 @@\n-\uFEFFb\n+\uFEFFB\n`);
+  const readBom = Result.isSuccess(marked) ? Parse.patch(marked.success, bom) : undefined;
+  expect(readBom !== undefined && Result.isSuccess(readBom), "hand-made: a line that starts with a BOM reads").toBe(
+    true,
+  );
+
+  if (readBom !== undefined && Result.isSuccess(readBom)) {
+    expect(readBom.success, "hand-made: the BOM is part of each line").toEqual([
+      Diff.Text.make({
+        lines: [Diff.Removed.make({ at: 1, text: "\uFEFFb\n" }), Diff.Added.make({ at: 1, text: "\uFEFFB\n" })],
+      }),
+    ]);
+  }
+
+  // A raw entry that names a file no tree holds is unreadable, and one that names a file a tree holds reads.
+  const empty = [Diff.Text.make({ lines: [] })];
+
+  const entryWith = (mode: string): Parse.Change => ({
+    status: "A",
+    path: "a",
+    after: { mode, id: after },
+    gitlink: false,
+  });
+
+  expect(unreadable(Parse.files([entryWith("040000")], empty)), "hand-made: a tree's mode is no file").toBe(true);
+  expect(Result.isSuccess(Parse.files([entryWith("100644")], empty)), "hand-made: a file's mode reads").toBe(true);
 });

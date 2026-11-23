@@ -1,6 +1,6 @@
 {
   "git": "git version 2.40.1",
-  "command": "git diff-tree -r -z --no-renames <from> <to> for `raw` and git diff-tree -r -p -U0 --no-renames --no-ext-diff --no-textconv --full-index <from> <to> for `output`, on two commits made with hash-object, update-index and commit-tree in a bare repository. The last three rows are the one-line row cut or bent by hand, each of which git never prints",
+  "command": "git diff-tree -r -z --no-renames <from> <to> for `raw` and git diff-tree -r -p -U0 --no-renames --no-ext-diff --no-textconv --full-index <from> <to> for `output`, on two commits made with hash-object, update-index and commit-tree in a bare repository.",
   "rows": [
     {
       "note": "nothing changed: no entry and no section",
@@ -558,28 +558,24 @@
       ]
     },
     {
-      "note": "derived from the one-line row: a patch with a partial row after its last section has no final newline, and that row is not dropped",
-      "raw": "OjEwMDY0NCAxMDA2NDQgZGU5ODA0NDFjM2FiMDNhOGMwN2RkYTFhZDI3YjhhMTFmMzlkZWIxZSA3YmU3M2NlM2MxYjFjZGFlYTg2ZTgxNjhkZmVlODU3NTE3NTk1M2JmIE0AYQA=",
-      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IGRlOTgwNDQxYzNhYjAzYThjMDdkZGExYWQyN2I4YTExZjM5ZGViMWUuLjdiZTczY2UzYzFiMWNkYWVhODZlODE2OGRmZWU4NTc1MTc1OTUzYmYgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMiArMiBAQCBhCi1iCitCCng=",
-      "expect": {
-        "failure": "Unreadable"
-      }
+      "note": "a binary file made a link: one raw entry, two sections, the first binary and the second text",
+      "raw": "OjEwMDY0NCAxMjAwMDAgMjBiNWJlOTE4ODZkMGI2ZjI2ZGM5OGEyMjVjMGRhYzA1ZmUyYzg2ZSAxZGU1NjU5MzNiMDVmNzRjNzVmZjlhNjUyMGFmNWY5ZjhhNWEyZjFkIFQAZgA=",
+      "output": "ZGlmZiAtLWdpdCBhL2YgYi9mCmRlbGV0ZWQgZmlsZSBtb2RlIDEwMDY0NAppbmRleCAyMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlLi4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCkJpbmFyeSBmaWxlcyBhL2YgYW5kIC9kZXYvbnVsbCBkaWZmZXIKZGlmZiAtLWdpdCBhL2YgYi9mCm5ldyBmaWxlIG1vZGUgMTIwMDAwCmluZGV4IDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAuLjFkZTU2NTkzM2IwNWY3NGM3NWZmOWE2NTIwYWY1ZjlmOGE1YTJmMWQKLS0tIC9kZXYvbnVsbAorKysgYi9mCkBAIC0wLDAgKzEgQEAKK3RhcmdldApcIE5vIG5ld2xpbmUgYXQgZW5kIG9mIGZpbGUK",
+      "expect": [
+        {
+          "_tag": "Binary"
+        }
+      ]
     },
     {
-      "note": "derived from the one-line row: a `\\ No newline` marker with no line before it, after a hunk side of zero lines",
-      "raw": "OjEwMDY0NCAxMDA2NDQgZGU5ODA0NDFjM2FiMDNhOGMwN2RkYTFhZDI3YjhhMTFmMzlkZWIxZSA3YmU3M2NlM2MxYjFjZGFlYTg2ZTgxNjhkZmVlODU3NTE3NTk1M2JmIE0AYQA=",
-      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IGRlOTgwNDQxYzNhYjAzYThjMDdkZGExYWQyN2I4YTExZjM5ZGViMWUuLjdiZTczY2UzYzFiMWNkYWVhODZlODE2OGRmZWU4NTc1MTc1OTUzYmYgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMCwwICsyIEBAIGEKXCBObyBuZXdsaW5lIGF0IGVuZCBvZiBmaWxlCitCCg==",
-      "expect": {
-        "failure": "Unreadable"
-      }
-    },
-    {
-      "note": "derived from the one-line row: a section that does not start with `diff --git`, its header lines replaced by one line of text",
-      "raw": "OjEwMDY0NCAxMDA2NDQgZGU5ODA0NDFjM2FiMDNhOGMwN2RkYTFhZDI3YjhhMTFmMzlkZWIxZSA3YmU3M2NlM2MxYjFjZGFlYTg2ZTgxNjhkZmVlODU3NTE3NTk1M2JmIE0AYQA=",
-      "output": "Z2FyYmFnZQpAQCAtMiArMiBAQCBhCi1iCitCCg==",
-      "expect": {
-        "failure": "Unreadable"
-      }
+      "note": "a link made a binary file: one raw entry, two sections, the first text and the second binary",
+      "raw": "OjEyMDAwMCAxMDA2NDQgMWRlNTY1OTMzYjA1Zjc0Yzc1ZmY5YTY1MjBhZjVmOWY4YTVhMmYxZCAyMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlIFQAZgA=",
+      "output": "ZGlmZiAtLWdpdCBhL2YgYi9mCmRlbGV0ZWQgZmlsZSBtb2RlIDEyMDAwMAppbmRleCAxZGU1NjU5MzNiMDVmNzRjNzVmZjlhNjUyMGFmNWY5ZjhhNWEyZjFkLi4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCi0tLSBhL2YKKysrIC9kZXYvbnVsbApAQCAtMSArMCwwIEBACi10YXJnZXQKXCBObyBuZXdsaW5lIGF0IGVuZCBvZiBmaWxlCmRpZmYgLS1naXQgYS9mIGIvZgpuZXcgZmlsZSBtb2RlIDEwMDY0NAppbmRleCAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwLi4yMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlCkJpbmFyeSBmaWxlcyAvZGV2L251bGwgYW5kIGIvZiBkaWZmZXIK",
+      "expect": [
+        {
+          "_tag": "Binary"
+        }
+      ]
     }
   ]
 }

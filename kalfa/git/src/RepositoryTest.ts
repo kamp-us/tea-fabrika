@@ -1834,6 +1834,8 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             "(c) a NUL at byte 8000, binary",
             "(n) a binary edit with other bytes",
             "(n) the same binary edit on a base that differs in another file",
+            "(a) a binary file made a link",
+            "(a) a link made a binary file",
           ]);
 
           // What the class of a case says its content is, whatever the model says: a NUL among the first 8000 bytes is binary, a NUL
@@ -1844,7 +1846,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             }
 
             return each.classes.includes("(c) a NUL at byte 8001, text") ||
-              each.label === "a mode-only change of a binary file"
+              each.label.startsWith("a mode-only change of ")
               ? "Text"
               : undefined;
           };
@@ -1888,7 +1890,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                     ).toBeGreaterThan(0);
                   }
 
-                  if (each.label === "a mode-only change of a binary file") {
+                  if (each.label.startsWith("a mode-only change of ")) {
                     expect(lines, `${each.label}: bytes that did not change hold no line`).toEqual([]);
                   }
                 }

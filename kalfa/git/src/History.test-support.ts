@@ -1641,6 +1641,8 @@ export const EDIT_CLASSES = [
   "(a) a link made a file",
   "(a) a file made a link with the same bytes",
   "(a) a link made a file with the same bytes",
+  "(a) a binary file made a link",
+  "(a) a link made a binary file",
   "(b) a mode-only change",
   "(c) a NUL in the first 8000 bytes on one side",
   "(c) a NUL at byte 8000, binary",
@@ -1650,6 +1652,7 @@ export const EDIT_CLASSES = [
   "(d) CRLF lines",
   "(d) a change of whitespace only",
   "(e) a text file in latin-1 bytes",
+  "(e) a line that starts with a BOM",
   "(f) no change",
   "(f) an empty file added",
   "(g) change blocks at the first line and at the last",
@@ -1904,6 +1907,21 @@ export const editCarrier = (texture: Texture): EditCarrier => {
   made("a file made a link", ["(a) a file made a link"], [text(src, base)], [text(src, [`t${q}`], "120000")]);
   made("a link made a file", ["(a) a link made a file"], [text(src, [`t${q}`], "120000")], [text(src, base)]);
 
+  // A binary file made a link and a link made a binary file: git prints one binary section and one text section, and the diff is
+  // `Binary` whichever comes first.
+  made(
+    "a binary file made a link",
+    ["(a) a binary file made a link"],
+    [file(src, joined("a", [0], "b"))],
+    [text(src, [`t${q}`], "120000")],
+  );
+  made(
+    "a link made a binary file",
+    ["(a) a link made a binary file"],
+    [text(src, [`t${q}`], "120000")],
+    [file(src, joined("a", [0], "b"))],
+  );
+
   // A file and a link that hold the same bytes are two blobs of one id, yet git prints every old line removed and every new line
   // added, so two such changes with other bytes are two changes.
   for (const target of [`x${q}`, `y${q}`]) {
@@ -1923,9 +1941,18 @@ export const editCarrier = (texture: Texture): EditCarrier => {
 
   // Modes.
   made("a mode-only change", ["(b) a mode-only change"], [text(src, base)], [text(src, base, "100755")]);
-  made("a mode-only change of a binary file", ["(b) a mode-only change"], binary(bin, 0x62), [
+
+  const modeOnlyBinary = made("a mode-only change of a binary file", ["(b) a mode-only change"], binary(bin, 0x62), [
     file(bin, joined("a", [0], "b"), "100755"),
   ]);
+
+  // The same mode change of another binary file at the same path: no byte of either is in the change, so the two are one edit.
+  const modeOnlyOther = made(
+    "a mode-only change of another binary file at the same path",
+    ["(b) a mode-only change"],
+    [file(bin, joined("c", [0], "d"))],
+    [file(bin, joined("c", [0], "d"), "100755")],
+  );
 
   // Line ends.
   made(
@@ -1955,6 +1982,15 @@ export const editCarrier = (texture: Texture): EditCarrier => {
     joined(...lines.flatMap((line): ReadonlyArray<string | ReadonlyArray<number>> => [[0xe9], line]));
 
   made("latin-1 lines", ["(e) a text file in latin-1 bytes"], [file(src, latin(base))], [file(src, latin(drawn))]);
+
+  // A line that starts with a BOM keeps it: the diff holds the line as it is, and a reader that drops a leading BOM reads another line.
+  const bom = (lines: ReadonlyArray<string>) => lines.map((line, i) => (i === 0 ? `\uFEFF${line}` : line));
+  made(
+    "a line that starts with a BOM",
+    ["(e) a line that starts with a BOM"],
+    [text(src, bom(base))],
+    [text(src, bom(replaceAt(base, 0, `${p}:new0\n`)))],
+  );
 
   // Two such files, whose paths sort one way by bytes and the other by UTF-16 units: the diff names the first by bytes.
   const gone = [`\uE000${p}`, `\u{1F600}${p}`];
@@ -2053,7 +2089,9 @@ export const editCarrier = (texture: Texture): EditCarrier => {
   return {
     history: { nodes, refs: [], shallow: [] },
     cases,
-    same: [same, [binaryEdit, sameBinary], text8001].map((group) => group.map((each) => cases.indexOf(each))),
+    same: [same, [binaryEdit, sameBinary], text8001, [modeOnlyBinary, modeOnlyOther]].map((group) =>
+      group.map((each) => cases.indexOf(each)),
+    ),
     drawn: cases.indexOf(first),
     variants: variants.map((each) => cases.indexOf(each)),
   };

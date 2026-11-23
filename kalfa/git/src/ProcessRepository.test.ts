@@ -1313,6 +1313,27 @@ it.effect.prop(
         }
       }
 
+      // Two submodules in one raw list: the first in the list is named, whichever order they come in.
+      const other: Entry = { ...GITLINK, path: "sub-module-two", id: { before: ZEROS, after: `${"c".repeat(39)}4` } };
+
+      for (const pair of [
+        [GITLINK, other],
+        [other, GITLINK],
+      ]) {
+        const entries = [...real, ...pair];
+        const both = yield* ask(withPatch(entries, patchText(real, lineText)), { files: entries.length, diff: bytes });
+        expect(Result.isFailure(both.result), "two submodules fail").toBe(true);
+
+        if (Result.isFailure(both.result)) {
+          expectFailure(
+            both.result.failure,
+            Repository.NotAFile,
+            { path: pair[0]?.path },
+            "the first submodule in the list is named",
+          );
+        }
+      }
+
       // One byte more than `diff`: DiffTooLarge, and no patch is printed.
       const heavy = yield* ask(good, { files, diff: bytes - 1 });
       expect(Result.isFailure(heavy.result), "one byte too many fails").toBe(true);

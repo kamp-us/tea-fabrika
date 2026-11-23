@@ -276,10 +276,11 @@ const patchIdOrUndefined = (repo: Repository.Repository["Service"], from: Commit
 
 // Plant (I8): run porcelain `git diff` in place of `diff-tree`, which reads `diff.noprefix` and `diff.orderFile`; drop
 // `--verbatim`, which `patchid.stable` would change; leave `--no-renames` out; run porcelain `git diff` for the patch of `diff`; drop
-// `--no-ext-diff` or `--no-textconv` from it. The ids and the diffs of every edit of the generator, asked of one bare repository, are
-// the same before and after its config gets the four lines.
+// `--no-ext-diff` or `--no-textconv` from it; leave a config line of the diff commands out of what the adapter reads, so git calls a
+// one-line text edit `Binary files differ` (`core.bigFileThreshold` and `core.attributesFile` each do it on git 2.40.1). The ids and
+// the diffs of every edit of the generator, asked of one bare repository, are the same before and after its config gets the six lines.
 it.effect.prop(
-  "I8 scenario: a repository's own config steers nothing: diff.noprefix, diff.orderFile, diff.algorithm=patience and patchid.stable=true change no patch id and no diff",
+  "I8 scenario: a repository's own config steers nothing: diff.noprefix, diff.orderFile, diff.algorithm=patience, patchid.stable=true, core.bigFileThreshold=3 and an attributes file that marks every file binary change no patch id and no diff",
   { texture: textureArb },
   ({ texture }) =>
     Effect.gen(function* () {
@@ -313,18 +314,22 @@ it.effect.prop(
           const fs = yield* FileSystem.FileSystem;
           // A file that puts the paths ending in 0 first, which a porcelain diff would follow.
           yield* fs.writeFileString(`${dir}/order`, "*0\n");
+          // Every file binary, which git reads from the repository's own config as it reads a global attributes file.
+          yield* fs.writeFileString(`${dir}/attributes`, "* binary\n");
 
           for (const [key, value] of [
             ["diff.noprefix", "true"],
             ["diff.orderFile", `${dir}/order`],
             ["diff.algorithm", "patience"],
             ["patchid.stable", "true"],
+            ["core.bigFileThreshold", "3"],
+            ["core.attributesFile", `${dir}/attributes`],
           ] as const) {
             yield* git(dir, ["config", key, value]);
           }
 
-          expect(yield* ids(), "the same ids with the four config lines").toEqual(without);
-          expect(yield* diffs(), "the same diffs with the four config lines").toEqual(diffsWithout);
+          expect(yield* ids(), "the same ids with the six config lines").toEqual(without);
+          expect(yield* diffs(), "the same diffs with the six config lines").toEqual(diffsWithout);
           expect(without.filter((id) => id !== undefined).length, "the edits have ids").toBeGreaterThan(20);
 
           expect(
