@@ -58,7 +58,7 @@ export type Answered<Op extends GitHub.AnyRoute, Status extends number = 200> = 
  */
 export type StatusOption<Op extends GitHub.AnyRoute> = Check.StatusOption<OperationRoute<Op>>;
 
-type StatusOf<Option> = Option extends readonly [{ readonly status: infer S extends number }] ? S : 200;
+type GivenStatus<Option> = Option extends readonly [{ readonly status: infer S extends number }] ? S : 200;
 
 type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
@@ -99,7 +99,7 @@ export interface Answer {
 export const answer = <
   Op extends GitHub.AnyRoute,
   const Option extends StatusOption<Op>,
-  const A extends Answered<Op, StatusOf<Option>>,
+  const A extends Answered<Op, GivenStatus<Option>>,
 >(
   op: Op,
   f: (asked: Asked<Op>) => A & Check.ExactFake<OperationRoute<Op>, A>,
