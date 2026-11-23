@@ -22,8 +22,10 @@ import * as CommitId from "./CommitId.ts";
 import * as Diff from "./Diff.ts";
 import mergeTreeRows from "./fixtures/merge-tree-2.40.1.json" with { type: "json" };
 import {
+  blobId as contentId,
   commitIdArb,
   committerFrom,
+  editModel,
   flatSignatureArb,
   messageVariants,
   ModelDiff,
@@ -32,6 +34,7 @@ import {
   partArb,
   textureArb,
   wordArb,
+  type FileSpec,
 } from "./History.test-support.ts";
 import { byBytes, bytes as objectBytes } from "./internal/object.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
@@ -2322,6 +2325,461 @@ it.effect.prop(
         }
 
         expect(nones, "the generator asks names that are not there").toBeGreaterThan(1);
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Ticket 1935, slice 2: `editTree` on the stand-in (P22). git is asked, in this order: whether the commit exists, the listing of each
+// folder on a changed path, one `hash-object` for each new content, and one `mktree -z` for each folder whose entries change.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** One entry of a stand-in tree: the folder it sits in ("" for the top), its name as bytes, and what `ls-tree` prints before it. */
+interface Leaf {
+  readonly dir: string;
+  readonly name: Uint8Array;
+  readonly mode: string;
+  readonly type: "blob" | "commit";
+  readonly id: string;
+}
+
+const latin1 = (octets: Uint8Array): string => Array.from(octets, (octet) => String.fromCharCode(octet)).join("");
+
+/** An entry as `ls-tree -z` prints it, without the NUL: the head, a tab and the name's own bytes. */
+const entryLine = (head: string, name: Uint8Array): Uint8Array => concat(head, "\t", name);
+
+const leafLine = (leaf: Leaf): Uint8Array => entryLine(`${leaf.mode} ${leaf.type} ${leaf.id}`, leaf.name);
+
+const parentFolder = (dir: string): string => (dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : "");
+
+/** Every folder that holds a leaf or a folder, the top excluded: each prefix of each leaf's folder. */
+const foldersIn = (leaves: ReadonlyArray<Leaf>): ReadonlySet<string> =>
+  new Set(
+    leaves.flatMap(({ dir }) =>
+      dir === "" ? [] : dir.split("/").map((_, n, parts) => parts.slice(0, n + 1).join("/")),
+    ),
+  );
+
+/** What is below a folder (`""` is the whole tree), as one text: equal exactly when nothing below it changed. */
+const belowKey = (leaves: ReadonlyArray<Leaf>, dir: string): string =>
+  leaves
+    .filter((leaf) => dir === "" || leaf.dir === dir || leaf.dir.startsWith(`${dir}/`))
+    .map((leaf) => `${leaf.dir}|${latin1(leaf.name)}|${leaf.mode}|${leaf.id}`)
+    .toSorted()
+    .join("\n");
+
+/** The entries `mktree -z` was given, each as the text of its bytes. */
+const mktreeLines = (input: Uint8Array): ReadonlyArray<string> => {
+  const lines: Array<string> = [];
+
+  for (let start = 0; start < input.length;) {
+    const end = input.indexOf(0, start);
+    lines.push(latin1(input.subarray(start, end === -1 ? input.length : end)));
+    start = end === -1 ? input.length : end + 1;
+  }
+
+  return lines;
+};
+
+type Change = readonly [path: string, change: Uint8Array | "absent"];
+
+const EDIT_MENU = 20;
+
+interface EditSpec {
+  readonly commit: string;
+  readonly part: string;
+  readonly picks: ReadonlyArray<number>;
+  readonly refuse: number;
+}
+
+const EDIT_SPEC = {
+  commit: commitIdArb,
+  part: partArb,
+  picks: Arbitrary.array(int(0, EDIT_MENU - 1), { minLength: 0, maxLength: 5 }),
+  refuse: int(0, 3),
+};
+
+const STAGES = ["cat-file", "ls-tree", "hash-object", "mktree"];
+
+// Plant: pass an untouched line decoded and encoded again, (v) red; run `hash-object` before the checks, so a refused edit writes; write
+// the top folder before the folder below it, red; write a folder whose entries came out the same, so an edit that changes nothing runs
+// `mktree`, (l) red; list a folder the edit does not touch; pass a changed folder's old line beside its new one; give a command a path.
+it.effect.prop(
+  "P22 editTree on the stand-in: cat-file --batch-check, the ls-tree -z listings top down, one hash-object per new content with its bytes byte for byte, then one mktree -z per changed folder, deepest first, whose stdin holds each untouched listed line byte for byte; a refused edit runs no hash-object and no mktree; an edit that changes nothing runs no mktree",
+  EDIT_SPEC,
+  (spec: EditSpec) =>
+    Effect.gen(function* () {
+      const commit = commitIdFrom(spec.commit);
+      const p = `zq-${spec.part}`;
+      const limit = 5;
+      const held = (k: number): Uint8Array => Uint8Array.of(k, 0xb0);
+      const fresh = (k: number): Uint8Array => Uint8Array.of(k, 0xf0, 7);
+      const root = hexId("e", 0);
+
+      const normal: ReadonlyArray<FileSpec> = [
+        { path: `a${p}`, mode: "100644", content: held(0) },
+        { path: `b${p}`, mode: "100755", content: held(1) },
+        { path: `c${p}/d${p}`, mode: "100644", content: held(2) },
+        { path: `c${p}/e${p}`, mode: "100644", content: held(3) },
+        { path: `f${p}/g${p}/h${p}`, mode: "100644", content: held(4) },
+        { path: `n${p}/k`, mode: "100644", content: held(5) },
+        { path: `ex${p}/inner`, mode: "100644", content: held(6) },
+      ];
+
+      // What the base also holds that no `Path` can name, or that no edit touches: names that are not UTF-8, a submodule, an odd mode.
+      const extras: ReadonlyArray<Leaf> = [
+        { dir: "", name: Uint8Array.of(0xfe, 0xff, 0x61), mode: "100644", type: "blob", id: hexId("a", 1) },
+        { dir: "", name: encoder.encode("sub"), mode: "160000", type: "commit", id: hexId("a", 2) },
+        { dir: `n${p}`, name: Uint8Array.of(0xff, 0x2d, 0x78), mode: "100644", type: "blob", id: hexId("a", 3) },
+        { dir: `n${p}`, name: encoder.encode("odd"), mode: "100664", type: "blob", id: hexId("a", 4) },
+      ];
+
+      const leavesFrom = (files: ReadonlyArray<FileSpec>): ReadonlyArray<Leaf> => [
+        ...files.map((file): Leaf => {
+          const parts = file.path.split("/");
+
+          return {
+            dir: parts.slice(0, -1).join("/"),
+            name: encoder.encode(parts.at(-1) ?? ""),
+            mode: file.mode,
+            type: "blob",
+            id: contentId(file.content),
+          };
+        }),
+        ...extras,
+      ];
+
+      const menu: ReadonlyArray<Change> = [
+        [`a${p}`, fresh(0)],
+        [`a${p}`, held(0)],
+        [`b${p}`, "absent"],
+        [`b${p}`, fresh(1)],
+        [`c${p}/d${p}`, fresh(2)],
+        [`c${p}/d${p}`, "absent"],
+        [`c${p}/e${p}`, "absent"],
+        [`c${p}/new`, fresh(3)],
+        [`f${p}/g${p}/i${p}`, fresh(4)],
+        [`f${p}/g${p}/h${p}`, "absent"],
+        [`u${p}/v${p}/w${p}`, fresh(5)],
+        [`n${p}/k`, fresh(6)],
+        [`n${p}/k`, "absent"],
+        [`n${p}/z`, fresh(7)],
+        [`zz${p}`, "absent"],
+        [`c${p}/e${p}`, held(3)],
+        [`nof${p}/q`, "absent"],
+        [`ex${p}/inner`, held(6)],
+        // A folder `a` where a file `a${p}` is listed, and a file `b` beside a listed `b${p}`: names that are the start of a listed name.
+        [`a/q`, fresh(9)],
+        [`b`, fresh(10)],
+      ];
+
+      // Refusals beside the changes that work: a file below a file, absent at a folder, a content over the limit.
+      const refusals: ReadonlyArray<Change> = [
+        [`a${p}/x`, fresh(8)],
+        [`c${p}`, "absent"],
+        [`big${p}`, Uint8Array.of(1, 2, 3, 4, 5, 6)],
+      ];
+
+      const picked = spec.picks.flatMap((pick) => menu.slice(pick, pick + 1));
+
+      const drawn = [
+        ...new Map<string, Uint8Array | "absent">([...picked, ...refusals.slice(spec.refuse - 1, spec.refuse)]),
+      ];
+
+      // Edits that change nothing, made every run: the drawn ones rarely are.
+      const fixed: ReadonlyArray<ReadonlyArray<Change>> = [
+        [],
+        [[`a${p}`, held(0)]],
+        [[`zz${p}`, "absent"]],
+        [
+          [`c${p}/e${p}`, held(3)],
+          [`nof${p}/q`, "absent"],
+          [`f${p}/zz`, "absent"],
+        ],
+      ];
+
+      for (const [n, changes] of [drawn, ...fixed].entries()) {
+        const model = editModel(normal, changes, limit);
+        const baseLeaves = leavesFrom(normal);
+        const dirs = [...foldersIn(baseLeaves)];
+
+        const treeId = new Map<string, string>([
+          ["", root],
+          ...dirs.map((dir, k) => [dir, hexId("e", k + 1)] as const),
+        ]);
+
+        const trees = new Map<string, ReadonlyArray<Uint8Array>>();
+
+        // The stand-in git: the trees of the base by id, as `ls-tree` prints them, and the blobs and trees `hash-object` and `mktree` make.
+        for (const dir of ["", ...dirs]) {
+          trees.set(treeId.get(dir) ?? "", [
+            ...baseLeaves.filter((leaf) => leaf.dir === dir).map(leafLine),
+            ...dirs
+              .filter((folder) => parentFolder(folder) === dir)
+              .map((folder) =>
+                entryLine(
+                  `040000 tree ${treeId.get(folder)}`,
+                  encoder.encode(folder.slice(dir === "" ? 0 : dir.length + 1)),
+                ),
+              ),
+          ]);
+        }
+
+        const blobs = new Set(baseLeaves.map((leaf) => leaf.id));
+        let counter = 0;
+
+        const git = (call: Call): Reply => {
+          switch (call.verb) {
+            case "version":
+              return { code: 0, stdout: "git version 2.40.1\n" };
+            case "rev-parse":
+              return { code: 0, stdout: call.rest.includes("--is-shallow-repository") ? "false\n" : ".\n" };
+            case "cat-file":
+              return {
+                code: 0,
+                stdout: [...asked(call)]
+                  .map((id) => {
+                    if (id === commit) {
+                      return `${id} commit 200\n`;
+                    }
+
+                    return id === `${commit}^{tree}` ? `${root} tree 100\n` : `${id} missing\n`;
+                  })
+                  .join(""),
+              };
+            case "ls-tree": {
+              const id = call.rest.at(-1) ?? "";
+              const listing = trees.get(id === commit ? root : id);
+
+              return listing === undefined
+                ? { code: 128, stderr: "fatal: not a tree" }
+                : { code: 0, stdout: concat(...listing.flatMap((line) => [line, Uint8Array.of(0)])) };
+            }
+
+            case "hash-object": {
+              const id = contentId(call.input);
+              blobs.add(id);
+
+              return { code: 0, stdout: `${id}\n` };
+            }
+
+            case "mktree": {
+              const lines = mktreeLines(call.input);
+              const names = lines.map((line) => line.slice(line.indexOf("\t") + 1));
+
+              const exist = lines.every((line) => {
+                const [mode, type, id] = line.slice(0, line.indexOf("\t")).split(" ");
+
+                return (
+                  /^[0-7]{6}$/.test(mode ?? "") &&
+                  (type === "commit" ||
+                    (type === "tree" ? trees.has(id ?? "") : type === "blob" && blobs.has(id ?? "")))
+                );
+              });
+
+              if (!exist || new Set(names).size !== names.length) {
+                return { code: 128, stderr: "fatal: a missing object or a name twice" };
+              }
+
+              counter += 1;
+              const id = hexId("f", counter);
+              trees.set(
+                id,
+                lines.map((line) => Uint8Array.from(line, (character) => character.charCodeAt(0))),
+              );
+
+              return { code: 0, stdout: `${id}\n` };
+            }
+
+            default:
+              return { code: 128, stderr: `fatal: ${call.verb} is no command of an edit` };
+          }
+        };
+
+        const { repo, stand } = yield* open(git, { blob: limit });
+        const opened = (yield* stand.calls).length;
+
+        const edit = new Map(
+          changes.map(([path, change]) => [Schema.decodeUnknownSync(Tree.Path)(path), change] as const),
+        );
+
+        const result = yield* Effect.result(repo.editTree(commit, edit));
+        const seen = (yield* stand.calls).slice(opened);
+        const place = `edit ${n}`;
+        const verbs = seen.map((each) => each.verb);
+        const stages = verbs.map((verb) => STAGES.indexOf(verb));
+
+        expect(
+          stages.every((stage, k) => stage >= 0 && stage >= (stages[k - 1] ?? 0)),
+          `${place}: the commands come in stages: ${verbs.join(" ")}`,
+        ).toBe(true);
+        expect(
+          seen.some((each) => each.piped),
+          `${place}: no piped command`,
+        ).toBe(false);
+
+        for (const each of seen) {
+          const rest = each.args.slice(START.length);
+
+          const given: Record<string, ReadonlyArray<string>> = {
+            "cat-file": CHECK,
+            "hash-object": ["hash-object", "-t", "blob", "-w", "--no-filters", "--stdin"],
+            mktree: ["mktree", "-z"],
+          };
+
+          if (each.verb === "ls-tree") {
+            expect(rest.slice(0, 2), `${place}: ls-tree -z`).toEqual(["ls-tree", "-z"]);
+            expect(rest.length, `${place}: ls-tree names one tree and no path`).toBe(3);
+          } else {
+            expect(rest, `${place}: ${each.verb}`).toEqual(given[each.verb]);
+          }
+
+          expect(
+            each.args.some((word) => word.includes("zq-")),
+            `${place}: no argument holds a path`,
+          ).toBe(false);
+        }
+
+        // The commit is asked about first, and only it and its tree are asked about. A content over the limit runs no command at all.
+        if (model.kind !== "too-large") {
+          const firstAsked = [...asked(seen[0])];
+          expect(firstAsked.includes(commit), `${place}: the commit is asked about first`).toBe(true);
+          expect(
+            firstAsked.every((id) => id === commit || id === `${commit}^{tree}`),
+            `${place}: nothing else is asked`,
+          ).toBe(true);
+        }
+
+        if (model.kind !== "files") {
+          expect(Result.isFailure(result), `${place}: a refused edit fails`).toBe(true);
+          expect(
+            verbs.filter((verb) => verb === "hash-object" || verb === "mktree"),
+            `${place}: a refused edit writes nothing`,
+          ).toEqual([]);
+
+          if (model.kind === "too-large") {
+            expect(seen.length, `${place}: a content over the limit runs no command`).toBe(0);
+          }
+
+          if (Result.isFailure(result)) {
+            if (model.kind === "too-large") {
+              expectFailure(result.failure, Repository.FileTooLarge, { path: model.path, most: model.most }, place);
+            } else if (model.kind === "not-a-file") {
+              expectFailure(result.failure, Repository.NotAFile, { path: model.path, holds: model.holds }, place);
+            } else {
+              expectFailure(result.failure, Repository.PathInTheWay, { path: model.path, other: model.other }, place);
+            }
+          }
+
+          continue;
+        }
+
+        expect(Result.isSuccess(result), `${place}: answers`).toBe(true);
+        const finalLeaves = leavesFrom(model.files);
+
+        // Each folder on a changed path that the base has is listed once, and each is shown by an earlier listing: top down.
+        const wanted = new Set<string>(changes.length === 0 ? [] : [root]);
+
+        for (const [path] of changes) {
+          const parts = path.split("/");
+
+          for (let at = 0; at < parts.length - 1 && dirs.includes(parts.slice(0, at + 1).join("/")); at++) {
+            wanted.add(treeId.get(parts.slice(0, at + 1).join("/")) ?? "");
+          }
+        }
+
+        const listed = seen.filter((each) => each.verb === "ls-tree").map((each) => each.args.at(-1) ?? "");
+        expect(listed.map((id) => (id === commit ? root : id)).toSorted(), `${place}: the folders listed`).toEqual(
+          [...wanted].toSorted(),
+        );
+        const shown = new Set<string>([root, commit]);
+
+        for (const id of listed) {
+          expect(shown.has(id), `${place}: ${id} was shown by an earlier listing`).toBe(true);
+
+          for (const line of trees.get(id === commit ? root : id) ?? []) {
+            const [, type, shownId] = latin1(line.subarray(0, line.indexOf(9))).split(" ");
+
+            if (type === "tree") {
+              shown.add(shownId ?? "");
+            }
+          }
+        }
+
+        // One `hash-object` for each new content, in path byte order, with its bytes.
+        const contents = changes
+          .toSorted(([a], [b]) => byBytes(a, b))
+          .flatMap(([, change]) => (change === "absent" ? [] : [change]));
+
+        expect(
+          seen.filter((each) => each.verb === "hash-object").map((each) => Array.from(each.input)),
+          `${place}: one hash-object for each new content, with its bytes`,
+        ).toEqual(contents.map((content) => Array.from(content)));
+
+        // One `mktree` for each folder below which something changed and that holds something after, deepest first.
+        const changedDirs = ["", ...foldersIn(finalLeaves)].filter(
+          (dir) => belowKey(baseLeaves, dir) !== belowKey(finalLeaves, dir),
+        );
+
+        const mktrees = seen.filter((each) => each.verb === "mktree");
+        expect(mktrees.length, `${place}: one mktree for each changed folder`).toBe(changedDirs.length);
+        const newIds = new Map<string, string>();
+        let lastDepth = Number.POSITIVE_INFINITY;
+
+        for (const [k, call] of mktrees.entries()) {
+          const given = new Set(mktreeLines(call.input));
+
+          // What the folder must be given: its own entries as the base listed them, a changed file as `mode blob id`, a folder below with
+          // its new id when something below it changed and its old one when not.
+          const expectedFor = (dir: string): ReadonlySet<string> | undefined => {
+            const lines = finalLeaves.filter((leaf) => leaf.dir === dir).map((leaf) => latin1(leafLine(leaf)));
+
+            for (const folder of foldersIn(finalLeaves)) {
+              const id = changedDirs.includes(folder) ? newIds.get(folder) : treeId.get(folder);
+
+              if (parentFolder(folder) === dir && id === undefined) {
+                return undefined;
+              }
+
+              if (parentFolder(folder) === dir) {
+                lines.push(
+                  latin1(entryLine(`040000 tree ${id}`, encoder.encode(folder.slice(dir === "" ? 0 : dir.length + 1)))),
+                );
+              }
+            }
+
+            return new Set(lines);
+          };
+
+          const dir = changedDirs.find((each) => {
+            const want = expectedFor(each);
+
+            return (
+              !newIds.has(each) &&
+              want !== undefined &&
+              want.size === given.size &&
+              [...want].every((line) => given.has(line))
+            );
+          });
+
+          expect(
+            dir !== undefined,
+            `${place}: mktree ${k} holds the entries of a changed folder whose folders below are made, each untouched line as listed`,
+          ).toBe(true);
+
+          if (dir !== undefined) {
+            const depth = dir === "" ? 0 : dir.split("/").length;
+            expect(depth <= lastDepth, `${place}: deepest first`).toBe(true);
+            lastDepth = depth;
+            newIds.set(dir, hexId("f", k + 1));
+          }
+        }
+
+        expect(
+          Result.isSuccess(result) ? result.success : undefined,
+          `${place}: the tree is the top folder's, or the base's own when nothing changed`,
+        ).toBe(changedDirs.length === 0 ? root : hexId("f", mktrees.length));
       }
     }),
   { arbitrary: { runs: 100, seed: 119120 } },

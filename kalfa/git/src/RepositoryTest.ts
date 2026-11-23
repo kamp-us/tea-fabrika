@@ -40,6 +40,7 @@ import {
   nameCarrier,
   READ_CLASSES,
   readCarrier,
+  readModel,
   reachedReadClasses,
   textModel,
   type ReadCarrier,
@@ -76,8 +77,17 @@ import {
   walkModel,
   CRISS,
   type DiffModel,
+  editModel,
+  reachedTreeEditClasses,
+  TREE_EDIT_CLASSES,
+  treeEditCarrier,
   type EditCarrier,
   type EditCase,
+  type EditModel,
+  type FileSpec,
+  type FlatSignature,
+  type TreeEditCarrier,
+  type TreeEditCase,
   type Committer,
   type History,
   type MergeCase,
@@ -87,6 +97,7 @@ import {
 import {
   clockAt,
   commitIdFrom,
+  editFrom,
   conflictPaths,
   encodeCommit,
   expectedRefs,
@@ -461,6 +472,113 @@ const everyReadClass = (carrier: ReadCarrier, prefixes: ReadonlyArray<string>): 
 };
 
 // ---------------------------------------------------------------------------------------------------------
+// The checks the edit laws share (ticket 1935, slice 2)
+// ---------------------------------------------------------------------------------------------------------
+
+/** What a case must answer under a limit on a file's size: the model, over the files of the commit the edit is made on. */
+const editWant = (carrier: TreeEditCarrier, each: TreeEditCase, limit: number): EditModel =>
+  editModel(carrier.history.nodes[each.base]?.files ?? [], each.changes, limit);
+
+/** The tree id or the failure `editTree` gives is the model's: the tree of the commit that holds the model's files, or the refusal. */
+const expectEdit = (
+  place: string,
+  result: Result.Result<Tree.TreeId, unknown>,
+  model: EditModel,
+  tree: Tree.TreeId | undefined,
+): void => {
+  if (model.kind === "files") {
+    expect(Result.isSuccess(result), `${place}: answers`).toBe(true);
+
+    if (Result.isSuccess(result)) {
+      expect(result.success, `${place}: the tree of the model's files`).toBe(tree);
+    }
+
+    return;
+  }
+
+  expect(Result.isFailure(result), `${place}: fails`).toBe(true);
+
+  if (Result.isFailure(result)) {
+    if (model.kind === "too-large") {
+      expectFailure(result.failure, Repository.FileTooLarge, { path: model.path, most: model.most }, place);
+    } else if (model.kind === "not-a-file") {
+      expectFailure(result.failure, Repository.NotAFile, { path: model.path, holds: model.holds }, place);
+    } else {
+      expectFailure(result.failure, Repository.PathInTheWay, { path: model.path, other: model.other }, place);
+    }
+  }
+};
+
+/** Every edit class is reached, and each case comes to what it was drawn to come to when no file is too large. */
+const everyTreeEditClass = (carrier: TreeEditCarrier): TreeEditCarrier => {
+  expect(reachedTreeEditClasses(carrier), "the generator reaches every edit class").toEqual([...TREE_EDIT_CLASSES]);
+
+  for (const each of carrier.cases) {
+    const model = editWant(carrier, each, Number.MAX_SAFE_INTEGER);
+    const meant = each.intent === "tree" || each.intent === "no change" ? "files" : each.intent;
+    expect(model.kind, `${each.label}: the case comes to what it is drawn to`).toBe(meant);
+
+    if (each.tight !== undefined) {
+      expect(editWant(carrier, each, each.tight).kind, `${each.label}: a tight limit makes it too large first`).toBe(
+        "too-large",
+      );
+    }
+  }
+
+  return carrier;
+};
+
+/** Runs one case of the carrier on a seeded store, as the law's `k`th, and gives `editTree`'s result. */
+const editing = (seeded: Seeded, each: TreeEditCase, k: number) =>
+  Effect.result(seeded.repository.editTree(idAt(seeded.ids, each.base), editFrom(each.changes, k % 2 === 1)));
+
+const answerTree = (seeded: Seeded, each: TreeEditCase): Tree.TreeId | undefined =>
+  each.node === undefined ? undefined : treeAt(seeded.trees, each.node);
+
+/** The largest new content of the cases that make a tree. */
+const largestContent = (carrier: TreeEditCarrier): number =>
+  Math.max(
+    ...carrier.cases.flatMap((each) =>
+      each.intent === "tree" ? each.changes.map(([, change]) => (change === "absent" ? 0 : change.length)) : [],
+    ),
+  );
+
+const AUTHOR: FlatSignature = { name: "Writer", email: "writer@example.test", seconds: 1_500_000_000, offset: "+0000" };
+
+/**
+ * A commit on a tree made by `editTree`, and each of the given paths read at it: the model's bytes, none or the refusal, as the
+ * model's files say. Reading is what shows that a tree an edit answered holds the files, and that its blobs can be read back.
+ */
+const readEdited = (
+  seeded: Seeded,
+  tree: Tree.TreeId,
+  files: ReadonlyArray<FileSpec>,
+  paths: ReadonlyArray<string>,
+  place: string,
+): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    const commit = yield* seeded.repository.writeCommit({
+      tree,
+      parents: [],
+      author: toSignature(AUTHOR),
+      message: "edited\n",
+    });
+
+    for (const path of paths) {
+      const read = yield* Effect.result(seeded.repository.readFile(commit.id, pathFrom(path)));
+      const model = readModel(files, path);
+      const bytes = model.kind === "file" ? model.bytes : undefined;
+      expectRead(
+        `${place}: ${path} read back`,
+        read,
+        readOutcome(model, path, DEFAULT.limits.blob),
+        (found) => found,
+        bytes,
+      );
+    }
+  });
+
+// ---------------------------------------------------------------------------------------------------------
 // The checks the write laws share
 // ---------------------------------------------------------------------------------------------------------
 
@@ -565,6 +683,42 @@ const readPath = (history: History, k: number): string => {
   const paths = history.nodes.flatMap((node) => node.files.map((each) => each.path));
 
   return paths.length === 0 ? "x" : (paths[k % paths.length] ?? "x");
+};
+
+/** The span of `editTree` for an edit that makes a tree and for one that fails, each on a history whose paths and bytes hold the canary. */
+const editSpans = (seeded: Seeded, history: History, tip: CommitId.CommitId, missing: CommitId.CommitId) => {
+  const last = history.nodes[history.nodes.length - 1]?.files[0];
+
+  const changes = new Map<Tree.Path, Uint8Array | "absent">([
+    [pathFrom(`${CANARY}-edit/${CANARY}-new`), new TextEncoder().encode(`${CANARY}-content\n`)],
+  ]);
+
+  if (last !== undefined) {
+    changes.set(pathFrom(last.path), "absent");
+  }
+
+  const edit: Repository.Edit = changes;
+
+  return [
+    {
+      call: "editTree",
+      note: "a tree made",
+      run: Effect.map(seeded.repository.editTree(tip, edit), (tree): Extra => ({
+        present: { "kalfa.git.tree": tree },
+        absent: [],
+      })),
+      expected: { "vcs.ref.base.revision": tip, "kalfa.git.changes": edit.size },
+    },
+    {
+      call: "editTree",
+      note: "an unknown base",
+      run: Effect.map(Effect.result(seeded.repository.editTree(missing, edit)), (): Extra => ({
+        present: {},
+        absent: ["kalfa.git.tree"],
+      })),
+      expected: { "vcs.ref.base.revision": missing, "kalfa.git.changes": edit.size },
+    },
+  ];
 };
 
 /** The spans of `readFile` and `readText`: found or not, and the size only for a file. The path and the bytes are never an attribute. */
@@ -1171,6 +1325,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                   expected: { "vcs.ref.base.revision": a, "vcs.ref.head.revision": b },
                 },
                 ...reading(seeded, shape.history, b),
+                ...editSpans(seeded, shape.history, b, commitIdFrom(missingId(texture, 7, ids))),
               ];
 
               const secrets = [CANARY, ...seeded.hidden];
@@ -1364,13 +1519,14 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // call an adapter writes, so it is in `Raw` too. Ticket 1935, slice 1: leave `readFile` out of the service, or
     // let `readText` be a call an adapter writes, so it is in `Raw` too; let a read write an object, so the fingerprint moves: red.
     it.effect.prop(
-      "S10 no working copy: the service has the ten read calls and the three write calls, no list of reads changes the store, and no list of writes or merges moves a ref",
+      "S10 no working copy: the service has the ten read calls and the four write calls, no list of reads changes the store, and no list of writes, edits or merges moves a ref",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), DEFAULT, (seeded, shape) =>
           Effect.gen(function* () {
             expect(Object.keys(seeded.repository).sort(), `${shape.label}: the keys`).toEqual([
               "diff",
+              "editTree",
               "isAncestor",
               "mergeBases",
               "mergeTrees",
@@ -1429,6 +1585,18 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             }
 
             yield* readRefsBack(seeded, shape.history, `${shape.label}: after writes`);
+
+            // Edits, some of them refused: trees are made, and no ref is moved by them.
+            for (let k = 0; k < 12; k++) {
+              const edit: Repository.Edit = new Map([
+                [pathFrom(readPath(shape.history, k)), Uint8Array.of(k, 0xf0)],
+                [pathFrom(`edit${k}/new`), Uint8Array.of(0xf1, k)],
+              ]);
+
+              yield* Effect.exit(seeded.repository.editTree(pick(k + 30), edit));
+            }
+
+            yield* readRefsBack(seeded, shape.history, `${shape.label}: after edits`);
 
             // Merges, most of them between commits that do not merge well: a merge writes objects and moves no ref.
             for (let k = 0; k < 12; k++) {
@@ -2738,6 +2906,46 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
               }),
             );
           }
+
+          // Slice 2: `editTree` writes a file of exactly `limits.blob` bytes and refuses one byte more, naming the first path by bytes,
+          // and a refused edit leaves the store as it was.
+          const edits = everyTreeEditClass(treeEditCarrier(texture));
+          const largest = largestContent(edits);
+
+          const sized = (each: TreeEditCase) =>
+            each.changes.some(([, change]) => change !== "absent" && change.length === largest);
+
+          expect(
+            edits.cases.filter(sized).length,
+            "the generator reaches a new content of the largest size",
+          ).toBeGreaterThan(0);
+
+          for (const limit of [largest, largest - 1, 1]) {
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const seeded = yield* subject.seed(edits.history, settings({ blob: limit }));
+                const chosen = edits.cases.filter((each, k) => sized(each) || k < 8);
+                let refusals = 0;
+
+                for (const [k, each] of chosen.entries()) {
+                  const model = editWant(edits, each, limit);
+                  const before = yield* seeded.fingerprint;
+                  const result = yield* editing(seeded, each, k);
+                  expectEdit(`${each.label}, a limit of ${limit} bytes`, result, model, answerTree(seeded, each));
+                  refusals += model.kind === "too-large" ? 1 : 0;
+
+                  if (model.kind !== "files") {
+                    expect(
+                      yield* seeded.fingerprint,
+                      `${each.label}: a refused edit leaves the store as it was`,
+                    ).toEqual(before);
+                  }
+                }
+
+                expect(refusals > 0, `a limit of ${limit} bytes: some edit is too large`).toBe(limit < largest);
+              }),
+            );
+          }
         }),
       run,
     );
@@ -2789,6 +2997,63 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                       expect(error.id, `${store.label}: ${call} names the id it was asked for`).toBe(absent);
                     }
                   }
+                }
+              }),
+            );
+          }
+
+          // Slice 2: `editTree` of an id the store lacks, or of a tree's or a blob's id, fails NoSuchCommit naming it; and on a
+          // shallow store every edit answers as on a whole one.
+          const edits = everyTreeEditClass(treeEditCarrier(texture));
+          const cut = cutShallow(edits.history);
+          expect(cut, "the edit carrier has a commit with parents").toBeDefined();
+          const small: Repository.Edit = new Map([[pathFrom("some/new"), Uint8Array.of(1, 2)]]);
+          const blobFile = edits.history.nodes.flatMap((node) => node.files).find((each) => each.content.length > 0);
+
+          for (const store of [
+            { label: "whole", history: edits.history },
+            ...(cut === undefined ? [] : [{ label: "shallow", history: cut }]),
+          ]) {
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const seeded = yield* subject.seed(store.history, DEFAULT);
+
+                for (const [k, each] of edits.cases.entries()) {
+                  if (k % 4 === 0) {
+                    expectEdit(
+                      `${store.label}: ${each.label}`,
+                      yield* editing(seeded, each, k),
+                      editWant(edits, each, DEFAULT.limits.blob),
+                      answerTree(seeded, each),
+                    );
+                  }
+                }
+
+                const lacking = [
+                  commitIdFrom(missingId(texture, 1, seeded.ids)),
+                  commitIdFrom(TREE_ID),
+                  ...(blobFile === undefined ? [] : [commitIdFrom(blobId(blobFile.content))]),
+                  ...seeded.trees
+                    .filter((id) => id !== TREE_ID)
+                    .slice(0, 1)
+                    .map(commitIdFrom),
+                ];
+
+                for (const absent of lacking) {
+                  const before = yield* seeded.fingerprint;
+
+                  const error = yield* refused(
+                    seeded.repository.editTree(absent, small),
+                    `${store.label}: editTree of ${absent}`,
+                  );
+
+                  expect(isMissing(error), `${store.label}: editTree of ${absent} fails with NoSuchCommit`).toBe(true);
+
+                  if (isMissing(error)) {
+                    expect(error.id, `${store.label}: editTree names the id it was asked for`).toBe(absent);
+                  }
+
+                  expect(yield* seeded.fingerprint, `${store.label}: nothing was written`).toEqual(before);
                 }
               }),
             );
@@ -2863,6 +3128,47 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
           );
 
           expect(changed, "the generator reaches files with bytes").toBeGreaterThan(20);
+
+          // Slice 2: the bytes given to `editTree` are the caller's: changing them after the call changes nothing read later.
+          const edits = everyTreeEditClass(treeEditCarrier(texture));
+          let given = 0;
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(edits.history, DEFAULT);
+
+              for (const [k, each] of edits.cases.entries()) {
+                const model = editWant(edits, each, DEFAULT.limits.blob);
+
+                if (each.intent !== "tree" || model.kind !== "files" || given >= 6) {
+                  continue;
+                }
+
+                const passed = editFrom(each.changes, k % 2 === 1);
+                const result = yield* Effect.result(seeded.repository.editTree(idAt(seeded.ids, each.base), passed));
+                expectEdit(each.label, result, model, answerTree(seeded, each));
+
+                for (const change of passed.values()) {
+                  if (change !== "absent") {
+                    given += 1;
+                    change.fill(((change[0] ?? 0) ^ 0x5a) & 0xff);
+                  }
+                }
+
+                if (Result.isSuccess(result)) {
+                  yield* readEdited(
+                    seeded,
+                    result.success,
+                    model.files,
+                    each.changes.map(([path]) => path),
+                    `${each.label}, after the caller changed its bytes`,
+                  );
+                }
+              }
+            }),
+          );
+
+          expect(given, "the generator reaches new contents").toBeGreaterThan(5);
         }),
       run,
     );
@@ -2883,6 +3189,177 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             Effect.gen(function* () {
               const seeded = yield* subject.seed(carrier.history, DEFAULT);
               yield* readAll(seeded, carrier, "names", DEFAULT.limits.blob, { text: false });
+            }),
+          );
+        }),
+      run,
+    );
+
+    // Slice 2 of ticket 1935: editing a tree. The model is `editModel` and `treeEditCarrier` in History.test-support.ts: each edit that
+    // makes a tree has a commit in the history whose files are the model's, so the tree id of that commit is the answer.
+
+    // Plant: keep a folder left with no files, (k) red; drop the untouched files of a rewritten folder, (k) red; give a replaced file
+    // mode 100644, (m) red; give a new file a sibling's mode, (m) red; match a changed name to a listed one by its start, (q) red.
+    it.effect.prop(
+      "S31 edit a tree: for every edit the classes and the draws make, editTree answers the tree id of the commit that holds the model's files, readFile at a commit on that tree gives each changed path its new bytes or none, and every other path is as before",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyTreeEditClass(treeEditCarrier(texture));
+          let made = 0;
+          let read = 0;
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+
+              for (const [k, each] of carrier.cases.entries()) {
+                const model = editWant(carrier, each, DEFAULT.limits.blob);
+
+                if (each.intent !== "tree") {
+                  continue;
+                }
+
+                made += 1;
+                const result = yield* editing(seeded, each, k);
+                expectEdit(each.label, result, model, answerTree(seeded, each));
+
+                if (k % 3 === 0 && Result.isSuccess(result) && model.kind === "files") {
+                  read += 1;
+                  const changed = new Set(each.changes.map(([path]) => path));
+                  const other = model.files.find((file) => !changed.has(file.path));
+
+                  yield* readEdited(
+                    seeded,
+                    result.success,
+                    model.files,
+                    [...changed, ...(other === undefined ? [] : [other.path])],
+                    each.label,
+                  );
+                }
+              }
+            }),
+          );
+
+          expect(made, "the generator reaches many edits that change").toBeGreaterThan(20);
+          expect(read, "the generator reads some of the trees back").toBeGreaterThan(5);
+          expect(
+            carrier.cases.filter((each) => each.classes.includes("(k) a random edit") && each.intent === "tree").length,
+            "the drawn edits make trees",
+          ).toBeGreaterThan(2);
+        }),
+      run,
+    );
+
+    // Plant: refuse "absent" on a path that holds nothing, (l) red; give a file replaced with its own bytes mode 100644, (l) red;
+    // answer a new empty tree for an empty edit, (l) red.
+    it.effect.prop(
+      "S32 no change gives back the same tree: an empty edit, a file replaced with its own bytes and absent on a path that holds nothing each answer the base's own tree, and the store is as it was",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyTreeEditClass(treeEditCarrier(texture));
+          let still = 0;
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+
+              for (const [k, each] of carrier.cases.entries()) {
+                if (each.intent !== "no change") {
+                  continue;
+                }
+
+                still += 1;
+                const before = yield* seeded.fingerprint;
+                const result = yield* editing(seeded, each, k);
+                expectEdit(
+                  each.label,
+                  result,
+                  editWant(carrier, each, DEFAULT.limits.blob),
+                  treeAt(seeded.trees, each.base),
+                );
+                expect(yield* seeded.fingerprint, `${each.label}: the store is as it was`).toEqual(before);
+              }
+            }),
+          );
+
+          expect(still, "the generator reaches edits that change nothing").toBeGreaterThan(8);
+        }),
+      run,
+    );
+
+    // Plant: delete the check on a removed link, (n) red; delete the path-in-the-way check, (n) red; refuse a file made a folder, (n)
+    // red; check the way before NotAFile, (p) red; name the last path by bytes, (p) red; check the size after NoSuchCommit, (p) red.
+    it.effect.prop(
+      "S33 refused edits: each refusal class fails with the error and the paths the model names, in the check order the plan gives, and leaves the store as it was",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyTreeEditClass(treeEditCarrier(texture));
+          let refusals = 0;
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+
+              for (const [k, each] of carrier.cases.entries()) {
+                if (each.intent !== "not-a-file" && each.intent !== "in-the-way") {
+                  continue;
+                }
+
+                refusals += 1;
+                const before = yield* seeded.fingerprint;
+                const result = yield* editing(seeded, each, k);
+                expectEdit(each.label, result, editWant(carrier, each, DEFAULT.limits.blob), undefined);
+                expect(yield* seeded.fingerprint, `${each.label}: the store is as it was`).toEqual(before);
+              }
+
+              // An id the store lacks with a change at a folder is NoSuchCommit, as nothing can be said of that folder.
+              const absent = commitIdFrom(missingId(texture, 2, seeded.ids));
+
+              const folder = carrier.cases.find((each) =>
+                each.classes.includes("(p) a change at a folder beside a new file in the way"),
+              );
+
+              expect(folder, "the generator reaches a change at a folder").toBeDefined();
+
+              if (folder !== undefined) {
+                const before = yield* seeded.fingerprint;
+
+                const error = yield* refused(
+                  seeded.repository.editTree(absent, editFrom(folder.changes, false)),
+                  "an unknown base",
+                );
+
+                expect(isMissing(error), "an unknown base with a change at a folder: NoSuchCommit").toBe(true);
+                expect(yield* seeded.fingerprint, "an unknown base: the store is as it was").toEqual(before);
+              }
+            }),
+          );
+
+          expect(refusals, "the generator reaches many refusals").toBeGreaterThan(14);
+
+          // Under a limit that makes the largest content too large, that is the first refusal, before the commit is looked up and before
+          // any folder is: a change at a folder, and an unknown base.
+          const tight = carrier.cases.find((each) => each.tight !== undefined);
+          const limit = tight?.tight;
+
+          if (tight === undefined || limit === undefined) {
+            return yield* Effect.die("the generator reaches no case that is too large first");
+          }
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, settings({ blob: limit }));
+              const before = yield* seeded.fingerprint;
+              const model = editWant(carrier, tight, limit);
+              expectEdit(tight.label, yield* editing(seeded, tight, 0), model, undefined);
+
+              const absent = commitIdFrom(missingId(texture, 3, seeded.ids));
+              const unknown = yield* Effect.result(seeded.repository.editTree(absent, editFrom(tight.changes, false)));
+              expectEdit(`${tight.label}, an unknown base`, unknown, model, undefined);
+              expect(yield* seeded.fingerprint, "a too large edit: the store is as it was").toEqual(before);
             }),
           );
         }),
