@@ -1,15 +1,15 @@
 // survivors.ts: the guard check. It runs StrykerJS on the product files a change touches, against
 // only the laws that load them, and lists every mutant that lived. Today's lead tooling, run by the
-// test writer before its commit and by the reviewer on the branch.
+// builder once its laws are green, and by the reviewer on the branch.
 //
 //   node .agents/skills/mutation/scripts/survivors.ts --out <folder> [--base <commit>] [--head <commit>] [--files <a.ts,b.ts>]
 //
 // - `--base` is where the change starts; none is `git merge-base origin/main HEAD`.
 // - `--head` is the commit to check; none is the working tree as it is now, uncommitted and
-//   untracked files included (what `git add -A` would take), so the test writer runs it before its
+//   untracked files included (what `git add -A` would take), so the builder runs it before its
 //   commit. Neither the branch, the index nor any ref changes: the trees and commits it makes are
 //   loose objects that nothing points at.
-// - `--files` names the product files to mutate, as the plan names them. A file the change touches
+// - `--files` names the product files to mutate, such as the files that hold the guarding checks. A file the change touches
 //   is mutated on its changed lines; a file it does not touch is mutated whole. None: every product
 //   file the change touches, by the hourly run's own file rule (`scope.ts`).
 // - `--out` is your scratch folder; mutbox's whole answer is `<out>/mutbox.json`.

@@ -117,7 +117,7 @@ It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no
 
 ## The guard check
 
-The test writer runs it before its commit and the reviewer on the branch, as their skills say.
+The builder runs it once its laws are green, and the reviewer on the branch, as their skills say.
 It is the same container run on a smaller scope: `scripts/survivors.ts` picks the product files
 (those a change touches, or those `--files` names), finds the laws whose imports reach them, and
 hands mutbox a commit whose parent holds the base's version of those files, so the sampler draws
