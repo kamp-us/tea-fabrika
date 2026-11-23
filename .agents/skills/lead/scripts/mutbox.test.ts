@@ -909,7 +909,7 @@ describe("mutbox, the run against a stand-in docker", () => {
 
   // Plants: start a second container beside a live one; wait on a lock whose owner is dead.
   it("a second run is stuck while one is live, and a dead run's lock and container are cleared", () => {
-    const busy = run({ lockPid: process.pid, args: () => ["--wait", "0"] });
+    const busy = run({ lockPid: process.pid });
     expect(busy.code, busy.text).toBe(30);
     expect(busy.summary).toMatchObject({ outcome: "stuck", reason: "docker_busy" });
     expect(busy.ranContainer).toBe(false);
@@ -926,9 +926,10 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(taken.lockLeft).toBe(false);
   });
 
-  // scenario: a run that waits takes a place in line, as the hourly run and drive's steps do.
+  // scenario: a run given --wait takes a place in line, behind each run already there. The hourly run is on CI with a lock of its
+  // own, and drive's mutation step refuses at the lock before it starts mutbox, so a person's run by hand, or a caller that opts in, is the one that waits.
   // Plants: take the lock with no place in line (a live run ahead is jumped); count a dead run's place as live;
-  // leave its own place behind when it gives up.
+  // never give up at the limit.
   it("scenario: a run that waits stays behind a live run in line and is stuck docker_busy at its limit, and skips a dead run's place", () => {
     const behind = run({ queue: [process.pid], args: () => ["--wait", "1"] });
     expect(behind.code, behind.text).toBe(30);

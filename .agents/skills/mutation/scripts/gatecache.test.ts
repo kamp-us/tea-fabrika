@@ -59,25 +59,27 @@ it.effect.prop(
 );
 
 it.effect.prop(
-  "a run is found under the key it was kept with and under no other, and a run of a stuck box is not kept",
+  "a run is found under the key it was kept with and under no other, and a run of a stuck box or one the time budget cut short is not kept",
   {
     id: Schema.Literals(["aa", "bb", "cc"]),
     outcome: Schema.Literals(["done", "skip", "stuck"]),
     survivors: Schema.Array(Row),
     seconds: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 900 })),
+    unreached: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
+    from: Schema.Literals(["report", "events", "nothing"]),
   },
-  ({ id, outcome, survivors, seconds }) =>
+  ({ id, outcome, survivors, seconds, unreached, from }) =>
     Effect.gen(function* () {
       const disk = memory();
-      const summary = answer(outcome, survivors, seconds);
+      const summary = answer(outcome, survivors, seconds, unreached, from);
+      // A whole answer: the box did not break, and the budget did not stop it before every sampled mutant was tried.
+      const whole = outcome === "skip" || (outcome === "done" && unreached === 0 && from === "report");
 
       const kept = yield* keep("/gate", id, summary, 7).pipe(Effect.provide(disk.layer));
-      expect(kept).toBe(outcome !== "stuck");
+      expect(kept).toBe(whole);
 
       const found = yield* find("/gate", id).pipe(Effect.provide(disk.layer));
-      expect(Option.map(found, (entry) => entry.summary)).toEqual(
-        outcome === "stuck" ? Option.none() : Option.some(summary),
-      );
+      expect(Option.map(found, (entry) => entry.summary)).toEqual(whole ? Option.some(summary) : Option.none());
 
       expect(Option.isNone(yield* find("/gate", `${id}x`).pipe(Effect.provide(disk.layer)))).toBe(true);
       expect([...disk.files.keys()].filter((path) => path.endsWith(".part"))).toEqual([]);

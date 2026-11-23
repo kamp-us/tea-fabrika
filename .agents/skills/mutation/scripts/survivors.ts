@@ -402,21 +402,32 @@ export const exitCode = (open: number, unloaded: number): 0 | 1 => (open + unloa
 /** One answer of the box, and whether it was read from a saved run (and when that run was saved, in ms) or made now. */
 export type Run = { readonly summary: Summary; readonly reused: boolean; readonly savedAt: number | null };
 
+/** What `judge`'s line is given: where to look again for a run saved while it waited, and what to do once it is its turn. */
+type Turn<E, R> = {
+  readonly saved: Effect.Effect<Option.Option<Run>, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path>;
+  readonly use: Effect.Effect<
+    Option.Option<Run>,
+    E | PlatformError.PlatformError | Schema.SchemaError,
+    R | FileSystem.FileSystem | Path.Path
+  >;
+};
+
 /**
  * The box's answer for a key and what it says of the answers, read now. A saved run is read first
- * and starts nothing; else `box` makes one (given a way to look again for one saved while it waited),
- * and it is saved. The `Survivor:` lines come after, on a saved run as on a new one, so a line written
- * since the run counts. Gives the mutants that lived and the ones still open.
+ * and starts nothing. Else the run waits its turn in `line`, and at its turn `start` makes the answer
+ * (none when the box was taken in that moment: the wait goes on), which is saved before the place in
+ * line is given up, so a run waiting behind it for the same key finds it and starts no second box. The
+ * `Survivor:` lines come after, on a saved run as on a new one, so a line written since the run counts.
+ * Gives the mutants that lived and the ones still open.
  */
-export const judge = <E, R>(ask: {
+export const judge = <E, R, E2, R2>(ask: {
   readonly dir: string;
   readonly key: string;
   /** The days a saved run is kept. */
   readonly days: number;
   readonly answers: Effect.Effect<ReadonlyArray<Answer>, E, R>;
-  readonly box: (
-    saved: Effect.Effect<Option.Option<Run>, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path>,
-  ) => Effect.Effect<Run, E, R>;
+  readonly start: Effect.Effect<Option.Option<Summary>, E, R>;
+  readonly line: (turn: Turn<E, R>) => Effect.Effect<Run, E2, R2>;
 }) =>
   Effect.gen(function* () {
     const saved = Effect.map(
@@ -425,12 +436,20 @@ export const judge = <E, R>(ask: {
     );
 
     const first = yield* saved;
-    const run = Option.isSome(first) ? first.value : yield* ask.box(saved);
 
-    if (!run.reused) {
-      yield* Saved.keep(ask.dir, ask.key, run.summary, ask.days);
-    }
+    const use = Effect.flatMap(
+      ask.start,
+      Option.match({
+        onNone: () => Effect.succeed(Option.none<Run>()),
+        onSome: (summary) =>
+          Effect.as(
+            Saved.keep(ask.dir, ask.key, summary, ask.days),
+            Option.some<Run>({ summary, reused: false, savedAt: null }),
+          ),
+      }),
+    );
 
+    const run = Option.isSome(first) ? first.value : yield* ask.line({ saved, use });
     const answers = yield* ask.answers;
     const lived = run.summary.b === null ? [] : [...run.summary.b.survivors, ...run.summary.b.uncovered];
 
@@ -630,6 +649,60 @@ const Ask = {
   ),
 };
 
+/**
+ * What a call looks at, from git: the base commit, the head's whole tree (the working tree as `git add -A`
+ * would take it when no head is named), the files to mutate, and the key of a saved run. The key holds the
+ * whole tree, not only the files to mutate: a change to a law alone changes the answer, and a law is not a
+ * product file.
+ */
+export const scope = Effect.fnUntraced(function* (
+  root: string,
+  ask: {
+    readonly base: string | undefined;
+    readonly head: string | undefined;
+    readonly files: string | undefined;
+    readonly index: string;
+    readonly cap: number;
+    readonly version: string;
+    readonly seconds: number;
+  },
+) {
+  const base = Str.trim(
+    ask.base === undefined
+      ? yield* ok(root, ["merge-base", "origin/main", "HEAD"])
+      : yield* ok(root, ["rev-parse", "--verify", `${ask.base}^{commit}`]),
+  );
+
+  const tree =
+    ask.head === undefined
+      ? yield* workingTree(root, ask.index)
+      : Str.trim(yield* ok(root, ["rev-parse", "--verify", `${ask.head}^{tree}`]));
+
+  const list = z(yield* ok(root, ["ls-tree", "-r", "-z", "--name-only", tree]));
+
+  const touched = z(
+    yield* ok(root, ["diff", "--name-only", "--no-renames", "--diff-filter=d", "-z", base, tree, "--"]),
+  );
+
+  const named =
+    ask.files === undefined
+      ? null
+      : Arr.filter(
+          Arr.map(Str.split(ask.files, ","), (file) => Str.trim(file)),
+          (file) => file !== "",
+        );
+
+  const files = yield* Effect.fromResult(pick({ changed: touched, named, tree: new Set(list), cap: ask.cap }));
+
+  return {
+    base,
+    tree,
+    list,
+    files,
+    key: Saved.key({ base, tree, files, version: ask.version, seconds: ask.seconds }),
+  };
+});
+
 const check = Effect.fnUntraced(function* (ask: {
   readonly out: string;
   readonly base: string | undefined;
@@ -657,32 +730,24 @@ const check = Effect.fnUntraced(function* (ask: {
   const out = path.resolve(ask.out);
   yield* fs.makeDirectory(out, { recursive: true });
 
-  const base = Str.trim(
-    ask.base === undefined
-      ? yield* ok(root, ["merge-base", "origin/main", "HEAD"])
-      : yield* ok(root, ["rev-parse", "--verify", `${ask.base}^{commit}`]),
+  // The key's scripts: what makes the box's answer.
+  const version = Saved.version(
+    yield* Effect.forEach(
+      SCRIPTS,
+      (name) => fs.readFileString(path.join(import.meta.dirname, name)).pipe(Effect.map((text) => ({ name, text }))),
+      { concurrency: 1 },
+    ),
   );
 
-  const tree =
-    ask.head === undefined
-      ? yield* workingTree(root, path.join(out, "index"))
-      : Str.trim(yield* ok(root, ["rev-parse", "--verify", `${ask.head}^{tree}`]));
-
-  const list = z(yield* ok(root, ["ls-tree", "-r", "-z", "--name-only", tree]));
-
-  const touched = z(
-    yield* ok(root, ["diff", "--name-only", "--no-renames", "--diff-filter=d", "-z", base, tree, "--"]),
-  );
-
-  const named =
-    ask.files === undefined
-      ? null
-      : Arr.filter(
-          Arr.map(Str.split(ask.files, ","), (file) => Str.trim(file)),
-          (file) => file !== "",
-        );
-
-  const files = yield* Effect.fromResult(pick({ changed: touched, named, tree: new Set(list), cap }));
+  const { base, tree, list, files, key } = yield* scope(root, {
+    base: ask.base,
+    head: ask.head,
+    files: ask.files,
+    index: path.join(out, "index"),
+    cap,
+    version,
+    seconds,
+  });
 
   // Read again after the box answers, so a Survivor: line written while the run waited counts. Read once
   // now too: a --answers file that cannot be read is refused before any wait.
@@ -745,15 +810,6 @@ const check = Effect.fnUntraced(function* (ask: {
 
   const mutbox = path.join(import.meta.dirname, "..", "..", "lead", "scripts", "mutbox.ts");
 
-  // The saved result's key: what the box's answer depends on, and not the commit bodies.
-  const version = Saved.version(
-    yield* Effect.forEach(
-      SCRIPTS,
-      (name) => fs.readFileString(path.join(import.meta.dirname, name)).pipe(Effect.map((text) => ({ name, text }))),
-      { concurrency: 1 },
-    ),
-  );
-
   const queue: Line = {
     dir: path.join(boxes, "state", "docker.queue"),
     pid: process.pid,
@@ -791,9 +847,6 @@ const check = Effect.fnUntraced(function* (ask: {
         lock,
         "--cap",
         String(seconds),
-        // This run holds its place in line already.
-        "--wait",
-        "0",
       ],
       secondsFor(false, seconds) + DOCKER_SECONDS.build + 6 * DOCKER_SECONDS.call,
     );
@@ -808,17 +861,16 @@ const check = Effect.fnUntraced(function* (ask: {
       ),
     );
 
-    return answer.outcome === "stuck" && answer.reason === "docker_busy"
-      ? Option.none<Run>()
-      : Option.some<Run>({ summary: answer, reused: false, savedAt: null });
+    return answer.outcome === "stuck" && answer.reason === "docker_busy" ? Option.none() : Option.some(answer);
   });
 
   const judged = yield* judge({
     dir: path.join(boxes, "state", "gate"),
-    key: Saved.key({ base, tree, files, version, seconds }),
+    key,
     days,
     answers: current,
-    box: (saved) => inLine(queue, saved, start),
+    start,
+    line: ({ saved, use }) => inLine(queue, saved, use),
   });
 
   const { summary } = judged;

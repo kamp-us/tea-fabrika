@@ -16,8 +16,9 @@
 // and applied to the saved result, so a line added after the run counts at once.
 //
 // A result lives in `<folder>/<key>.json`, in the boxes folder beside the main checkout, outside every
-// worktree, and a save drops every result older than MUTATE_KEEP_DAYS (survivors.ts), the new one never. Only an answer of the box is saved (`done`, or `skip` when nothing could be sampled): a
-// `stuck` run says the box broke, and the next call must try again. A file that cannot be read
+// worktree, and a save drops every result older than MUTATE_KEEP_DAYS (survivors.ts), the new one never. Only a whole answer of the box is saved
+// (`done` with every sampled mutant reached, or `skip` when nothing could be sampled): a `stuck` run says the box broke, and a
+// run the time budget cut short is a part of an answer, and the next call must try again. A file that cannot be read
 // or decoded is a miss, never an error.
 import { createHash } from "node:crypto"; // edge: a hash of a short text, taken in one step; effect/crypto Digest is async and needs a layer
 import { Array as Arr, Clock, Effect, FileSystem, Option, Path, Schema } from "effect";
@@ -66,6 +67,10 @@ export const find = Effect.fnUntraced(function* (dir: string, id: string) {
   );
 });
 
+/** Whether the time budget stopped the run: a partial answer, which a later call under the same budget would repeat. Pure. */
+const cutShort = (summary: Summary): boolean =>
+  summary.b !== null && (summary.b.unreached > 0 || summary.b.from !== "report");
+
 const DAY = 86_400_000;
 
 /**
@@ -97,7 +102,7 @@ const prune = Effect.fnUntraced(function* (dir: string, days: number, now: numbe
  * moment sees all of it or none. Then every saved run older than `days` days is dropped.
  */
 export const keep = Effect.fnUntraced(function* (dir: string, id: string, summary: Summary, days: number) {
-  if (summary.outcome === "stuck") {
+  if (summary.outcome === "stuck" || cutShort(summary)) {
     return false;
   }
 

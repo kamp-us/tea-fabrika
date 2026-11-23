@@ -19,7 +19,7 @@ const taken = (method: string, pathOrDescriptor: string) =>
   Effect.fail(PlatformError.systemError(AlreadyExists.make({ module: "FileSystem", method, pathOrDescriptor })));
 
 /** The files by path, and a file system over them. Every folder is there. */
-export const memory = () => {
+export const memory = (onKept: (path: string) => void = () => undefined) => {
   const files = new Map<string, string>();
 
   const layer = Layer.mergeAll(
@@ -43,6 +43,7 @@ export const memory = () => {
         }
 
         files.set(path, data);
+        onKept(path);
 
         return Effect.void;
       },
@@ -55,6 +56,7 @@ export const memory = () => {
 
         files.delete(from);
         files.set(to, text);
+        onKept(to);
 
         return Effect.void;
       },
@@ -83,6 +85,8 @@ export const answer = (
   outcome: Summary["outcome"],
   survivors: ReadonlyArray<typeof Row.Type>,
   seconds: number,
+  unreached = 0,
+  from: "report" | "events" | "nothing" = "report",
 ): Summary => ({
   outcome,
   reason: outcome === "stuck" ? "docker_down" : "",
@@ -101,14 +105,14 @@ export const answer = (
   sample: null,
   reach: null,
   b:
-    outcome === "stuck"
+    outcome !== "done"
       ? null
       : {
           exit: 0,
-          from: "report",
+          from,
           counts: { Survived: survivors.length },
           tested: survivors.length,
-          unreached: 0,
+          unreached,
           survivors,
           uncovered: [],
           ignored: [],

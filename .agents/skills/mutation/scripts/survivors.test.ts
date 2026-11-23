@@ -24,6 +24,7 @@ import {
   survivorLines,
   testsIn,
 } from "./survivors.ts";
+import type { Run } from "./survivors.ts";
 
 // Today's tooling: the guard check's pure parts. The run itself starts Docker, so it is tried by hand.
 const options = { seed: 119120, numRuns: 200 };
@@ -555,13 +556,9 @@ describe("survivors, a saved run", () => {
   const key = (files: ReadonlyArray<string>) =>
     Saved.key({ base: "b0", tree: "t0", files, version: "v0", seconds: 300 });
 
-  const made =
-    (box: () => void) => (): Effect.Effect<{ summary: ReturnType<typeof answer>; reused: false; savedAt: null }> =>
-      Effect.sync(() => {
-        box();
-
-        return { summary: answer("done", [], 1), reused: false as const, savedAt: null };
-      });
+  /** The wait for a turn with nobody in line: the box is free, and a box taken in that moment is not looked for. */
+  const direct = <E, R>(turn: { readonly use: Effect.Effect<Option.Option<Run>, E, R> }) =>
+    Effect.flatMap(turn.use, (got) => (Option.isSome(got) ? Effect.succeed(got.value) : Effect.die("busy")));
 
   // Plants: skip the look at the saved runs (a hit starts a box); leave the files out of the key (a
   // changed file hits); never save the box's answer (a second call starts a box).
@@ -586,7 +583,12 @@ describe("survivors, a saved run", () => {
             key: key(files),
             days: 7,
             answers: Effect.succeed([]),
-            box: made(() => void (started += 1)),
+            start: Effect.sync(() => {
+              started += 1;
+
+              return Option.some(answer("done", [], 1));
+            }),
+            line: direct,
           }).pipe(Effect.provide(disk.layer));
 
           const seen = calls.slice(0, calls.indexOf(files)).some((earlier) => key(earlier) === key(files));
@@ -630,12 +632,12 @@ describe("survivors, a saved run", () => {
 
               return answersIn(body(bodies));
             }),
-            box: () =>
-              Effect.sync(() => {
-                started += 1;
+            start: Effect.sync(() => {
+              started += 1;
 
-                return { summary: saved, reused: false as const, savedAt: null };
-              }),
+              return Option.some(saved);
+            }),
+            line: direct,
           }).pipe(Effect.provide(disk.layer));
 
         const first = yield* call([]);
@@ -650,6 +652,45 @@ describe("survivors, a saved run", () => {
         expect(read, "the lines were read on each call").toBe(2);
         expect(second.open).toEqual(rows.filter((row) => !answered.has(`${row.file}:${row.line}`)));
         expect(Option.isSome(yield* Saved.find("/gate", "k1").pipe(Effect.provide(disk.layer)))).toBe(true);
+      }),
+    { arbitrary: { seed: options.seed, runs: options.numRuns } },
+  );
+
+  // Plants: save after the place in line is given up (a run waiting for the same key takes the box and
+  // starts a second one); save a run when the box was busy (nothing to save).
+  effect.effect.prop(
+    "the answer is saved before the place in line is given up, and a busy box saves nothing",
+    { rows: Schema.Array(Row).check(Schema.isMaxLength(3)), busy: Schema.Boolean },
+    ({ rows, busy }) =>
+      Effect.gen(function* () {
+        const events: Array<string> = [];
+
+        const disk = memory((path) => {
+          if (path.endsWith(".json")) {
+            events.push("saved");
+          }
+        });
+
+        yield* judge({
+          dir: "/gate",
+          key: "k2",
+          days: 7,
+          answers: Effect.succeed([]),
+          start: Effect.sync(() => {
+            events.push("started");
+
+            return busy ? Option.none() : Option.some(answer("done", rows, 1));
+          }),
+          // The line of one run: its turn once, then the place given back.
+          line: ({ use }) =>
+            Effect.map(use, (got) => {
+              events.push(Option.isSome(got) ? "released" : "busy");
+
+              return Option.getOrElse(got, () => ({ summary: answer("done", [], 1), reused: false, savedAt: null }));
+            }),
+        }).pipe(Effect.provide(disk.layer));
+
+        expect(events).toEqual(busy ? ["started", "busy"] : ["started", "saved", "released"]);
       }),
     { arbitrary: { seed: options.seed, runs: options.numRuns } },
   );

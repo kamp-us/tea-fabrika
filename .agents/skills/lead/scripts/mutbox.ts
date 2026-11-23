@@ -30,11 +30,11 @@
 //   5. the commit's Node is not the image's        stuck node_mismatch
 //   6. the time limit hits                         docker kill, stuck time_limit, no container left
 //   7. the container is killed mid-run             stuck killed, no container left
-//   8. two runs at once                            the second takes a place in line (`docker.queue`
-//                                                  beside the lock) and waits `--wait` seconds, else
-//                                                  MUTATE_WAIT_SECONDS (7200), for its turn, then is
-//                                                  stuck docker_busy (one Docker box); 0 waits not at
-//                                                  all, and a run ahead of it in line goes first
+//   8. two runs at once                            the second is stuck docker_busy (one Docker box);
+//                                                  with `--wait <seconds>` it takes a place in line
+//                                                  (`docker.queue` beside the lock) instead, goes
+//                                                  after each run ahead of it, and is stuck
+//                                                  docker_busy only when its wait runs out
 //   9. a dead run left its lock or its container   the lock is taken over, the container removed
 //  10. a path with spaces                          runs; a path Docker's --mount cannot take
 //                                                  (a comma, a quote, a newline) is stuck bad_path
@@ -77,7 +77,6 @@ import {
   pipe,
   String as Str,
   Clock,
-  Config,
   Console,
   Effect,
   FileSystem,
@@ -812,11 +811,12 @@ const takeLock = Effect.fnUntraced(function* (lock: string) {
 });
 
 /**
- * The Docker box, in line. `wait` seconds is the longest this run waits for its turn: it takes a place in
+ * The Docker box. 0 `wait` takes the lock or is stuck `docker_busy` at once, as drive's mutation step
+ * wants (it refuses at the lock before it starts mutbox) and as the hourly run on CI does, with a lock of
+ * its own on a disposable runner. More is the longest this run waits for its turn: it takes a place in
  * `docker.queue` beside the lock, says its place each minute on stderr, and takes the lock when it is first
- * live in line and the lock is free, so no run jumps one that waited longer (`gatequeue.ts`). A run that
- * waited its time out is stuck `docker_busy`, as one that found the box busy always was. 0 takes no place:
- * the lock or `docker_busy` at once, for a caller that holds a place already (`survivors.ts`).
+ * live in line and the lock is free, so it never jumps a run that waited longer (`gatequeue.ts`). A wait that
+ * runs out is stuck `docker_busy`, as a busy box always was.
  */
 const takeBox = Effect.fnUntraced(function* (ask: Pick<Ask, "lock" | "ticket" | "checkout">, wait: number) {
   if (wait === 0) {
@@ -971,7 +971,7 @@ interface Ask {
   readonly cap: number | undefined;
   /** The approved plan, from the current folder, as drive reads it; its build-owned files must get a mutant. */
   readonly plan: string | undefined;
-  /** Seconds this run waits in line for the box; none is MUTATE_WAIT_SECONDS, and 0 takes no place in line. */
+  /** Seconds this run waits in line for the box; none or 0 takes no place in line. */
   readonly wait: number | undefined;
 }
 
@@ -1048,19 +1048,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
 
   yield* dockerReady();
 
-  yield* takeBox(
-    ask,
-    ask.wait ??
-      (yield* Config.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), "MUTATE_WAIT_SECONDS").pipe(
-        Config.withDefault(7200),
-        Effect.mapError(() =>
-          Stuck.make({
-            reason: "bad_wait",
-            detail: "MUTATE_WAIT_SECONDS is a whole number of seconds, 0 or more, when set",
-          }),
-        ),
-      )),
-  );
+  yield* takeBox(ask, ask.wait ?? 0);
   yield* sweepContainers(ask.lock);
 
   // The copy that goes in: the build commit and its parent, fetched with git's own plumbing into
