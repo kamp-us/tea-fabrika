@@ -79,6 +79,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      one. Plant a break yourself where a law looks weak, and in at least three laws you pick: in
      your head or in a scratch copy, never in the branch. In a read-only box a command that writes
      ends your turn with no answer, so plant by reading there.
+   - Delete at least one guarding check (a scope, a re-read, an equality, a schema, an own-key read)
+     and report whether a law went red. A guarding check whose deletion turns no law red is a finding.
    - A law moved onto a schema's Arbitrary keeps its old reach.
    - If secrets must stay out of records, URLs or spans, the plan's Law cell has `[secrets]` and
      the law generates flows: made-up words, keys and passes, operation orders, refusals and
@@ -135,6 +137,8 @@ These hold in every review and recheck, so the brief does not repeat them.
 - **Git in a worktree:** start every git command with `cd <worktree> || exit 1`. Ignore git's
   `gc.log` warnings. Check that `HEAD` is the brief's reviewed head before you read.
 - **Do not start subagents.** Do not wait on CI. Do not mark the pull request ready or merge it.
+- **Write scratch files only in your own scratch folder,** the one your brief names. A folder another agent
+  shares is never written.
 - **Tests one file at a time:** `nice -n 19 pnpm exec vitest run --maxWorkers=1 <one file>`, with
   `TYPESAFE_API_KEY` unset; the test config refuses a broad run. No `pnpm typecheck`: the build ran
   it on this head. Never run a test that sends a real signal, calls `launchctl`, starts Electron or

@@ -22,7 +22,7 @@ const Seed = Schema.Struct({ noise: Schema.String.check(Schema.isMaxLength(8)), 
 export type Seed = typeof Seed.Type;
 
 /** Six seeds: one run's whole supply of randomness for texts. */
-const seeds: Arbitrary.Arbitrary<ReadonlyArray<Seed>> = Arbitrary.array(Arbitrary.schema(Seed), {
+export const seeds: Arbitrary.Arbitrary<ReadonlyArray<Seed>> = Arbitrary.array(Arbitrary.schema(Seed), {
   minLength: 6,
   maxLength: 6,
 });
@@ -78,25 +78,27 @@ const code = (point: number): string => String.fromCodePoint(point);
 
 const NBSP = code(0xa0);
 
-const NEL = code(0x85);
+export const NEL = code(0x85);
 
-const LS = code(0x2028);
+export const LS = code(0x2028);
 
-const PS = code(0x2029);
+export const PS = code(0x2029);
 
-const BOM = code(0xfeff);
+export const BOM = code(0xfeff);
 
 const PADS = [" ", "\t", "\n", "\r\n", NBSP, "  "];
 
-const BREAKS = ["\n", "\r\n", "\r", "\n\n", NEL, LS, PS];
+export const BREAKS = ["\n", "\r\n", "\r", "\n\n", NEL, LS, PS];
 
-const CONTROLS = [
+export const CONTROLS = [
   ...Array.from({ length: 0x20 }, (_, point) => String.fromCodePoint(point)),
   String.fromCodePoint(0x7f),
   BOM,
 ];
 
-const LETTERS = [0xe9, 0x15f, 0x130, 0x131, 0x3b1, 0x436, 0x8bbe, 0xfffd, 0x1f600, 0x10ffff, 0xd800, 0xdc00].map(code);
+export const LETTERS = [0xe9, 0x15f, 0x130, 0x131, 0x3b1, 0x436, 0x8bbe, 0xfffd, 0x1f600, 0x10ffff, 0xd800, 0xdc00].map(
+  code,
+);
 
 const MARKS = [
   "---",

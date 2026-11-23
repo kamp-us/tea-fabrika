@@ -51,6 +51,9 @@ when to keep going and how to write for a reader who saw none of the work.
   sentence was reached. Each id gets a plant in a laws row's Plant cell, a wrong rule in product
   code that a generator missing that class would let pass: "trim the body, (a) red".
   `plancheck.sh --draft` refuses an id that no Plant cell names.
+- **Each check that guards data gets a class that reaches it.** A guarding check is a scope, a
+  re-read, an equality, a schema or an own-key read. Its class passes every earlier check, since an
+  input that fails an earlier one never reaches it, and its Laws row plants the deletion of that check.
 - When secrets must stay out of records, URLs or spans, use `[secrets]` and generated flows.
   Inspect every named output, including encoded URLs, and plant a leak into each.
 - `plancheck.sh` checks file owners and keeps exam paths with `tests`.
@@ -124,7 +127,8 @@ These hold in every plan round, so the brief does not repeat them.
 
 - **Write only the plan file.** No product, test or skill edit, no commit, no push: the lead reads,
   signs and commits the plan. Do not start subagents. Run no test, no install and no
-  `pnpm typecheck`; reading is the job.
+  `pnpm typecheck`; reading is the job. A scratch file goes only in your own scratch folder, the one
+  your brief names, never in a folder another agent shares.
 - **Git in a worktree:** start every git command with `cd <worktree> || exit 1`. Ignore git's
   `gc.log` warnings. Make a worktree only when the brief gives the command for it.
 - **Public repo:** no secrets, no absolute paths from anyone's machine, no personal names. Quote
