@@ -8,7 +8,7 @@ import { stop } from "./error.ts";
 import type { Document, Format } from "./format.ts";
 
 /** Where a file is read from, and the name a person reads. */
-interface Place {
+export interface Place {
   readonly path: string;
   readonly name: string;
 }
@@ -101,9 +101,9 @@ export const contents = Effect.fnUntraced(function* (app: string, place: Place, 
     );
 });
 
-/** Reads and parses one file. A missing file counts as empty, any other failure to read it fails as `read`. */
-export const load = Effect.fnUntraced(function* (app: string, format: Format, place: Place) {
-  const text = yield* contents(app, place);
+/** Reads and parses one file. A missing file counts as empty, any other failure to read it fails as `read`. The message ends with `closing`, the start's own sentence when none is given. */
+export const load = Effect.fnUntraced(function* (app: string, format: Format, place: Place, closing?: string) {
+  const text = yield* contents(app, place, closing);
 
-  return yield* Effect.fromResult(parse(app, format, place.name, text));
+  return yield* Effect.fromResult(parse(app, format, place.name, text, closing));
 });

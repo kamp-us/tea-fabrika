@@ -1,4 +1,4 @@
-// Today's CI: fixed host-law suites on disposable runners (macOS for next/'s launchd laws, Linux for P8).
+// Today's CI: fixed host-law suites on disposable runners (macOS for next/'s launchd laws and kalfa/config's file watch, Linux for P8).
 import { parse } from "yaml";
 import { allSteps, compact, map, sameEntries } from "./shared.ts";
 
@@ -32,6 +32,12 @@ const P8 = [
   ".github/ci/progress-reporter.integration.test.ts",
 ].join(" ");
 
+const CONFIG_WATCH = [
+  'git rev-parse HEAD > "$RUNNER_TEMP/config-watch-head.txt"',
+  'pnpm exec vitest run --project next-integration --maxWorkers=1 --fileParallelism=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/config-watch.json"',
+  "kalfa/config/src/SettingGroup.live.integration.test.ts",
+].join(" ");
+
 /** The host workflow keeps L13 as its default and exposes only fixed remote law suites. */
 export const lintHost = (text: string): string[] => {
   const errors: string[] = [];
@@ -63,13 +69,15 @@ export const lintHost = (text: string): string[] => {
         "e88-r6",
         "box",
         "p8",
-      ]), "H1: dispatch selects only l13, e88-r6, box or p8 and defaults to l13");
+        "config-watch",
+      ]), "H1: dispatch selects only l13, e88-r6, box, p8 or config-watch and defaults to l13");
 
   const jobs = map(workflow["jobs"]);
   const launchd = map(jobs["launchd"]);
   const e88 = map(jobs["e88-r6"]);
   const box = map(jobs["box"]);
   const p8 = map(jobs["p8"]);
+  const watch = map(jobs["config-watch"]);
   const l13 = allSteps(launchd).find((step) => step["name"] === "L13");
   const paths = map(on["pull_request"])["paths"];
   require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["pull_request", "workflow_dispatch"]) &&
@@ -81,7 +89,8 @@ export const lintHost = (text: string): string[] => {
     String(l13?.["run"]).includes(
       "pnpm exec vitest run --maxWorkers=1 --root e2e --fileParallelism=false --testTimeout=120000 --hookTimeout=120000 electron-launchd.visual.test.ts",
     ), "H2: L13 retains its automatic paths and default command");
-  require(JSON.stringify(Object.keys(jobs).toSorted()) === JSON.stringify(["box", "e88-r6", "launchd", "p8"]) &&
+  require(JSON.stringify(Object.keys(jobs).toSorted()) ===
+    JSON.stringify(["box", "config-watch", "e88-r6", "launchd", "p8"]) &&
     [launchd, e88, box].every((job) => job["runs-on"] === "macos-15" && job["timeout-minutes"] === 20) &&
     compact(e88["if"]) ===
       "github.event_name=='workflow_dispatch'&&inputs.suite=='e88-r6'", "H3: E88 R6 is dispatch-only on the existing macOS runner and time limit");
@@ -171,6 +180,36 @@ export const lintHost = (text: string): string[] => {
         "if-no-files-found": "error",
       }),
     ), "H9: p8 dispatch runs only the fixed P8 file at full depth on ubuntu-latest, with blocking failures and a proof saved after a failed law too");
+
+  const watchSteps = allSteps(watch);
+  const watchRun = watchSteps.find((step) => step["name"] === "R3 law");
+  const watchProof = watchSteps.find((step) => step["name"] === "R3 proof");
+  require(watch["runs-on"] === "macos-15" &&
+    watch["timeout-minutes"] === 20 &&
+    compact(watch["if"]) === "github.event_name=='workflow_dispatch'&&inputs.suite=='config-watch'" &&
+    String(watchRun?.["run"])
+      .replace(/\\\n\s*/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() === CONFIG_WATCH &&
+    JSON.stringify(watchRun?.["env"]) === JSON.stringify({ FABRIKA_TEST_DEPTH: "full" }) &&
+    Object.keys(map(workflow["env"])).length === 0 &&
+    Object.keys(map(watch["env"])).length === 0 &&
+    watch["continue-on-error"] === undefined &&
+    watchSteps.every(
+      (step) =>
+        step["continue-on-error"] === undefined && (step === watchRun || Object.keys(map(step["env"])).length === 0),
+    ) &&
+    watchRun?.["if"] === undefined &&
+    compact(watchProof?.["if"]) === "always()" &&
+    watchProof?.["uses"] === "actions/upload-artifact@v7" &&
+    sameEntries(
+      Object.entries(map(watchProof?.["with"])),
+      Object.entries({
+        name: "config-watch",
+        path: `\${{ runner.temp }}/config-watch*`,
+        "if-no-files-found": "error",
+      }),
+    ), "H10: config-watch dispatch runs only the fixed R3 file at full depth on macos-15, with blocking failures and a proof saved after a failed law too");
 
   const concurrency = map(workflow["concurrency"]);
   const group = /^host-\$\{\{(.+)\}\}-\$\{\{(.+)\}\}$/.exec(String(concurrency["group"]));
