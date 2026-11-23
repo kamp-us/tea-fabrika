@@ -426,6 +426,12 @@
       "imports": ["kalfa-diagnostics"]
     },
     {
+      "name": "kalfa-secrets",
+      "layer": 2,
+      "paths": ["kalfa/secrets/src"],
+      "imports": ["kalfa-config"]
+    },
+    {
       "name": "next-telemetry",
       "layer": 1,
       "paths": ["next/packages/libfabrika/src/telemetry"],
@@ -538,7 +544,8 @@
     "kalfa/diagnostics/src",
     "kalfa/git/src",
     "kalfa/github/src",
-    "kalfa/markdown/src"
+    "kalfa/markdown/src",
+    "kalfa/secrets/src"
   ],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],
   "allowed": [
