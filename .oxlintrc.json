@@ -743,6 +743,7 @@
       // The config engine moved to kalfa/config (our tooling is a few @kalfa packages grouped by domain) keeps the next/** rule block below, as its own
       // override, so the next/** block stays exactly next/** (edge-config.test.ts reads it by that).
       "files": [
+        "kalfa/cli/src/**",
         "kalfa/config/src/**",
         "kalfa/config/*.ts",
         "kalfa/diagnostics/src/**",
@@ -5546,6 +5547,58 @@
                 "message": "@kalfa/github reads GitHub's description through @octokit/openapi-types only, as types."
               }
             ]
+          }
+        ]
+      }
+    },
+    {
+      // @kalfa/cli (ticket 2076) reads no environment variable: what a subcommand needs is a setting it declares, so a run on one machine is the run on another.
+      // It is the one kalfa package whose `bin` reads `process` (to wait for standard output before it exits), so `process` itself is not banned: its `env` is,
+      // and so is the global object's way to it. An override replaces a rule's options, so this repeats the `kalfa/**/*` entries above. Its tests are left out.
+      "files": ["kalfa/cli/src/**"],
+      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
+          },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "process",
+            "property": "env",
+            "message": "@kalfa/cli reads no environment variable: what a subcommand needs is a setting it declares and reads through its own Configuration."
+          },
+          {
+            "object": "globalThis",
+            "property": "process",
+            "message": "@kalfa/cli reads no environment variable, and `globalThis.process` is the same door as `process`."
           }
         ]
       }

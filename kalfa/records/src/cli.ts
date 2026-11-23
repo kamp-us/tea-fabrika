@@ -1,6 +1,6 @@
 /**
- * `./cli`: the `records` command, the root a future `kalfa` finds through this package's `kalfa.cli`
- * field. One subcommand so far:
+ * `./cli`: the `records` command, the root a future `kalfa` will find once this package exports a `subcommand`
+ * made with `@kalfa/cli/Subcommand`. One subcommand so far:
  *
  *   records check [map|runbook]
  *
