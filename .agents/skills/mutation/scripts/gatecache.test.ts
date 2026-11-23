@@ -1,5 +1,6 @@
 import { it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import { expect } from "vitest";
 import { answer, File, memory, Row } from "./gate.test-support.ts";
 import { find, keep, key, version } from "./gatecache.ts";
@@ -70,7 +71,7 @@ it.effect.prop(
       const disk = memory();
       const summary = answer(outcome, survivors, seconds);
 
-      const kept = yield* keep("/gate", id, summary).pipe(Effect.provide(disk.layer));
+      const kept = yield* keep("/gate", id, summary, 7).pipe(Effect.provide(disk.layer));
       expect(kept).toBe(outcome !== "stuck");
 
       const found = yield* find("/gate", id).pipe(Effect.provide(disk.layer));
@@ -87,6 +88,42 @@ it.effect.prop(
       }
 
       expect(Option.isNone(yield* find("/gate", id).pipe(Effect.provide(disk.layer)))).toBe(true);
+    }),
+  run,
+);
+
+const HOUR = 3_600_000;
+
+it.effect.prop(
+  "a save drops the saved runs older than the days it is given and none newer, and never the run it saves",
+  {
+    ages: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 24 * 20 }))).check(
+      Schema.isMaxLength(8),
+    ),
+    days: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10 })),
+    onTheDay: Schema.Boolean,
+  },
+  ({ ages, days, onTheDay }) =>
+    Effect.gen(function* () {
+      const disk = memory();
+      const now = 100 * 24 * HOUR;
+      // One run is exactly `days` old when asked: still kept, as it is not older than that.
+      const hours = onTheDay ? [...ages, days * 24] : ages;
+
+      for (const [i, age] of hours.entries()) {
+        yield* TestClock.setTime(now - age * HOUR);
+        yield* keep("/gate", `old${i}`, answer("done", [], 1), 36_500).pipe(Effect.provide(disk.layer));
+      }
+
+      yield* TestClock.setTime(now);
+      yield* keep("/gate", "fresh", answer("done", [], 1), days).pipe(Effect.provide(disk.layer));
+
+      for (const [i, age] of hours.entries()) {
+        const there = Option.isSome(yield* find("/gate", `old${i}`).pipe(Effect.provide(disk.layer)));
+        expect(there, `a run ${age} hours old, kept for ${days} days`).toBe(age <= days * 24);
+      }
+
+      expect(Option.isSome(yield* find("/gate", "fresh").pipe(Effect.provide(disk.layer)))).toBe(true);
     }),
   run,
 );

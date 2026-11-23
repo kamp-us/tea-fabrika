@@ -27,6 +27,7 @@
 //   MUTATE_SECONDS       300   how long Stryker may test mutants: run.sh's cap, in whole seconds
 //   MUTATE_FILES         8     the most product files one run takes; more is refused, naming the count
 //   MUTATE_WAIT_SECONDS  7200  the longest a run waits in line for the box; then it gives up its place (exit 2)
+//   MUTATE_KEEP_DAYS     7     how long a saved run is kept: each save drops the ones older than this
 //   BOXES                the boxes folder beside the main checkout, as env.sh finds it; the one Docker
 //                        box's lock is `<BOXES>/state/docker.lock`
 //
@@ -91,6 +92,9 @@ const SECONDS = Config.schema(AtLeastOne, "MUTATE_SECONDS").pipe(Config.withDefa
 
 /** The most product files one run takes. */
 const FILES = Config.schema(AtLeastOne, "MUTATE_FILES").pipe(Config.withDefault(8));
+
+/** How many days a saved run is kept: a save drops the older ones. */
+const KEEP = Config.schema(AtLeastOne, "MUTATE_KEEP_DAYS").pipe(Config.withDefault(7));
 
 /** The longest a run waits in line for the box, in seconds. */
 const WAIT = Config.schema(AtLeastOne, "MUTATE_WAIT_SECONDS").pipe(Config.withDefault(7200));
@@ -407,6 +411,8 @@ export type Run = { readonly summary: Summary; readonly reused: boolean; readonl
 export const judge = <E, R>(ask: {
   readonly dir: string;
   readonly key: string;
+  /** The days a saved run is kept. */
+  readonly days: number;
   readonly answers: Effect.Effect<ReadonlyArray<Answer>, E, R>;
   readonly box: (
     saved: Effect.Effect<Option.Option<Run>, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path>,
@@ -422,7 +428,7 @@ export const judge = <E, R>(ask: {
     const run = Option.isSome(first) ? first.value : yield* ask.box(saved);
 
     if (!run.reused) {
-      yield* Saved.keep(ask.dir, ask.key, run.summary);
+      yield* Saved.keep(ask.dir, ask.key, run.summary, ask.days);
     }
 
     const answers = yield* ask.answers;
@@ -636,13 +642,14 @@ const check = Effect.fnUntraced(function* (ask: {
   const path = yield* Path.Path;
   const started = yield* Clock.currentTimeMillis;
 
-  const { seconds, cap, wait } = yield* Effect.mapError(
+  const { seconds, cap, wait, days } = yield* Effect.mapError(
     Effect.gen(function* () {
-      return { seconds: yield* SECONDS, cap: yield* FILES, wait: yield* WAIT };
+      return { seconds: yield* SECONDS, cap: yield* FILES, wait: yield* WAIT, days: yield* KEEP };
     }),
     () =>
       Refused.make({
-        detail: "MUTATE_SECONDS, MUTATE_FILES and MUTATE_WAIT_SECONDS are whole numbers, 1 or more, when set",
+        detail:
+          "MUTATE_SECONDS, MUTATE_FILES, MUTATE_WAIT_SECONDS and MUTATE_KEEP_DAYS are whole numbers, 1 or more, when set",
       }),
   );
 
@@ -753,7 +760,7 @@ const check = Effect.fnUntraced(function* (ask: {
     label: `${path.basename(root)} ${pipe(tree, Str.slice(0, 7))}`,
     holder: heldBy(lock),
     alive,
-    say: (note) => Console.log(noteLine(note)),
+    say: (note) => Console.log(`survivors: ${noteLine(note)}`),
     poll: 5,
     every: 60,
     limit: wait,
@@ -784,6 +791,9 @@ const check = Effect.fnUntraced(function* (ask: {
         lock,
         "--cap",
         String(seconds),
+        // This run holds its place in line already.
+        "--wait",
+        "0",
       ],
       secondsFor(false, seconds) + DOCKER_SECONDS.build + 6 * DOCKER_SECONDS.call,
     );
@@ -806,6 +816,7 @@ const check = Effect.fnUntraced(function* (ask: {
   const judged = yield* judge({
     dir: path.join(boxes, "state", "gate"),
     key: Saved.key({ base, tree, files, version, seconds }),
+    days,
     answers: current,
     box: (saved) => inLine(queue, saved, start),
   });

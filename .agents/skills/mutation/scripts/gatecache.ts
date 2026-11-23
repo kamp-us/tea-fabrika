@@ -16,7 +16,7 @@
 // and applied to the saved result, so a line added after the run counts at once.
 //
 // A result lives in `<folder>/<key>.json`, in the boxes folder beside the main checkout, outside every
-// worktree. Only an answer of the box is saved (`done`, or `skip` when nothing could be sampled): a
+// worktree, and a save drops every result older than MUTATE_KEEP_DAYS (survivors.ts), the new one never. Only an answer of the box is saved (`done`, or `skip` when nothing could be sampled): a
 // `stuck` run says the box broke, and the next call must try again. A file that cannot be read
 // or decoded is a miss, never an error.
 import { createHash } from "node:crypto"; // edge: a hash of a short text, taken in one step; effect/crypto Digest is async and needs a layer
@@ -66,12 +66,37 @@ export const find = Effect.fnUntraced(function* (dir: string, id: string) {
   );
 });
 
+const DAY = 86_400_000;
+
+/**
+ * Drops each saved run of the folder that is more than `days` days old at `now`, and none other: a file
+ * that cannot be read is left, since it may be one being written.
+ */
+const prune = Effect.fnUntraced(function* (dir: string, days: number, now: number) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+
+  const names = Arr.filter(yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => [])), (name) =>
+    name.endsWith(".json"),
+  );
+
+  for (const name of names) {
+    const raw = yield* fs.readFileString(path.join(dir, name)).pipe(Effect.orElseSucceed(() => ""));
+
+    const entry = yield* Schema.decodeEffect(Schema.fromJsonString(Entry))(raw).pipe(Effect.orElseSucceed(() => null));
+
+    if (entry !== null && now - entry.saved > days * DAY) {
+      yield* fs.remove(path.join(dir, name), { force: true }).pipe(Effect.ignore);
+    }
+  }
+});
+
 /**
  * Saves an answer of the box under an id, and says whether it did: a `stuck` run is not saved. The
  * file is written whole beside its place and then moved there, so a call that reads it at that
- * moment sees all of it or none.
+ * moment sees all of it or none. Then every saved run older than `days` days is dropped.
  */
-export const keep = Effect.fnUntraced(function* (dir: string, id: string, summary: Summary) {
+export const keep = Effect.fnUntraced(function* (dir: string, id: string, summary: Summary, days: number) {
   if (summary.outcome === "stuck") {
     return false;
   }
@@ -87,6 +112,7 @@ export const keep = Effect.fnUntraced(function* (dir: string, id: string, summar
   );
 
   yield* fs.rename(part, target);
+  yield* prune(dir, days, yield* Clock.currentTimeMillis);
 
   return true;
 });

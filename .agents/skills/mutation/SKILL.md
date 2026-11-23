@@ -127,7 +127,9 @@ exits, and what it cannot see. It prints one line per survivor: `lived` (a law r
 passed), `no law ran`, or `no law loads` for a file no law reaches, then `static` lines Stryker
 skipped, then the counts and seconds. A scope past `MUTATE_FILES` is refused before Docker starts.
 A call whose base, tree, files and scripts match a saved run reads it and starts no box, and a call that
-needs the box waits its turn in line (`MUTATE_WAIT_SECONDS`, default 7200); the header says how.
+needs the box waits its turn in line (`MUTATE_WAIT_SECONDS`, default 7200); a save drops runs older than
+`MUTATE_KEEP_DAYS` (default 7). The header says how. `mutbox.ts run` takes a place in the same line, so
+a mutation step or a run by hand never jumps a waiting builder (`--wait 0` takes none).
 
 ## The hourly run, in CI
 

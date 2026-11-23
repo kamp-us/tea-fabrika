@@ -63,7 +63,7 @@ const TICKET = new RegExp(`^\\d{${WIDTH}}\\.json$`);
 
 /** The words of a note for the terminal. Pure. */
 export const noteLine = (note: Note): string =>
-  `survivors: waiting for the box, place ${note.place} of ${note.total}, ${note.waited} s in line; ${
+  `waiting for the box, place ${note.place} of ${note.total}, ${note.waited} s in line; ${
     note.ahead === null
       ? note.holder === null
         ? "none ahead"
@@ -148,61 +148,66 @@ export const waiting = Effect.fnUntraced(function* (ask: Pick<Line, "dir" | "ali
  * the run ahead saved ends the wait with no box. At the head of the line with the box free, `use` runs; it gives
  * none when the box was taken by a run outside the line in that moment, and the wait goes on in the same place.
  */
-export const inLine = <A, E1, R1, E2, R2>(
+export const held = <A, E1, R1, E2, R2>(
   ask: Line,
   saved: Effect.Effect<Option.Option<A>, E1, R1>,
   use: Effect.Effect<Option.Option<A>, E2, R2>,
 ) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const me = yield* join(ask);
-      const started = yield* Clock.currentTimeMillis;
-      let said: number | null = null;
+  Effect.gen(function* () {
+    const me = yield* join(ask);
+    const started = yield* Clock.currentTimeMillis;
+    let said: number | null = null;
 
-      for (;;) {
-        const found = yield* saved;
+    for (;;) {
+      const found = yield* saved;
 
-        if (Option.isSome(found)) {
-          return found.value;
-        }
-
-        const line = yield* waiting(ask);
-        const holder = yield* ask.holder;
-        const index = Arr.findFirstIndex(line, (ticket) => ticket.name === me.name);
-
-        if (Option.isNone(index)) {
-          yield* restore(ask.dir, me);
-        }
-
-        if (Option.getOrNull(index) === 0 && holder === null) {
-          const ran = yield* use;
-
-          if (Option.isSome(ran)) {
-            return ran.value;
-          }
-        }
-
-        const now = yield* Clock.currentTimeMillis;
-        const waited = Math.floor((now - started) / 1000);
-
-        if (waited >= ask.limit) {
-          return yield* Waited.make({ seconds: waited });
-        }
-
-        if (said === null || now - said >= ask.every * 1000) {
-          said = now;
-          const at = Option.getOrElse(index, () => line.length);
-
-          yield* ask.say({
-            place: at + 1,
-            total: Math.max(line.length, at + 1),
-            ahead: line[at - 1] ?? null,
-            holder,
-            waited,
-          });
-        }
-
-        yield* Effect.sleep(Duration.seconds(ask.poll));
+      if (Option.isSome(found)) {
+        return found.value;
       }
-    }),
-  );
+
+      const line = yield* waiting(ask);
+      const holder = yield* ask.holder;
+      const index = Arr.findFirstIndex(line, (ticket) => ticket.name === me.name);
+
+      if (Option.isNone(index)) {
+        yield* restore(ask.dir, me);
+      }
+
+      if (Option.getOrNull(index) === 0 && holder === null) {
+        const ran = yield* use;
+
+        if (Option.isSome(ran)) {
+          return ran.value;
+        }
+      }
+
+      const now = yield* Clock.currentTimeMillis;
+      const waited = Math.floor((now - started) / 1000);
+
+      if (waited >= ask.limit) {
+        return yield* Waited.make({ seconds: waited });
+      }
+
+      if (said === null || now - said >= ask.every * 1000) {
+        said = now;
+        const at = Option.getOrElse(index, () => line.length);
+
+        yield* ask.say({
+          place: at + 1,
+          total: Math.max(line.length, at + 1),
+          ahead: line[at - 1] ?? null,
+          holder,
+          waited,
+        });
+      }
+
+      yield* Effect.sleep(Duration.seconds(ask.poll));
+    }
+  });
+
+/** `held` in a scope of its own: the place is given back as soon as `use` has run. */
+export const inLine = <A, E1, R1, E2, R2>(
+  ask: Line,
+  saved: Effect.Effect<Option.Option<A>, E1, R1>,
+  use: Effect.Effect<Option.Option<A>, E2, R2>,
+) => Effect.scoped(held(ask, saved, use));

@@ -3,6 +3,7 @@
 //
 //   node mutbox.ts run --checkout <repo> --ticket <n> --build <commit> --related <a.test.ts,b.test.ts>
 //                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>] [--cap <n>] [--plan <file>]
+//                      [--wait <seconds>]
 //   node mutbox.ts gc --lock <file>
 //
 // `run` prints one JSON line and writes the same value to <out>/mutbox.json: outcome `done` (exit
@@ -29,7 +30,11 @@
 //   5. the commit's Node is not the image's        stuck node_mismatch
 //   6. the time limit hits                         docker kill, stuck time_limit, no container left
 //   7. the container is killed mid-run             stuck killed, no container left
-//   8. two runs at once                            the second is stuck docker_busy (one Docker box)
+//   8. two runs at once                            the second takes a place in line (`docker.queue`
+//                                                  beside the lock) and waits `--wait` seconds, else
+//                                                  MUTATE_WAIT_SECONDS (7200), for its turn, then is
+//                                                  stuck docker_busy (one Docker box); 0 waits not at
+//                                                  all, and a run ahead of it in line goes first
 //   9. a dead run left its lock or its container   the lock is taken over, the container removed
 //  10. a path with spaces                          runs; a path Docker's --mount cannot take
 //                                                  (a comma, a quote, a newline) is stuck bad_path
@@ -72,6 +77,7 @@ import {
   pipe,
   String as Str,
   Clock,
+  Config,
   Console,
   Effect,
   FileSystem,
@@ -87,6 +93,8 @@ import type { PlatformError } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import { parseSync, Visitor } from "oxc-parser";
+import { held, noteLine } from "../../mutation/scripts/gatequeue.ts";
+import type { Line } from "../../mutation/scripts/gatequeue.ts";
 
 /** Docker's own label on every image and container this script makes, so cleanup finds them. */
 export const LABEL = "fabrika.mutbox=1";
@@ -803,6 +811,50 @@ const takeLock = Effect.fnUntraced(function* (lock: string) {
   );
 });
 
+/**
+ * The Docker box, in line. `wait` seconds is the longest this run waits for its turn: it takes a place in
+ * `docker.queue` beside the lock, says its place each minute on stderr, and takes the lock when it is first
+ * live in line and the lock is free, so no run jumps one that waited longer (`gatequeue.ts`). A run that
+ * waited its time out is stuck `docker_busy`, as one that found the box busy always was. 0 takes no place:
+ * the lock or `docker_busy` at once, for a caller that holds a place already (`survivors.ts`).
+ */
+const takeBox = Effect.fnUntraced(function* (ask: Pick<Ask, "lock" | "ticket" | "checkout">, wait: number) {
+  if (wait === 0) {
+    return yield* takeLock(ask.lock);
+  }
+
+  const path = yield* Path.Path;
+
+  const queue: Line = {
+    dir: path.join(path.dirname(ask.lock), "docker.queue"),
+    pid: process.pid,
+    label: `mutbox, ticket ${ask.ticket}, ${path.basename(ask.checkout)}`,
+    holder: heldBy(ask.lock),
+    alive,
+    say: (note) => Console.error(`mutbox: ${noteLine(note)}`),
+    poll: 5,
+    every: 60,
+    limit: wait,
+  };
+
+  const taken = takeLock(ask.lock).pipe(
+    Effect.as(Option.some<void>(undefined)),
+    Effect.catchIf(
+      (stuck) => stuck.reason === "docker_busy",
+      () => Effect.succeed(Option.none<void>()),
+    ),
+  );
+
+  yield* held(queue, Effect.succeed(Option.none<void>()), taken).pipe(
+    Effect.catchTag("Waited", (waited) =>
+      Stuck.make({
+        reason: "docker_busy",
+        detail: `waited ${waited.seconds} s in line for the Docker box (MUTATE_WAIT_SECONDS); one at a time`,
+      }),
+    ),
+  );
+});
+
 /** Every container a run under this lock made. Whoever holds the lock may remove them. */
 const sweepContainers = Effect.fnUntraced(function* (lock: string) {
   const listed = yield* docker(["ps", "-aq", "--filter", `label=${OWNER}=${lock}`]);
@@ -919,6 +971,8 @@ interface Ask {
   readonly cap: number | undefined;
   /** The approved plan, from the current folder, as drive reads it; its build-owned files must get a mutant. */
   readonly plan: string | undefined;
+  /** Seconds this run waits in line for the box; none is MUTATE_WAIT_SECONDS, and 0 takes no place in line. */
+  readonly wait: number | undefined;
 }
 
 /** A run that ended before the container answered: what was asked, and why it is stuck. */
@@ -993,7 +1047,20 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   }
 
   yield* dockerReady();
-  yield* takeLock(ask.lock);
+
+  yield* takeBox(
+    ask,
+    ask.wait ??
+      (yield* Config.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), "MUTATE_WAIT_SECONDS").pipe(
+        Config.withDefault(7200),
+        Effect.mapError(() =>
+          Stuck.make({
+            reason: "bad_wait",
+            detail: "MUTATE_WAIT_SECONDS is a whole number of seconds, 0 or more, when set",
+          }),
+        ),
+      )),
+  );
   yield* sweepContainers(ask.lock);
 
   // The copy that goes in: the build commit and its parent, fetched with git's own plumbing into
@@ -1264,6 +1331,7 @@ const run = Command.make(
     seconds: Flag.Int("seconds").pipe(Flag.withDefault(undefined)),
     cap: Flag.Int("cap").pipe(Flag.withDefault(undefined)),
     plan: Flag.String("plan").pipe(Flag.withDefault(undefined)),
+    wait: Flag.Int("wait").pipe(Flag.withDefault(undefined)),
   },
   Effect.fn("mutbox.run")(function* (ask) {
     const fs = yield* FileSystem.FileSystem;

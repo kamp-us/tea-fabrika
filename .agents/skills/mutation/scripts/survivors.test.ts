@@ -584,6 +584,7 @@ describe("survivors, a saved run", () => {
           const got = yield* judge({
             dir: "/gate",
             key: key(files),
+            days: 7,
             answers: Effect.succeed([]),
             box: made(() => void (started += 1)),
           }).pipe(Effect.provide(disk.layer));
@@ -623,6 +624,7 @@ describe("survivors, a saved run", () => {
           judge({
             dir: "/gate",
             key: "k1",
+            days: 7,
             answers: Effect.sync(() => {
               read += 1;
 
