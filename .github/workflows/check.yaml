@@ -567,7 +567,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.select.outputs.projects)[matrix.shard] == 'tooling' && 33 || 20 }}
     strategy:
-      fail-fast: true
+      fail-fast: false # TEMPORARY, one run lists every slow law
       max-parallel: 9
       matrix:
         shard: ${{ fromJSON(needs.select.outputs.legs || '["1"]') }}
