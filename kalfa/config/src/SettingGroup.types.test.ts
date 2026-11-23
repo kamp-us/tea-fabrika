@@ -93,9 +93,9 @@ const liveLast = base.pipe(
 
 // FO6 (ticket 1842): file-only is a mark in the type, as `live` is. The same combinators, with `fileOnly` and `live` in
 // each order and among the others.
-const lockedAlone = base.pipe(Setting.withDescription("Who carries a rule over."), Setting.fileOnly);
+const fileOnlyAlone = base.pipe(Setting.withDescription("Who carries a rule over."), Setting.fileOnly);
 
-const lockedFirst = base.pipe(
+const fileOnlyFirst = base.pipe(
   Setting.fileOnly,
   Setting.withDefault("people"),
   Setting.withDescription("Who carries a rule over."),
@@ -103,7 +103,7 @@ const lockedFirst = base.pipe(
   Setting.files(["repo"]),
 );
 
-const lockedLast = base.pipe(
+const fileOnlyLast = base.pipe(
   Setting.live,
   Setting.files(["repo"]),
   Setting.withDefault("robots"),
@@ -111,7 +111,7 @@ const lockedLast = base.pipe(
   Setting.withDescription("Who carries a rule over."),
 );
 
-const lockedMiddle = base.pipe(
+const fileOnlyMiddle = base.pipe(
   Setting.withDescription("Who carries a rule over."),
   Setting.fileOnly,
   Setting.files(["repo", "user"]),
@@ -140,13 +140,13 @@ const tries = Setting.make("quality.max-2-tries", Schema.Int).pipe(
 const group = SettingGroup.make("demo", port, carry, tries);
 
 // FO6: a group with a live file-only setting and a restart setting that a flag may set.
-const locked = SettingGroup.make("demo", lockedLast, port);
+const fileOnlyGroup = SettingGroup.make("demo", fileOnlyLast, port);
 
-type LockedSettings = typeof locked.settings;
+type FileOnlySettings = typeof fileOnlyGroup.settings;
 
-type LockedValues = Effect.Success<typeof locked>;
+type FileOnlyValues = Effect.Success<typeof fileOnlyGroup>;
 
-const lockedFlags = SettingGroup.flags(locked);
+const fileOnlyFlags = SettingGroup.flags(fileOnlyGroup);
 
 type Values = Effect.Success<typeof group>;
 
@@ -176,13 +176,13 @@ const refusals = () => [
   carry.pipe(Setting.live),
 
   // @ts-expect-error FO6: a file-only setting is not made file-only twice
-  lockedAlone.pipe(Setting.fileOnly),
+  fileOnlyAlone.pipe(Setting.fileOnly),
 
   // @ts-expect-error FO6: a live file-only setting is not made file-only twice
-  lockedFirst.pipe(Setting.fileOnly),
+  fileOnlyFirst.pipe(Setting.fileOnly),
 
   // @ts-expect-error FO6: a file-only setting has no flag, so a hand-written record that names it does not compile
-  SettingGroup.layer(locked, { version: "1.2.3", flags: { "delivery.carry-rule": Option.none<string>() } }),
+  SettingGroup.layer(fileOnlyGroup, { version: "1.2.3", flags: { "delivery.carry-rule": Option.none<string>() } }),
 
   Effect.gen(function* () {
     // @ts-expect-error T4: a setting is not an Effect, it is read only through its group
@@ -209,17 +209,17 @@ it("T1 type: a setting piped through any of the four combinators, in any order, 
 });
 
 it("FO6 type: a setting piped through `fileOnly` and `live` with the others, in any order, carries both marks, a group reads a live file-only setting as `Live`, and a file-only setting has no flag", () => {
-  expectTypeOf(lockedAlone).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false, true>>();
-  expectTypeOf(lockedFirst).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
-  expectTypeOf(lockedLast).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
-  expectTypeOf(lockedMiddle).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
-  expectTypeOf(lockedAlone.fileOnly).toEqualTypeOf<true>();
-  expectTypeOf(lockedAlone.live).toEqualTypeOf<false>();
-  expectTypeOf(lockedLast.fileOnly).toEqualTypeOf<true>();
-  expectTypeOf(lockedLast.live).toEqualTypeOf<true>();
+  expectTypeOf(fileOnlyAlone).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false, true>>();
+  expectTypeOf(fileOnlyFirst).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
+  expectTypeOf(fileOnlyLast).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
+  expectTypeOf(fileOnlyMiddle).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
+  expectTypeOf(fileOnlyAlone.fileOnly).toEqualTypeOf<true>();
+  expectTypeOf(fileOnlyAlone.live).toEqualTypeOf<false>();
+  expectTypeOf(fileOnlyLast.fileOnly).toEqualTypeOf<true>();
+  expectTypeOf(fileOnlyLast.live).toEqualTypeOf<true>();
 
   // The file-only mark changes nothing about the value a group reads.
-  expectTypeOf<LockedValues>().toEqualTypeOf<{
+  expectTypeOf<FileOnlyValues>().toEqualTypeOf<{
     readonly carryRule: SettingGroup.Live<Rule>;
     readonly port: number;
   }>();
@@ -228,9 +228,9 @@ it("FO6 type: a setting piped through `fileOnly` and `live` with the others, in 
   // a file-only one.
   type Keys = "instance.port" | "config.watch.debounce";
 
-  expectTypeOf<keyof typeof lockedFlags>().toEqualTypeOf<Keys>();
-  expectTypeOf<keyof SettingGroup.FlagValues<LockedSettings>>().toEqualTypeOf<Keys>();
-  expectTypeOf<"delivery.carry-rule">().not.toExtend<keyof typeof lockedFlags>();
+  expectTypeOf<keyof typeof fileOnlyFlags>().toEqualTypeOf<Keys>();
+  expectTypeOf<keyof SettingGroup.FlagValues<FileOnlySettings>>().toEqualTypeOf<Keys>();
+  expectTypeOf<"delivery.carry-rule">().not.toExtend<keyof typeof fileOnlyFlags>();
   expectTypeOf(refusals).toBeFunction();
 });
 

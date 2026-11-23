@@ -675,7 +675,7 @@ describe("V8 own keys only", () => {
 // ---------------------------------------------------------------------------------------------
 
 /** A group of at most three settings: a live file-only one, a live one that is not, and up to one restart setting. */
-const LockedShape = Schema.Struct({
+const FileOnlyShape = Schema.Struct({
   app: Word,
   first: Slot,
   second: Slot,
@@ -686,7 +686,7 @@ const LockedShape = Schema.Struct({
 describe("FO5 a live file-only setting", () => {
   it.effect.prop(
     "a setting marked live and file-only, in either pipe order, beside a live setting that is not file-only, follows its files as a fresh start does and is never read from the environment, and a variable that names it stops the start",
-    { shape: LockedShape, walked: Walk },
+    { shape: FileOnlyShape, walked: Walk },
     ({ shape, walked }) =>
       Effect.gen(function* () {
         const reached = new Set<string>();
@@ -698,9 +698,9 @@ describe("FO5 a live file-only setting", () => {
             ...shape.rest.map((slot) => ({ ...slot, live: false })),
           ];
 
-          const [locked, open] = specs;
+          const [fileOnlySetting, open] = specs;
 
-          if (locked === undefined || open === undefined) {
+          if (fileOnlySetting === undefined || open === undefined) {
             return;
           }
 
@@ -717,7 +717,10 @@ describe("FO5 a live file-only setting", () => {
             originsNow(step.rig).pipe(
               Effect.tap((origins) =>
                 Effect.sync(() => {
-                  expect(origins[named(locked)], `${named(locked)} after ${step.done}`).not.toMatchObject({
+                  expect(
+                    origins[named(fileOnlySetting)],
+                    `${named(fileOnlySetting)} after ${step.done}`,
+                  ).not.toMatchObject({
                     _tag: "env",
                   });
                   expect(origins[named(open)], `${named(open)} after ${step.done}`).toEqual({
@@ -735,7 +738,7 @@ describe("FO5 a live file-only setting", () => {
           // With a variable that names it, in any state of the files, the start stops with the one error of FO1.
           for (const held of [false, true]) {
             const exit = yield* boot(group, {
-              env: { [variable(shape.app, locked)]: "4098" },
+              env: { [variable(shape.app, fileOnlySetting)]: "4098" },
               texts: held ? { repo: render(specs, walked.first, 0) } : {},
               collect: false,
             }).pipe(Effect.exit);
@@ -752,7 +755,9 @@ describe("FO5 a live file-only setting", () => {
             if (Schema.is(SettingGroup.SettingsError)(error)) {
               expect(error.reason, error.message).toBe("scope");
               expect(
-                error.message.startsWith(`${variable(shape.app, locked)}: ${named(locked)} may be set only in `),
+                error.message.startsWith(
+                  `${variable(shape.app, fileOnlySetting)}: ${named(fileOnlySetting)} may be set only in `,
+                ),
                 error.message,
               ).toBe(true);
             }

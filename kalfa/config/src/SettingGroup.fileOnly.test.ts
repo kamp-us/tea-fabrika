@@ -566,7 +566,9 @@ it.effect.prop(
       }
 
       // Every class is reached in every run, and the read is what tells it apart: a provider that keeps an empty variable
-      // reads it, and no other class is read by any provider.
+      // reads it, and no near name is read by any provider. A child variable of a table-valued setting is the one class that
+      // may be either: today the read ignores it, and once ticket 1997 reads a variable for each key of a table it reads it.
+      // Either way the oracle above holds the stop to the read, so a read child variable must stop the start.
       for (const kind of ["number", "table"]) {
         expect(
           reached.has(`${kind}, empty, provider that keeps empty strings read`),
@@ -580,7 +582,12 @@ it.effect.prop(
           "the name in lower case",
           "a child variable",
         ]) {
-          expect(reached.has(`${kind}, ${near} ignored`), `a run reaches ${kind}, ${near}`).toBe(true);
+          const either = kind === "table" && near === "a child variable";
+
+          expect(
+            reached.has(`${kind}, ${near} ignored`) || (either && reached.has(`${kind}, ${near} read`)),
+            `a run reaches ${kind}, ${near}`,
+          ).toBe(true);
         }
       }
     }),
@@ -720,20 +727,20 @@ it.effect.prop(
   { input: StopOrder },
   ({ input: { app, entries, swap, junk, flagText } }) =>
     Effect.gen(function* () {
-      const [lock, second, third] = entries;
+      const [fileOnlyEntry, second, third] = entries;
 
-      if (lock === undefined || second === undefined || third === undefined) {
+      if (fileOnlyEntry === undefined || second === undefined || third === undefined) {
         return;
       }
 
       // The group the faults are made against: the file-only setting first, its variable set, then a setting of the repo file only, then one of the user file only.
       const group = makeGroup(app, [
-        declare(named(lock), { fileOnly: true }),
+        declare(named(fileOnlyEntry), { fileOnly: true }),
         declare(named(second), { files: ["repo"] }),
         declare(named(third), { files: ["user"] }),
       ]);
 
-      const withVariable = environment({ [variable(app, lock)]: String(lock.seed + 1) });
+      const withVariable = environment({ [variable(app, fileOnlyEntry)]: String(fileOnlyEntry.seed + 1) });
       const reached = new Set<string>();
 
       // A file's fault, or a newer minimum version, with the variable set: the file's error, or `version`, is the one.
@@ -745,7 +752,9 @@ it.effect.prop(
 
         expect(error.reason, `${fault.label}: ${error.message}`).toBe(fault.reason);
         expect(error.file, fault.label).toBeDefined();
-        expect(error.message.startsWith(`${variable(app, lock)}:`), `${fault.label}: ${error.message}`).toBe(false);
+        expect(error.message.startsWith(`${variable(app, fileOnlyEntry)}:`), `${fault.label}: ${error.message}`).toBe(
+          false,
+        );
         reached.add(fault.label);
       }
 
@@ -753,18 +762,18 @@ it.effect.prop(
       const flagged = seen(
         (yield* start(group, {
           env: withVariable,
-          flags: { [named(lock)]: Option.some(flagText) },
+          flags: { [named(fileOnlyEntry)]: Option.some(flagText) },
         })).exit,
       );
 
       expect(flagged.reason).toBe("scope");
-      expect(flagged.message.startsWith(`--${named(lock)}:`), flagged.message).toBe(true);
-      expect(flagged.message.includes(variable(app, lock))).toBe(false);
+      expect(flagged.message.startsWith(`--${named(fileOnlyEntry)}:`), flagged.message).toBe(true);
+      expect(flagged.message.includes(variable(app, fileOnlyEntry))).toBe(false);
       reached.add("flag");
 
       // Two file-only settings with their variables set: the first in the group's order is the one named.
-      const locks = [lock, second];
-      const ordered = swap ? [...locks].reverse() : locks;
+      const fileOnlyPair = [fileOnlyEntry, second];
+      const ordered = swap ? [...fileOnlyPair].reverse() : fileOnlyPair;
 
       const pair = makeGroup(app, [
         ...ordered.map((entry) => declare(named(entry), { fileOnly: true })),
@@ -774,7 +783,7 @@ it.effect.prop(
       const both = seen(
         (yield* start(pair, {
           env: environment({
-            [variable(app, lock)]: String(lock.seed + 1),
+            [variable(app, fileOnlyEntry)]: String(fileOnlyEntry.seed + 1),
             [variable(app, second)]: String(second.seed + 1),
           }),
         })).exit,
@@ -789,16 +798,19 @@ it.effect.prop(
       reached.add("first of two");
 
       // A refused variable of a setting earlier in the group's order comes before a later file-only setting's stop.
-      const earlier = makeGroup(app, [declare(named(second)), declare(named(lock), { fileOnly: true })]);
+      const earlier = makeGroup(app, [declare(named(second)), declare(named(fileOnlyEntry), { fileOnly: true })]);
 
       const refused = seen(
         (yield* start(earlier, {
-          env: environment({ [variable(app, second)]: junk, [variable(app, lock)]: String(lock.seed + 1) }),
+          env: environment({
+            [variable(app, second)]: junk,
+            [variable(app, fileOnlyEntry)]: String(fileOnlyEntry.seed + 1),
+          }),
         })).exit,
       );
 
       expect(refused.reason, refused.message).toBe("invalid");
-      expect(refused.message.includes(variable(app, lock))).toBe(false);
+      expect(refused.message.includes(variable(app, fileOnlyEntry))).toBe(false);
       reached.add("earlier refusal");
 
       // Every class is reached in every run.
