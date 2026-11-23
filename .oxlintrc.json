@@ -743,7 +743,8 @@
         "kalfa/diagnostics/src/**",
         "kalfa/git/src/**",
         "kalfa/github/src/**",
-        "kalfa/markdown/src/**"
+        "kalfa/markdown/src/**",
+        "kalfa/secrets/src/**"
       ],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
       "rules": {
@@ -5541,6 +5542,393 @@
                 "message": "@kalfa/github reads GitHub's description through @octokit/openapi-types only, as types."
               }
             ]
+          }
+        ]
+      }
+    },
+    {
+      // @kalfa/secrets (ticket 2053) holds secrets by name and signs with keys. It imports `@kalfa/config` and no other kalfa or repo package (decision 0047: it is usable alone), no Telemetry (its spans are made with `Effect.fn`), no Node module and no platform package, and prints nothing: a console line is a place a value could land. `node:*` holds `node:fs` and not `node:fs/promises`, so both spellings are listed, and every name of Node 26's
+      // `require("node:module").builtinModules` is written bare below, subpaths included (regenerate the list with that call when Node moves). `@kalfa/config`'s subpaths stay refused: only its root entry is let through. Its tests, test support and `StoreTest.ts` (the `/test` entry point, which loads `@effect/vitest`) are left out, and `MemoryStore.ts` has its own override below that refuses every kalfa package. An override replaces a rule's options, so this repeats the base entries.
+      "files": ["kalfa/secrets/src/**"],
+      "excludeFiles": [
+        "kalfa/secrets/src/**/*.test.ts",
+        "kalfa/secrets/src/**/*.test-support.ts",
+        "kalfa/secrets/src/StoreTest.ts",
+        "kalfa/secrets/src/MemoryStore.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "../../**", "!@kalfa/config"],
+                "message": "@kalfa/secrets imports `@kalfa/config`'s root and nothing else of ours: not its other entry points, not another kalfa package, not `@kampus/vitest`, and nothing of this repo (decision 0047)."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/secrets imports no Telemetry: its span is made with Effect.fn."
+              },
+              {
+                "group": ["node:*", "node:*/**", "@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/secrets takes values and does no IO: no Node module and no platform package."
+              },
+              {
+                "group": [
+                  "_http_agent",
+                  "_http_agent/**",
+                  "_http_client",
+                  "_http_client/**",
+                  "_http_common",
+                  "_http_common/**",
+                  "_http_incoming",
+                  "_http_incoming/**",
+                  "_http_outgoing",
+                  "_http_outgoing/**",
+                  "_http_server",
+                  "_http_server/**",
+                  "_tls_common",
+                  "_tls_common/**",
+                  "_tls_wrap",
+                  "_tls_wrap/**",
+                  "assert",
+                  "assert/**",
+                  "assert/strict",
+                  "async_hooks",
+                  "async_hooks/**",
+                  "buffer",
+                  "buffer/**",
+                  "child_process",
+                  "child_process/**",
+                  "cluster",
+                  "cluster/**",
+                  "console",
+                  "console/**",
+                  "constants",
+                  "constants/**",
+                  "crypto",
+                  "crypto/**",
+                  "dgram",
+                  "dgram/**",
+                  "diagnostics_channel",
+                  "diagnostics_channel/**",
+                  "dns",
+                  "dns/**",
+                  "dns/promises",
+                  "domain",
+                  "domain/**",
+                  "events",
+                  "events/**",
+                  "fs",
+                  "fs/**",
+                  "fs/promises",
+                  "http",
+                  "http/**",
+                  "http2",
+                  "http2/**",
+                  "https",
+                  "https/**",
+                  "inspector",
+                  "inspector/**",
+                  "inspector/promises",
+                  "module",
+                  "module/**",
+                  "net",
+                  "net/**",
+                  "os",
+                  "os/**",
+                  "path",
+                  "path/**",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "perf_hooks/**",
+                  "process",
+                  "process/**",
+                  "punycode",
+                  "punycode/**",
+                  "querystring",
+                  "querystring/**",
+                  "readline",
+                  "readline/**",
+                  "readline/promises",
+                  "repl",
+                  "repl/**",
+                  "stream",
+                  "stream/**",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "string_decoder/**",
+                  "sys",
+                  "sys/**",
+                  "timers",
+                  "timers/**",
+                  "timers/promises",
+                  "tls",
+                  "tls/**",
+                  "trace_events",
+                  "trace_events/**",
+                  "tty",
+                  "tty/**",
+                  "url",
+                  "url/**",
+                  "util",
+                  "util/**",
+                  "util/types",
+                  "v8",
+                  "v8/**",
+                  "vm",
+                  "vm/**",
+                  "wasi",
+                  "wasi/**",
+                  "worker_threads",
+                  "worker_threads/**",
+                  "zlib",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/secrets takes values and does no IO: no Node module, written without its node: prefix either."
+              }
+            ]
+          }
+        ],
+        "eslint/no-console": "error",
+        "eslint/no-new-func": "error",
+        "eslint/no-restricted-globals": [
+          "error",
+          { "name": "console", "message": "@kalfa/secrets prints nothing." },
+          { "name": "process", "message": "@kalfa/secrets reads no process and no environment." },
+          { "name": "Buffer", "message": "@kalfa/secrets uses no Node global." },
+          {
+            "name": "globalThis",
+            "message": "A ban on `process` alone misses `globalThis.process`: no global object here."
+          },
+          { "name": "global", "message": "@kalfa/secrets uses no Node global." },
+          { "name": "self", "message": "@kalfa/secrets uses no global object." },
+          { "name": "window", "message": "@kalfa/secrets uses no global object." },
+          { "name": "Function", "message": "@kalfa/secrets builds no function from text." },
+          {
+            "name": "fetch",
+            "message": "@kalfa/secrets does no IO: no network of its own."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "@kalfa/secrets does no IO: no network of its own."
+          },
+          {
+            "name": "WebSocket",
+            "message": "@kalfa/secrets does no IO: no network of its own."
+          }
+        ]
+      }
+    },
+    {
+      // @kalfa/secrets's memory store (ticket 2053, the `/memory` entry point) imports no kalfa package at all, `@kalfa/config` included: a store is swapped for another one, so it holds nothing of ours but the package's own files (its ports are in `Store.ts`). Everything else is the package override's above, repeated, since an override replaces a rule's options.
+      "files": ["kalfa/secrets/src/MemoryStore.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "../../**"],
+                "message": "MemoryStore.ts is a store any app may swap for another: it imports no kalfa package at all, `@kalfa/config` included, and nothing of this repo (decision 0047)."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/secrets imports no Telemetry: its span is made with Effect.fn."
+              },
+              {
+                "group": ["node:*", "node:*/**", "@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/secrets takes values and does no IO: no Node module and no platform package."
+              },
+              {
+                "group": [
+                  "_http_agent",
+                  "_http_agent/**",
+                  "_http_client",
+                  "_http_client/**",
+                  "_http_common",
+                  "_http_common/**",
+                  "_http_incoming",
+                  "_http_incoming/**",
+                  "_http_outgoing",
+                  "_http_outgoing/**",
+                  "_http_server",
+                  "_http_server/**",
+                  "_tls_common",
+                  "_tls_common/**",
+                  "_tls_wrap",
+                  "_tls_wrap/**",
+                  "assert",
+                  "assert/**",
+                  "assert/strict",
+                  "async_hooks",
+                  "async_hooks/**",
+                  "buffer",
+                  "buffer/**",
+                  "child_process",
+                  "child_process/**",
+                  "cluster",
+                  "cluster/**",
+                  "console",
+                  "console/**",
+                  "constants",
+                  "constants/**",
+                  "crypto",
+                  "crypto/**",
+                  "dgram",
+                  "dgram/**",
+                  "diagnostics_channel",
+                  "diagnostics_channel/**",
+                  "dns",
+                  "dns/**",
+                  "dns/promises",
+                  "domain",
+                  "domain/**",
+                  "events",
+                  "events/**",
+                  "fs",
+                  "fs/**",
+                  "fs/promises",
+                  "http",
+                  "http/**",
+                  "http2",
+                  "http2/**",
+                  "https",
+                  "https/**",
+                  "inspector",
+                  "inspector/**",
+                  "inspector/promises",
+                  "module",
+                  "module/**",
+                  "net",
+                  "net/**",
+                  "os",
+                  "os/**",
+                  "path",
+                  "path/**",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "perf_hooks/**",
+                  "process",
+                  "process/**",
+                  "punycode",
+                  "punycode/**",
+                  "querystring",
+                  "querystring/**",
+                  "readline",
+                  "readline/**",
+                  "readline/promises",
+                  "repl",
+                  "repl/**",
+                  "stream",
+                  "stream/**",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "string_decoder/**",
+                  "sys",
+                  "sys/**",
+                  "timers",
+                  "timers/**",
+                  "timers/promises",
+                  "tls",
+                  "tls/**",
+                  "trace_events",
+                  "trace_events/**",
+                  "tty",
+                  "tty/**",
+                  "url",
+                  "url/**",
+                  "util",
+                  "util/**",
+                  "util/types",
+                  "v8",
+                  "v8/**",
+                  "vm",
+                  "vm/**",
+                  "wasi",
+                  "wasi/**",
+                  "worker_threads",
+                  "worker_threads/**",
+                  "zlib",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/secrets takes values and does no IO: no Node module, written without its node: prefix either."
+              }
+            ]
+          }
+        ],
+        "eslint/no-console": "error",
+        "eslint/no-new-func": "error",
+        "eslint/no-restricted-globals": [
+          "error",
+          { "name": "console", "message": "@kalfa/secrets prints nothing." },
+          { "name": "process", "message": "@kalfa/secrets reads no process and no environment." },
+          { "name": "Buffer", "message": "@kalfa/secrets uses no Node global." },
+          {
+            "name": "globalThis",
+            "message": "A ban on `process` alone misses `globalThis.process`: no global object here."
+          },
+          { "name": "global", "message": "@kalfa/secrets uses no Node global." },
+          { "name": "self", "message": "@kalfa/secrets uses no global object." },
+          { "name": "window", "message": "@kalfa/secrets uses no global object." },
+          { "name": "Function", "message": "@kalfa/secrets builds no function from text." },
+          {
+            "name": "fetch",
+            "message": "@kalfa/secrets does no IO: no network of its own."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "@kalfa/secrets does no IO: no network of its own."
+          },
+          {
+            "name": "WebSocket",
+            "message": "@kalfa/secrets does no IO: no network of its own."
           }
         ]
       }
