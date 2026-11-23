@@ -10,7 +10,7 @@ import * as change from "./change.ts";
 import type { Group } from "./check.ts";
 import { type SettingsError, stop } from "./error.ts";
 import type { Format } from "./format.ts";
-import { contents, type Names, repoPlace, userPlace } from "./place.ts";
+import { contents, type Names, repoPlace, shown, userPlace } from "./place.ts";
 
 /** What one disk call is about: the edit it makes, and the file as a person reads it. */
 interface Call {
@@ -29,17 +29,29 @@ const fail = (call: Call, reason: "read" | "write", text: string, cause?: unknow
 const unwritten = (call: Call, cause: PlatformError.PlatformError) =>
   fail(call, "write", cause.reason._tag === "NotFound" ? "its folder is not there." : "could not be written.", cause);
 
-/** Makes the app's own folder, and nothing above it. One already there is as good. */
+/** The folder this call made: its path, or none when the folder was there already, or there is none to make. */
+type Made = string | undefined;
+
+/** Makes the app's own folder, and nothing above it. One already there is as good, and is not this call's to take away. */
 const folder = (fs: FileSystem.FileSystem, call: Call, path: string | undefined) =>
   path === undefined
-    ? Effect.void
-    : fs
-        .makeDirectory(path)
-        .pipe(
-          Effect.catchTag("PlatformError", (cause) =>
-            cause.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(unwritten(call, cause)),
-          ),
-        );
+    ? Effect.undefined
+    : fs.makeDirectory(path).pipe(
+        Effect.as<Made>(path),
+        Effect.catchTag("PlatformError", (cause) =>
+          cause.reason._tag === "AlreadyExists" ? Effect.undefined : Effect.fail(unwritten(call, cause)),
+        ),
+      );
+
+/** Takes a folder this call made away again when it is still empty: another writer may have put its lock in it since. */
+const unmake = (fs: FileSystem.FileSystem, call: Call, path: string) =>
+  fs.readDirectory(path).pipe(
+    Effect.flatMap((entries) => (entries.length === 0 ? fs.remove(path, { recursive: true }) : Effect.void)),
+    Effect.ignore({ log: "Warn", message: `${call.name}'s folder was not removed.` }),
+  );
+
+/** A remove with no file to take the key out of. The edit still checks the setting and the file's scope, on an empty text, so a remove refuses the same way whatever the disk holds. */
+const nothing = (call: Call) => call.edit("", call.names).pipe(Effect.as(false));
 
 /**
  * Makes the lock, empty and with `"wx"`, so it is made only when no one holds it. Answers false when the file's folder is not there and the call is a remove: it has nothing to take out.
@@ -60,7 +72,7 @@ const take = (fs: FileSystem.FileSystem, call: Call, lock: string) =>
             ),
           );
         case "NotFound":
-          return call.kind === "remove" ? Effect.succeed(false) : Effect.fail(unwritten(call, cause));
+          return call.kind === "remove" ? nothing(call) : Effect.fail(unwritten(call, cause));
         default:
           return Effect.fail(unwritten(call, cause));
       }
@@ -95,7 +107,7 @@ interface Place {
 /**
  * Changes the file at `place`: follows a link to its target, makes the app's own folder for a set, and edits under the lock. Answers whether the file changed.
  *
- * With no home there is no user file: a set fails `write` naming both variables, and a remove has nothing to take out.
+ * With no home there is no user configuration: a set fails `write` naming both variables, and a remove has nothing to take out.
  */
 const onDisk = Effect.fnUntraced(function* (call: Call, place: Place) {
   const { path } = place;
@@ -107,7 +119,7 @@ const onDisk = Effect.fnUntraced(function* (call: Call, place: Place) {
           "write",
           `could not be written, because neither $${call.app.toUpperCase()}_HOME nor HOME is set.`,
         )
-      : false;
+      : yield* nothing(call);
   }
 
   const fs = yield* FileSystem.FileSystem;
@@ -116,11 +128,7 @@ const onDisk = Effect.fnUntraced(function* (call: Call, place: Place) {
   const real = yield* fs.realPath(path).pipe(Effect.orElseSucceed(() => path));
   const lock = `${real}.lock`;
 
-  if (call.kind === "set") {
-    yield* folder(fs, call, place.folder);
-  }
-
-  return yield* Effect.acquireUseRelease(
+  const locked = Effect.acquireUseRelease(
     take(fs, call, lock),
     (taken) => (taken ? replace(fs, call, real, lock) : Effect.succeed(false)),
     // Only a lock this call made is taken out, and only when the call did not finish: a finished one has renamed it away.
@@ -130,6 +138,13 @@ const onDisk = Effect.fnUntraced(function* (call: Call, place: Place) {
             .remove(lock, { force: true })
             .pipe(Effect.ignore({ log: "Warn", message: `${call.name}.lock was not removed.` }))
         : Effect.void,
+  );
+
+  // Only a folder this call made goes again when the call fails, after the lock in it has gone.
+  return yield* Effect.acquireUseRelease(
+    call.kind === "set" ? folder(fs, call, place.folder) : Effect.undefined,
+    () => locked,
+    (made, exit) => (made !== undefined && Exit.isFailure(exit) ? unmake(fs, call, made) : Effect.void),
   );
 });
 
@@ -146,9 +161,11 @@ const write = Effect.fnUntraced(function* (
 ) {
   const { app } = group;
   const provider = yield* ConfigProvider.ConfigProvider;
-  const found = { repo: yield* repoPlace(app, format, repo), user: yield* userPlace(app, format, provider) };
+  // A failure to read the environment is the call's, so it ends as the call's failures do.
+  const closing = `${shown(app, format)[file === "repo" ? "repo" : "user"]} was not changed.`;
+  const found = { repo: yield* repoPlace(app, format, repo), user: yield* userPlace(app, format, provider, closing) };
   const names = { repo: found.repo.name, user: found.user.name };
-  // A file name cast past the types reaches the user file, never a key that `Object` holds.
+  // A file name cast past the types reaches the user configuration, never a key that `Object` holds.
   const place = file === "repo" ? found.repo : found.user;
 
   const changed = yield* onDisk({ app, kind, name: place.name, names, edit }, place);

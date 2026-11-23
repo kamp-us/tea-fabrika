@@ -314,13 +314,13 @@ export const edit = <App extends string, R extends ReadonlyArray<Setting.Any>>(
  *
  * **Details**
  *
- * `file` says which file, `"repo"` or `"user"`. The repo file is `<repo>/.<app>/<app>.toml`, and `repo` is the folder that holds `.<app>/`, the current folder by default. The user file is found as the start finds it: `$<APP>_HOME/<app>.toml`, else `$HOME/.<app>/<app>.toml`. Errors name a file as the start does, as `.demo/demo.toml`, `~/.demo/demo.toml` or `$DEMO_HOME/demo.toml`, never by an absolute path.
+ * `file` says which file, `"repo"` or `"user"`. The repo configuration is `<repo>/.<app>/<app>.toml`, and `repo` is the folder that holds `.<app>/`, the current folder by default. The user configuration is found as the start finds it: `$<APP>_HOME/<app>.toml`, else `$HOME/.<app>/<app>.toml`. Errors name a file as the start does, as `.demo/demo.toml`, `~/.demo/demo.toml` or `$DEMO_HOME/demo.toml`, never by an absolute path.
  *
  * The new text goes into `<file>.lock`, which is made only if none is there, and one rename puts it over the file: a reader never sees half a file, and a second writer fails at once with `write`, as `git config` does. A link is followed to its target, so a file kept in a dotfiles repo stays a link. A value the file already holds changes nothing: no lock is left and nothing is renamed. The call ends one span, `config.set`, with the attributes `kalfa.config.app`, `kalfa.config.setting`, `kalfa.config.file` and `kalfa.config.changed`, and no value.
  *
  * **Gotchas**
  *
- * Fails `write` when the file or its lock cannot be written, when another change holds the lock (after a crash, remove the lock file by hand), and for a user file when neither `$<APP>_HOME` nor `HOME` is set. A set makes the app's own folder, `.<app>/`, and no folder above it: a missing parent fails `write`, and so does a `$<APP>_HOME` that names a folder that is not there. Fails `read` when the file exists and cannot be read. Every other fault is the edit's: the file is as it was.
+ * Fails `write` when the file or its lock cannot be written, when another change holds the lock (after a crash, remove the lock file by hand), and for a user configuration when neither `$<APP>_HOME` nor `HOME` is set. A set makes the app's own folder, `.<app>/`, and no folder above it: a missing parent fails `write`, and so does a `$<APP>_HOME` that names a folder that is not there. Fails `read` when the file exists and cannot be read. Every other fault is the edit's: the file is as it was.
  *
  * @category combinators
  */
@@ -338,7 +338,7 @@ export const set = <App extends string, R extends ReadonlyArray<Setting.Any>, S 
  *
  * **Details**
  *
- * A remove of a key the file lacks, or of a file or folder that is not there, succeeds and writes nothing. With no home there is no user file, and a remove of its setting succeeds with nothing to take out. The call ends one span, `config.remove`.
+ * A remove of a key the file lacks, or of a file or folder that is not there, succeeds and writes nothing. With no home there is no user configuration, and a remove of its setting succeeds with nothing to take out. The call ends one span, `config.remove`.
  *
  * @category combinators
  */

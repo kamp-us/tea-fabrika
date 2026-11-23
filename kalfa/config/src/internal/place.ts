@@ -20,11 +20,11 @@ export interface Loaded {
 
 export type Names = Readonly<Record<Setting.File, string>>;
 
-/** The value of a variable in the current environment, or none. */
-const lookup = (app: string, provider: ConfigProvider.ConfigProvider, name: string) =>
+/** The value of a variable in the current environment, or none. A failure to read it ends with `closing`, the start's own sentence when none is given. */
+const lookup = (app: string, provider: ConfigProvider.ConfigProvider, name: string, closing?: string) =>
   provider.load([name]).pipe(
     Effect.map((node) => node?.value),
-    Effect.mapError((cause) => stop(app, "read", `${name} could not be read.`, undefined, cause)),
+    Effect.mapError((cause) => stop(app, "read", `${name} could not be read.`, undefined, cause, closing)),
   );
 
 /** The folder and the file name of an app's configuration, `.<app>` and `<app>.<extension>`: the one rule for a path and for the name a person reads. */
@@ -46,16 +46,17 @@ export const repoPlace = Effect.fnUntraced(function* (app: string, format: Forma
 });
 
 /**
- * Where the user configuration is: `$<APP>_HOME/<app>.<extension>`, else `$HOME/.<app>/<app>.<extension>`, else nowhere. With no home it has no path. Its folder is the `.<app>/` under `HOME`, which a set may make, and never the folder `$<APP>_HOME` names: a person chose that one, and a typo in it must not make a new folder.
+ * Where the user configuration is: `$<APP>_HOME/<app>.<extension>`, else `$HOME/.<app>/<app>.<extension>`, else nowhere. With no home it has no path. Its folder is the `.<app>/` under `HOME`, which a set may make, and never the folder `$<APP>_HOME` names: a person chose that one, and a typo in it must not make a new folder. A failure to read the environment ends with `closing`, the start's own sentence when none is given.
  */
 export const userPlace = Effect.fnUntraced(function* (
   app: string,
   format: Format,
   provider: ConfigProvider.ConfigProvider,
+  closing?: string,
 ) {
   const path = yield* Path.Path;
-  const moved = yield* lookup(app, provider, `${app.toUpperCase()}_HOME`);
-  const home = moved === undefined ? yield* lookup(app, provider, "HOME") : undefined;
+  const moved = yield* lookup(app, provider, `${app.toUpperCase()}_HOME`, closing);
+  const home = moved === undefined ? yield* lookup(app, provider, "HOME", closing) : undefined;
 
   const { folder, file } = parts(app, format);
 

@@ -141,7 +141,7 @@ A message ends `<file> was not changed.` and never holds a value.
 
 `SettingGroup.set(group, setting, value, file, { repo })` and `SettingGroup.remove(group, setting, file, { repo })` do
 the same edit on a real file. Each answers an `Effect` of nothing, which needs Effect's `FileSystem` and `Path`. `repo`
-is the folder that holds `.<app>/`, the current folder by default. The repo file is `<repo>/.<app>/<app>.toml`. The
+is the folder that holds `.<app>/`, the current folder by default. The repo configuration is `<repo>/.<app>/<app>.toml`. The
 user file is found as the start finds it: `$<APP>_HOME/<app>.toml`, else `$HOME/.<app>/<app>.toml`. Errors name a file
 as the start does, never by an absolute path.
 
@@ -159,14 +159,14 @@ The file is written the way git writes its config:
 - **One rename.** The lock is renamed over the file, so a reader never sees half a file, and the file's own path is
   never written. A failed write or rename leaves the file as it was and no lock behind. The call removes only a lock it
   made.
-- **A link is followed** to its target, so a user file kept in a dotfiles folder and linked into the home folder stays a
+- **A link is followed** to its target, so a user configuration kept in a dotfiles folder and linked into the home folder stays a
   link.
 - **No change, no write.** A set of the value the file holds, or a remove of a key it lacks, renames nothing and leaves
   no lock.
 - **The folder.** A set makes `.<app>/` when it is missing, and no folder above it: a missing parent fails `write`. A
   `$<APP>_HOME` that names a folder that is not there fails `write` too, since a typo there should not make a new folder.
   A remove of a file or folder that is not there succeeds and writes nothing.
-- **No home.** With neither `$<APP>_HOME` nor `HOME`, there is no user file: a set fails `write`, and a remove has
+- **No home.** With neither `$<APP>_HOME` nor `HOME`, there is no user configuration: a set fails `write`, and a remove has
   nothing to take out.
 
 Each call ends one span, `config.set` or `config.remove`, with `kalfa.config.app`, `kalfa.config.setting`,
