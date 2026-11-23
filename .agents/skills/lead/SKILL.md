@@ -112,6 +112,8 @@ Branch: fabrikalfa/<name>, from <origin/main or the parent branch>
 Plan file: .kalfa/quests/<quest>-PLAN.md
 Read also: <tier rows, notes and code the plan must start from>
 Owner away: <yes or no>
+Already ruled out: <what earlier rounds tried, or none>
+Other open PRs: <none, or their URLs. Naming one adds: run `node oxlint-plugins/law-ids.ts`, and renumber the law ids against any open PR's ids>
 This quest:
 - <what is decided, what this slice may build, what is out of scope>
 ```
@@ -123,6 +125,8 @@ Use the tests skill for ticket <id>, <title>, <today's tooling or next/>.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  PR: <full URL>
 Start: <git pull --ff-only, or merge origin/main because ...>
 Approved plan: .kalfa/quests/<quest>-PLAN.md
+Already ruled out: <what earlier rounds tried, or none>
+Other open PRs: <none, or their URLs. Naming one adds: run `node oxlint-plugins/law-ids.ts`, and renumber the law ids against any open PR's ids>
 This quest:
 - <facts settled after the plan, laws that wait, folders to stay out of>
 ```
@@ -135,6 +139,7 @@ Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  Head: <short SHA>  PR: <full 
 Start: <git pull --ff-only, or merge origin/main because ...>
 Approved plan: .kalfa/quests/<quest>-PLAN.md
 Laws: <the test files the test writer wrote, fast and integration>
+Already ruled out: <what earlier rounds tried, or none>
 This quest:
 - <facts settled after the plan, what the test writer found, clashes with open PRs>
 ```
@@ -147,6 +152,8 @@ Use the tests skill for ticket 1041, pipe plumbing, next/.
 Worktree: ../tf-pipe-plumbing  Branch: fabrikalfa/pipe-plumbing  PR: https://github.com/kamp-us/tea-fabrika/pull/1310
 Start: merge origin/main (the tile slice and docs landed since the branch was cut).
 Approved plan: .kalfa/quests/t1041-PLAN.md
+Already ruled out: none
+Other open PRs: none
 This quest:
 - Settled after the plan by experiment 295 (https://github.com/kamp-us/tea-fabrika/pull/1311), the lead's calls:
   mail.chunk is 64 KiB, mail.unread is 256, the cap's maximum is 16,384. A law that pins a default pins these.
@@ -171,6 +178,7 @@ Parent base: <branch and full signed SHA, or origin/main and full SHA>
 Reviewed head: <branch and full SHA>
 Decided notes: <every decided note the PR builds>
 Last fixes: <commit range and report, or none>
+Already ruled out: <what earlier rounds tried, or none>
 Waits for the owner: <no, or what he must decide>
 Look hardest at:
 1. <a call the plan did not spell out, or a doubt, as a question, with its source>
@@ -237,6 +245,7 @@ for how a law is written and the build skill for how product code is written; fo
 standing rules.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  Reviewed head: <full SHA>  PR: <full URL>
 Approved plan: <path>
+Already ruled out: <what earlier rounds tried, or none>
 
 Faults the review named:
 1. <path:line>: <what is wrong>. Input that shows it: <the call, the Msgs or the value>.
