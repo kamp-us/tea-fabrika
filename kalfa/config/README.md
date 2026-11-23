@@ -181,6 +181,25 @@ Each call ends one span, `config.set` or `config.remove`, with `kalfa.config.app
 The new reason is `write`: the file or its lock could not be written, or another change holds the lock. A file that
 exists and cannot be read fails `read`. Every other fault is the edit's, with its own reason and line.
 
+## Settings for a process that cannot read files
+
+A Worker cannot read the configuration files. The process that can, the loading process, gives it the settings as a
+stream of snapshots, and carrying them is the app's job: `postMessage`, a socket, anything.
+
+```ts
+import { SettingGroup } from "@kalfa/config";
+
+// The loading process: its group is started from the files, as always.
+const out = SettingGroup.snapshots(Demo);
+// { app: "demo", values: { "instance.port": 4100, ... }, origins: { "instance.port": { _tag: "file", ... } }, hash: "9f2c..." }
+```
+
+`snapshots(group)` gives the snapshot of the files now, then one more each time a change to a file is taken and the
+snapshot says something new: another value, or only another origin, as a line moved. A refused change gives none. A
+snapshot holds the files as last taken, so a restart setting that changed in a file shows its new value though the
+loading process keeps the one it started with. It is plain JSON, and it holds the app's name, so one app's snapshot
+is never read as another's. It needs the group's layer and `Digest`; the layer from files does not need `Digest`.
+
 ## Public modules
 
 Import these explicit subpaths: `App`, `Setting`, `Sources`, `Toml`, `TomlParser`, `Codec`,
