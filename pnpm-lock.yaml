@@ -738,6 +738,18 @@ importers:
 
   kalfa/markdown:
     dependencies:
+      '@types/mdast':
+        specifier: 'catalog:'
+        version: 4.0.4
+      mdast-util-from-markdown:
+        specifier: 'catalog:'
+        version: 2.1.0(supports-color@10.2.2)
+      mdast-util-gfm:
+        specifier: 'catalog:'
+        version: 3.1.0(supports-color@10.2.2)
+      micromark-extension-gfm:
+        specifier: 'catalog:'
+        version: 3.0.0
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
