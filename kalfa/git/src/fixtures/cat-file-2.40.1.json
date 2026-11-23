@@ -1,6 +1,6 @@
 {
   "git": "git version 2.40.1",
-  "command": "git --no-replace-objects --git-dir=<bare repository> cat-file --batch, the ids on standard input one per line, standard output stored as base64; the repository made by fast-import --date-format=raw",
+  "command": "git --no-replace-objects --git-dir=<bare repository> cat-file --batch, the ids on standard input one per line, standard output stored as base64; the repository made by fast-import --date-format=raw; the row with files was made by fast-import with `deleteall` and `M` lines; the last four rows are commit objects written by `hash-object --literally -t commit -w --stdin`, each well formed but for its tree line",
   "rows": [
     {
       "note": "a root commit",
@@ -8,6 +8,7 @@
       "expect": [
         {
           "id": "74939013608679fcd98b84d1095bb8de117151e9",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Ada Lovelace",
@@ -35,6 +36,7 @@
       "expect": [
         {
           "id": "776bb16b654ac7c5e0728f2588ee90de43bc11c8",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Bo",
@@ -62,6 +64,7 @@
       "expect": [
         {
           "id": "4024cf9959ca675c1a22c061a23b878edf98c217",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Cy",
@@ -89,6 +92,7 @@
       "expect": [
         {
           "id": "454ce3a4c2de4b086e058e2c520b8d0e9c072949",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "",
@@ -116,6 +120,7 @@
       "expect": [
         {
           "id": "db8208eb8eb26debbf423186d9631c4039ea5f66",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": " Jo",
@@ -143,6 +148,7 @@
       "expect": [
         {
           "id": "0d4adb51b09b7a1f000756830bbe33f8f155201d",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Jo ",
@@ -170,6 +176,7 @@
       "expect": [
         {
           "id": "032853922e75c0b58e2873ace9cf6693c28694e9",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Ada",
@@ -197,6 +204,7 @@
       "expect": [
         {
           "id": "4fd77ff06bf0b6cd5beb30886c151a28b75795f8",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Ada Lovelace",
@@ -224,6 +232,7 @@
       "expect": [
         {
           "id": "fc4a7052c6ebbbe40190e46c62bec3afccce7075",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Em",
@@ -251,6 +260,7 @@
       "expect": [
         {
           "id": "972fbb9f7289e764ee18cda70454894c16a0c202",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Nn",
@@ -278,6 +288,7 @@
       "expect": [
         {
           "id": "c7ee92fd6bc5d3e6b4d82f968b00765dadcf0dfb",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "设 😀",
@@ -305,6 +316,7 @@
       "expect": [
         {
           "id": "5134256629a826eac28f23804c2b6eb4ac9c0e45",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Hd",
@@ -332,6 +344,7 @@
       "expect": [
         {
           "id": "2f0114df3b97b72c15bc4bc65a2499164222e17c",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [
             "74939013608679fcd98b84d1095bb8de117151e9",
             "776bb16b654ac7c5e0728f2588ee90de43bc11c8"
@@ -362,6 +375,7 @@
       "expect": [
         {
           "id": "0d0251d46582d61f3ac6353641d6f42cd824418c",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [
             "776bb16b654ac7c5e0728f2588ee90de43bc11c8",
             "74939013608679fcd98b84d1095bb8de117151e9"
@@ -392,6 +406,7 @@
       "expect": [
         {
           "id": "785a4e700b3eecbfb454af1e8447042aed6a291e",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [
             "4024cf9959ca675c1a22c061a23b878edf98c217",
             "74939013608679fcd98b84d1095bb8de117151e9",
@@ -466,6 +481,7 @@
       "expect": [
         {
           "id": "74939013608679fcd98b84d1095bb8de117151e9",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Ada Lovelace",
@@ -487,6 +503,7 @@
         },
         {
           "id": "2f0114df3b97b72c15bc4bc65a2499164222e17c",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [
             "74939013608679fcd98b84d1095bb8de117151e9",
             "776bb16b654ac7c5e0728f2588ee90de43bc11c8"
@@ -511,6 +528,7 @@
         },
         {
           "id": "0d0251d46582d61f3ac6353641d6f42cd824418c",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [
             "776bb16b654ac7c5e0728f2588ee90de43bc11c8",
             "74939013608679fcd98b84d1095bb8de117151e9"
@@ -535,6 +553,7 @@
         },
         {
           "id": "785a4e700b3eecbfb454af1e8447042aed6a291e",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [
             "4024cf9959ca675c1a22c061a23b878edf98c217",
             "74939013608679fcd98b84d1095bb8de117151e9",
@@ -560,6 +579,7 @@
         },
         {
           "id": "454ce3a4c2de4b086e058e2c520b8d0e9c072949",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "",
@@ -581,6 +601,7 @@
         },
         {
           "id": "4fd77ff06bf0b6cd5beb30886c151a28b75795f8",
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           "parents": [],
           "author": {
             "name": "Ada Lovelace",
@@ -599,6 +620,125 @@
             }
           },
           "message": "a\r\nb\rc\u0000d\n"
+        }
+      ]
+    },
+    {
+      "note": "three commits that hold files, the third a merge of the first two: their trees are not the empty tree",
+      "output": "YzczMjJlOWRhYWY4MDRiMGQ3MzMxOGZiYTMxMjg4ZDI5YjgwOWEzNyBjb21taXQgMTcyCnRyZWUgOTcwODk0ZjQxNjBkNjQzZGI2NzE1YWU2NDJhZjk2NjkzM2E4YzdhZQphdXRob3IgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCmZpbGVzIG9uZQoKMWQ2ZDZiOTE5ZDFjOTBiMGI1YjdkMzhhYmY1ZjkwMzE5YmY4M2EyOCBjb21taXQgMTcyCnRyZWUgZDJjNjBlZGM0NzRhMDNiNzQ4ZDg5ZGJiODkxNzVkMzc5MDBiODlmYQphdXRob3IgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCmZpbGVzIHR3bwoKMTY0ZGM5ZDQ4NTZmN2ZlMTBhNDk5ZjU0MTQ1MTYxMmUzNDhkMTM5MSBjb21taXQgMjY1CnRyZWUgYWJlZTA2YWI2YmRmODBkM2ViY2UwNGQxMzg4MGNiOWIxYWM3MDNjMApwYXJlbnQgYzczMjJlOWRhYWY4MDRiMGQ3MzMxOGZiYTMxMjg4ZDI5YjgwOWEzNwpwYXJlbnQgMWQ2ZDZiOTE5ZDFjOTBiMGI1YjdkMzhhYmY1ZjkwMzE5YmY4M2EyOAphdXRob3IgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCm1lcmdlZAoK",
+      "expect": [
+        {
+          "id": "c7322e9daaf804b0d73318fba31288d29b809a37",
+          "tree": "970894f4160d643db6715ae642af966933a8c7ae",
+          "parents": [],
+          "author": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "files one\n"
+        },
+        {
+          "id": "1d6d6b919d1c90b0b5b7d38abf5f90319bf83a28",
+          "tree": "d2c60edc474a03b748d89dbb89175d37900b89fa",
+          "parents": [],
+          "author": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "files two\n"
+        },
+        {
+          "id": "164dc9d4856f7fe10a499f541451612e348d1391",
+          "tree": "abee06ab6bdf80d3ebce04d13880cb9b1ac703c0",
+          "parents": [
+            "c7322e9daaf804b0d73318fba31288d29b809a37",
+            "1d6d6b919d1c90b0b5b7d38abf5f90319bf83a28"
+          ],
+          "author": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "merged\n"
+        }
+      ]
+    },
+    {
+      "note": "a commit with no tree line",
+      "output": "OTYyYTQ3OWY0MWI1YjhlNTY5MjNjMDYzMTRhMDZiMWZiNTllZGNmMSBjb21taXQgMTI0CmF1dGhvciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKY29tbWl0dGVyIEFkYSBMb3ZlbGFjZSA8YWRhQGV4YW1wbGUudGVzdD4gMTcwMDAwMDAwMCArMDAwMAoKbm8gdHJlZQoK",
+      "expect": [
+        {
+          "failure": "UnreadableCommit",
+          "id": "962a479f41b5b8e56923c06314a06b1fb59edcf1",
+          "reason": "header"
+        }
+      ]
+    },
+    {
+      "note": "a commit with two tree lines",
+      "output": "OGYxNzBhZWEwMDU4YmI3MTFlYzIwZmQxYzg4MDM2OGQxNjNkYWQ4ZiBjb21taXQgMjE4CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAp0cmVlIDRiODI1ZGM2NDJjYjZlYjlhMDYwZTU0YmY4ZDY5Mjg4ZmJlZTQ5MDQKYXV0aG9yIEFkYSBMb3ZlbGFjZSA8YWRhQGV4YW1wbGUudGVzdD4gMTcwMDAwMDAwMCArMDAwMApjb21taXR0ZXIgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCgp0d28gdHJlZXMKCg==",
+      "expect": [
+        {
+          "failure": "UnreadableCommit",
+          "id": "8f170aea0058bb711ec20fd1c880368d163dad8f",
+          "reason": "header"
+        }
+      ]
+    },
+    {
+      "note": "a commit whose tree line comes after the author line",
+      "output": "YTEzZGJkMzI4MTNmOTJlMDhjNzMxMzgyNTNiZDYwN2I1MWRiMzRiMCBjb21taXQgMTcyCmF1dGhvciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKdHJlZSA0YjgyNWRjNjQyY2I2ZWI5YTA2MGU1NGJmOGQ2OTI4OGZiZWU0OTA0CmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCnRyZWUgbGF0ZQoK",
+      "expect": [
+        {
+          "failure": "UnreadableCommit",
+          "id": "a13dbd32813f92e08c73138253bd607b51db34b0",
+          "reason": "header"
+        }
+      ]
+    },
+    {
+      "note": "a commit whose tree id is in uppercase hex",
+      "output": "ZTFmNzkxMDZjZDk4NmUyNDU3Zjg1NDcyMDc4M2FjZDQwNmY0ZjE2ZCBjb21taXQgMTczCnRyZWUgNEI4MjVEQzY0MkNCNkVCOUEwNjBFNTRCRjhENjkyODhGQkVFNDkwNAphdXRob3IgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCnVwcGVyIHRyZWUKCg==",
+      "expect": [
+        {
+          "failure": "UnreadableCommit",
+          "id": "e1f79106cd986e2457f854720783acd406f4f16d",
+          "reason": "header"
         }
       ]
     }

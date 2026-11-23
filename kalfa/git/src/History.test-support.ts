@@ -59,6 +59,12 @@ const byBytes = (a: string, b: string): number => {
 
 const LETTERS = [..."abcdefghijklmnopqrstuvwxyz0123456789"];
 
+/** Bytes of a file: any octet, so a draw reaches NUL, 0xff and bytes that are no UTF-8. */
+export const bytesArb: Arbitrary.Arbitrary<Uint8Array> = Arbitrary.array(intBetween(0, 255), {
+  minLength: 1,
+  maxLength: 16,
+}).pipe(Arbitrary.map((octets) => Uint8Array.from(octets)));
+
 /** Every ASCII mark git allows inside a ref name part (not `. - @`, which come apart, and not `/`). */
 const MARKS = "!\"#$%&'()+,;<=>]_`{|}";
 
@@ -356,6 +362,142 @@ export const toPlain = (flat: FlatSignature): PlainSignature => ({
 });
 
 // ---------------------------------------------------------------------------------------------------------
+// Tree ids, modes and paths
+// ---------------------------------------------------------------------------------------------------------
+
+/** A path as a drawn value: one to three good parts joined by `/`. Each part starts with `p`, so no rule of `Path` touches it. */
+export const pathArb: Arbitrary.Arbitrary<string> = Arbitrary.array(partArb, { minLength: 1, maxLength: 3 }).pipe(
+  Arbitrary.map((parts) => parts.join("/")),
+);
+
+export const MODE_ACCEPT = ["100644", "100755", "120000"] as const;
+
+/** Each refused form of a file mode, with the class it stands for. */
+export const MODE_REFUSALS: ReadonlyArray<readonly [label: string, text: string]> = [
+  ["a submodule", "160000"],
+  ["a folder with a leading zero", "040000"],
+  ["a folder", "40000"],
+  ["a mode with three digits", "644"],
+  ["a mode git does not write", "100664"],
+  ["the empty text", ""],
+];
+
+const ENDS_OF_THE_IGNORED = ["\u200C", "\u200F", "\u202A", "\u202E", "\u206A", "\u206F", "\uFEFF"];
+
+/** Each part that git's own check calls `.git` (checked with `git fsck --strict` on git 2.40.1, one class each). */
+export const DOT_GIT_FORMS: ReadonlyArray<readonly [label: string, part: string]> = [
+  ["the part .git", ".git"],
+  ["the part .GIT in capitals", ".GIT"],
+  ["the part .Git in mixed case", ".Git"],
+  ["a trailing space", ".git "],
+  ["two trailing spaces", ".git  "],
+  ["a trailing dot", ".git."],
+  ["capitals with a dot and a space after", ".GIT. "],
+  ["a space and a dot after", ".git ."],
+  ["the short name git~1", "git~1"],
+  ["the short name GIT~1 in capitals", "GIT~1"],
+  ["the short name git~1 with a trailing space", "git~1 "],
+  ["the short name git~1 with a trailing dot", "git~1."],
+  ["a stream name .git:x", ".git:x"],
+  ["a stream name with nothing after the colon", ".git:"],
+  ...ENDS_OF_THE_IGNORED.map((c): readonly [string, string] => [
+    `U+${c.charCodeAt(0).toString(16).toUpperCase()} inside, a character git's HFS check ignores`,
+    `.g${c}it`,
+  ]),
+  ["U+200C after, a character git's HFS check ignores", ".git\u200C"],
+  ["U+200C before, a character git's HFS check ignores", "\u200C.git"],
+  ["U+FEFF after, a character git's HFS check ignores", ".git\uFEFF"],
+  ["U+FEFF before, a character git's HFS check ignores", "\uFEFF.git"],
+  // NTFS reads a backslash as a folder separator, so a piece between backslashes is a name of its own (checked with
+  // `git fsck --strict` on git 2.40.1).
+  [".git after a backslash", "x\\.git"],
+  [".git before a backslash", ".git\\x"],
+  ["git~1 after a backslash", "x\\git~1"],
+  ["git~1 before a backslash", "git~1\\x"],
+  [".git in capitals after a backslash, with a trailing space", "x\\.GIT "],
+  [".git in capitals with U+200C inside, a character git's HFS check ignores", ".G\u200CIT"],
+  [".git in capitals with U+202E inside, a character git's HFS check ignores", ".Gi\u202Et"],
+];
+
+/** Parts next to those git's check refuses, which git accepts: a rule that reaches too far is seen here. */
+export const NEAR_DOT_GIT: ReadonlyArray<readonly [label: string, part: string]> = [
+  ["the part .gitx", ".gitx"],
+  ["the part git", "git"],
+  ["the part ..a", "..a"],
+  ["the part a.", "a."],
+  ["the part .git2", ".git2"],
+  ["the part git~2", "git~2"],
+  ["the part git~10", "git~10"],
+  ["U+200B inside .git, which git does not ignore", ".g\u200Bit"],
+  ["U+2010 inside .git, just past the ignored U+200C to U+200F", ".g\u2010it"],
+  ["U+2029 inside .git, just before the ignored U+202A to U+202E", ".g\u2029it"],
+  ["U+202F inside .git, just past the ignored U+202A to U+202E", ".g\u202Fit"],
+  ["U+2069 inside .git, just before the ignored U+206A to U+206F", ".g\u2069it"],
+  ["U+2070 inside .git, just past the ignored U+206A to U+206F", ".g\u2070it"],
+  ["U+FEFE inside .git, just before the ignored U+FEFF", ".g\uFEFEit"],
+  [".git with U+200C inside after a backslash: an HFS volume has no folders to split", "x\\.g\u200Cit"],
+  ["U+200C before .git, then a backslash", "\u200C.git\\x"],
+  [".git, U+200C, then a backslash", ".git\u200C\\x"],
+  ["a backslash and git~2", "x\\git~2"],
+];
+
+/** The names that are on JavaScript's object prototype: a store that keeps paths in a plain object loses them. */
+export const PROTOTYPE_NAMES = ["__proto__", "constructor", "hasOwnProperty", "toString"] as const;
+
+/** Each accepted class of path, made from a drawn path `p`. */
+export const pathAccepted = (p: string): ReadonlyArray<readonly [label: string, path: string]> => [
+  ["plain", p],
+  ["a character past U+024F inside the Basic Multilingual Plane", `${p}\u8BBE`],
+  ["a character outside the Basic Multilingual Plane", `${p}\u{1F600}`],
+  ["a character from U+E000 to U+FFFF", `${p}\uFF5A`],
+  ["a space", `${p} z`],
+  ["a line break", `${p}\nz`],
+  ["a tab and a carriage return", `${p}\t\rz`],
+  ["a backslash", `${p}\\z`],
+  ["a leading dash", `-${p}`],
+  ["a leading quote", `"${p}`],
+  ["a part of 300 bytes", `${p}/${"a".repeat(300)}`],
+  ["forty folders deep", Array.from({ length: 40 }, () => p).join("/")],
+  ...NEAR_DOT_GIT.flatMap(([label, part]): ReadonlyArray<readonly [string, string]> => [
+    [label, part],
+    [`${label}, as a folder in the middle`, `${p}/${part}/${p}`],
+  ]),
+  ...PROTOTYPE_NAMES.flatMap((name): ReadonlyArray<readonly [string, string]> => [
+    [`the name ${name}`, name],
+    [`the name ${name} as a folder`, `${name}/${p}`],
+    [`the name ${name} deep`, `${p}/${name}`],
+  ]),
+];
+
+/** Each refused class of path, made from a drawn path `p`: one break at a time, in a path every other rule lets through. */
+export const pathRefused = (p: string): ReadonlyArray<readonly [label: string, path: string]> => [
+  ["an empty part: the empty text", ""],
+  ["an empty part: a leading slash", `/${p}`],
+  ["an empty part: a trailing slash", `${p}/`],
+  ["an empty part: two slashes inside", `${p}//${p}`],
+  ["a part .: alone", "."],
+  ["a part .: first", `./${p}`],
+  ["a part .: inside", `${p}/./${p}`],
+  ["a part .: last", `${p}/.`],
+  ["a part ..: alone", ".."],
+  ["a part ..: first", `../${p}`],
+  ["a part ..: inside", `${p}/../${p}`],
+  ["a part ..: last", `${p}/..`],
+  ...DOT_GIT_FORMS.flatMap(([label, part]): ReadonlyArray<readonly [string, string]> => [
+    [`.git form, ${label}: at the top`, part],
+    [`.git form, ${label}: as a folder`, `${part}/${p}`],
+    [`.git form, ${label}: three folders deep`, `a/b/c/${part}`],
+  ]),
+  ["a NUL: inside a part", `${p}\u0000${p}`],
+  ["a NUL: alone as a part", `${p}/\u0000`],
+  ["a NUL: first in a part", `\u0000${p}`],
+  ["a NUL: last in a path", `${p}\u0000`],
+  ["a lone surrogate: a high one inside", `${p}\uD800${p}`],
+  ["a lone surrogate: a low one inside", `${p}\uDC00${p}`],
+  ["a lone surrogate: one at the end", `${p}\uD800`],
+];
+
+// ---------------------------------------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------------------------------------
 
@@ -377,11 +519,20 @@ export const limitsArb = Arbitrary.all({
 // The history value
 // ---------------------------------------------------------------------------------------------------------
 
+/** A file of a commit's tree, as plain data: where it sits, its kind, its bytes. */
+export interface FileSpec {
+  readonly path: string;
+  readonly mode: "100644" | "100755" | "120000";
+  readonly content: Uint8Array;
+}
+
 export interface Node {
   readonly parents: ReadonlyArray<number>;
   readonly author: FlatSignature;
   readonly committer: FlatSignature;
   readonly message: string;
+  /** No two the same path, and no path a folder of another. `[]` is git's empty tree. */
+  readonly files: ReadonlyArray<FileSpec>;
 }
 
 export interface History {
@@ -396,6 +547,7 @@ export interface Texture {
   readonly words: ReadonlyArray<string>;
   readonly signatures: ReadonlyArray<FlatSignature>;
   readonly parts: ReadonlyArray<string>;
+  readonly blobs: ReadonlyArray<Uint8Array>;
 }
 
 export const textureArb: Arbitrary.Arbitrary<Texture> = Arbitrary.all({
@@ -403,6 +555,7 @@ export const textureArb: Arbitrary.Arbitrary<Texture> = Arbitrary.all({
   words: Arbitrary.array(wordArb, { minLength: 12, maxLength: 12 }),
   signatures: Arbitrary.array(flatSignatureArb, { minLength: 8, maxLength: 8 }),
   parts: Arbitrary.array(partArb, { minLength: 8, maxLength: 8 }),
+  blobs: Arbitrary.array(bytesArb, { minLength: 8, maxLength: 8 }),
 });
 
 class Draw {
@@ -430,7 +583,211 @@ class Draw {
   part(): string {
     return at(this.texture.parts, this.#cursor++);
   }
+
+  blob(): Uint8Array {
+    return at(this.texture.blobs, this.#cursor++);
+  }
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// Trees: the files a commit holds
+// ---------------------------------------------------------------------------------------------------------
+
+/** What a tree law draws: parts for names and bytes for contents. */
+export interface TreeDraw {
+  readonly parts: ReadonlyArray<string>;
+  readonly blobs: ReadonlyArray<Uint8Array>;
+}
+
+export const treeArb: Arbitrary.Arbitrary<TreeDraw> = Arbitrary.all({
+  parts: Arbitrary.array(partArb, { minLength: 6, maxLength: 6 }),
+  blobs: Arbitrary.array(bytesArb, { minLength: 6, maxLength: 6 }),
+});
+
+const file = (path: string, content: Uint8Array, mode: FileSpec["mode"] = "100644"): FileSpec => ({
+  path,
+  mode,
+  content,
+});
+
+const textFile = (path: string, content: string, mode: FileSpec["mode"] = "100644"): FileSpec =>
+  file(path, utf8(content), mode);
+
+/** The trees a law builds, each one class of file: order and nesting, contents, kinds, names. */
+export const TREE_CLASSES = [
+  "a folder beside a-b, a.b and a0",
+  "a file three folders deep beside a file at the top",
+  "an empty file",
+  "no trailing newline",
+  "a NUL byte",
+  "bytes that are not UTF-8",
+  "CRLF lines",
+  "past 1000 bytes",
+  "the same bytes at two paths",
+  "the same bytes at two paths, once with two modes",
+  "an executable file",
+  "a link",
+  "names with a space, a line break, a leading dash and a leading quote",
+  "names past U+024F, from U+E000 to U+FFFF and outside the Basic Multilingual Plane",
+  "names on the object prototype, as files",
+  "names on the object prototype, as folders",
+  "no files",
+] as const;
+
+/** One tree for each class above, every path a good `Path` and no path a folder of another. */
+export const treeClasses = (
+  draw: TreeDraw,
+): ReadonlyArray<{ readonly label: string; readonly files: ReadonlyArray<FileSpec> }> => {
+  const p = at(draw.parts, 0);
+  const q = at(draw.parts, 1);
+  const r = at(draw.parts, 2);
+  const [b, c, d] = [at(draw.blobs, 0), at(draw.blobs, 1), at(draw.blobs, 2)];
+  const big = Uint8Array.from({ length: 1000 + b.length }, (_, i) => ((b[i % b.length] ?? 0) + i) & 255);
+
+  return [
+    {
+      label: "a folder beside a-b, a.b and a0",
+      files: [file(`f${p}/c`, b), file(`f${p}-b`, c), file(`f${p}.b`, d), file(`f${p}0`, b)],
+    },
+    {
+      label: "a file three folders deep beside a file at the top",
+      files: [file(`t${q}`, c), file(`d1${p}/d2${q}/d3${r}/z`, d)],
+    },
+    { label: "an empty file", files: [file(`e${p}`, new Uint8Array())] },
+    { label: "no trailing newline", files: [textFile(`n${p}`, "no newline")] },
+    { label: "a NUL byte", files: [file(`z${p}`, Uint8Array.of(0x61, 0x00, 0x62, 0x0a))] },
+    { label: "bytes that are not UTF-8", files: [file(`b${p}`, Uint8Array.of(0xff, 0xfe, 0x00, 0x80, 0xc3, 0x28))] },
+    { label: "CRLF lines", files: [textFile(`c${p}`, "one\r\ntwo\r\n")] },
+    { label: "past 1000 bytes", files: [file(`k${p}`, big)] },
+    { label: "the same bytes at two paths", files: [file(`s1${p}`, b), file(`s2${q}/x`, b)] },
+    {
+      label: "the same bytes at two paths, once with two modes",
+      files: [file(`m1${p}`, b), file(`m2${p}`, b, "100755")],
+    },
+    { label: "an executable file", files: [textFile(`x${p}`, "#!/bin/sh\n", "100755")] },
+    { label: "a link", files: [textFile(`l${p}`, `t${q}`, "120000"), file(`t${q}`, c)] },
+    {
+      label: "names with a space, a line break, a leading dash and a leading quote",
+      files: [file(`a b${p}`, b), file(`l\nb${p}`, c), file(`-d${p}`, d), file(`"q${p}`, b)],
+    },
+    {
+      label: "names past U+024F, from U+E000 to U+FFFF and outside the Basic Multilingual Plane",
+      files: ["\u8BBE", "\uFF5A", "\u{1F600}", "\u0250", "\uE000"].map((mark, i) =>
+        file(`${mark}${p}`, at(draw.blobs, i)),
+      ),
+    },
+    {
+      label: "names on the object prototype, as files",
+      files: PROTOTYPE_NAMES.map((name, i) => file(name, at(draw.blobs, i))),
+    },
+    {
+      label: "names on the object prototype, as folders",
+      files: PROTOTYPE_NAMES.map((name, i) => file(`${name}/${p}`, at(draw.blobs, i))),
+    },
+    { label: "no files", files: [] },
+  ];
+};
+
+/** Trees git cannot hold, one class each, every path a good `Path`: a path that is a folder of another. */
+export const CONFLICT_CLASSES = [
+  "a file beside a file below it, the file first",
+  "a file beside a file below it, the file below first",
+  "a file beside a file two folders below it",
+  "a file in a folder beside a file below it",
+  "a link beside a file below it",
+] as const;
+
+export const conflictClasses = (
+  draw: TreeDraw,
+): ReadonlyArray<{ readonly label: string; readonly files: ReadonlyArray<FileSpec> }> => {
+  const p = at(draw.parts, 0);
+  const q = at(draw.parts, 1);
+  const r = at(draw.parts, 2);
+  const [b, c] = [at(draw.blobs, 0), at(draw.blobs, 1)];
+  const aside = file(`o${p}`, c);
+
+  return [
+    { label: "a file beside a file below it, the file first", files: [aside, file(`a${p}`, b), file(`a${p}/${q}`, c)] },
+    {
+      label: "a file beside a file below it, the file below first",
+      files: [file(`a${p}/${q}`, c), file(`a${p}`, b), aside],
+    },
+    {
+      label: "a file beside a file two folders below it",
+      files: [file(`g${p}`, b), file(`g${p}/${q}/${r}`, c), aside],
+    },
+    {
+      label: "a file in a folder beside a file below it",
+      files: [file(`x${p}/${q}`, b), aside, file(`x${p}/${q}/${r}`, c)],
+    },
+    {
+      label: "a link beside a file below it",
+      files: [textFile(`k${p}`, `t${q}`, "120000"), file(`k${p}/${q}`, c), aside],
+    },
+  ];
+};
+
+/** The files of a tree as one text: equal exactly when two commits hold the same paths, modes and bytes. */
+export const filesKey = (files: ReadonlyArray<FileSpec>): string =>
+  JSON.stringify(
+    files
+      .map((each) => [each.path, each.mode, Array.from(each.content)] as const)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
+
+/** Whether two commits hold the same files: the model of "same tree id". */
+export const sameFiles = (a: ReadonlyArray<FileSpec>, b: ReadonlyArray<FileSpec>): boolean =>
+  filesKey(a) === filesKey(b);
+
+const EDIT_KINDS = ["no change", "one byte", "one path", "one folder level", "one mode", "one path removed"] as const;
+
+/** The files of a commit made from its first parent's with one change. `tag` is unique to the commit, so no new path clashes. */
+const edit = (
+  files: ReadonlyArray<FileSpec>,
+  kind: (typeof EDIT_KINDS)[number],
+  tag: string,
+  part: string,
+): ReadonlyArray<FileSpec> => {
+  const [first, ...rest] = files;
+  const added = [...files, textFile(`${tag}-${part}`, part)];
+
+  if (first === undefined) {
+    return kind === "no change" || kind === "one path removed" ? files : added;
+  }
+
+  switch (kind) {
+    case "no change":
+      return files;
+    case "one byte":
+      return [
+        {
+          ...first,
+          content:
+            first.content.length === 0
+              ? Uint8Array.of(1)
+              : Uint8Array.from(first.content, (octet, i) => (i === 0 ? (octet + 1) & 255 : octet)),
+        },
+        ...rest,
+      ];
+    case "one path":
+      return added;
+    case "one folder level":
+      return [{ ...first, path: `${tag}d/${first.path}` }, ...rest];
+    case "one mode":
+      return [{ ...first, mode: first.mode === "100644" ? "100755" : "100644" }, ...rest];
+    case "one path removed":
+      return rest;
+  }
+};
+
+const rootFiles = (draw: Draw, i: number): ReadonlyArray<FileSpec> =>
+  Array.from({ length: 1 + draw.int(3) }, (_, k) =>
+    file(
+      k % 2 === 0 ? `r${i}f${k}-${draw.part()}` : `r${i}d${k}/${draw.part()}`,
+      draw.blob(),
+      at(MODE_ACCEPT, draw.int(3)),
+    ),
+  );
 
 const BASE_SECONDS = 1_700_000_000;
 
@@ -484,13 +841,21 @@ const refsFor = (draw: Draw, n: number): ReadonlyArray<{ name: string; commit: n
 
 const build = (draw: Draw, parentLists: ReadonlyArray<ReadonlyArray<number>>, dates: Dates): History => {
   const n = parentLists.length;
+  const turn = draw.int(EDIT_KINDS.length);
+  const nodes: Array<Node> = [];
 
-  const nodes = parentLists.map((parents, i): Node => ({
-    parents,
-    author: draw.signature(draw.int(4_000_000_000)),
-    committer: draw.signature(committerSeconds(i, n, dates, draw)),
-    message: draw.word(),
-  }));
+  parentLists.forEach((parents, i) => {
+    const author = draw.signature(draw.int(4_000_000_000));
+    const committer = draw.signature(committerSeconds(i, n, dates, draw));
+    const message = draw.word();
+    const first = parents[0] === undefined ? undefined : nodes[parents[0]];
+
+    // A root draws its files; any other commit holds its first parent's files with one change, cycling through the kinds.
+    const files =
+      first === undefined ? rootFiles(draw, i) : edit(first.files, at(EDIT_KINDS, turn + i), `n${i}`, draw.part());
+
+    nodes.push({ parents, author, committer, message, files });
+  });
 
   return { nodes, refs: refsFor(draw, n), shallow: [] };
 };
@@ -645,6 +1010,50 @@ export const carrier = (texture: Texture): { readonly history: History; readonly
     author: entry.author,
     committer: { ...entry.committer, seconds: BASE_SECONDS + i },
     message: entry.message,
+    files: [],
+  }));
+
+  return { history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] }, classes: entries.map((e) => e.label) };
+};
+
+/** What the tree carrier adds to `TREE_CLASSES`: commits whose files are those of the first one, changed in one way. */
+export const TREE_CHANGE_CLASSES = [
+  "the same files on another parent",
+  "one byte differs",
+  "one path differs",
+  "one folder level differs",
+  "one mode differs",
+] as const;
+
+export const TREE_CARRIER_CLASSES: ReadonlyArray<string> = [...TREE_CLASSES, ...TREE_CHANGE_CLASSES];
+
+/** A history with a commit for every tree class, then commits that hold the first one's files changed in one way. */
+export const treeCarrier = (
+  texture: Texture,
+): { readonly history: History; readonly classes: ReadonlyArray<string> } => {
+  const draw = new Draw(texture);
+  const word = draw.word();
+  const author = draw.signature(draw.int(4_000_000_000));
+  const committer = draw.signature(0);
+  const base = treeClasses(texture);
+  const first = base[0]?.files ?? [];
+  const part = at(texture.parts, 3);
+
+  const entries: ReadonlyArray<{ label: string; parents: ReadonlyArray<number>; files: ReadonlyArray<FileSpec> }> = [
+    ...base.map(({ label, files }, i) => ({ label, parents: i === 0 ? [] : [i - 1], files })),
+    { label: "the same files on another parent", parents: [1], files: first },
+    { label: "one byte differs", parents: [0], files: edit(first, "one byte", "c1", part) },
+    { label: "one path differs", parents: [0], files: edit(first, "one path", "c2", part) },
+    { label: "one folder level differs", parents: [0], files: edit(first, "one folder level", "c3", part) },
+    { label: "one mode differs", parents: [0], files: edit(first, "one mode", "c4", part) },
+  ];
+
+  const nodes = entries.map((entry, i): Node => ({
+    parents: entry.parents,
+    author,
+    committer: { ...committer, seconds: BASE_SECONDS + i },
+    message: word,
+    files: entry.files,
   }));
 
   return { history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] }, classes: entries.map((e) => e.label) };
