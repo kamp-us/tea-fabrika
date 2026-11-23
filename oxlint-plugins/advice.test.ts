@@ -206,6 +206,9 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
   symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
   writeFileSync(join(at, ".oxlintrc.json"), Predicate.isString(config) ? config : JSON.stringify(config));
+  // The linked `node_modules` is the repo's own, thousands of folders: with no `.gitignore` a whole run (no path) walks all of them, which took 6 of
+  // the 7 s of each such run. The real repo has the line too.
+  writeFileSync(join(at, ".gitignore"), "node_modules\n");
 
   for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(at, path)), { recursive: true });

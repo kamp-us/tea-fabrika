@@ -189,6 +189,48 @@ if (cmd === "codex") {
 }
 `;
 
+const ROLES = ["tests", "build", "lead", "person", "stranger"];
+
+interface RoleKey {
+  readonly secret: string;
+  readonly published: string;
+  readonly pub: string;
+}
+
+const roleKeys = new Map<string, RoleKey>();
+
+/**
+ * A role's key, made once for the file. A fixture made its own five keys with ten `ssh-keygen` runs, about a third of its time, and a law builds a fixture
+ * for each of its places: K2's 36 fixtures took 37 s of CI's 60 s limit. A fixture copies the key in, and its allowed signers hold the key's public half.
+ */
+const roleKey = (role: string): RoleKey => {
+  const known = roleKeys.get(role);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const folder = mkdtempSync(join(tmpdir(), "bx321-key-"));
+  const file = join(folder, role);
+  const made = spawnSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "fixture", "-f", file], {
+    encoding: "utf8",
+  });
+  expect(made.status, made.stderr).toBe(0);
+  const shown = spawnSync("ssh-keygen", ["-y", "-f", file], { encoding: "utf8" });
+  expect(shown.status, shown.stderr).toBe(0);
+
+  const key = {
+    secret: readFileSync(file, "utf8"),
+    published: readFileSync(`${file}.pub`, "utf8"),
+    pub: shown.stdout.trim().split(" ").slice(0, 2).join(" "),
+  };
+
+  rmSync(folder, { recursive: true, force: true });
+  roleKeys.set(role, key);
+
+  return key;
+};
+
 class Box {
   readonly dir = mkdtempSync(join(tmpdir(), "bx321-"));
   readonly main = join(this.dir, "main");
@@ -245,11 +287,13 @@ class Box {
     this.git(this.main, "init", "-q", "-b", "main", `--separate-git-dir=${join(this.dir, "main-gitdata")}`);
     const lines: string[] = [];
 
-    for (const role of ["tests", "build", "lead", "person", "stranger"]) {
+    for (const role of ROLES) {
       const key = join(this.home, ".fabrika/step-keys", role);
       mkdirSync(dirname(key), { recursive: true });
-      this.must("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "fixture", "-f", key]);
-      const pub = this.must("ssh-keygen", ["-y", "-f", key]).trim().split(" ").slice(0, 2).join(" ");
+      const made = roleKey(role);
+      writeFileSync(key, made.secret, { mode: 0o600 });
+      writeFileSync(`${key}.pub`, made.published);
+      const pub = made.pub;
 
       if (role !== "stranger") {
         lines.push(
@@ -955,100 +999,107 @@ describe("T321 K2 box start, today's tooling", () => {
   // ticket. Main and this box's branch are allowed; another branch blocks only while it is live,
   // and an older branch whose links the base already holds never does. Plant: walk from main.
   // Plant: block on an open branch whose only change is field/*.jsonl rows, or row files (each field row is its own file).
-  it("K2 refuses a shared ticket only when another live branch carries its links", () => {
-    const places = [
-      "main",
-      "this",
-      "open-pr",
-      "running-box",
-      "running-old-box",
-      "history",
-      "merged",
-      "gh-down",
-      "different-ticket",
-      "inside",
-      "field-rows",
-      "field-files",
-    ] as const;
+  // Twelve places, each a fixture, over 3 runs: 36 fixtures, 37 s of CI's 60 s limit as one law. It is two laws of six places, each with the same 3 runs.
+  for (const [half, from] of [
+    ["first", 0],
+    ["second", 6],
+  ] as const) {
+    it(`K2 refuses a shared ticket only when another live branch carries its links, the ${half} six places`, () => {
+      const everywhere = [
+        "main",
+        "this",
+        "open-pr",
+        "running-box",
+        "running-old-box",
+        "history",
+        "merged",
+        "gh-down",
+        "different-ticket",
+        "inside",
+        "field-rows",
+        "field-files",
+      ] as const;
 
-    const blocks = new Set(["open-pr", "running-box", "running-old-box", "gh-down"]);
-    fc.assert(
-      fc.property(word, (text) => {
-        each(places, (place) =>
-          fixture((b) => {
-            b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
-            const other = !["main", "this", "inside"].includes(place);
+      const places = everywhere.slice(from, from + 6);
+      const blocks = new Set(["open-pr", "running-box", "running-old-box", "gh-down"]);
+      fc.assert(
+        fc.property(word, (text) => {
+          each(places, (place) =>
+            fixture((b) => {
+              b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
+              const other = !["main", "this", "inside"].includes(place);
 
-            if (other) {
-              b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
-            }
+              if (other) {
+                b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+              }
 
-            // Lead-only field rows on an open PR are not a quest (PR 601, 2026-11-09).
-            const path =
-              place === "field-rows"
-                ? "field/runs.jsonl"
-                : place === "field-files"
-                  ? "field/runs/2026-11-11-t321-tests1.json"
-                  : "src/a.ts";
+              // Lead-only field rows on an open PR are not a quest (PR 601, 2026-11-09).
+              const path =
+                place === "field-rows"
+                  ? "field/runs.jsonl"
+                  : place === "field-files"
+                    ? "field/runs/2026-11-11-t321-tests1.json"
+                    : "src/a.ts";
 
-            const rows = place === "field-rows" || place === "field-files";
-            const sha = b.commit(b.main, path, `${text}\n`);
-            b.sign(b.main, rows ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
+              const rows = place === "field-rows" || place === "field-files";
+              const sha = b.commit(b.main, path, `${text}\n`);
+              b.sign(b.main, rows ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
 
-            if (place === "main" || place === "merged") {
-              b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
-            }
+              if (place === "main" || place === "merged") {
+                b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+              }
 
-            // An older branch of this quest that the base already holds is history (#590).
-            if (place === "inside") {
-              b.git(b.main, "branch", "fabrikalfa/old", sha);
-            }
+              // An older branch of this quest that the base already holds is history (#590).
+              if (place === "inside") {
+                b.git(b.main, "branch", "fabrikalfa/old", sha);
+              }
 
-            b.setup({
-              openPrs: ["open-pr", "field-rows", "field-files"].includes(place)
-                ? ["fabrikalfa/other"]
-                : ["fabrikalfa/unrelated"],
-              ...(place === "gh-down" ? { gh: "down" as const } : {}),
-            });
-
-            if (place === "running-box" || place === "running-old-box") {
-              write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
-              // A tree in BOXES/box, or one made before that layout, in BOXES.
-              mkdirSync(place === "running-box" ? boxTree(b.boxes, "two") : oldBoxTree(b.boxes, "two"), {
-                recursive: true,
+              b.setup({
+                openPrs: ["open-pr", "field-rows", "field-files"].includes(place)
+                  ? ["fabrikalfa/other"]
+                  : ["fabrikalfa/unrelated"],
+                ...(place === "gh-down" ? { gh: "down" as const } : {}),
               });
-            }
 
-            if (place === "history") {
-              // A box state left behind with no box on disk is not a running quest.
-              write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
-            }
+              if (place === "running-box" || place === "running-old-box") {
+                write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
+                // A tree in BOXES/box, or one made before that layout, in BOXES.
+                mkdirSync(place === "running-box" ? boxTree(b.boxes, "two") : oldBoxTree(b.boxes, "two"), {
+                  recursive: true,
+                });
+              }
 
-            b.git(b.main, "checkout", "-q", "main");
+              if (place === "history") {
+                // A box state left behind with no box on disk is not a running quest.
+                write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
+              }
 
-            const got =
-              place === "inside"
-                ? b.new(sha, b.branch)
-                : b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
+              b.git(b.main, "checkout", "-q", "main");
 
-            expect(got.code).not.toBeNull();
+              const got =
+                place === "inside"
+                  ? b.new(sha, b.branch)
+                  : b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 
-            // A live branch is the check saying no; open PRs gh cannot read is a check that
-            // could not run, which stays stuck (ticket 428).
-            if (place === "gh-down") {
-              refused(got, /^stuck shared_ticket 321 on fabrikalfa\/other: open PRs cannot be read/m);
-              expect(got.code, got.text).toBe(1);
-            } else if (blocks.has(place)) {
-              checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
-            } else {
-              expect(got.code, got.text).toBe(0);
-            }
-          }),
-        );
-      }),
-      options,
-    );
-  }, 180_000); // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
+              expect(got.code).not.toBeNull();
+
+              // A live branch is the check saying no; open PRs gh cannot read is a check that
+              // could not run, which stays stuck (ticket 428).
+              if (place === "gh-down") {
+                refused(got, /^stuck shared_ticket 321 on fabrikalfa\/other: open PRs cannot be read/m);
+                expect(got.code, got.text).toBe(1);
+              } else if (blocks.has(place)) {
+                checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
+              } else {
+                expect(got.code, got.text).toBe(0);
+              }
+            }),
+          );
+        }),
+        options,
+      );
+    }, 180_000);
+  } // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
 
   // Plant: walk each branch by its name again after listing it (box.sh before ticket 567). A branch
   // deleted during the scan then fails the start as "stuck base commit walk failed" with no reason,

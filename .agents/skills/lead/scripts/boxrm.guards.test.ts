@@ -10,19 +10,13 @@ import { fixture, input, kept } from "./boxrm.test-support.ts";
 // and an inspection that runs no box program. The rest of its laws are in boxrm.test.ts and
 // boxrm.storage.test.ts.
 describe("box rm, today's tooling", () => {
+  // Each run of these laws builds a fixture (a git repo, a clone and a script run, 1 s in CI) for each of its kinds, so a law over all its kinds took 27 to 37 s of
+  // CI's 60 s limit. Each kind is a law of its own with the same runs, and each is a fraction of the work.
   // Plants: inspect only unstaged changes; treat an unsuccessful status as empty output.
-  it("T318 every tracked change and failed status keep both paths", () => {
-    fc.assert(
-      fc.property(input, (v) => {
-        for (const change of [
-          "staged",
-          "unstaged",
-          "addition",
-          "deletion",
-          "staged-deletion",
-          "conflict",
-          "status-failed",
-        ]) {
+  for (const change of ["staged", "unstaged", "addition", "deletion", "staged-deletion", "conflict", "status-failed"]) {
+    it(`T318 every tracked change and failed status keep both paths, ${change}`, () => {
+      fc.assert(
+        fc.property(input, (v) => {
           fixture(v, (f) => {
             expect.hasAssertions();
             const tracked = join(f.work, "tracked");
@@ -67,17 +61,17 @@ describe("box rm, today's tooling", () => {
 
             kept(f);
           });
-        }
-      }),
-      { seed: 3187, numRuns: 3 },
-    );
-  });
+        }),
+        { seed: 3187, numRuns: 3 },
+      );
+    });
+  }
 
   // Plants: check HEAD alone; accept objects or remote-tracking refs without retained MAIN ancestry.
-  it("T318 each local branch detached HEAD stash and step-note needs MAIN retention", () => {
-    fc.assert(
-      fc.property(input, (v) => {
-        for (const kind of ["branch", "detached", "stash", "notes", "remote-only", "objects-only"]) {
+  for (const kind of ["branch", "detached", "stash", "notes", "remote-only", "objects-only"]) {
+    it(`T318 each local branch detached HEAD stash and step-note needs MAIN retention, ${kind}`, () => {
+      fc.assert(
+        fc.property(input, (v) => {
           for (const retain of [false, true]) {
             fixture(v, (f) => {
               const base = f.git(f.work, "rev-parse", "HEAD");
@@ -133,25 +127,25 @@ describe("box rm, today's tooling", () => {
               expect(existsSync(f.data)).toBe(!retain);
             });
           }
-        }
-      }),
-      { seed: 3188, numRuns: 3 },
-    );
-  });
+        }),
+        { seed: 3188, numRuns: 3 },
+      );
+    });
+  }
 
   // Plants: follow a symlink/escaping name, or delete one half before validating the other.
-  it("T318 invalid names partial pairs malformed metadata and symlinks keep all other paths", () => {
-    fc.assert(
-      fc.property(input, (v) => {
-        for (const kind of [
-          "name",
-          "missing-data",
-          "missing-work",
-          "metadata",
-          "data-link",
-          "work-link",
-          "outside-pointer",
-        ]) {
+  for (const kind of [
+    "name",
+    "missing-data",
+    "missing-work",
+    "metadata",
+    "data-link",
+    "work-link",
+    "outside-pointer",
+  ]) {
+    it(`T318 invalid names partial pairs malformed metadata and symlinks keep all other paths, ${kind}`, () => {
+      fc.assert(
+        fc.property(input, (v) => {
           fixture(v, (f) => {
             const outside = join(f.dir, "outside");
             mkdirSync(outside);
@@ -209,11 +203,11 @@ describe("box rm, today's tooling", () => {
 
             expect(readFileSync(join(outside, "keep"), "utf8")).toBe(v.value);
           });
-        }
-      }),
-      { seed: 3189, numRuns: 3 },
-    );
-  });
+        }),
+        { seed: 3189, numRuns: 3 },
+      );
+    });
+  }
 
   // Plant (mutation, seed 119120): skip the keep on a malformed gitdir pointer, which ends in a
   // traceback. Missing refs or objects must keep too; a later guard also catches those.
@@ -247,10 +241,10 @@ describe("box rm, today's tooling", () => {
   });
 
   // Plant: use the box's original gitdir/config and observe its fsmonitor/filter/include marker run.
-  it("T318 inspection never executes box or inherited Git programs or writes its index", () => {
-    fc.assert(
-      fc.property(input, (v) => {
-        for (const kind of ["hook", "fsmonitor", "filter", "include", "inherited"]) {
+  for (const kind of ["hook", "fsmonitor", "filter", "include", "inherited"]) {
+    it(`T318 inspection never executes box or inherited Git programs or writes its index, ${kind}`, () => {
+      fc.assert(
+        fc.property(input, (v) => {
           for (const dirty of [false, true]) {
             fixture(v, (f) => {
               const marker = join(f.dir, "executed"),
@@ -306,9 +300,9 @@ describe("box rm, today's tooling", () => {
               }
             });
           }
-        }
-      }),
-      { seed: 3190, numRuns: 4 },
-    );
-  });
+        }),
+        { seed: 3190, numRuns: 4 },
+      );
+    });
+  }
 });
