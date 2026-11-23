@@ -6,9 +6,9 @@ import * as Recorder from "./Recorder.ts";
 import { holder } from "./Secrets.test-support.ts";
 
 /** The route's name, the store's id and its first item: the words a fact holds. */
-const NAME = Schema.decodeUnknownSync(Name.SecretName)("transport/turn-key");
+export const NAME = Schema.decodeUnknownSync(Name.SecretName)("transport/turn-key");
 
-const STORE_ID = Schema.decodeUnknownSync(Name.StoreId)("memory");
+export const STORE_ID = Schema.decodeUnknownSync(Name.StoreId)("memory");
 
 /** What a person's put and a read of it leave behind: the answer, the service that holds the value, and the facts the read was recorded as. */
 export const flow = Effect.fn("secrets.flow")(

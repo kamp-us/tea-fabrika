@@ -1,14 +1,16 @@
 // N1, the three names of the package: a secret name, a store id and a version. Each is a branded text a Schema checks, so a name a person writes in
 // a route or a declaration is refused before anything reads a store. They run in memory on every pull request.
 import { expect, it } from "@effect/vitest";
-import { Effect, Option, Schema } from "effect";
+import { Arbitrary, Array as Arr, Effect, Option, Schema } from "effect";
 import * as Name from "./Name.ts";
 import {
   ACCEPTED_NAME_CLASSES,
   acceptedNames,
   acceptedStoreIds,
   acceptedVersions,
+  between,
   nameTexture,
+  PART_LIMIT,
   REFUSED_NAME_CLASSES,
   refusedNames,
   refusedStoreIds,
@@ -67,6 +69,38 @@ it.effect.prop(
       for (const each of refusedVersions) {
         expect(takes(Name.Version, each.text), `${each.id}: no version`).toBe(false);
       }
+    }),
+  { arbitrary: { runs: 200, seed: SEED } },
+);
+
+const partLengths = Arbitrary.all({
+  texture: nameTexture,
+  length: between(1, 2 * PART_LIMIT),
+  place: between(0, 3),
+});
+
+// N2. Plant: no limit on a part (a part of 100 characters is a name); a limit of 63 (a part of 64 is refused); a limit of 65 (a part of 65 is a name);
+// a limit on the first part only; a limit on the whole name and none on a part.
+it.effect.prop(
+  "N2 parts: a part of a name, between two slashes, is a name at 64 characters and no name at 65, wherever it sits, whatever its length is drawn at",
+  { drawn: partLengths },
+  ({ drawn }) =>
+    Effect.sync(() => {
+      const { texture, place } = drawn;
+      const index = place % texture.segments.length;
+
+      const named = (length: number) =>
+        texture.segments.map((each, at) => (at === index ? "a".repeat(length) : each)).join("/");
+
+      for (const length of [PART_LIMIT, PART_LIMIT + 1, drawn.length]) {
+        expect(takes(Name.SecretName, named(length)), `a part of ${length} characters, at ${index}`).toBe(
+          length <= PART_LIMIT,
+        );
+      }
+
+      expect(Arr.getUnsafe(texture.segments, index).length, "the drawn parts are short").toBeLessThanOrEqual(
+        PART_LIMIT,
+      );
     }),
   { arbitrary: { runs: 200, seed: SEED } },
 );

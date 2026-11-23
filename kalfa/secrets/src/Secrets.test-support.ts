@@ -9,6 +9,7 @@ import {
   type Exit,
   Logger,
   Match,
+  Layer,
   Option,
   Predicate,
   Redacted,
@@ -18,7 +19,9 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url, Hex } from "effect/encoding";
-import type * as Store from "./Store.ts";
+import * as Errors from "./Errors.ts";
+import * as Recorder from "./Recorder.ts";
+import * as Store from "./Store.ts";
 
 /** The shared seed: a fixed seed makes a red run repeat. */
 export const SEED = 119120;
@@ -94,10 +97,22 @@ export const REFUSED_NAME_CLASSES = [
   "257 characters",
 ] as const;
 
-const padded = (head: string, length: number): string => {
-  const filler = Arr.makeBy(Math.max(0, length - head.length - 1), () => "a").join("");
+/** The longest part of a name, between two slashes. */
+export const PART_LIMIT = 64;
 
-  return head.length >= length ? head.slice(0, length) : `${head}/${filler}`.slice(0, length);
+/** `head` with parts of `a` added, none over the part limit, until the name is `length` characters long. */
+const padded = (head: string, length: number): string => {
+  let name = head;
+
+  while (name.length < length) {
+    // The part that ends the name exactly, or a shorter one that leaves left for one more part of a character at least.
+    const left = length - name.length - 1;
+    const part = left <= PART_LIMIT ? left : Math.min(PART_LIMIT, left - 2);
+
+    name = `${name}/${"a".repeat(part)}`;
+  }
+
+  return name;
 };
 
 /** Names a name Schema must take: one made for each class of (a). */
@@ -396,3 +411,22 @@ export const reading = (held: Store.Held, text: string) =>
 
 /** The text a writer gives, or nothing when it throws: a display that cannot be written shows nothing. */
 export const shown = (write: () => string | undefined): string => Result.getOrElse(Result.try(write), () => "") ?? "";
+
+// ---- stores and a recorder that fail with a value in their error
+
+/** The error a store's own client raises when it quotes what it read: the value in its message, and in the error under it, and under that. */
+const quoting = (text: string): Error =>
+  new Error(`bad value ${text}`, { cause: new Error(`nested ${text}`, { cause: text }) });
+
+/** A store whose every read fails as `StoreFailed`, with an error that quotes `text`, a value the store holds. */
+export const failingStore = (text: string) =>
+  Store.make({
+    id: "failing",
+    item: Schema.NonEmptyString,
+    place: "store",
+    holds: { read: (_item: string) => Effect.fail(new Errors.StoreFailed({ cause: quoting(text) })) },
+  });
+
+/** A recorder whose every write fails as `RecordFailed`, with an error that quotes `text`, a value the caller held. */
+export const failingRecorder = (text: string): Layer.Layer<Recorder.Recorder> =>
+  Layer.succeed(Recorder.Recorder, { record: () => Effect.fail(new Errors.RecordFailed({ cause: quoting(text) })) });

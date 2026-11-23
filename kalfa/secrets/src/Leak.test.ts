@@ -10,11 +10,16 @@
 // replace them.
 import { inspect } from "node:util";
 import { expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Formatter, Option } from "effect";
+import { Cause, Effect, Exit, Formatter, Option, Schema } from "effect";
 import * as Errors from "./Errors.ts";
-import { flow } from "./Leak.test-support.ts";
+import { flow, NAME, STORE_ID } from "./Leak.test-support.ts";
+import * as Name from "./Name.ts";
+import * as Recorder from "./Recorder.ts";
 import {
+  failingRecorder,
+  failingStore,
   findable,
+  holder,
   found,
   needles,
   outcome,
@@ -208,6 +213,72 @@ it.effect.prop(
 
             expect(showsAny(texts, needles(value)), `${value.id}: ${error._tag} over ${name}`).toEqual([]);
           }
+        }
+      }
+    }),
+  run,
+);
+
+// X11. [secrets] Plant: write the cause's text into StoreFailed's message; write it into RecordFailed's message; keep the cause as it came (a
+// plain property, as `Schema.Defect` holds it), so the error under it prints and lists the value; give the error a `toJSON` that returns the
+// cause's text.
+it.effect.prop(
+  "X11 failures: [secrets] a store and a recorder that fail with an error that quotes a value fail with an error that shows no value, in its text, its message, its stack, its JSON, its properties, the cause chain under it, the spans and the logs that carry it",
+  { texture: valueTexture },
+  ({ texture }) =>
+    Effect.gen(function* () {
+      const values = findable(valueClasses(texture));
+      expect(classIds(values), "the generator reaches every value class").toBe("cde");
+
+      const version = Schema.decodeUnknownSync(Name.Version)("1");
+
+      for (const value of values) {
+        const failing: ReadonlyArray<{
+          readonly name: string;
+          readonly run: Effect.Effect<unknown, Errors.StoreFailed | Errors.RecordFailed>;
+        }> = [
+          { name: "the store", run: holder(failingStore(value.text)).read("app-key") },
+          {
+            name: "the recorder",
+            run: Recorder.Recorder.use((recorder) =>
+              recorder.record(new Recorder.Fetched({ name: NAME, store: STORE_ID, version })),
+            ).pipe(Effect.provide(failingRecorder(value.text))),
+          },
+        ];
+
+        for (const { name, run: failed } of failing) {
+          const { exit, spans, logs } = yield* watched(
+            failed.pipe(
+              Effect.tapError((error) =>
+                Effect.annotateCurrentSpan("failed", error).pipe(Effect.andThen(Effect.logError("failed", error))),
+              ),
+              Effect.withSpan("failing"),
+            ),
+          );
+
+          expect(Exit.isFailure(exit), `${value.id}: ${name} fails`).toBe(true);
+
+          const errors = Exit.isFailure(exit) ? Option.toArray(Cause.findErrorOption(exit.cause)) : [];
+
+          expect(errors.length, `${value.id}: ${name} fails with an error`).toBe(1);
+
+          const cause = Exit.isFailure(exit) ? [exit.cause] : [];
+
+          const texts = [
+            ...errors.flatMap((error) => [
+              ...displays(error),
+              error.message,
+              error.stack ?? "",
+              ...reachable(error),
+              Cause.pretty(Cause.fail(error)),
+              Cause.pretty(Cause.die(error)),
+            ]),
+            ...cause.flatMap((each) => [Cause.pretty(each), ...reachable(each)]),
+            ...spans.map(spanText),
+            ...logs,
+          ];
+
+          expect(showsAny(texts, needles(value)), `${value.id}: ${name}`).toEqual([]);
         }
       }
     }),
