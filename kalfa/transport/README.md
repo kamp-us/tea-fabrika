@@ -56,6 +56,8 @@ data (`read`). `Format.layerJsonRpc` is the one Transport ships, JSON-RPC 2.0, o
 - The value is under `params.value`, never spread into `params`, so a bare string, a number or a value with its own
   `_meta` key all fit. It is written by Effect's JSON codec (`Schema.toCodecJson`), so a `BigInt` is a string and a
   `Uint8Array` is base64. Effect's codec writes `-0` as `0`, so `-0` comes back `0`.
+- `Format.write` of data no JSON holds (a `BigInt`, a cycle) fails with `FormatError` of `value`. The stream functions
+  never reach it, since the codec writes only JSON.
 - Another format is another Layer of `Format`. No stream function changes.
 
 ## The trace
