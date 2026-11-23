@@ -29,18 +29,19 @@ const reports = Command.make("leak", {}, () =>
 
 const gives = Layer.succeed(Probe, { value: "v" });
 
-// A Layer that builds from the platform, and one that builds from a service nothing gives.
+// A Layer that builds from the platform.
 const fromPlatform = Layer.effect(
   Probe,
   Effect.map(Path.Path, () => ({ value: "v" })),
 );
 
-const fromOther = Layer.effect(
-  Probe,
-  Effect.map(Other, () => ({ value: "v" })),
-);
-
 const diagnostics = [KeyShape];
+
+// A call of `make` on the command that needs `Probe`, with a Layer of this type that gives it.
+type Takes<L> = (
+  command: typeof needsProbe,
+  options: { readonly layer: L; readonly diagnostics: ReadonlyArray<Diagnostic.Declared> },
+) => void;
 
 const shapeContract = (widened: string, either: "a" | "b") => {
   // The name is the command's name, as a literal.
@@ -115,9 +116,14 @@ const shapeContract = (widened: string, either: "a" | "b") => {
   // @ts-expect-error the Layer gives a service the command does not need, and the command still needs `Other`
   const wrong = Subcommand.make(needsOther, { layer: gives, diagnostics });
 
-  // K10 plant: widen the Layer's requirement `LR` to `unknown`, and this line compiles.
-  // @ts-expect-error a Layer needs a service that nothing gives: only Node's platform is given to it
-  const needy = Subcommand.make(needsProbe, { layer: fromOther, diagnostics });
+  // A Layer that needs a service nothing gives is refused. It is a type check of `make`'s own signature, with no
+  // Layer value to hand over: `make` fits a call with such a Layer only if its signature takes one.
+  // K10 plant: widen the Layer's requirement `LR` to `unknown`, or to a bound that holds `Other`, and the two `not`
+  // lines fail; narrow it to `never`, and the line with `Path` fails.
+  expectTypeOf(Subcommand.make).not.toExtend<Takes<Layer.Layer<Probe, never, Other>>>();
+  expectTypeOf(Subcommand.make).not.toExtend<Takes<Layer.Layer<Probe, never, Path.Path | Other>>>();
+  expectTypeOf(Subcommand.make).toExtend<Takes<Layer.Layer<Probe, never, Path.Path>>>();
+  expectTypeOf(Subcommand.make).toExtend<Takes<Layer.Layer<Probe, never, Subcommand.Platform>>>();
 
   // @ts-expect-error a list of codes holds declared codes, never text
   const text = Subcommand.make(typed, { layer: Layer.empty, diagnostics: ["leak/key-shape"] });
@@ -134,7 +140,7 @@ const shapeContract = (widened: string, either: "a" | "b") => {
   // @ts-expect-error the command is an effect/cli command, never its name
   const named = Subcommand.make("leak", { layer: Layer.empty, diagnostics });
 
-  expectTypeOf([missing, wrong, needy, text, plainCode, noList, noLayer, named]).toBeArray();
+  expectTypeOf([missing, wrong, text, plainCode, noList, noLayer, named]).toBeArray();
 };
 
 // Two types are the same when each is assignable to the other. `expectTypeOf`'s own equality cannot read a Subcommand

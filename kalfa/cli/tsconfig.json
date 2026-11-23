@@ -20,16 +20,6 @@
                 "instanceOfSchema": "error"
               }
             }
-          },
-          // K10 hands `make` a Layer that needs a service nothing gives, and checks that the compiler refuses it; this
-          // check says so too, on that line, and so is off in that one file.
-          {
-            "include": ["src/Subcommand.types.test.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "missingLayerContext": "off"
-              }
-            }
           }
         ]
       }

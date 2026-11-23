@@ -17,6 +17,7 @@ import {
 } from "effect";
 import { Command } from "effect/cli";
 import { ChildProcessSpawner } from "effect/process";
+import * as fc from "fast-check";
 import type * as Subcommand from "./Subcommand.ts";
 
 /** The shared seed: a fixed seed makes a red run repeat. */
@@ -27,14 +28,27 @@ const pattern = (form: RegExp): Arbitrary.Arbitrary<string> =>
 
 // ---- root names
 
-/** A root name by the rule: lowercase words joined by single hyphens, the first starting with a letter. */
-export const goodName: Arbitrary.Arbitrary<string> = pattern(/^[a-z][a-z0-9]{0,4}(?:-[a-z0-9]{1,4}){0,2}$/);
+// A root name by the rule: lowercase words joined by single hyphens, the first starting with a letter.
+const GOOD_NAME = /^[a-z][a-z0-9]{0,4}(?:-[a-z0-9]{1,4}){0,2}$/;
+
+/** Root names, as Effect's Arbitrary draws them. */
+export const goodName: Arbitrary.Arbitrary<string> = pattern(GOOD_NAME);
+
+/** The same names, as fast-check draws them, for a law that runs `fc.assert` itself. */
+export const goodNameFc: fc.Arbitrary<string> = fc.stringMatching(GOOD_NAME);
+
+// Any short text from the characters a name is made of and the ones that break it. Most of what it draws is no root
+// name, and some is, so the model decides each one.
+const ANY_TEXT = /^[a-zA-Z0-9\- /_\n]{0,8}$/;
+
+/** Texts of the characters a name is made of and the ones that break it, as fast-check draws them. */
+export const anyTextFc: fc.Arbitrary<string> = fc.stringMatching(ANY_TEXT);
 
 /**
- * Any short text from the characters a name is made of and the ones that break it. Most of what this draws is no root
- * name, and some is, so the model decides each one.
+ * Any short text at all, lone surrogates, control characters and every script included: what the patterns above cannot
+ * draw. Effect's Arbitrary has no generator for a lone surrogate, so this one is fast-check's.
  */
-export const anyText: Arbitrary.Arbitrary<string> = pattern(/^[a-zA-Z0-9\- /_\n]{0,8}$/);
+export const wildText: fc.Arbitrary<string> = fc.string({ unit: "binary", maxLength: 8 });
 
 const LOWER = "abcdefghijklmnopqrstuvwxyz";
 

@@ -6,18 +6,21 @@ import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import * as TestDiagnostics from "@kalfa/diagnostics/TestDiagnostics";
 import { Effect, Exit, Layer, Ref, Result } from "effect";
 import { Command } from "effect/cli";
+import * as fc from "fast-check";
 import {
-  anyText,
+  anyTextFc,
   CANDIDATE_IDS,
   candidates,
   goodCodes,
   goodName,
+  goodNameFc,
   isRootName,
   NAME_BREAKS,
   platform,
   Probe,
   probing,
   SEED,
+  wildText,
 } from "./Subcommand.test-support.ts";
 import * as Subcommand from "./Subcommand.ts";
 
@@ -56,25 +59,25 @@ describe("K11, make and isSubcommand at run time", () => {
   // Plant: drop the name check, and a name with a capital letter builds. Check with a pattern that allows a trailing
   // hyphen, a leading digit or a double hyphen, and that break builds. Make the pattern refuse a digit inside a word,
   // and a good name with a digit is refused. Give the pattern the multiline flag, and a trailing line break builds.
-  it.prop(
-    "a name builds exactly when it is a root name by an independent model of the rule, and a refused name throws an Error",
-    { good: goodName, text: anyText },
-    ({ good, text }) => {
-      const names = [good, text, ...NAME_BREAKS.map((broken) => broken.apply(good))];
+  it("a name builds exactly when it is a root name by an independent model of the rule, and a refused name throws an Error", () => {
+    fc.assert(
+      fc.property(goodNameFc, anyTextFc, wildText, (good, text, wild) => {
+        const names = [good, text, wild, ...NAME_BREAKS.map((broken) => broken.apply(good))];
 
-      for (const name of names) {
-        expect(verdict(name)).toBeUndefined();
-      }
+        for (const name of names) {
+          expect(verdict(name)).toBeUndefined();
+        }
 
-      // Every class is reached: the good name builds, and every break is refused.
-      expect(attempt(good).built).toBeDefined();
+        // Every class is reached: the good name builds, and every break is refused.
+        expect(attempt(good).built).toBeDefined();
 
-      for (const broken of NAME_BREAKS) {
-        expect(attempt(broken.apply(good)).thrown, broken.name).toBeInstanceOf(Error);
-      }
-    },
-    { arbitrary: { seed: SEED, runs: 200 } },
-  );
+        for (const broken of NAME_BREAKS) {
+          expect(attempt(broken.apply(good)).thrown, broken.name).toBeInstanceOf(Error);
+        }
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+  });
 
   // Plant: store another name than the command's, and the name differs. Cut the list of codes to its first code, or
   // sort it, and the list differs. Store the command with no `Command.provide`, and its handler dies for `Probe`.
