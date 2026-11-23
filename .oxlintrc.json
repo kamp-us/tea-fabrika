@@ -737,7 +737,13 @@
     {
       // The config engine moved to kalfa/config (our tooling is a few @kalfa packages grouped by domain) keeps the next/** rule block below, as its own
       // override, so the next/** block stays exactly next/** (edge-config.test.ts reads it by that).
-      "files": ["kalfa/config/src/**", "kalfa/config/*.ts", "kalfa/diagnostics/src/**", "kalfa/git/src/**", "kalfa/markdown/src/**"],
+      "files": [
+        "kalfa/config/src/**",
+        "kalfa/config/*.ts",
+        "kalfa/diagnostics/src/**",
+        "kalfa/git/src/**",
+        "kalfa/markdown/src/**"
+      ],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
       "rules": {
         "fabrika/no-promises": "error",

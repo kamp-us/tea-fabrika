@@ -1,15 +1,16 @@
-// The laws of the git-binary adapter on a stand-in spawner (P2 to P6): what each exit code means, the time
-// limit, git's version, the command's environment, and that sizes are read before objects. The real binary
-// answers the shared laws in ProcessRepository.integration.test.ts.
+// The laws of the git-binary adapter on a stand-in spawner (P2 to P8): what each exit code means, the time
+// limit, git's version, the command's environment, the arguments of each call, that sizes are read before objects,
+// and how much stderr an error keeps. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, ConfigProvider, Context, Duration, Effect, Fiber, Layer, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as CommitId from "./CommitId.ts";
-import { commitIdArb, wordArb } from "./HistoryTest.ts";
+import { commitIdArb, wordArb } from "./History.test-support.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Ref from "./Ref.ts";
+import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
-import { expectFailure, settings } from "./RepositoryTest.ts";
+import { settings } from "./RepositoryTest.ts";
 import * as Settings from "./Settings.ts";
 import { standIn, type Call, type Reply } from "./StandIn.test-support.ts";
 
@@ -195,6 +196,84 @@ it.effect.prop(
   { arbitrary: { runs: 50, seed: 119120 } },
 );
 
+// Plant: no `forceKillAfter` in the spawn. A child that ignores the first signal is then never killed, so its scope
+// never ends and the call never ends; the law's own guard (the call has ended once the clock is past the limit plus
+// the kill time) fails it, so the plant is seen red and never hangs. The call runs detached: a child that is never
+// killed would otherwise hold the test's own scope open.
+it.effect.prop(
+  "P3 the time limit: a child that ignores the first signal is killed a short, fixed time later, and the call still ends",
+  { a: commitIdArb, seconds: int(1, 3600) },
+  ({ a, seconds }) =>
+    Effect.gen(function* () {
+      const limit = Duration.seconds(seconds);
+      const known = [a, `b${a.slice(1)}`];
+      const mode = { hang: false };
+
+      const { repo, stand } = yield* Effect.gen(function* () {
+        const stand = yield* standIn((call) =>
+          mode.hang && call.verb !== "version" ? "hang, ignores the first signal" : script(known, 200)(call),
+        );
+
+        const context = yield* Layer.build(
+          ProcessRepository.layer({
+            path: PATH,
+            settings: Schema.decodeUnknownSync(Settings.Settings)({
+              limits: { commits: 100, refs: 100, bytes: 100_000, time: `${seconds} seconds` },
+            }),
+          }).pipe(Layer.provide(stand.layer)),
+        );
+
+        return { repo: Context.get(context, Repository.Repository), stand };
+      }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { PATH: "/bin" } }))));
+
+      mode.hang = true;
+      const first = commitIdFrom(known[0] ?? a);
+      const second = commitIdFrom(known[1] ?? a);
+      const refName = Schema.decodeUnknownSync(Ref.RefName)("refs/heads/main");
+
+      const calls: ReadonlyArray<readonly [string, Effect.Effect<unknown, unknown>]> = [
+        ["readCommit", repo.readCommit(first)],
+        ["readRefs", repo.readRefs(refName)],
+        ["walk", repo.walk({ include: [first], exclude: [] })],
+        ["mergeBases", repo.mergeBases(first, second)],
+        ["isAncestor", repo.isAncestor(first, second)],
+      ];
+
+      for (const [name, call] of calls) {
+        const before = yield* stand.ended;
+        const fiber = yield* Effect.forkDetach(call);
+        yield* Effect.yieldNow;
+        yield* TestClock.adjust(Duration.millis(1));
+
+        const hanging = (yield* stand.calls).at(-1);
+        const killAfter = hanging?.forceKillAfter;
+        expect(killAfter, `${name}: the spawn says when to kill a child that ignores the first signal`).toBeDefined();
+
+        if (killAfter === undefined) {
+          return;
+        }
+
+        expect(Duration.isFinite(killAfter), `${name}: the kill time is finite`).toBe(true);
+        expect(Duration.isGreaterThan(killAfter, Duration.zero), `${name}: the kill time is above zero`).toBe(true);
+        expect(
+          Duration.isLessThanOrEqualTo(killAfter, Duration.minutes(1)),
+          `${name}: the kill time is short, not a wait of the call's own`,
+        ).toBe(true);
+
+        yield* TestClock.adjust(limit);
+        yield* TestClock.adjust(killAfter);
+        expect(
+          fiber.pollUnsafe(),
+          `${name}: the call has ended once the clock passed the limit and the kill time`,
+        ).toBeDefined();
+        const error = yield* Effect.flip(Fiber.join(fiber)).pipe(Effect.orDie);
+        expect(isTimedOut(error), `${name}: fails with TimedOut`).toBe(true);
+        expect((yield* stand.ended) > before, `${name}: the child was killed`).toBe(true);
+      }
+    }),
+  { arbitrary: { runs: 50, seed: 119120 } },
+);
+
 const LABELS = ["plain", "Apple", "Windows"] as const;
 
 const versionText = (label: (typeof LABELS)[number], major: number, minor: number, patch: number): string => {
@@ -354,6 +433,133 @@ it.effect.prop(
           .every((call) => call.args.includes(`--max-count=${commits + 1}`)),
         "git is asked for one more than the limit, and no more",
       ).toBe(true);
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+const START = [
+  "--no-replace-objects",
+  `--git-dir=${PATH}`,
+  "-c",
+  "core.hooksPath=/dev/null",
+  "-c",
+  "gc.auto=0",
+  "-c",
+  "maintenance.auto=false",
+];
+
+// Plant: swap the two ids given to `merge-base`; drop `--not` from `rev-list`.
+it.effect.prop(
+  "P7 git's arguments: each call asks git for exactly its plumbing command, with its ids and counts in order",
+  { a: commitIdArb, commits: int(1, 40), refs: int(1, 40), withExclude: Arbitrary.schema(Schema.Boolean) },
+  ({ a, commits, refs, withExclude }) =>
+    Effect.gen(function* () {
+      const ids = [1, 2, 3, 4].map((n) => `${n}${a.slice(1)}`);
+      const [one, two, three, four] = ids.map(commitIdFrom);
+      const refName = Schema.decodeUnknownSync(Ref.RefName)("refs/kalfa/candidates");
+
+      if (one === undefined || two === undefined || three === undefined || four === undefined) {
+        return;
+      }
+
+      const exclude = withExclude ? [three, four] : [];
+      const OPEN = [["version"], ["rev-parse", "--git-dir"]];
+      const CHECK = ["cat-file", "--batch-check"];
+      const SHALLOW = ["rev-parse", "--is-shallow-repository"];
+
+      const cases: ReadonlyArray<
+        readonly [string, (repo: Repository.Repository["Service"]) => Effect.Effect<unknown, unknown>, string[][]]
+      > = [
+        ["readCommit", (repo) => repo.readCommit(one), [CHECK, ["cat-file", "--batch"]]],
+        [
+          "readRefs",
+          (repo) => repo.readRefs(refName),
+          [
+            [
+              "for-each-ref",
+              `--count=${refs + 1}`,
+              "--format=%(objectname) %(objecttype) %(symref) %(refname)",
+              refName,
+            ],
+          ],
+        ],
+        [
+          "walk",
+          (repo) => repo.walk({ include: [one, two], exclude }),
+          [
+            CHECK,
+            SHALLOW,
+            [
+              "rev-list",
+              "--topo-order",
+              "--reverse",
+              `--max-count=${commits + 1}`,
+              ids[0] ?? "",
+              ids[1] ?? "",
+              ...(withExclude ? ["--not", ids[2] ?? "", ids[3] ?? ""] : []),
+            ],
+          ],
+        ],
+        [
+          "mergeBases",
+          (repo) => repo.mergeBases(one, two),
+          [CHECK, SHALLOW, ["merge-base", "--all", ids[0] ?? "", ids[1] ?? ""]],
+        ],
+        [
+          "isAncestor",
+          (repo) => repo.isAncestor(one, two),
+          [CHECK, SHALLOW, ["merge-base", "--is-ancestor", ids[0] ?? "", ids[1] ?? ""]],
+        ],
+      ];
+
+      for (const [name, call, expected] of cases) {
+        const { repo, stand } = yield* open(script(ids, 200), { commits, refs });
+        yield* Effect.exit(call(repo));
+
+        expect(
+          (yield* stand.calls).map((seen) => seen.args),
+          `${name}: every command, in order`,
+        ).toEqual([...OPEN, ...expected].map((rest) => [...START, ...rest]));
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// Plant: keep the whole of stderr, or its last `limits.bytes` bytes.
+it.effect.prop(
+  "P8 the stderr cap: an error keeps the first limits.bytes bytes of stderr, and a shorter stderr whole",
+  { bytes: int(1, 200), code: int(2, 255), shift: int(0, 25), more: int(1, 300), cut: int(0, 400) },
+  ({ bytes, code, shift, more, cut }) =>
+    Effect.gen(function* () {
+      const a = "a".repeat(40);
+      const b = "b".repeat(40);
+
+      const text = (length: number): string =>
+        Array.from({ length }, (_, i) => String.fromCharCode(97 + ((i * 7 + shift) % 26))).join("");
+
+      for (const length of [bytes - 1, bytes, bytes + 1, bytes + more]) {
+        const said = text(length);
+
+        const ways: ReadonlyArray<readonly [string, string | ReadonlyArray<string>]> = [
+          ["in one chunk", said],
+          [`cut at ${cut}`, [said.slice(0, cut), said.slice(cut)]],
+        ];
+
+        for (const [way, stderr] of ways) {
+          const { repo } = yield* open(
+            script([a, b], 200, (call) => (call.verb === "merge-base" ? { code, stderr } : { code: 0 })),
+            { bytes },
+          );
+
+          const error = yield* failure(repo.isAncestor(commitIdFrom(a), commitIdFrom(b)));
+          unavailable(
+            error,
+            Repository.Exited,
+            { code, stderr: said.slice(0, bytes) },
+            `${length} bytes of stderr, ${way}`,
+          );
+        }
+      }
     }),
   { arbitrary: { runs: 100, seed: 119120 } },
 );

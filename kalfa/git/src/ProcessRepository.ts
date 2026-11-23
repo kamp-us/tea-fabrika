@@ -5,7 +5,7 @@
  *
  * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a read. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`.
  */
-import { Config, Effect, Layer, Stream } from "effect";
+import { Config, Duration, Effect, Layer, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { CommitId } from "./CommitId.ts";
 import * as Parse from "./internal/parse.ts";
@@ -37,6 +37,11 @@ const PINNED = {
   GIT_NO_REPLACE_OBJECTS: "1",
   LC_ALL: "C",
 };
+
+// How long a child that ignores the first signal has to end before it is killed outright. A time limit ends a call, so
+// the child must end with it: without this, a git that ignores SIGTERM would hold the call open past its limit. It is
+// short and fixed, and no caller has a reason to change it.
+const KILL_AFTER = Duration.seconds(5);
 
 const encoder = new TextEncoder();
 
@@ -80,6 +85,7 @@ const runner = (
             ChildProcess.make("git", [...start(path), ...args], {
               extendEnv: false,
               env,
+              forceKillAfter: KILL_AFTER,
               stdin: input === undefined ? "ignore" : Stream.make(encoder.encode(input)),
             }),
           )

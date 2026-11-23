@@ -93,12 +93,16 @@ export const refs = (
         return yield* Result.fail(unreadable("a for-each-ref line has an unexpected form"));
       }
 
+      const refName = yield* Result.mapError(Schema.decodeUnknownResult(Ref.RefName)(name), () =>
+        unreadable("a for-each-ref line names a ref that is not a ref name"),
+      );
+
       if (symref !== "") {
-        return yield* Result.fail(new Repository.RefNotCommit({ ref: name, points: "symbolic" }));
+        return yield* Result.fail(new Repository.RefNotCommit({ ref: refName, points: "symbolic" }));
       }
 
       if (type === "tag" || type === "tree" || type === "blob") {
-        return yield* Result.fail(new Repository.RefNotCommit({ ref: name, points: type }));
+        return yield* Result.fail(new Repository.RefNotCommit({ ref: refName, points: type }));
       }
 
       if (type !== "commit") {

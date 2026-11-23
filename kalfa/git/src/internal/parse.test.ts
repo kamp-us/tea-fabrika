@@ -6,8 +6,8 @@ import * as Commit from "../Commit.ts";
 import catFile from "../fixtures/cat-file-2.40.1.json" with { type: "json" };
 import forEachRef from "../fixtures/for-each-ref-2.40.1.json" with { type: "json" };
 import * as Ref from "../Ref.ts";
+import { expectFailure } from "../Repository.test-support.ts";
 import * as Repository from "../Repository.ts";
-import { expectFailure } from "../RepositoryTest.ts";
 import * as Parse from "./parse.ts";
 
 const FAILURES = {

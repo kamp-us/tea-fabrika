@@ -7,10 +7,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as CommitId from "./CommitId.ts";
-import type { History, Person } from "./HistoryTest.ts";
+import type { FlatSignature, History } from "./History.test-support.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Repository from "./Repository.ts";
-import type { Config as Settings, Seeded, Subject } from "./RepositoryTest.ts";
+import type { Seeded, Subject } from "./RepositoryTest.ts";
+import type { Settings } from "./Settings.ts";
 
 type Needs = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path;
 
@@ -82,8 +83,8 @@ const bytes = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
   return out;
 };
 
-const identLine = (person: Person): string =>
-  `${person.name}${person.name === "" ? "" : " "}<${person.email}> ${person.seconds} ${person.offset}`;
+const identLine = (flat: FlatSignature): string =>
+  `${flat.name}${flat.name === "" ? "" : " "}<${flat.email}> ${flat.seconds} ${flat.offset}`;
 
 /** The fast-import stream of a history: a root starts after `reset`, a merge names its parents in order. */
 const importStream = (history: History): Uint8Array =>

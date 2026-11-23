@@ -6,17 +6,18 @@ import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
 import fastImport from "./fixtures/fast-import-2.40.1.json" with { type: "json" };
-import { missingId, shapes, textureArb, type History, type Person } from "./HistoryTest.ts";
+import { missingId, shapes, textureArb, type History, type FlatSignature } from "./History.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
 import * as Ref from "./Ref.ts";
+import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as RepositoryTest from "./RepositoryTest.ts";
 
-const signature = (person: Person): Commit.Signature =>
+const signature = (flat: FlatSignature): Commit.Signature =>
   new Commit.Signature({
-    name: person.name,
-    email: person.email,
-    at: { seconds: person.seconds, offset: person.offset },
+    name: flat.name,
+    email: flat.email,
+    at: { seconds: flat.seconds, offset: flat.offset },
   });
 
 const commitIdFrom = (text: string): CommitId.CommitId => Schema.decodeUnknownSync(CommitId.CommitId)(text);
@@ -115,7 +116,7 @@ const refusal = (result: Result.Result<unknown, unknown>, reason: string, place:
   expect(Result.isFailure(result), `${place} is refused`).toBe(true);
 
   if (Result.isFailure(result)) {
-    RepositoryTest.expectFailure(result.failure, MemoryRepository.BadStore, { reason }, `${place} says why`);
+    expectFailure(result.failure, MemoryRepository.BadStore, { reason }, `${place} says why`);
   }
 };
 
@@ -132,10 +133,10 @@ it.effect.prop(
       }
 
       const root = all.find((shape) => shape.label === "one root");
-      const person = texture.people[0];
+      const flat = texture.signatures[0];
 
-      if (root === undefined || person === undefined) {
-        return yield* Effect.die("the generator made no root or person");
+      if (root === undefined || flat === undefined) {
+        return yield* Effect.die("the generator made no root or signature");
       }
 
       const { store, ids } = yield* build(root.history);
@@ -144,8 +145,8 @@ it.effect.prop(
 
       const orphan = yield* MemoryRepository.commit({
         parents: [gone],
-        author: signature(person),
-        committer: signature(person),
+        author: signature(flat),
+        committer: signature(flat),
         message: "orphan",
       });
 

@@ -1,7 +1,7 @@
 // The laws every adapter of `Repository` passes (S1 to S10), exported as `/test`. A runner gives a
 // `Subject`: how to seed a history into its own kind of store. The suite draws a texture, makes one
 // history for each shape class from it, seeds each, and compares every answer with the model in
-// HistoryTest.ts. A subject that passes these laws answers as every other one does.
+// History.test-support.ts. A subject that passes these laws answers as every other one does.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema, type Scope, Tracer } from "effect";
 import * as Commit from "./Commit.ts";
@@ -34,12 +34,11 @@ import {
   type History,
   type Shape,
   type Texture,
-} from "./HistoryTest.ts";
+} from "./History.test-support.ts";
 import * as Ref from "./Ref.ts";
+import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
-
-export type Config = typeof Settings.Settings.Type;
 
 /** A seeded store: the service to ask, the id each history commit got, and what the laws may look at. */
 export interface Seeded {
@@ -53,7 +52,7 @@ export interface Seeded {
 }
 
 export interface Subject {
-  readonly seed: (history: History, settings: Config) => Effect.Effect<Seeded, never, Scope.Scope>;
+  readonly seed: (history: History, settings: Settings.Settings) => Effect.Effect<Seeded, never, Scope.Scope>;
 }
 
 export interface SuiteOptions {
@@ -66,7 +65,7 @@ export interface SuiteOptions {
 /** Settings with generous limits, and the ones a law wants to push set. */
 export const settings = (
   limits: { readonly commits?: number; readonly refs?: number; readonly bytes?: number } = {},
-): Config =>
+): Settings.Settings =>
   Schema.decodeUnknownSync(Settings.Settings)({
     limits: { commits: 1000, refs: 1000, bytes: 1_000_000, time: "10 seconds", ...limits },
   });
@@ -105,11 +104,10 @@ const nonEmpty = <A>(items: ReadonlyArray<A>): readonly [A, ...Array<A>] => {
   return [first, ...rest];
 };
 
-export const encodeCommit = (commit: Commit.Commit): typeof Commit.Commit.Encoded =>
-  Schema.encodeSync(Commit.Commit)(commit);
+const encodeCommit = (commit: Commit.Commit): typeof Commit.Commit.Encoded => Schema.encodeSync(Commit.Commit)(commit);
 
 /** What `readCommit` of commit `i` must answer, as plain data. */
-export const expectedCommit = (
+const expectedCommit = (
   history: History,
   ids: ReadonlyArray<CommitId.CommitId>,
   i: number,
@@ -142,7 +140,7 @@ const expectedRefs = (
 const seedEach = <A, E>(
   subject: Subject,
   histories: ReadonlyArray<Shape>,
-  config: Config,
+  config: Settings.Settings,
   check: (seeded: Seeded, shape: Shape) => Effect.Effect<A, E>,
 ): Effect.Effect<ReadonlyArray<A>, E> =>
   Effect.forEach(
@@ -192,17 +190,6 @@ const readRefsBack = (seeded: Seeded, history: History, label: string): Effect.E
 const isMissing = Schema.is(Repository.NoSuchCommit);
 
 const isTooShort = Schema.is(Repository.HistoryTooShort);
-
-/** `error` is an instance of the failure class `kind` and holds `fields`: never its text, only what it says. */
-export const expectFailure = <E>(
-  error: E,
-  kind: abstract new (...args: never[]) => object,
-  fields: object,
-  message: string,
-): void => {
-  expect(error, message).toBeInstanceOf(kind);
-  expect(error, message).toMatchObject(fields);
-};
 
 const failure = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<E, never> => Effect.flip(effect).pipe(Effect.orDie);
 

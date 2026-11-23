@@ -1,10 +1,12 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-// K1 and K2: what the package's own files say. It stands alone (decision on small libraries usable alone):
+// K1 to K4: what the package's own files say. It stands alone (decision on small libraries usable alone):
 // it names no other package of this repository, it has no dependencies, and no file in it names the repository.
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import manifest from "../package.json" with { type: "json" };
+import * as HistoryTest from "./HistoryTest.ts";
+import * as RepositoryTest from "./RepositoryTest.ts";
 
 const Manifest = Schema.Struct({
   name: Schema.String,
@@ -79,4 +81,22 @@ it("K2 scenario: no file of the package names this repository or its records, in
       expect(text.includes(word), `${file} names ${word}`).toBe(false);
     }
   }
+});
+
+// The word for a human being, written in two halves so this file does not hold it whole.
+const NOT_A_SIGNATURE = `Per${"son"}`;
+
+// Plant: name a test type for a human being again.
+it("K3 scenario: no file of the package names a signature for a human being; the glossary's word is Signature", () => {
+  const files = filesUnder(new URL("../", import.meta.url));
+
+  for (const file of files) {
+    expect(readFileSync(file, "utf8").includes(NOT_A_SIGNATURE), `${file} holds the word`).toBe(false);
+  }
+});
+
+// Plant: export one more helper from either entry.
+it("K4 scenario: the public test entries export only what a caller needs", () => {
+  expect(Object.keys(RepositoryTest).sort(), "/test").toEqual(["settings", "suite"]);
+  expect(Object.keys(HistoryTest).sort(), "/test/History").toEqual(["shapes", "textureArb"]);
 });

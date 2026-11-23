@@ -9,6 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as CommitId from "./CommitId.ts";
 import { bareRepository, fastImport, git, openRepository, processSubject } from "./ProcessSeed.test-support.ts";
 import * as Ref from "./Ref.ts";
+import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as RepositoryTest from "./RepositoryTest.ts";
 
@@ -60,13 +61,13 @@ it.effect(
 
       const repo = yield* openRepository(dir, settings);
       const id = commitIdFrom(first ?? "");
-      RepositoryTest.expectFailure(
+      expectFailure(
         yield* failure(repo.readCommit(id)),
         Repository.UnreadableCommit,
         { id, reason: "message" },
         "readCommit",
       );
-      RepositoryTest.expectFailure(
+      expectFailure(
         yield* failure(repo.walk({ include: [id], exclude: [] })),
         Repository.UnreadableCommit,
         { id, reason: "message" },
@@ -101,19 +102,19 @@ it.effect(
       ]);
       yield* git(dir, ["symbolic-ref", "refs/heads/alias", "refs/heads/main"]);
       const repo = yield* openRepository(dir, settings);
-      RepositoryTest.expectFailure(
+      expectFailure(
         yield* failure(repo.readRefs(refNameFrom("refs/tags/annotated"))),
         Repository.RefNotCommit,
         { ref: "refs/tags/annotated", points: "tag" },
         "an annotated tag",
       );
-      RepositoryTest.expectFailure(
+      expectFailure(
         yield* failure(repo.readRefs(refNameFrom("refs/heads/alias"))),
         Repository.RefNotCommit,
         { ref: "refs/heads/alias", points: "symbolic" },
         "a symbolic ref",
       );
-      RepositoryTest.expectFailure(
+      expectFailure(
         yield* failure(repo.readRefs(refNameFrom("refs/heads"))),
         Repository.RefNotCommit,
         {},
@@ -151,15 +152,10 @@ it.effect(
 
       const fs = yield* FileSystem.FileSystem;
       const empty = yield* fs.makeTempDirectoryScoped();
-      RepositoryTest.expectFailure(
-        yield* failure(openRepository(empty, settings)),
-        Repository.NoRepository,
-        {},
-        "an empty folder",
-      );
+      expectFailure(yield* failure(openRepository(empty, settings)), Repository.NoRepository, {}, "an empty folder");
       // An empty folder inside a repository: only `--git-dir` stops git from finding the one above it.
       yield* fs.makeDirectory(`${bare}/empty`);
-      RepositoryTest.expectFailure(
+      expectFailure(
         yield* failure(openRepository(`${bare}/empty`, settings)),
         Repository.NoRepository,
         {},

@@ -17,7 +17,7 @@ import {
   MESSAGE_CLASSES,
   messageVariants,
   partArb,
-  personArb,
+  flatSignatureArb,
   refAccepted,
   refRefused,
   SIGNATURE_CLASSES,
@@ -25,9 +25,9 @@ import {
   signatureVariants,
   toPlain,
   wordArb,
-} from "./HistoryTest.ts";
+} from "./History.test-support.ts";
 import * as Ref from "./Ref.ts";
-import { expectFailure } from "./RepositoryTest.ts";
+import { expectFailure } from "./Repository.test-support.ts";
 import * as Settings from "./Settings.ts";
 
 const RUNS = { arbitrary: { runs: 200, seed: 119120 } };
@@ -238,7 +238,7 @@ it.prop(
 // empty name or email; refuse a space at either end of a name.
 it.prop(
   "G4 a commit's values: Commit and Signature round-trip every class and refuse what git's format cannot hold",
-  { base: personArb, word: wordArb, id: commitIdArb, parent: commitIdArb },
+  { base: flatSignatureArb, word: wordArb, id: commitIdArb, parent: commitIdArb },
   ({ base, word, id, parent }) => {
     const messages = messageVariants(word);
     const signatures = signatureVariants(base);
@@ -275,11 +275,11 @@ it.prop(
       roundTrips(`message ${label}`, plainCommit({ message }));
     }
 
-    for (const [label, person] of signatures) {
-      roundTrips(`author ${label}`, plainCommit({ author: toPlain(person) }));
-      roundTrips(`committer ${label}`, plainCommit({ committer: toPlain(person) }));
-      const alone = Schema.decodeUnknownSync(Commit.Signature)(toPlain(person));
-      expect(Schema.encodeSync(Commit.Signature)(alone), `${label} as a signature`).toEqual(toPlain(person));
+    for (const [label, flat] of signatures) {
+      roundTrips(`author ${label}`, plainCommit({ author: toPlain(flat) }));
+      roundTrips(`committer ${label}`, plainCommit({ committer: toPlain(flat) }));
+      const alone = Schema.decodeUnknownSync(Commit.Signature)(toPlain(flat));
+      expect(Schema.encodeSync(Commit.Signature)(alone), `${label} as a signature`).toEqual(toPlain(flat));
     }
 
     for (const [label, plain] of signatureRefusals(base)) {
@@ -304,11 +304,14 @@ const NOT_A_TIME = [
   ["a bare number", 5],
   ["a bare number as text", "5"],
   ["a negative amount", "-5 seconds"],
+  ["infinity, which has no end to wait for", "Infinity"],
+  ["negative infinity", "-Infinity"],
   ["a unit with no amount", "seconds"],
   ["the empty text", ""],
 ] as const;
 
-// Plant: give `commits` a default; drop the text check on `time`, so `"ten"` is accepted.
+// Plant: give `commits` a default; drop the text check on `time`, so `"ten"` is accepted; drop the finite check on `time`,
+// so `"Infinity"` is accepted.
 it.prop(
   "G5 settings: Settings accepts every positive count and duration text, refuses the rest, and has no default",
   { limits: limitsArb },

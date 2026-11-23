@@ -1,7 +1,7 @@
 // A stand-in for the process spawner: it answers each git command from a script, records every command
 // with its environment, and counts how many child scopes have ended, so a law can see a child was ended
 // without a real signal.
-import { Effect, Layer, PlatformError, Predicate, Ref, Sink, Stream } from "effect";
+import { Duration, Effect, Layer, Option, PlatformError, Predicate, Ref, Sink, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Command } from "effect/process/ChildProcess";
 
@@ -11,19 +11,28 @@ export interface Call {
   readonly verb: string;
   readonly rest: ReadonlyArray<string>;
   readonly extendEnv: boolean | undefined;
+  /** How long the command's scope waits after the first signal before it kills the child outright, if it says. */
+  readonly forceKillAfter: Duration.Duration | undefined;
   readonly env: Readonly<Record<string, string>>;
 }
 
-/** What a command does: exit with a code and output, never exit, or fail to start. */
+/**
+ * What a command does: exit with a code and output (stderr may come in several chunks), never exit, never exit and
+ * ignore the first signal, or fail to start.
+ *
+ * A child that ignores the first signal ends only when its scope kills it outright, which the scope does after the
+ * command's `forceKillAfter` and never without one, as Effect's Node spawner does.
+ */
 export type Reply =
-  | { readonly code: number; readonly stdout?: string; readonly stderr?: string }
+  | { readonly code: number; readonly stdout?: string; readonly stderr?: string | ReadonlyArray<string> }
   | "hang"
+  | "hang, ignores the first signal"
   | "cannot start";
 
 interface StandIn {
   readonly layer: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>;
   readonly calls: Effect.Effect<ReadonlyArray<Call>>;
-  /** How many child scopes have ended. */
+  /** How many children are dead: their scope has ended and, for a child that ignores a signal, it was killed. */
   readonly ended: Effect.Effect<number>;
 }
 
@@ -57,7 +66,12 @@ const commandFrom = (command: Command): Call | undefined => {
     }
   }
 
-  return { args, ...split(args), extendEnv: command.options.extendEnv, env };
+  const forceKillAfter =
+    command.options.forceKillAfter === undefined
+      ? undefined
+      : Option.getOrUndefined(Duration.fromInput(command.options.forceKillAfter));
+
+  return { args, ...split(args), extendEnv: command.options.extendEnv, forceKillAfter, env };
 };
 
 /** A spawner that answers from `script`, which sees every command and says what it does. */
@@ -75,8 +89,16 @@ export const standIn = (script: (call: Call) => Reply): Effect.Effect<StandIn> =
         }
 
         yield* Ref.update(calls, (all) => [...all, call]);
-        yield* Effect.addFinalizer(() => Ref.update(ended, (n) => n + 1));
         const reply = script(call);
+
+        yield* Effect.addFinalizer(() =>
+          reply === "hang, ignores the first signal"
+            ? Effect.andThen(
+                call.forceKillAfter === undefined ? Effect.never : Effect.sleep(call.forceKillAfter),
+                Ref.update(ended, (n) => n + 1),
+              )
+            : Ref.update(ended, (n) => n + 1),
+        );
 
         if (reply === "cannot start") {
           return yield* PlatformError.badArgument({
@@ -86,18 +108,25 @@ export const standIn = (script: (call: Call) => Reply): Effect.Effect<StandIn> =
           });
         }
 
-        const out = reply === "hang" ? Stream.never : Stream.make(encoder.encode(reply.stdout ?? ""));
-        const err = reply === "hang" ? Stream.never : Stream.make(encoder.encode(reply.stderr ?? ""));
+        const stuck = reply === "hang" || reply === "hang, ignores the first signal";
+
+        const chunks = (text: string | ReadonlyArray<string> | undefined) =>
+          Stream.fromIterable(Predicate.isString(text) ? [text] : (text ?? [""])).pipe(
+            Stream.map((chunk) => encoder.encode(chunk)),
+          );
+
+        const out = stuck ? Stream.never : chunks(reply.stdout);
+        const err = stuck ? Stream.never : chunks(reply.stderr);
 
         return ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
-          exitCode: reply === "hang" ? Effect.never : Effect.succeed(ChildProcessSpawner.ExitCode(reply.code)),
-          isRunning: Effect.succeed(reply === "hang"),
+          exitCode: stuck ? Effect.never : Effect.succeed(ChildProcessSpawner.ExitCode(reply.code)),
+          isRunning: Effect.succeed(stuck),
           kill: () => Effect.void,
           stdin: Sink.drain,
           stdout: out,
           stderr: err,
-          all: reply === "hang" ? Stream.never : Stream.merge(out, err),
+          all: stuck ? Stream.never : Stream.merge(out, err),
           getInputFd: () => Sink.drain,
           getOutputFd: () => Stream.empty,
           unref: Effect.succeed(Effect.void),

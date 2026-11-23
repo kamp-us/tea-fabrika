@@ -66,12 +66,15 @@ time = "10 seconds"
 
 `commits` is the most commits a walk or a merge-base answer holds. `refs` is the most refs one `readRefs` answer
 holds. `bytes` is the most bytes one commit object holds, and the most stderr an error keeps. `time` is the longest
-one call may take. A setting's value is plain data, so the time is duration text, which the package decodes.
+one call may take. A setting's value is plain data, so the time is duration text, which the package decodes. When a
+call runs out of time, git is asked to stop, and a git that ignores that is killed a fixed five seconds later, so the
+call always ends.
 
 ## The laws
 
-`@kalfa/git/test` holds `RepositoryTest.suite`, the laws every adapter passes, and `@kalfa/git/test/History` holds the
-histories they draw. A new adapter writes a `Subject` that seeds a history into its own kind of store, and runs
+`@kalfa/git/test` holds `RepositoryTest.suite`, the laws every adapter passes, with its `Subject`, `Seeded` and
+`SuiteOptions` types and `settings`. `@kalfa/git/test/History` holds the `History` and `Node` types and the `textureArb`
+and `shapes` that draw the histories. A new adapter writes a `Subject` that seeds a history into its own kind of store, and runs
 `RepositoryTest.suite("name", subject, { runs, timeout })` in its own test file. `@effect/vitest` and `vitest` are
 optional peers, needed only by `/test`.
 

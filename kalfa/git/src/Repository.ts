@@ -9,7 +9,7 @@ import { Context, Effect, Schema } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
 import type * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
-import type * as Ref from "./Ref.ts";
+import * as Ref from "./Ref.ts";
 import * as Settings from "./Settings.ts";
 
 /**
@@ -34,7 +34,7 @@ export class NoSuchCommit extends Schema.TaggedError<NoSuchCommit, { readonly br
 export class RefNotCommit extends Schema.TaggedError<RefNotCommit, { readonly brand: unique symbol }>()(
   "RefNotCommit",
   {
-    ref: Schema.String,
+    ref: Ref.RefName,
     points: Schema.Literals(["symbolic", "tag", "tree", "blob"]),
   },
 ) {}
