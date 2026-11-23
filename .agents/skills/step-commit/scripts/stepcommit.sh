@@ -19,7 +19,10 @@ if step not in ("tests", "build", "mutation", "lead", "fix"): refuse("unknown st
 role = "tests" if step == "mutation" else step
 def git(*args, **kw):
     return subprocess.run(["git", *args], capture_output=True, **kw)
-if git("diff", "--cached", "--quiet").returncode:
+# A merge in progress (a step ending a merge of origin/main) leaves the merged branch's files staged;
+# the commit that ends it is the step's own, so those files are read below, not refused here.
+merging = git("rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
+if not merging and git("diff", "--cached", "--quiet").returncode:
     refuse("the index already holds staged changes; commit only your own paths", 4)
 root = pathlib.Path(git("rev-parse", "--show-toplevel").stdout.decode().strip())
 named = []
@@ -33,6 +36,17 @@ for p in paths:
     if git("ls-files", "--cached", "--", n + "/").stdout or git("ls-tree", "-r", "--name-only", "HEAD", "--", n + "/").stdout:
         refuse("named file paths required, no folders: " + p)
     named.append(n)
+def staged_names(*against):
+    return [p for p in git("diff", "--cached", "--name-only", "--no-renames", "-z", *against).stdout.decode().split("\0") if p]
+# The staged paths a merge brought, unchanged: staged against HEAD, and not different from the merged
+# branch. The merge owns them, not the step, so owners and formatting do not read them. Any other staged
+# path the step does not name (a stray, or a conflict left unresolved) is the occupied index of before.
+brought = set()
+if merging:
+    differs = set(staged_names("MERGE_HEAD"))
+    brought = {p for p in staged_names() if p not in differs and p not in named}
+    if [p for p in staged_names() if p not in brought and p not in named]:
+        refuse("the index already holds staged changes beyond the merge's; name each resolved conflict and commit only your own paths", 4)
 branch = git("branch", "--show-current").stdout.decode().strip()
 # A lead link for a ticket whose open PR is on another branch becomes that ticket's newest lead
 # link, outside that PR's chain, so the commits check reads the PR's own lead links as stale_link
@@ -245,7 +259,7 @@ for n in named:
 added = git("--literal-pathspecs", "add", "--", *named)
 if added.returncode: refuse("named path could not be staged")
 # --no-renames lists both sides as add/delete, including a removed exam path.
-staged = [p for p in git("diff", "--cached", "--name-only", "--no-renames", "-z").stdout.decode().split("\0") if p]
+staged = [p for p in staged_names() if p not in brought]
 try:
     check(staged)
     # Check the index's bytes, not the working tree: a clean filter can change them.
