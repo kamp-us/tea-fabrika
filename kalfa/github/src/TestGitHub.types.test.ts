@@ -3,7 +3,7 @@
 // holds one law's lines, and its `it` only names the helper.
 import { expectTypeOf, it } from "@effect/vitest";
 import type { Layer } from "effect";
-import { CancelRun, Dispatch, ListCheckRuns } from "./GitHub.test-support.ts";
+import { CancelRun, Dispatch, ListCheckRuns, Zen } from "./GitHub.test-support.ts";
 import type * as GitHub from "./GitHub.ts";
 import { CreatedIssue, EchoIssue, RunLogs } from "./TestGitHub.test-support.ts";
 import * as GitHubTest from "./TestGitHub.ts";
@@ -139,4 +139,31 @@ it("T12 type: refuse takes a 4xx status only", () => {
 it("T13 type: layer is a Layer of the GitHub service and nothing else", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
   expectTypeOf(layers).toBeFunction();
+});
+
+// T16, the fake on a text route. Plant: type a text route's `Answered` as `Schema.Json`, and the object line compiles.
+const textRoute = () => {
+  const ok = [
+    GitHubTest.answer(Zen, () => "Keep it logically awesome."),
+    GitHubTest.answer(Zen, () => ""),
+    GitHubTest.refuse(Zen, { status: 404, errors: "gone" }),
+    GitHubTest.refuse(ListCheckRuns, { status: 422, message: "m", errors: "one text" }),
+  ];
+
+  // @ts-expect-error a text route answers a text, not an object
+  const object = GitHubTest.answer(Zen, () => ({ a: 1 }));
+  // @ts-expect-error nor a list
+  const list = GitHubTest.answer(Zen, () => ["a"]);
+  // @ts-expect-error nor a number
+  const number = GitHubTest.answer(Zen, () => 1);
+  // On a JSON route a text is not an answer either: 1944's T9 still holds.
+  // @ts-expect-error the check runs route answers an object
+  const text = GitHubTest.answer(ListCheckRuns, () => "text");
+
+  expectTypeOf([ok, object, list, number, text]).toBeArray();
+};
+
+it("T16 type: the fake answers a text route with a text, and refuse takes errors as a text", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(textRoute).toBeFunction();
 });

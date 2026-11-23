@@ -1,14 +1,28 @@
 // C10: the fake `GitHubTest.layer`, answered by `GitHubTest.answer` and `GitHubTest.refuse`, run through `call` and through the
 // service's own `send`. It runs in memory: the fake is the whole of the GitHub side. The type laws are in TestGitHub.types.test.ts.
 import { assert, describe, expect, it } from "@effect/vitest";
-import { Cause, Duration, Effect, Exit, Option, Schema } from "effect";
-import { between, CancelRun, Dispatch, failure, ListCheckRuns, reasonHeld, SEED } from "./GitHub.test-support.ts";
+import { Cause, Data, Duration, Effect, Exit, Option, Schema } from "effect";
+import {
+  between,
+  CancelRun,
+  Dispatch,
+  failure,
+  ListCheckRuns,
+  reasonHeld,
+  SEED,
+  slice1,
+  textAnswers,
+  Zen,
+} from "./GitHub.test-support.ts";
 import * as GitHub from "./GitHub.ts";
 import { CreatedIssue, EchoIssue, fakeCalls, goodTexts } from "./TestGitHub.test-support.ts";
 import * as GitHubTest from "./TestGitHub.ts";
 
 /** The value a reply's text holds. */
 const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+
+// The ways a request can be sent, as the constructors of the type that names them.
+const Auth = Data.taggedEnum<GitHub.Auth>();
 
 /** What the fake's `send` answers for a request: the reply itself, as the service gives it. */
 const send = (request: GitHub.Request) => GitHub.GitHub.use((service) => service.send(request));
@@ -27,6 +41,7 @@ const makeRequest = (
   path: op.path,
   params: parts.params,
   query: parts.query ?? {},
+  auth: Auth.Login(),
   ...(parts.body === undefined ? {} : { body: parts.body }),
 });
 
@@ -256,5 +271,62 @@ describe("C10, the fake", () => {
         expect(yield* pollMillis({ poll: `${fake.pollMillis} millis` })).toBe(fake.pollMillis);
       }),
     { arbitrary: { seed: SEED, runs: 100 } },
+  );
+});
+
+// F1, the fake on a text route. Plant: write a text route's value with `JSON.stringify`, so (b) and (c) come back quoted; write a
+// JSON route's value as is; leave the text's content type as JSON's.
+describe("F1, the fake on a text route", () => {
+  it.effect.prop(
+    "answer on a text route replies with the text as the body, as is, as plain text, and call through the layer gives it back; a JSON route still gets JSON.stringify; refuse takes errors as a text",
+    { drawn: slice1, at: between(0, 8) },
+    ({ drawn, at }) =>
+      Effect.gen(function* () {
+        for (const answer of textAnswers(drawn.base, drawn.length)) {
+          const body = answer.value;
+          const layer = GitHubTest.layer([GitHubTest.answer(Zen, () => body)]);
+          const reply = yield* send(makeRequest(Zen, { params: {} })).pipe(Effect.provide(layer));
+
+          expect(reply.body, `${answer.name}: the text as is`).toBe(body);
+          expect(reply.status, answer.name).toBe(200);
+          expect(reply.headers["content-type"], `${answer.name}: plain text`).toBe("text/plain; charset=utf-8");
+
+          const read = yield* GitHub.call(Zen, {}).pipe(Effect.provide(layer));
+
+          assert.deepStrictEqual(read, body, answer.name);
+        }
+
+        // A JSON route's value is still written as JSON text.
+        const json = yield* send(makeRequest(ListCheckRuns, { params: { owner: "o", repo: "r", ref: "main" } })).pipe(
+          Effect.provide(GitHubTest.layer([GitHubTest.answer(ListCheckRuns, () => ({ check_runs: [] }))])),
+        );
+
+        expect(json.body).toBe('{"check_runs":[]}');
+        expect(json.headers["content-type"]).toBe("application/json; charset=utf-8");
+
+        // `errors` as the one text GitHub sends, with the other fields of a refusal, through `call`'s own reading.
+        const statuses = [400, 401, 403, 404, 409, 410, 422, 451, 499] as const;
+        const status = statuses[at] ?? 404;
+
+        const refusing = GitHubTest.layer([
+          GitHubTest.refuse(ListCheckRuns, { status, message: drawn.base, errors: drawn.marker }),
+        ]);
+
+        const refused = yield* GitHub.call(ListCheckRuns, {
+          params: { owner: "o", repo: "r", ref: "main" },
+          query: { per_page: 1 },
+        }).pipe(Effect.provide(refusing), Effect.exit);
+
+        const held = reasonHeld(refused);
+
+        expect(held?.reason._tag).toBe("ClientError");
+
+        if (held?.reason._tag === "ClientError") {
+          expect(held.reason.status).toBe(status);
+          expect(held.reason.message).toBe(drawn.base);
+          expect(held.reason.errors).toBe(drawn.marker);
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 200 } },
   );
 });

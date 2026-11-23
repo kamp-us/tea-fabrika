@@ -18,7 +18,19 @@ import {
   Tracer,
 } from "effect";
 import * as GitHub from "./GitHub.ts";
-import { CANCEL, CHECK_RUNS, CREATE_ISSUE, DISPATCH, INSTALLATION_TOKEN } from "./Octokit.test-support.ts";
+import {
+  CANCEL,
+  CHECK_RUNS,
+  CREATE_ISSUE,
+  DELETE_COMMENT,
+  DISPATCH,
+  GET_REPO,
+  INSTALLATION_TOKEN,
+  README,
+  STAR,
+  UPDATE_ISSUE,
+  ZEN,
+} from "./Octokit.test-support.ts";
 
 /** The shared seed: a fixed seed makes a red run repeat. */
 export const SEED = 119120;
@@ -499,3 +511,144 @@ export const FilteredIssue = GitHub.route(CREATE_ISSUE, {
 
 /** A value a caller's type would refuse, passed on as the type asks, so a law can reach what only a cast reaches. */
 export const untyped = Schema.decodeUnknownSync(Schema.Any);
+
+// ---- 1945, slice 1: text answers, who a request is sent as, a 5xx and a query a URL cannot carry
+
+/** A plain read: the part of a repository a caller reads. */
+export const GetRepo = GitHub.route(GET_REPO, {
+  success: Schema.Struct({ id: Schema.Int, full_name: Schema.String, private: Schema.Boolean }),
+});
+
+/** GitHub answers `/zen` in text, and it is read with no token. */
+export const Zen = GitHub.route(ZEN, { body: "text", auth: "none", success: Schema.String });
+
+/** The same text route, sent as the login: the one a call's own token may go with. */
+export const ZenAsLogin = GitHub.route(ZEN, { body: "text", success: Schema.String });
+
+/** The same text route with nothing declared to read: its answer is `void`. */
+export const ZenUnread = GitHub.route(ZEN, { body: "text", auth: "none" });
+
+/** A text answer read into a Struct: its Schema starts at a string and ends at an object. */
+export const ZenCounted = GitHub.route(ZEN, {
+  body: "text",
+  success: Schema.String.pipe(
+    Schema.decodeTo(Schema.Struct({ text: Schema.String, length: Schema.Int }), {
+      decode: SchemaGetter.transform((text: string) => ({ text, length: text.length })),
+      encode: SchemaGetter.transform((counted: { readonly text: string }) => counted.text),
+    }),
+  ),
+});
+
+/** A file's text, asked for by media type: a route whose answer is JSON until the media type says otherwise. */
+export const Readme = GitHub.route(README, {
+  body: "text",
+  accept: "application/vnd.github.raw+json",
+  success: Schema.String,
+});
+
+/** The check runs route with a query whose value is read as is, so a value a URL cannot carry reaches the check. */
+export const LooseQuery = GitHub.route(CHECK_RUNS, untyped({ query: { per_page: Schema.Unknown } }));
+
+const StarRepo = GitHub.route(STAR);
+
+const PatchIssue = GitHub.route(UPDATE_ISSUE);
+
+const DeleteComment = GitHub.route(DELETE_COMMENT);
+
+/** The five methods, each with a call of a route that has it: the same 5xx is a write that may have applied, or a read. */
+export const METHOD_CALLS: ReadonlyArray<{
+  readonly method: GitHub.Method;
+  readonly program: Effect.Effect<unknown, GitHub.GitHubError | GitHub.RateLimited, GitHub.GitHub>;
+}> = [
+  { method: "GET", program: GitHub.call(GetRepo, { params: { owner: "o", repo: "r" } }) },
+  { method: "PUT", program: GitHub.call(StarRepo, { params: { owner: "o", repo: "r" } }) },
+  { method: "POST", program: GitHub.call(CreateIssue, { params: { owner: "o", repo: "r" }, payload: { title: "t" } }) },
+  { method: "PATCH", program: GitHub.call(PatchIssue, { params: { owner: "o", repo: "r", issue_number: 1 } }) },
+  { method: "DELETE", program: GitHub.call(DeleteComment, { params: { owner: "o", repo: "r", comment_id: 1 } }) },
+];
+
+/** The texts a text answer holds: each class of the plan's `texts`, made from one drawn word and its length. */
+export const textAnswers = (
+  base: string,
+  length: number,
+): ReadonlyArray<{ readonly name: string; readonly value: string }> => [
+  { name: "a: empty", value: "" },
+  { name: "a: only spaces", value: "   " },
+  { name: "a: a trailing line feed", value: `${base}\n` },
+  { name: "a: a carriage return and line feed inside", value: `${base}\r\n${base}` },
+  { name: "b: an empty object", value: "{}" },
+  { name: "b: an empty list", value: "[]" },
+  { name: "b: null", value: "null" },
+  { name: "b: a number", value: "123" },
+  { name: "b: a quoted text", value: '"x"' },
+  { name: "b: true", value: "true" },
+  { name: "c: a quote and a backslash", value: `"${base}\\` },
+  { name: "c: control marks", value: Array.from({ length: 32 }, (_, code) => String.fromCharCode(code)).join("") },
+  { name: "c: letters past ASCII", value: `éşİ设\uFFFD${base}` },
+  { name: "c: an emoji", value: `${base}😀` },
+  { name: "d: 64 KB", value: base.repeat(Math.ceil(65536 / base.length)).slice(0, 65536 + (length % 7)) },
+];
+
+/** What the laws of 1945's first slice draw: a word and its length for the texts, a token, a status of each kind. */
+export const slice1 = Arbitrary.all({
+  base: word,
+  length: between(0, 100000),
+  token: word,
+  serverStatus: between(500, 599),
+  informational: between(100, 199),
+  redirect: between(300, 399),
+  marker: word,
+});
+
+// ---- a token that must never show
+
+/** The forms a token is written in elsewhere: as it is, percent-encoded, as JSON text holds it, and in base64. */
+export const tokenForms = (token: string): ReadonlyArray<string> => [
+  token,
+  encodeURIComponent(token),
+  JSON.stringify(token).slice(1, -1),
+  btoa(String.fromCharCode(...new TextEncoder().encode(token))),
+];
+
+/** Every text a value's own properties reach, names and symbols' descriptions included, cause chains and nested objects too. */
+export const reachable = (root: object): ReadonlyArray<string> => {
+  const seen = new Set<object>();
+  const found: Array<string> = [];
+  const pending: Array<object> = [root];
+
+  while (pending.length > 0) {
+    const next = pending.pop();
+
+    if (next === undefined || seen.has(next)) {
+      continue;
+    }
+
+    seen.add(next);
+
+    for (const key of Reflect.ownKeys(next)) {
+      found.push(String(key));
+
+      const value = Object.getOwnPropertyDescriptor(next, key)?.value;
+
+      if (Predicate.isString(value)) {
+        found.push(value);
+      } else if (Predicate.isObjectOrArray(value)) {
+        pending.push(value);
+      }
+    }
+  }
+
+  return found;
+};
+
+/** The text a span holds: its name, its attributes and its events. */
+export const spanText = (span: Tracer.Span): string =>
+  [
+    span.name,
+    ...[...span.attributes].map(
+      ([key, value]) => `${key}=${Predicate.isString(value) ? value : JSON.stringify(value)}`,
+    ),
+    JSON.stringify(Predicate.hasProperty(span, "events") ? span.events : [], (_, each) =>
+      Predicate.isBigInt(each) ? String(each) : each,
+    ),
+  ].join("\n");

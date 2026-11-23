@@ -37,6 +37,11 @@ export const CONTRIBUTORS = "GET /repos/{owner}/{repo}/contributors"; // a 200 w
 
 export const MERGE_RESULT = "GET /repos/{owner}/{repo}/pulls/{pull_number}/merge-async/{uuid}"; // `details` is a `OneOf` of three objects
 
+/** The routes the laws of 1945's first slice call: a plain JSON read, and a read whose answer a media type changes to text. */
+export const GET_REPO = "GET /repos/{owner}/{repo}";
+
+export const README = "GET /repos/{owner}/{repo}/readme";
+
 /** Every vector, with the method and the path template its route text holds. */
 export const VECTORS = [
   { route: CANCEL, method: "POST", path: "/repos/{owner}/{repo}/actions/runs/{run_id}/cancel" },
