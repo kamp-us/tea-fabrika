@@ -888,7 +888,7 @@ const SUBPATHS = [
   "Print",
   "Snapshot",
   "Load",
-  "cli",
+  "Cli",
 ] as const;
 
 const STAGES = ["build", "pack", "install", "runtime", "imports", "private", "types"] as const;

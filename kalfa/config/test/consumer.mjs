@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import * as Root from "@kalfa/config";
 import * as App from "@kalfa/config/App";
-import * as Cli from "@kalfa/config/cli";
+import * as Cli from "@kalfa/config/Cli";
 import * as Codec from "@kalfa/config/Codec";
 import * as Files from "@kalfa/config/Files";
 import * as JsonSchema from "@kalfa/config/JsonSchema";
@@ -44,7 +44,7 @@ const publicModules = {
   Print,
   Snapshot,
   Load,
-  cli: Cli,
+  Cli,
 };
 
 for (const name of Object.keys(publicModules)) {

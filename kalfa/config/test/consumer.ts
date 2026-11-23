@@ -2,7 +2,7 @@ import * as Root from "@kalfa/config";
 import * as App from "@kalfa/config/App";
 // @ts-expect-error Test sources are not public package subpaths.
 import type * as Test from "@kalfa/config/App.test";
-import * as Cli from "@kalfa/config/cli";
+import * as Cli from "@kalfa/config/Cli";
 import * as Codec from "@kalfa/config/Codec";
 import type * as Files from "@kalfa/config/Files";
 // @ts-expect-error Internal compiled files are not public package subpaths.

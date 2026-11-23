@@ -470,6 +470,7 @@ type Joined =
   | "stop:other-app"
   | "stop:one-name"
   | "stop:value-and-table"
+  | "stop:table-and-value"
   | "stop:one-variable"
   | "stop:bad-app"
   | "build:shared-object"
@@ -481,6 +482,7 @@ const JOINED: ReadonlyArray<Joined> = [
   "stop:other-app",
   "stop:one-name",
   "stop:value-and-table",
+  "stop:table-and-value",
   "stop:one-variable",
   "stop:bad-app",
   "build:shared-object",
@@ -544,6 +546,8 @@ it.effect.prop(
 
       stops("stop:one-name", [make(app, named(own)), make(app, named(own, "text"))], [own]);
       stops("stop:value-and-table", [make(app, named(own)), make(app, named(table))], [own, table]);
+      // The table first, then the value under it: the clash is found whichever of the two is declared first.
+      stops("stop:table-and-value", [make(app, named(table)), make(app, named(own))], [own, table]);
       stops("stop:one-variable", [make(app, named(dashed)), make(app, named(joined))], [dashed, joined]);
 
       // The app's name is held to the rule of `SettingGroup.make`.

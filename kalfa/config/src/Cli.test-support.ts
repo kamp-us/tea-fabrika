@@ -570,8 +570,8 @@ const origin = (s: Scene, e: Entry): string => {
   }
 };
 
-/** A description with the indent after each of its inner breaks. A final break is left as it is: it ends the block. */
-const indented = (text: string) => text.replace(/(\r\n|\r|\n)(?!$)/gu, "$1  ");
+/** A description with the indent after each of its inner breaks. A final break is left as it is: it ends the block. A CRLF is one break. */
+const indented = (text: string) => text.replace(/(\r\n|\r(?!\n)|\n)(?!$)/gu, "$1  ");
 
 /** One setting's block, as the plan's listing writes it. */
 const block = (s: Scene, e: Entry): string => {
