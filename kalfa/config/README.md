@@ -187,11 +187,29 @@ A Worker cannot read the configuration files. The process that can, the loading 
 stream of snapshots, and carrying them is the app's job: `postMessage`, a socket, anything.
 
 ```ts
-import { SettingGroup } from "@kalfa/config";
+import { NodeServices } from "@effect/platform-node";
+import { Setting, SettingGroup } from "@kalfa/config";
+import { Effect, Schema, Stream } from "effect";
+import { Digest } from "effect/crypto";
 
-// The loading process: its group is started from the files, as always.
-const out = SettingGroup.snapshots(Demo);
-// { app: "demo", values: { "instance.port": 4100, ... }, origins: { "instance.port": { _tag: "file", ... } }, hash: "9f2c..." }
+const port = Setting.make("instance.port", Schema.Int).pipe(
+  Setting.withDefault(18800),
+  Setting.withDescription("The port the service listens on."),
+);
+
+const Demo = SettingGroup.make("demo", port);
+
+// The loading process: its group is started from the files, as always, and the stream is read inside that layer.
+// `Digest.layerWebCrypto` gives the stream its hash; the layer from files needs only the file system and the path.
+const first = await Effect.runPromise(
+  SettingGroup.snapshots(Demo).pipe(
+    Stream.take(1),
+    Stream.runCollect,
+    Effect.provide(SettingGroup.layer(Demo, { version: "1.0.0" })),
+    Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+  ),
+);
+// [{ app: "demo", values: { "instance.port": 18800 }, origins: { "instance.port": { _tag: "default" } }, hash: "0083..." }]
 ```
 
 `snapshots(group)` gives the snapshot of the files now, then one more each time a change to a file is taken and the
