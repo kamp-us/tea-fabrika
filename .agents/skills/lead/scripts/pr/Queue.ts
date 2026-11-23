@@ -19,10 +19,10 @@
 
 import { String as Str, pipe, Option, Array as Arr, Duration, Effect, Match, Schedule, Schema } from "effect";
 
-import { Checks, type Job } from "../ci/Checks.ts";
+import { Checks, type ChecksError, type Job } from "../ci/Checks.ts";
 import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
-import { Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
+import { Detail, PullRequests, PullRequestsError } from "./PullRequests.ts";
 import type { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import { Sweeps } from "./Sweeps.ts";
 import { Tickets } from "./Tickets.ts";
@@ -77,39 +77,118 @@ const unlessConflicting = Effect.fn("Queue.unlessConflicting")(function* (pr: nu
   }
 });
 
+/** The pull request left open while a wait ran: merged or closed, so no check will be waited for. */
+export class Gone extends Schema.TaggedError<Gone, { readonly brand: unique symbol }>()("Gone", {
+  pr: Schema.Finite,
+  state: Schema.String,
+}) {}
+
+/** The required check as one read found it: the head it was read at, and the check run there (none before GitHub has made it). */
+export type Awaited = { readonly oid: string; readonly job: Option.Option<Job> };
+
+const ended = (job: Option.Option<Job>): boolean => Option.isSome(job) && job.value.status === "completed";
+
+/** What a caller says when the head it read first is not the head the check ended at. */
+export const moved = (from: string, to: string): string => `its head moved from ${from} to ${to} while waiting`;
+
 /**
- * The required check at `oid` as it stands: read once, or again until it ends or the wait is over.
- * Each read that finds it not ended also asks whether pull request `pr` has come to conflict with
- * main (a wait for a check GitHub will never start ends there, with `Conflicting`).
+ * The required check of pull request `pr` as it stands, read at the head the pull request holds on
+ * each read. Without a wait, one read at `oid`. With one, again each `every` seconds until the check
+ * at the current head has ended or the wait is over: a push or an update-branch moves the head and
+ * the next read follows it, and a check read at a head the pull request has left is read again at
+ * once. Each read that finds it not ended also asks whether the pull request has come to conflict
+ * with main (a check GitHub will never start ends the wait with `Conflicting`) or has left open
+ * (`Gone`). A wait over with nothing read fails with the last error.
  */
-export const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: Wait | undefined, pr: number) {
+export const required = Effect.fn("Queue.required")(function* (oid: string, wait: Wait | undefined, pr: number) {
   const checks = yield* Checks;
-  const read = checks.job(oid, REQUIRED);
 
   if (wait === undefined) {
-    return yield* read;
+    return { oid, job: yield* checks.job(oid, REQUIRED) } satisfies Awaited;
   }
 
-  let last: Option.Option<Job> = Option.none();
+  const prs = yield* PullRequests;
+  let last: Awaited | undefined;
+  let failed: PullRequestsError | ChecksError | undefined;
 
-  const ended = read.pipe(
-    Effect.tap((found) =>
+  const read = Effect.gen(function* () {
+    // A head read again after the check ended is the head the check belongs to; a moved one is read again at once.
+    for (;;) {
+      const now = yield* prs.view(pr);
+      const job = yield* checks.job(now.oid, REQUIRED);
+      last = { oid: now.oid, job };
+
+      if (ended(job)) {
+        if ((yield* prs.view(pr)).oid === now.oid) {
+          return last;
+        }
+
+        continue;
+      }
+
+      if (now.state !== "OPEN") {
+        return yield* Gone.make({ pr, state: now.state });
+      }
+
+      if (now.mergeable === "CONFLICTING") {
+        return yield* Conflicting.make({ pr });
+      }
+
+      return yield* Pending.make();
+    }
+  });
+
+  const done = read.pipe(
+    Effect.tapError((e) =>
       Effect.sync(() => {
-        last = found;
+        if (e._tag === "PullRequestsError" || e._tag === "ChecksError") {
+          failed = e;
+        }
       }),
     ),
-    Effect.filterOrFail(
-      (found) => Option.isSome(found) && found.value.status === "completed",
-      () => Pending.make(),
-    ),
-    Effect.tapError(() => unlessConflicting(pr)),
-    Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)), while: (e) => e._tag !== "Conflicting" }),
+    Effect.retry({
+      schedule: Schedule.spaced(Duration.seconds(wait.every)),
+      while: (e) => e._tag !== "Conflicting" && e._tag !== "Gone",
+    }),
     Effect.catchTag("Pending", () => Effect.sync(() => last)),
     Effect.timeoutOption(Duration.minutes(wait.minutes)),
   );
 
-  return Option.getOrElse(yield* ended, () => last);
+  const result = Option.getOrElse(yield* done, () => last);
+
+  return result ?? (yield* failed ?? PullRequestsError.make({ reason: "the required check was not read" }));
 });
+
+/** How the required check stands in words, as a refusal says it: its conclusion, else its status, else missing. */
+export const stands = (job: Option.Option<Job>): string =>
+  Option.isNone(job) ? "missing" : (job.value.conclusion ?? job.value.status);
+
+/**
+ * What `land.ts wait` says of a read check, and whether it is a success. A cancelled check names its
+ * run (the check run's page: a second run at one head cancels the first, and the first's check is
+ * the one that reads cancelled).
+ */
+export const verdict = (repo: string, pr: number, at: Awaited): { readonly ok: boolean; readonly text: string } => {
+  const head = `pr ${pr}: ${REQUIRED}`;
+
+  if (Option.isNone(at.job) || at.job.value.status !== "completed") {
+    return { ok: false, text: `${head} is ${stands(at.job)} at ${at.oid}, not ended` };
+  }
+
+  const { id, conclusion } = at.job.value;
+
+  if (conclusion === "success") {
+    return { ok: true, text: `${head} succeeded at ${at.oid}` };
+  }
+
+  return {
+    ok: false,
+    text:
+      conclusion === "cancelled"
+        ? `${head} was cancelled at ${at.oid}: its run was cancelled, https://github.com/${repo}/runs/${id}`
+        : `${head} is ${conclusion ?? "ended with no conclusion"} at ${at.oid}, not a success: https://github.com/${repo}/runs/${id}`,
+  };
+};
 
 /**
  * Whether a CI run has started at `oid`: any check run GitHub Actions made there, which a push's own
@@ -267,16 +346,24 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   }
 
   // With a queue on, a merge call on a head that is not green yet arms auto-merge (a pull request whose steps passed lands on green CI and a clean leak check alone). So the
-  // required check is read first, and anything but a finished success asks nothing.
-  const required = yield* requiredAt(found.oid, a.wait, found.number).pipe(
-    Effect.catchTag("Conflicting", () => conflicted(found.number)),
+  // required check is read first, and anything but a finished success asks nothing. It is read at the head the leak checks ran on.
+  const at = yield* required(found.oid, a.wait, found.number).pipe(
+    Effect.catchTags({
+      Conflicting: () => conflicted(found.number),
+      Gone: (e) =>
+        NotQueued.make({ reason: `pr ${found.number}: it is ${e.state}, not merged; not added to the queue` }),
+    }),
   );
 
-  const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
+  if (at.oid !== found.oid) {
+    return yield* NotQueued.make({ reason: `pr ${found.number}: ${moved(found.oid, at.oid)}; not added to the queue` });
+  }
 
-  if (required._tag === "None" || required.value.status !== "completed" || required.value.conclusion !== "success") {
+  const read = at.job;
+
+  if (read._tag === "None" || read.value.status !== "completed" || read.value.conclusion !== "success") {
     return yield* NotQueued.make({
-      reason: `pr ${found.number}: ${REQUIRED} is ${stands} at ${found.oid}, not a success; not added to the queue`,
+      reason: `pr ${found.number}: ${REQUIRED} is ${stands(read)} at ${found.oid}, not a success; not added to the queue`,
     });
   }
 

@@ -220,22 +220,30 @@ const admin = Effect.fn("Merge.admin")(function* (
 
   // Every admin merge, docs included, lands once ci-required is green at the head: it skips the queue,
   // never the check.
-  const required = yield* Queue.requiredAt(found.oid, wait, found.number).pipe(
-    Effect.catchTag("Conflicting", () => refuse(Queue.conflictLine(found.number))),
+  const at = yield* Queue.required(found.oid, wait, found.number).pipe(
+    Effect.catchTags({
+      Conflicting: () => refuse(Queue.conflictLine(found.number)),
+      Gone: (e) => refuse(`it is ${e.state}, not merged`),
+    }),
   );
 
-  if (required._tag === "None" || required.value.status !== "completed" || required.value.conclusion !== "success") {
-    const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
-
-    return yield* refuse(`${Queue.REQUIRED} is ${stands} at ${found.oid}, not a success; not merged`);
+  // The check was read at the head the pull request held when it ended. A push during the wait moves
+  // it, and the pinned squash would refuse anyway; say so here, before asking.
+  if (at.oid !== found.oid) {
+    return yield* refuse(`${Queue.moved(found.oid, at.oid)}; not merged`);
   }
 
-  // The check was read for the head that was read first. A push during the wait moves it, and the
-  // pinned squash would refuse anyway; say so here, before asking.
+  const read = at.job;
+
+  if (read._tag === "None" || read.value.status !== "completed" || read.value.conclusion !== "success") {
+    return yield* refuse(`${Queue.REQUIRED} is ${Queue.stands(read)} at ${found.oid}, not a success; not merged`);
+  }
+
+  // Read once more, with no wait too: a push after the check was read moves it as well.
   const now = yield* prs.view(pr);
 
   if (now.oid !== found.oid) {
-    return yield* refuse(`its head moved from ${found.oid} to ${now.oid} while waiting; not merged`);
+    return yield* refuse(`${Queue.moved(found.oid, now.oid)}; not merged`);
   }
 
   // A fix holds main's head (a sev fix is admin-merged one at a time on current main): the next fix is tested on top of it. A ready pull request in a sev0

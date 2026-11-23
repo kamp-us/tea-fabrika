@@ -5,7 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
 import { Effect, Fiber, Layer, Option, Schema, Match } from "effect";
 import { TestClock } from "effect/testing";
-import { ChecksError, type Job } from "../ci/Checks.ts";
+import { Checks, ChecksError, type Job } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import type { PullRequest } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
@@ -236,6 +236,87 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
           "ci-required is in_progress",
         );
         expect(never.calls).toEqual([]);
+      }),
+  );
+
+  // Plants: read the first run's green and stop (the 2044 and 2049 loops); keep reading the head first read; call a cancelled
+  // run a pass, or leave it unnamed.
+  it.effect(
+    "scenario: the wait follows the check at the head as it stands: a second run at one head, a head that moves, and a cancelled run",
+    () =>
+      Effect.gen(function* () {
+        const next = "f".repeat(40);
+
+        /** The check at each head, one answer a read; the head the pull request holds changes after read `moveAt`. */
+        const waiting = (answers: Record<string, ReadonlyArray<Job>>, moveAt?: number) =>
+          Effect.gen(function* () {
+            const m = memory();
+            const reads: Array<string> = [];
+
+            const checks = Layer.succeed(
+              Checks,
+              Checks.of({
+                job: (head) =>
+                  Effect.sync(() => {
+                    const seen = reads.filter((h) => h === head).length;
+                    reads.push(head);
+                    const list = answers[head] ?? [];
+
+                    if (moveAt !== undefined && reads.length >= moveAt) {
+                      m.github.prs[0] = { ...m.github.prs[0]!, oid: next };
+                    }
+
+                    return Option.fromUndefinedOr(list[Math.min(seen, list.length - 1)]);
+                  }),
+                started: () => Effect.succeed(true),
+                log: () => Effect.succeed(""),
+              }),
+            );
+
+            const fiber = yield* Queue.required(oid, { minutes: 30, every: 60 }, 900).pipe(
+              Effect.provide(Layer.merge(m.layer, checks)),
+              Effect.forkChild,
+            );
+
+            yield* TestClock.adjust("31 minutes");
+
+            return { at: yield* Fiber.join(fiber), reads };
+          });
+
+        const running = { id: 1, status: "in_progress", conclusion: null };
+        const second = { id: 2, status: "queued", conclusion: null };
+        const cancelled = { id: 2, status: "completed", conclusion: "cancelled" };
+        const green = { id: 3, status: "completed", conclusion: "success" };
+
+        // A second run at the same head replaces the first as the latest check run; its end is the one read.
+        const twice = yield* waiting({ [oid]: [running, second, cancelled] });
+        expect(twice.at.job).toEqual(Option.some(cancelled));
+        expect(twice.at.oid).toBe(oid);
+        const said = Queue.verdict(repo, 900, twice.at);
+        expect(said.ok).toBe(false);
+        expect(said.text).toContain("was cancelled");
+        expect(said.text).toContain(`https://github.com/${repo}/runs/2`);
+
+        // A head that moves: the check at the old head never ends, the one at the new head has.
+        const moves = yield* waiting({ [oid]: [running], [next]: [green] }, 1);
+        expect(moves.at.oid).toBe(next);
+        expect(moves.at.job).toEqual(Option.some(green));
+        expect(Queue.verdict(repo, 900, moves.at)).toEqual({
+          ok: true,
+          text: `pr 900: ci-required succeeded at ${next}`,
+        });
+
+        // A check that ended at a head the pull request has left is read again at the new one.
+        const left = yield* waiting({ [oid]: [green], [next]: [running, { ...green, id: 4 }] }, 1);
+        expect(left.at.oid).toBe(next);
+        expect(left.at.job).toEqual(Option.some({ ...green, id: 4 }));
+
+        // A check that never ends is read at its limit, not ended, and says so.
+        const never = yield* waiting({ [oid]: [running] });
+        expect(Queue.verdict(repo, 900, never.at)).toEqual({
+          ok: false,
+          text: `pr 900: ci-required is in_progress at ${oid}, not ended`,
+        });
       }),
   );
 

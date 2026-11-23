@@ -29,7 +29,7 @@
 //       pr           open the PR from the body file, or update the open one
 //       queue        as `land.ts queue <pr> --wait` below
 //
-//   land.ts queue <pr> [--wait]
+//   land.ts queue <pr> [--wait] [--wait-minutes <n>] [--every-seconds <n>]
 //     the lead session, for any pull request whose steps passed (pr/Queue.ts, a pull request whose steps passed lands on green CI and a clean leak check alone): refuses one
 //     that is closed or not into main; leak-greps its net change, each of its commits and
 //     its title and description, which become the squash commit's text; marks a draft ready for
@@ -40,6 +40,15 @@
 //     `gh pr merge --squash --match-head-commit <head>`, which adds it to GitHub's merge queue.
 //     It prints `queued`, never `merged`: GitHub tests it on newest main and merges it later. No
 //     --admin, no --auto, no other merge method.
+//
+//   land.ts wait <pr> [--wait-minutes <n>] [--every-seconds <n>]
+//     the one wait for CI, in place of a hand-written loop that picks a workflow run by head SHA (a ready
+//     event starts a second run at one head, and the loop read the first). Reads `ci-required`, the check
+//     `land.ts` itself reads, at the head the pull request holds on each read (default 60 minutes, every 60
+//     seconds), until it has ended; a push or an update-branch moves the head and the next read follows it.
+//     Prints the conclusion and exits 0 on success, 1 on any other (a cancelled one says so and names its
+//     run, a pull request that turns to conflict with main ends it at once). `queue --wait` and `admin
+//     --wait` make this same wait before they act, and take the same two flags.
 //
 //   land.ts check <pr>
 //     the lead session, after it writes a pull request's body and before `queue`: runs exactly the body checks `queue`
@@ -135,6 +144,7 @@ const Check = Schema.Literals([
   "push",
   "pr",
   "queue",
+  "wait",
   "arm",
   "body",
 ]);
@@ -660,8 +670,13 @@ const queueServices = (env: Env) =>
  * green at its head, then one pinned squash. With `wait`, the check is given the quest's hour to end.
  * `dir` is the checkout the head is fetched into: the main checkout unless a quest names its tree.
  */
-export const queue = Effect.fn("land.queue")(function* (env: Env, pr: number, wait: boolean, dir = env.MAIN) {
-  return yield* Queue.add({ dir, pr, ...(wait ? { wait: Queue.QUEST_WAIT } : {}) }).pipe(
+export const queue = Effect.fn("land.queue")(function* (
+  env: Env,
+  pr: number,
+  wait: Queue.Wait | undefined,
+  dir = env.MAIN,
+) {
+  return yield* Queue.add({ dir, pr, ...(wait ? { wait } : {}) }).pipe(
     Effect.provide(queueServices(env)),
     Effect.mapError(
       (e) => new Refused({ check: e._tag === "LeakGrepRefused" ? "leak" : "queue", reason: e.reason, output: "" }),
@@ -715,17 +730,53 @@ const run = Command.make(
     yield* say(
       `PR https://github.com/${quest.env.GH_REPO}/pull/${pr}; waiting for ${Queue.REQUIRED} to add it to the queue`,
     );
-    yield* say(Queue.line(yield* queue(quest.env, pr, true, quest.ready.tree)));
+    yield* say(Queue.line(yield* queue(quest.env, pr, Queue.QUEST_WAIT, quest.ready.tree)));
   }),
 );
 
 const PrNumber = Argument.Int("pr");
 
+/** The flags a wait takes: its limit in minutes and the seconds between two reads, each with the wait's default. */
+const waitFlags = (fallback: Queue.Wait) => ({
+  minutes: Flag.Int("wait-minutes").pipe(Flag.withDefault(fallback.minutes)),
+  every: Flag.Int("every-seconds").pipe(Flag.withDefault(fallback.every)),
+});
+
 const queueCommand = Command.make(
   "queue",
-  { pr: PrNumber, wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)) },
-  Effect.fn("land.queueCommand")(function* ({ pr, wait }) {
-    yield* Console.log(Queue.line(yield* queue(yield* loadEnv, pr, wait)));
+  { pr: PrNumber, wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)), ...waitFlags(Queue.QUEST_WAIT) },
+  Effect.fn("land.queueCommand")(function* ({ pr, wait, minutes, every }) {
+    yield* Console.log(Queue.line(yield* queue(yield* loadEnv, pr, wait ? { minutes, every } : undefined)));
+  }),
+);
+
+// The one wait for CI: reads `ci-required` at the pull request's head as it stands on each read (a push or an
+// update-branch is followed), until it has ended, and says how. Exit 0 only on success. `queue --wait` and
+// `admin --wait` make the same wait; no hand-written loop picks a workflow run instead.
+const waitCommand = Command.make(
+  "wait",
+  { pr: PrNumber, ...waitFlags(Queue.QUEST_WAIT) },
+  Effect.fn("land.waitCommand")(function* ({ pr, minutes, every }) {
+    const env = yield* loadEnv;
+
+    const at = yield* Queue.required("", { minutes, every }, pr).pipe(
+      Effect.provide(queueServices(env)),
+      Effect.mapError((e) =>
+        e._tag === "Conflicting"
+          ? new Refused({ check: "wait", reason: `pr ${pr}: ${Queue.conflictLine(pr)}`, output: "" })
+          : e._tag === "Gone"
+            ? new Refused({ check: "wait", reason: `pr ${pr}: it is ${e.state}, not open`, output: "" })
+            : new Refused({ check: "wait", reason: e.reason, output: "" }),
+      ),
+    );
+
+    const said = Queue.verdict(env.GH_REPO, pr, at);
+
+    if (!said.ok) {
+      return yield* new Refused({ check: "wait", reason: said.text, output: "" });
+    }
+
+    yield* Console.log(said.text);
   }),
 );
 
@@ -857,8 +908,7 @@ const adminCommand = Command.make(
   "admin",
   {
     pr: PrNumber,
-    minutes: Flag.Int("wait-minutes").pipe(Flag.withDefault(Merge.ADMIN_WAIT.minutes)),
-    every: Flag.Int("every-seconds").pipe(Flag.withDefault(Merge.ADMIN_WAIT.every)),
+    ...waitFlags(Merge.ADMIN_WAIT),
     wait: Flag.Boolean("wait"),
     queueMinutes: Flag.Int("queue-minutes").pipe(Flag.withDefault(Queue.QUEST_WAIT.minutes)),
     queueEvery: Flag.Int("queue-every-seconds").pipe(Flag.withDefault(Queue.QUEST_WAIT.every)),
@@ -926,6 +976,7 @@ const land = Command.make("land").pipe(
     ready,
     run,
     queueCommand,
+    waitCommand,
     checkCommand,
     armCommand,
     mergeCommand,
