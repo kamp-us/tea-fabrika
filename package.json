@@ -41,6 +41,7 @@
     "@effect/vitest": "catalog:",
     "@kalfa/ci": "workspace:*",
     "@kalfa/config": "workspace:*",
+    "@kalfa/git": "workspace:*",
     "@kalfa/diagnostics": "workspace:*",
     "@kalfa/markdown": "workspace:*",
     "@kalfa/records": "workspace:*",

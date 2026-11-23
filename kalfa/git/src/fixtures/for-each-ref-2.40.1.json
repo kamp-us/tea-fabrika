@@ -1,0 +1,141 @@
+{
+  "git": "git version 2.40.1",
+  "command": "git --no-replace-objects --git-dir=<bare repository> for-each-ref '--format=%(objectname) %(objecttype) %(symref) %(refname)' <ref>, one run per row, standard output stored as text; refs made by fast-import reset, git update-ref, git tag -a and git symbolic-ref",
+  "rows": [
+    {
+      "note": "a branch",
+      "output": "74939013608679fcd98b84d1095bb8de117151e9 commit  refs/heads/main\n",
+      "expect": [
+        {
+          "name": "refs/heads/main",
+          "commit": "74939013608679fcd98b84d1095bb8de117151e9"
+        }
+      ]
+    },
+    {
+      "note": "a branch with a BMP name",
+      "output": "671507b55095a03be7be4213b62bafae53fd4f3c commit  refs/heads/设\n",
+      "expect": [
+        {
+          "name": "refs/heads/设",
+          "commit": "671507b55095a03be7be4213b62bafae53fd4f3c"
+        }
+      ]
+    },
+    {
+      "note": "a branch in U+E000 to U+FFFF",
+      "output": "74939013608679fcd98b84d1095bb8de117151e9 commit  refs/heads/ｚ\n",
+      "expect": [
+        {
+          "name": "refs/heads/ｚ",
+          "commit": "74939013608679fcd98b84d1095bb8de117151e9"
+        }
+      ]
+    },
+    {
+      "note": "a branch outside the BMP",
+      "output": "671507b55095a03be7be4213b62bafae53fd4f3c commit  refs/heads/😀\n",
+      "expect": [
+        {
+          "name": "refs/heads/😀",
+          "commit": "671507b55095a03be7be4213b62bafae53fd4f3c"
+        }
+      ]
+    },
+    {
+      "note": "a candidate ref outside the branches",
+      "output": "74939013608679fcd98b84d1095bb8de117151e9 commit  refs/kalfa/candidates/01J\n",
+      "expect": [
+        {
+          "name": "refs/kalfa/candidates/01J",
+          "commit": "74939013608679fcd98b84d1095bb8de117151e9"
+        }
+      ]
+    },
+    {
+      "note": "a lightweight tag, which is a plain ref to a commit",
+      "output": "74939013608679fcd98b84d1095bb8de117151e9 commit  refs/tags/light\n",
+      "expect": [
+        {
+          "name": "refs/tags/light",
+          "commit": "74939013608679fcd98b84d1095bb8de117151e9"
+        }
+      ]
+    },
+    {
+      "note": "an annotated tag, whose object is a tag",
+      "output": "3cd1652a7c013323f0249bab9a73d650b0dfdefb tag  refs/tags/annotated\n",
+      "expect": [
+        {
+          "failure": "RefNotCommit",
+          "ref": "refs/tags/annotated",
+          "points": "tag"
+        }
+      ]
+    },
+    {
+      "note": "a ref to a tree",
+      "output": "4b825dc642cb6eb9a060e54bf8d69288fbee4904 tree  refs/kalfa/tree\n",
+      "expect": [
+        {
+          "failure": "RefNotCommit",
+          "ref": "refs/kalfa/tree",
+          "points": "tree"
+        }
+      ]
+    },
+    {
+      "note": "a ref to a blob",
+      "output": "6dfb49d12cbf2e3e1f79d6e95a7589fb2b4bdfd2 blob  refs/kalfa/blob\n",
+      "expect": [
+        {
+          "failure": "RefNotCommit",
+          "ref": "refs/kalfa/blob",
+          "points": "blob"
+        }
+      ]
+    },
+    {
+      "note": "a symbolic ref",
+      "output": "74939013608679fcd98b84d1095bb8de117151e9 commit refs/heads/main refs/heads/alias\n",
+      "expect": [
+        {
+          "failure": "RefNotCommit",
+          "ref": "refs/heads/alias",
+          "points": "symbolic"
+        }
+      ]
+    },
+    {
+      "note": "several refs in one output, in the order git sorts them",
+      "output": "74939013608679fcd98b84d1095bb8de117151e9 commit  refs/heads/main\n671507b55095a03be7be4213b62bafae53fd4f3c commit  refs/heads/main-2\n671507b55095a03be7be4213b62bafae53fd4f3c commit  refs/heads/设\n74939013608679fcd98b84d1095bb8de117151e9 commit  refs/heads/ｚ\n671507b55095a03be7be4213b62bafae53fd4f3c commit  refs/heads/😀\n",
+      "expect": [
+        {
+          "name": "refs/heads/main",
+          "commit": "74939013608679fcd98b84d1095bb8de117151e9"
+        },
+        {
+          "name": "refs/heads/main-2",
+          "commit": "671507b55095a03be7be4213b62bafae53fd4f3c"
+        },
+        {
+          "name": "refs/heads/设",
+          "commit": "671507b55095a03be7be4213b62bafae53fd4f3c"
+        },
+        {
+          "name": "refs/heads/ｚ",
+          "commit": "74939013608679fcd98b84d1095bb8de117151e9"
+        },
+        {
+          "name": "refs/heads/😀",
+          "commit": "671507b55095a03be7be4213b62bafae53fd4f3c"
+        }
+      ]
+    },
+    {
+      "note": "no ref under the name: git prints nothing",
+      "output": "",
+      "expect": []
+    }
+  ]
+}

@@ -55,6 +55,10 @@
     "kalfa-diagnostics": {
       "imports": [],
       "pure": false
+    },
+    "kalfa-git": {
+      "imports": [],
+      "pure": false
     }
   },
   "libraries": {
@@ -76,7 +80,8 @@
     "kalfa/quality": "kalfa-quality",
     "kalfa/records": "kalfa-records",
     "kalfa/ci": "kalfa-ci",
-    "kalfa/diagnostics": "kalfa-diagnostics"
+    "kalfa/diagnostics": "kalfa-diagnostics",
+    "kalfa/git": "kalfa-git"
   },
   "libraryRoots": ["next", "kalfa"],
   "acrossDeployables": ["relative-import-crosses-workspace"]

@@ -737,7 +737,13 @@
     {
       // The config engine moved to kalfa/config (our tooling is a few @kalfa packages grouped by domain) keeps the next/** rule block below, as its own
       // override, so the next/** block stays exactly next/** (edge-config.test.ts reads it by that).
-      "files": ["kalfa/config/src/**", "kalfa/config/*.ts", "kalfa/diagnostics/src/**", "kalfa/markdown/src/**"],
+      "files": [
+        "kalfa/config/src/**",
+        "kalfa/config/*.ts",
+        "kalfa/diagnostics/src/**",
+        "kalfa/git/src/**",
+        "kalfa/markdown/src/**"
+      ],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
       "rules": {
         "fabrika/no-promises": "error",
@@ -4064,6 +4070,260 @@
             ]
           }
         ]
+      }
+    },
+    {
+      // Source control (@kalfa/git) is a library with no Node import and no other package. An override replaces a rule's options, so this repeats the base entries and adds its own. Every pattern that means "and below" ends in /**, never /*.
+      "files": ["kalfa/git/src/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/platform-node",
+                "message": "@kalfa/git: the app provides the Node layer at the top, so this package never imports it."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/git: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/git: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/git: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib"
+                ],
+                "message": "@kalfa/git imports no Node module, so it runs wherever the app joins a spawner (NodeServices.layer from @effect/platform-node at the top). Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["effect/process", "effect/process/**"],
+                "message": "@kalfa/git: only ProcessRepository.ts spawns a process. Memory and the contract stay free of effect/process."
+              },
+              {
+                "group": ["@effect/platform-node/**", "@effect/vitest/**", "vitest/**"],
+                "message": "@kalfa/git: no Node layer and no test tools in product files."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**"],
+                "message": "@kalfa/git imports no other package of this repository (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/git imports no path out of its own folder."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": ["error", "process", "console", "globalThis", "global", "self", "window"],
+        "eslint/no-console": "error"
+      },
+      "excludeFiles": ["**/*.test.ts", "**/*Test.ts", "**/*.test-support.ts", "kalfa/git/src/ProcessRepository.ts"]
+    },
+    {
+      // Source control's one file that spawns: the same rows as above, less effect/process, which ProcessRepository.ts alone may import.
+      "files": ["kalfa/git/src/ProcessRepository.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/platform-node",
+                "message": "@kalfa/git: the app provides the Node layer at the top, so this package never imports it."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/git: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/git: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/git: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "!effect/process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib"
+                ],
+                "message": "@kalfa/git imports no Node module, so it runs wherever the app joins a spawner (NodeServices.layer from @effect/platform-node at the top). Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["@effect/platform-node/**", "@effect/vitest/**", "vitest/**"],
+                "message": "@kalfa/git: no Node layer and no test tools in product files."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**"],
+                "message": "@kalfa/git imports no other package of this repository (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/git imports no path out of its own folder."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": ["error", "process", "console", "globalThis", "global", "self", "window"],
+        "eslint/no-console": "error"
       }
     },
     {

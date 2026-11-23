@@ -1,0 +1,258 @@
+{
+  "git": "git version 2.40.1",
+  "command": "git check-ref-format <name>, exit 0 is accepted and exit 1 is refused, one run per row; each name starts with refs/ and has two parts or more, or is refused by git whatever its form",
+  "rows": [
+    {
+      "name": "refs/heads/main",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/feature/x",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/a.b",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/a-b_c",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/设",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/😀",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/ｚ",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/#%+,=!$&;<>|\"`{}]",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/@",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/a@b",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads",
+      "accepted": true
+    },
+    {
+      "name": "refs/kalfa/candidates/01J",
+      "accepted": true
+    },
+    {
+      "name": "refs/tags/v1.0.0",
+      "accepted": true
+    },
+    {
+      "name": "refs/remotes/origin/x",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/HEAD",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/-x",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/a/b/c/d/e/f/g/h/i/j",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "accepted": true
+    },
+    {
+      "name": "refs/x",
+      "accepted": true
+    },
+    {
+      "name": "refs/heads/.x",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a\tb",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a\nb",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a\rb",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a..b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a.lock",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/x.lock/y",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a.",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a@{b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/@{",
+      "accepted": false
+    },
+    {
+      "name": "@",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads//a",
+      "accepted": false
+    },
+    {
+      "name": "//a",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a/",
+      "accepted": false
+    },
+    {
+      "name": "/refs/heads/a",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a~b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a^b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a:b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a?b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a*b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a[b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a\\b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/ab",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/./a",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/../a",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a/.",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a/..",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/.",
+      "accepted": false
+    },
+    {
+      "name": "refs",
+      "accepted": false
+    },
+    {
+      "name": "refs/",
+      "accepted": false
+    },
+    {
+      "name": "",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a\u0001b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a\u001fb",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/ ",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a/.b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a/b.lock",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a.lock/b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/.lock",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a.lock.lock",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a..",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/..",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/a/./b",
+      "accepted": false
+    },
+    {
+      "name": "refs/heads/@/@",
+      "accepted": true
+    }
+  ]
+}
