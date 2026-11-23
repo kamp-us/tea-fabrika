@@ -464,6 +464,8 @@ export interface Scene {
   readonly arrival: Arrival | undefined;
   /** The other settings the file names, for the start's other values. */
   readonly others: ReadonlyArray<Other>;
+  /** Lines the answer must still hold, as they were: the header of a table that is now empty. */
+  readonly keeps: ReadonlyArray<string>;
 }
 
 export type Id =
@@ -710,6 +712,8 @@ export interface Spec {
   /** Where the arrival is looked for (a block form or not); none for no arrival. */
   readonly arrive?: boolean;
   readonly top?: boolean;
+  /** Lines the answer must still hold, as they were. */
+  readonly keeps?: ReadonlyArray<string>;
 }
 
 /** A scene from a spec: the file as a person types it, and what the call must do to it. */
@@ -793,6 +797,7 @@ export const buildScene = (given: Draw, spec: Spec): Scene => {
     remove: spec.remove === true,
     arrival,
     others: OTHER_KEYS.filter((which) => lines.some((line) => line.head?.join(".") === which)),
+    keeps: spec.keeps ?? [],
   };
 };
 
@@ -935,6 +940,11 @@ export const judge = (scene: Scene, answer: string): ReadonlyArray<string> => {
   const found = splitLines(answer, scene.eol);
   const problems: Array<string> = [];
 
+  // A text that has no final line break answers without one: a cut or a write at its end never adds it.
+  if (!scene.final && /[\r\n]$/u.test(answer)) {
+    problems.push("the file has no final line break, and the answer ends with one");
+  }
+
   for (const [i, line] of found.entries()) {
     if (/[\r\n]/u.test(line)) {
       problems.push(`line ${i + 1} holds a line break that is not the file's own: ${JSON.stringify(line)}`);
@@ -1074,6 +1084,8 @@ interface ArraySpec {
   readonly eol: string;
   readonly final: boolean;
   readonly others?: boolean;
+  /** The first block sits right under the header of the table that holds it (`[table]`), not at the root. */
+  readonly home?: boolean;
   /** The record setting, for a kind change, instead of the steps setting. */
   readonly rules?: boolean;
 }
@@ -1103,6 +1115,10 @@ export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
     lines.push({ text: `[${bare(c.table)}]`, own: STAY, head: [c.table] });
     lines.push(...assignment(c, bare(c.name), [], array));
   } else {
+    if (spec.home === true) {
+      lines.push({ text: `[${bare(c.table)}]`, own: STAY, head: [c.table] });
+    }
+
     if (spec.above === true) {
       lines.push({ text: note(c), own: STAY });
     }
@@ -1139,8 +1155,10 @@ export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
       }
     }
 
-    // A blank line ends the last block: it goes with it.
-    lines.push({ text: "", own: block([]) });
+    // A blank line ends the last block: it goes with it. A file that ends in the block has none.
+    if (spec.others === true) {
+      lines.push({ text: "", own: block([]) });
+    }
   }
 
   if (spec.others === true) {
@@ -1173,7 +1191,10 @@ export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
               {
                 label: "the array on one line",
                 test: (line) =>
-                  new RegExp(`^${escape(`${bare(c.table)}.${bare(c.name)}`)} = \\[.*\\]$`, "u").test(line),
+                  new RegExp(
+                    `^${escape(spec.home === true ? bare(c.name) : `${bare(c.table)}.${bare(c.name)}`)} = \\[.*\\]$`,
+                    "u",
+                  ).test(line),
               },
             ],
             blanks: 1,
@@ -1200,6 +1221,7 @@ export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
     remove: false,
     arrival,
     others: othersIn(lines),
+    keeps: [],
   };
 };
 

@@ -475,6 +475,7 @@ const readable = (draw: Draw): ReadonlyArray<Scene> => {
     buildScene(draw, {
       ids: ["m"],
       label: "m an item under a header becomes empty",
+      keeps: [`[${draw.table}.${draw.name}.${first}]`],
       form: "c",
       style: 3,
       eol: LF,
@@ -484,6 +485,7 @@ const readable = (draw: Draw): ReadonlyArray<Scene> => {
     buildScene(draw, {
       ids: ["m"],
       label: "m a record under its own header becomes empty",
+      keeps: [`[${draw.table}.${draw.name}]`],
       form: "b",
       style: 0,
       eol: CRLF,
@@ -538,7 +540,14 @@ it.effect.prop(
       const reach = new Reach<Id>(RC3_IDS);
 
       for (const scene of readable(draw)) {
-        yield* readBack(scene, yield* answer(scene));
+        const text = yield* answer(scene);
+
+        // A table that a header names keeps its header when its keys go: the header is still a line of the answer.
+        for (const line of scene.keeps) {
+          expect(text.split(scene.eol), `${scene.label}: the header stays\n${text}`).toContain(line);
+        }
+
+        yield* readBack(scene, text);
         reach.mark(...scene.ids);
       }
 
@@ -818,7 +827,7 @@ it.effect.prop(
 // RC7, an array is replaced whole, in its own form
 // ---------------------------------------------------------------------------------------------
 
-/** The cases of RC7: at most ten sets and four starts (the `start` flag). */
+/** The cases of RC7: twelve sets and five starts (the `start` flag). */
 const arrays = (draw: Draw): ReadonlyArray<{ readonly scene: Scene; readonly start: boolean }> => {
   const [a = 1, b = 2, c = 3] = draw.steps;
   const word = draw.fresh.word;
@@ -893,8 +902,9 @@ const arrays = (draw: Draw): ReadonlyArray<{ readonly scene: Scene; readonly sta
       scene: arrayScene(draw, {
         ...tables,
         ...crlf,
+        others: false,
         ids: ["z"],
-        label: "z an element is added",
+        label: "z an element is added, the blocks end a file with no final line break",
         old: [{ n: a }],
         next: [{ n: a }, { n: b }],
         sep: false,
@@ -939,6 +949,32 @@ const arrays = (draw: Draw): ReadonlyArray<{ readonly scene: Scene; readonly sta
         label: "z a new array of plain values",
         old: [{ n: a }, { n: b }],
         next: [a, { n: b }],
+        sep: false,
+      }),
+    },
+    // (z) the same two, with the first block under the header of the table that holds it: the line is written in that table.
+    {
+      start: true,
+      scene: arrayScene(draw, {
+        ...tables,
+        ids: ["z"],
+        home: true,
+        label: "z a new empty array, in a table",
+        old: [{ n: a }, { n: b }],
+        next: [],
+        sep: true,
+        above: true,
+      }),
+    },
+    {
+      start: false,
+      scene: arrayScene(draw, {
+        ...tables,
+        ids: ["z"],
+        home: true,
+        label: "z a new array of plain values, in a table",
+        old: [{ n: a }, { n: b }],
+        next: [b, { n: a }],
         sep: false,
       }),
     },
