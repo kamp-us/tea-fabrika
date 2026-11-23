@@ -32,7 +32,17 @@ const START = [
 
 const word = fc.stringMatching(/^[a-z][a-z0-9]{2,7}$/);
 
-const caller = fc.oneof(
+/** One file that imports: whether it may take the adapter and the parser, and whether only the parser is tried. */
+interface Caller {
+  readonly file: string;
+  readonly adapter: boolean;
+  readonly parser: boolean;
+  readonly parserOnly?: boolean;
+  /** The group a parser import is counted under, for the coverage check. */
+  readonly kind?: string;
+}
+
+const caller: fc.Arbitrary<Caller> = fc.oneof(
   // The exact start files: they choose the adapter.
   fc.constantFrom(...START).map((file) => ({ file, adapter: true, parser: false })),
   // Every other app file, sibling tests included.
@@ -69,8 +79,17 @@ const caller = fc.oneof(
     )
     .map(([w, folder]) => ({ file: `${folder}X${w}.ts`, adapter: false, parser: false })),
   // The format is the one file that imports the parser; the adapter that wraps it may not.
-  fc.constant({ file: PARSER_HOME, adapter: true, parser: true }),
-  fc.constant({ file: ADAPTER, adapter: true, parser: false }),
+  fc.constant({ file: PARSER_HOME, adapter: true, parser: true, parserOnly: true, kind: PARSER_HOME }),
+  fc.constant({ file: ADAPTER, adapter: true, parser: false, parserOnly: true, kind: ADAPTER }),
+  // Every other file of `kalfa/config/src`, at the top level and under `internal/`, may not import the parser: the
+  // exemption names one file, not a folder. (Their adapter imports are not this rule's case, so only the parser is tried.)
+  fc.tuple(word, fc.constantFrom("kalfa/config/src/X", "kalfa/config/src/internal/x")).map(([w, stem]) => ({
+    file: `${stem}${w}.ts`,
+    adapter: false,
+    parser: false,
+    parserOnly: true,
+    kind: `${stem}*.ts`,
+  })),
 );
 
 const target = fc.constantFrom("package", "relative", "relative-bare", "parser", "parser-subpath");
@@ -89,7 +108,8 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
   it("oxlint refuses each import a caller may not make, in every spelling, and passes the rest", async () => {
     // Each run plants a batch of generated imports and lints them in one oxlint process.
     // Coverage: each start file must be drawn taking the adapter, or a lost allowance would pass.
-    // Each parser file must be drawn importing the parser, too: the format allowed, the adapter refused.
+    // Each kind of `kalfa/config/src` file must be drawn importing the parser, too: the format allowed, and the adapter
+    // and every other file, at the top level and under `internal/`, refused.
     const started = new Set<string>();
     const parsed = new Set<string>();
     await fc.assert(
@@ -97,10 +117,9 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
         fc.uniqueArray(fc.tuple(caller, target), { minLength: 1, maxLength: 12, selector: ([c]) => c.file }),
         async (cases) => {
           const planted = cases
-            // The adapter importing itself, or the format importing the adapter that wraps it, is no case of this rule.
-            .filter(
-              ([c, t]) => !((c.file === ADAPTER || c.file === PARSER_HOME) && t !== "parser" && t !== "parser-subpath"),
-            )
+            // The adapter importing itself, the format importing the adapter that wraps it, and the other files of
+            // `kalfa/config/src` importing it are no case of this rule: only the parser is tried for them.
+            .filter(([c, t]) => !(c.parserOnly === true && t !== "parser" && t !== "parser-subpath"))
             .map(([c, t]) => {
               const spec =
                 t === "package"
@@ -115,7 +134,7 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
 
               const allowed = t === "parser" || t === "parser-subpath" ? c.parser : c.adapter;
 
-              return { file: c.file, spec, allowed };
+              return { file: c.file, spec, allowed, kind: c.kind };
             });
 
           fc.pre(planted.length > 0);
@@ -125,8 +144,8 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
               started.add(p.file);
             }
 
-            if ((p.file === PARSER_HOME || p.file === ADAPTER) && p.spec.startsWith("toml-eslint-parser")) {
-              parsed.add(`${p.file} ${p.allowed ? "allowed" : "refused"}`);
+            if (p.kind !== undefined && p.spec.startsWith("toml-eslint-parser")) {
+              parsed.add(`${p.kind} ${p.allowed ? "allowed" : "refused"}`);
             }
           }
 
@@ -147,6 +166,13 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
       { seed: SEED, numRuns: 100, endOnFailure: true },
     );
     expect([...started].sort()).toEqual([...START].sort());
-    expect([...parsed].sort()).toEqual([`${ADAPTER} refused`, `${PARSER_HOME} allowed`]);
+    expect([...parsed].sort()).toEqual(
+      [
+        `${ADAPTER} refused`,
+        `${PARSER_HOME} allowed`,
+        "kalfa/config/src/X*.ts refused",
+        "kalfa/config/src/internal/x*.ts refused",
+      ].sort(),
+    );
   }, 120_000);
 });
