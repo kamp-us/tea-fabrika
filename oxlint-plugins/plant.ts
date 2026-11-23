@@ -5,6 +5,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Array as Arr, Record as Rec, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
+import { ruleBlocks } from "./one-rule.test-support.ts";
 
 /** One fire: the rule's code, as oxlint prints it (`fabrika(no-of)`), where, and what it says. */
 interface Fire {
@@ -35,13 +36,19 @@ type Fires<A> = (code: string, file: string) => readonly A[];
 /**
  * Lints the planted files, keyed by path from the top of the repo, and answers the lines one rule
  * (`fabrika(no-of)`) fires on in one of them, in order. Given `show`, it answers each fire as `show`
- * gives it, for a law that also reads what a fire says.
+ * gives it, for a law that also reads what a fire says. Given `only`, a built-in rule of the config (`eslint/no-restricted-imports`), the run reads that
+ * rule's blocks of the config alone, with no JS plugin to load: one run costs 0.07 s in place of 0.35 s (one-rule.test-support.ts).
  */
 export function plant(files: Files): Promise<Fires<number>>;
 export function plant<A>(files: Files, show: (fire: Fire) => A): Promise<Fires<A>>;
-export function plant<A>(files: Files, show: (fire: Fire) => A | number = (f) => f.line): Promise<Fires<A | number>> {
+export function plant(files: Files, show: undefined, only: string): Promise<Fires<number>>;
+export function plant<A>(
+  files: Files,
+  show: (fire: Fire) => A | number = (f) => f.line,
+  only?: string,
+): Promise<Fires<A | number>> {
   return Effect.runPromise(
-    lint(files).pipe(
+    lint(files, only).pipe(
       Effect.map(
         (all) => (code: string, file: string) =>
           Arr.map(
@@ -54,16 +61,22 @@ export function plant<A>(files: Files, show: (fire: Fire) => A | number = (f) =>
   );
 }
 
-const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>>) {
+const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>>, only?: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const ROOT = path.resolve(import.meta.dirname, "..");
   // The real path: on a Mac the temp folder is behind a link, and oxlint matches globs on the real one.
   const at = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "exam-" }));
-  yield* fs.copyFile(path.join(ROOT, ".oxlintrc.json"), path.join(at, ".oxlintrc.json"));
-  yield* fs.symlink(path.join(ROOT, "oxlint-plugins"), path.join(at, "oxlint-plugins"));
-  // The config loads the vendored anti-slop plugins from here (we use the anti-slop plugin as it ships, never our own copy of its rules).
-  yield* fs.symlink(path.join(ROOT, "vendor"), path.join(at, "vendor"));
+
+  if (only === undefined) {
+    yield* fs.copyFile(path.join(ROOT, ".oxlintrc.json"), path.join(at, ".oxlintrc.json"));
+    yield* fs.symlink(path.join(ROOT, "oxlint-plugins"), path.join(at, "oxlint-plugins"));
+    // The config loads the vendored anti-slop plugins from here (we use the anti-slop plugin as it ships, never our own copy of its rules).
+    yield* fs.symlink(path.join(ROOT, "vendor"), path.join(at, "vendor"));
+  } else {
+    const blocks = ruleBlocks(yield* fs.readFileString(path.join(ROOT, ".oxlintrc.json")), only);
+    yield* fs.writeFileString(path.join(at, ".oxlintrc.json"), JSON.stringify({ plugins: ["eslint"], ...blocks }));
+  }
 
   for (const [file, text] of Rec.toEntries(files)) {
     const full = path.join(at, file);

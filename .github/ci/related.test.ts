@@ -90,17 +90,20 @@ const made = (options: Parameters<typeof createVitest>[1]) =>
     (context) => promised(() => context.close()).pipe(Effect.orDie),
   );
 
-beforeAll(() =>
-  Effect.gen(function* () {
-    vitest = yield* made({ root, watch: false, maxWorkers: 1 });
-  }),
-);
-
 const affected = async (paths: string[]) => {
   vitest.config.related = paths.map((path) => join(root, path));
 
   return (await vitest.getRelevantTestSpecifications()).map((spec) => relative(root, spec.moduleId)).sort();
 };
+
+beforeAll(() =>
+  Effect.gen(function* () {
+    vitest = yield* made({ root, watch: false, maxWorkers: 1 });
+    // The first call builds the module graph cold, 9 s here and 30 s in CI, and the first law to call it paid that: the subset law, over half of the 60 s
+    // limit. The setup pays it, under the hook's own limit, so no law carries it.
+    yield* promised(() => affected(readScripts.slice(0, 1)));
+  }),
+);
 
 const declaring = (changed: ReadonlyArray<string>) =>
   tests.filter((test) => changed.some((path) => readers.get(test)!.has(path))).sort();

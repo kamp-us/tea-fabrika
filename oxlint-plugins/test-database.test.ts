@@ -11,6 +11,7 @@ import { dirname, join, relative } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
+import { oneRuleConfig } from "./one-rule.test-support.ts";
 import { testDatabase } from "./test-database.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -114,13 +115,17 @@ it('R1: new DatabaseSync(arg) from node:sqlite fires in a next/ test, suite or t
 });
 
 /** The test-database fires oxlint finds with the repo's own config, by file from the repo's top, as lines. */
-const fires = (paths: readonly string[]) => {
-  const out = spawnSync(join(root, "node_modules/.bin/oxlint"), ["--format=json", ...paths], {
-    cwd: root,
-    encoding: "utf8",
-    // Node's default cap is 1 MiB, and a cut report is not JSON: read all of it.
-    maxBuffer: Infinity,
-  });
+const fires = (paths: readonly string[], config?: string) => {
+  const out = spawnSync(
+    join(root, "node_modules/.bin/oxlint"),
+    [...(config === undefined ? [] : [`--config=${config}`, "--disable-nested-config"]), "--format=json", ...paths],
+    {
+      cwd: root,
+      encoding: "utf8",
+      // Node's default cap is 1 MiB, and a cut report is not JSON: read all of it.
+      maxBuffer: Infinity,
+    },
+  );
 
   if (out.error !== undefined) {
     throw out.error;
@@ -175,5 +180,12 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s tests, suites
 it("scenario: next/'s tree is at zero, so the rule blocks from the start (a lint rule blocks wherever its code is clean)", () => {
   // The real tree is the input: 62 calls in 53 files fired on `86a7668d6`, and ticket 1029 moved
   // each one to `TestDatabase.make` or `TestDatabase.open`.
-  expect(Object.fromEntries(fires(committed()))).toEqual({});
+  // The rule alone, over the whole tree, from the repo's own config (one-rule.test-support.ts): the other rules' work over 800 files was most of this law's 16 s.
+  const config = oneRuleConfig(root, "fabrika/test-database");
+
+  try {
+    expect(Object.fromEntries(fires(committed(), config))).toEqual({});
+  } finally {
+    rmSync(dirname(config), { recursive: true, force: true });
+  }
 });

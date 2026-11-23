@@ -11,7 +11,7 @@
 # Version 3, the one a draft must carry, also needs one `Estimate: <n> steps, $<d>` line ending the
 # Size section in draft and approved modes; plans approved at version 2 keep passing. Legacy plans keep their owner checks. Fixed inputs need one of the four labels in
 # five-steps-for-every-check.md. Paths are read as the repo reads them: `./package.json` is
-# `package.json`. Draft mode also prints sizecap.ts's size line (0099), which never changes the exit,
+# `package.json`. Draft mode also prints the size line of sizecap.plan.ts, the plan side of sizecap.ts (0099), which never changes the exit,
 # and fails a files-table path that is no repo path: one with a `:`, or a word with no `/` or `.`.
 # A versioned plan also gets `advice:` lines, which never change the exit: a type or lint law with
 # an fc. generator, a test law with an fc. generator and no run count, and a Validation section that
@@ -41,7 +41,7 @@ fi
 # Draft mode also prints the plan's size and names each slice with no estimate. Advice only: no
 # number caps a pull request (0099), so it never fails the check.
 if [ "$draft" = 1 ]; then
-    node "$here/../../lead/scripts/sizecap.ts" plan "$plan" || echo "size: not checked"
+    node "$here/../../lead/scripts/sizecap.plan.ts" "$plan" || echo "size: not checked"
 fi
 python3 - "$plan" "$here/../../step-commit/scripts/exam.py" "$draft" <<'PY'
 import hashlib, json, os, re, subprocess, sys

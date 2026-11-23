@@ -91,14 +91,29 @@ const Cell = Schema.Struct({ pick: Nat, amount: Nat, reopen: Schema.Boolean });
 
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(25));
 
+/** The most accepted messages one history of Q18 holds: the real limit, which the pinned run below replays. */
+const EDGE = 1001;
+
+// A history is replayed message by message, about a millisecond and a half each, so a run of up to three histories drawn up to EDGE long took
+// seconds, and the law 205 s in CI with a 600 s limit of its own. A drawn history stops at 60 messages and the pinned run replays EDGE.
 const History = Schema.Array(
   Schema.Struct({
     ...Cell.fields,
-    length: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1001 })),
+    length: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 60 })),
   }),
 ).check(Schema.isMinLength(1), Schema.isMaxLength(3));
 
-const options = { timeout: 600_000, arbitrary: { seed: 119120, runs: 40, size: 100 } };
+// Q19 runs a cell per tape entry, each with up to six attempts and a reopen, so a tape of 25 cells took 34 s in CI. A drawn tape stops at 8 cells
+// and the pinned run takes 25.
+// Q7 runs a cell per tape entry, each a journal read, a drain, a poison and perhaps a reopen, so a tape of 25 cells took 26 s of CI's 60 s limit in 40
+// runs. A drawn tape stops at 10 cells and the pinned run takes 25.
+const Fills = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(10));
+
+const Timers = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(8));
+
+const WIDE_TAPE = Array.from({ length: 25 }, (_, i) => ({ pick: i, amount: (i * 37) % 251, reopen: i % 3 === 0 }));
+
+const options = { arbitrary: { seed: 119120, runs: 40, size: 100 } };
 
 const names = ["alpha:1", "alpha:2", "beta:1"];
 
@@ -237,99 +252,100 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
       options,
     );
 
-    it.effect.prop(
-      "Q7 a full program still records failure, dead letter, signals, cleanup and successor checkpoint",
-      { tape: Tape },
-      ({ tape }) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            yield* TestClock.setTime(1_000);
-            const w = yield* open(defaults);
-            const name = required(names[required(tape[0]).pick % 2]);
-            yield* w.watch("beta:1", name, "inbound");
-            yield* w.watch(name, "beta:1", "outbound");
-            const initial = yield* w.program("sample/alpha");
+    const fills = (tape: typeof Tape.Type) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(1_000);
+          const w = yield* open(defaults);
+          const name = required(names[required(tape[0]).pick % 2]);
+          yield* w.watch("beta:1", name, "inbound");
+          yield* w.watch(name, "beta:1", "outbound");
+          const initial = yield* w.program("sample/alpha");
 
-            for (const [n, c] of tape.entries()) {
-              expect(yield* w.msg(required(names[c.pick % 2]), `healthy:${n}`, Msg.cases.inc.make({}))).toHaveProperty(
-                "_tag",
-                "accepted",
-              );
-            }
+          for (const [n, c] of tape.entries()) {
+            expect(yield* w.msg(required(names[c.pick % 2]), `healthy:${n}`, Msg.cases.inc.make({}))).toHaveProperty(
+              "_tag",
+              "accepted",
+            );
+          }
 
-            const full = yield* w.program("sample/alpha");
-            expect(full.writes - initial.writes).toBe(2 * tape.length);
-            w.limits({ ...defaults, writes: full.writes });
-            let terminal = false;
+          const full = yield* w.program("sample/alpha");
+          expect(full.writes - initial.writes).toBe(2 * tape.length);
+          w.limits({ ...defaults, writes: full.writes });
+          let terminal = false;
 
-            for (const c of tape) {
-              const saved = yield* Schema.decodeUnknownEffect(Schema.NullOr(supervision))(yield* w.journal(name));
+          for (const c of tape) {
+            const saved = yield* Schema.decodeUnknownEffect(Schema.NullOr(supervision))(yield* w.journal(name));
 
-              if (saved !== null && saved.journal._tag !== "idle") {
-                yield* w.drain(name);
-              } else if (!terminal) {
-                w.cut(c.amount % 8);
-                const result = yield* Effect.result(w.msg(name, "poison", Msg.cases.throw.make({})));
-                w.cut(null);
-                terminal =
-                  result._tag === "Success" &&
-                  Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
-              }
-
-              if (c.reopen) {
-                yield* w.reopen;
-              }
-
-              expect((yield* w.program("sample/alpha")).writes).toBe(full.writes);
-              expect((yield* w.local(name)).fault).toBeNull();
-            }
-
-            // Finish the saved delivery limit after the generated cuts, then replay the accepted history.
-            for (let retry = 0; retry < 3 && !terminal; retry++) {
+            if (saved !== null && saved.journal._tag !== "idle") {
               yield* w.drain(name);
+            } else if (!terminal) {
+              w.cut(c.amount % 8);
               const result = yield* Effect.result(w.msg(name, "poison", Msg.cases.throw.make({})));
+              w.cut(null);
               terminal =
                 result._tag === "Success" &&
                 Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
             }
 
-            yield* w.drain(name);
-            expect(terminal).toBe(true);
-            yield* w.restart(name, "person", true);
-            yield* w.drain(name);
+            if (c.reopen) {
+              yield* w.reopen;
+            }
+
             expect((yield* w.program("sample/alpha")).writes).toBe(full.writes);
             expect((yield* w.local(name)).fault).toBeNull();
-            expect((yield* w.local(name)).recovery.total.writes).toBeGreaterThan(0);
-            expect((yield* w.projectRecovery(name)).total.writes).toBeGreaterThan(0);
-            const entries = yield* w.entries;
-            expect(Arr.some(entries, (e) => e._tag === "exited")).toBe(true);
-            expect(Arr.some(entries, (e) => e._tag === "restarted")).toBe(true);
-            expect(
-              Arr.some(
-                entries,
-                (e) =>
-                  e._tag === "send" &&
-                  e.stream === "beta:1/inbox" &&
-                  Schema.is(Schema.Struct({ m: Schema.Struct({ ref: Schema.Literal("inbound") }) }))(e.body),
-              ),
-            ).toBe(true);
-            expect(
-              Arr.some(
-                entries,
-                (e) =>
-                  e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
-              ),
-            ).toBe(true);
-            expect(Arr.some(entries, (e) => Predicate.isString(e.stream) && Str.endsWith("/dead")(e.stream))).toBe(
-              true,
-            );
-            expect(yield* w.checkpoint(name)).not.toBeNull();
-            expect(yield* w.input("beta:1", "other", Msg.cases.inc.make({}))).toHaveProperty("_tag", "placed");
-            yield* w.drain("beta:1");
-          }),
-        ),
+          }
+
+          // Finish the saved delivery limit after the generated cuts, then replay the accepted history.
+          for (let retry = 0; retry < 3 && !terminal; retry++) {
+            yield* w.drain(name);
+            const result = yield* Effect.result(w.msg(name, "poison", Msg.cases.throw.make({})));
+            terminal =
+              result._tag === "Success" &&
+              Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
+          }
+
+          yield* w.drain(name);
+          expect(terminal).toBe(true);
+          yield* w.restart(name, "person", true);
+          yield* w.drain(name);
+          expect((yield* w.program("sample/alpha")).writes).toBe(full.writes);
+          expect((yield* w.local(name)).fault).toBeNull();
+          expect((yield* w.local(name)).recovery.total.writes).toBeGreaterThan(0);
+          expect((yield* w.projectRecovery(name)).total.writes).toBeGreaterThan(0);
+          const entries = yield* w.entries;
+          expect(Arr.some(entries, (e) => e._tag === "exited")).toBe(true);
+          expect(Arr.some(entries, (e) => e._tag === "restarted")).toBe(true);
+          expect(
+            Arr.some(
+              entries,
+              (e) =>
+                e._tag === "send" &&
+                e.stream === "beta:1/inbox" &&
+                Schema.is(Schema.Struct({ m: Schema.Struct({ ref: Schema.Literal("inbound") }) }))(e.body),
+            ),
+          ).toBe(true);
+          expect(
+            Arr.some(
+              entries,
+              (e) => e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
+            ),
+          ).toBe(true);
+          expect(Arr.some(entries, (e) => Predicate.isString(e.stream) && Str.endsWith("/dead")(e.stream))).toBe(true);
+          expect(yield* w.checkpoint(name)).not.toBeNull();
+          expect(yield* w.input("beta:1", "other", Msg.cases.inc.make({}))).toHaveProperty("_tag", "placed");
+          yield* w.drain("beta:1");
+        }),
+      );
+
+    it.effect.prop(
+      "Q7 a full program still records failure, dead letter, signals, cleanup and successor checkpoint",
+      { tape: Fills },
+      ({ tape }) => fills(tape),
       options,
     );
+
+    it.effect("pinned: Q7 fills a program with a tape of 25 cells", () => fills(WIDE_TAPE));
 
     it.effect.prop(
       "Q8 reserve exhaustion keeps saved work, faults durably, and only checked person restart resumes",
@@ -437,122 +453,139 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
       options,
     );
 
+    const replay = (tape: typeof History.Type) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(1_000);
+          const w = yield* open(defaults);
+          const messages: string[] = [];
+
+          for (const [n, c] of tape.entries()) {
+            // Beyond the measured 350: generated histories include up to 1,001 accepted messages.
+            const length = c.length;
+
+            for (let j = 0; j < length; j++) {
+              const id = `history:${n}:${j}`;
+
+              const m =
+                j === length - 1
+                  ? Msg.cases.inc.make({ text: Str.repeat(c.amount % 256)("é😀") })
+                  : Msg.cases.inc.make({});
+
+              expect(yield* w.input("alpha:1", id, m)).toHaveProperty("_tag", "placed");
+              messages.push(id);
+            }
+
+            yield* w.drain("alpha:1");
+            const full = yield* w.program("sample/alpha");
+            w.limits({
+              ...defaults,
+              writes: full.writes,
+              recovery: {
+                project: { ...defaults.recovery.project, writes: 16 },
+                process: { ...defaults.recovery.process, writes: 28 },
+              },
+            });
+
+            if (c.reopen) {
+              yield* w.reopen;
+            }
+
+            yield* w.restart("alpha:1", `restart:${n}`, true);
+            yield* w.drain("alpha:1");
+            expect((yield* w.local("alpha:1")).fault).toBeNull();
+            expect(yield* w.program("sample/alpha")).toEqual(full);
+            expect(yield* w.checkpoint("alpha:1")).toHaveProperty("saved.model.count", messages.length);
+            const before = yield* w.entries;
+            yield* w.restart("alpha:1", `restart:${n}`, true);
+            yield* w.drain("alpha:1");
+            expect(yield* w.entries).toEqual(before);
+            expect(yield* w.program("sample/alpha")).toEqual(full);
+            const after = yield* w.entries;
+            const stepped = new Set<unknown>();
+
+            for (const entry of after) {
+              const id = entry.id;
+
+              if (Predicate.isTagged(entry, "stepped")) {
+                stepped.add(id);
+              }
+            }
+
+            for (const id of messages) {
+              expect(stepped.has(`step:${id}`)).toBe(true);
+            }
+
+            w.limits(defaults);
+            yield* TestClock.setTime((yield* Clock.currentTimeMillis) + 60_001);
+          }
+        }),
+      );
+
     it.effect.prop(
       "Q18 accepted history brings replay room, independent of exhausted program and recovery windows",
       { tape: History },
-      ({ tape }) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            yield* TestClock.setTime(1_000);
-            const w = yield* open(defaults);
-            const messages: string[] = [];
+      ({ tape }) => replay(tape),
+      options,
+    );
 
-            for (const [n, c] of tape.entries()) {
-              // Beyond the measured 350: generated histories include up to 1,001 accepted messages.
-              const length = c.length;
+    // Plant (run once, restored): Runner.ts's replay loop records no `step:` entry from the 1,001st letter on (`if (index >= 1000) continue`): this
+    // run goes red, and the drawn histories, 60 messages at most, do not reach it.
+    it.effect(
+      "pinned: Q18 replays two histories of EDGE accepted messages, one with a reopen, under the same windows",
+      () =>
+        replay([
+          { pick: 0, amount: 255, reopen: false, length: EDGE },
+          { pick: 1, amount: 3, reopen: true, length: EDGE },
+        ]),
+    );
 
-              for (let j = 0; j < length; j++) {
-                const id = `history:${n}:${j}`;
+    const lands = (tape: typeof Timers.Type) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const w = yield* open({ ...defaults, writes: 2 });
 
-                const m =
-                  j === length - 1
-                    ? Msg.cases.inc.make({ text: Str.repeat(c.amount % 256)("é😀") })
-                    : Msg.cases.inc.make({});
+          for (const [n, c] of tape.entries()) {
+            const at = 1_000 + n * 120_002;
+            yield* TestClock.setTime(at);
+            const m = c.pick % 2 === 0 ? Msg.cases.work.make({}) : Msg.cases.schedule.make({ at: at + 1 });
+            expect(yield* w.input("alpha:1", `deferred:${n}`, m)).toHaveProperty("_tag", "placed");
+            yield* w.drain("alpha:1");
+            const saved = yield* w.checkpoint("alpha:1");
+            const journal = yield* w.journal("alpha:1");
+            const usage = yield* w.local("alpha:1");
+            yield* TestClock.setTime(at + 1);
 
-                expect(yield* w.input("alpha:1", id, m)).toHaveProperty("_tag", "placed");
-                messages.push(id);
-              }
-
-              yield* w.drain("alpha:1");
-              const full = yield* w.program("sample/alpha");
-              w.limits({
-                ...defaults,
-                writes: full.writes,
-                recovery: {
-                  project: { ...defaults.recovery.project, writes: 16 },
-                  process: { ...defaults.recovery.process, writes: 28 },
-                },
-              });
+            for (let attempt = 0; attempt < 2 + (c.amount % 5); attempt++) {
+              yield* call(w, "alpha:1", (r) => r.due(at + 1));
+              expect(yield* w.alarm("alpha:1")).toBeGreaterThan(at + 1);
 
               if (c.reopen) {
                 yield* w.reopen;
               }
 
-              yield* w.restart("alpha:1", `restart:${n}`, true);
-              yield* w.drain("alpha:1");
-              expect((yield* w.local("alpha:1")).fault).toBeNull();
-              expect(yield* w.program("sample/alpha")).toEqual(full);
-              expect(yield* w.checkpoint("alpha:1")).toHaveProperty("saved.model.count", messages.length);
-              const before = yield* w.entries;
-              yield* w.restart("alpha:1", `restart:${n}`, true);
-              yield* w.drain("alpha:1");
-              expect(yield* w.entries).toEqual(before);
-              expect(yield* w.program("sample/alpha")).toEqual(full);
-              const after = yield* w.entries;
-              const stepped = new Set<unknown>();
-
-              for (const entry of after) {
-                const id = entry.id;
-
-                if (Predicate.isTagged(entry, "stepped")) {
-                  stepped.add(id);
-                }
-              }
-
-              for (const id of messages) {
-                expect(stepped.has(`step:${id}`)).toBe(true);
-              }
-
-              w.limits(defaults);
-              yield* TestClock.setTime((yield* Clock.currentTimeMillis) + 60_001);
+              expect(yield* w.checkpoint("alpha:1")).toEqual(saved);
+              expect(yield* w.journal("alpha:1")).toEqual(journal);
+              expect((yield* w.local("alpha:1")).recovery).toEqual(usage.recovery);
+              expect(Arr.filter(yield* w.entries, (e) => e._tag === "dead" || e._tag === "exited")).toEqual([]);
             }
-          }),
-        ),
-      options,
-    );
+
+            yield* TestClock.setTime(at + 60_001);
+            yield* call(w, "alpha:1", (r) => r.due(at + 60_001));
+            yield* w.drain("alpha:1");
+            const after = yield* w.checkpoint("alpha:1");
+            expect(after).not.toEqual(saved);
+            expect((yield* w.local("alpha:1")).fault).toBeNull();
+          }
+        }),
+      );
 
     it.effect.prop(
       "Q19 quota-refused timers and command answers keep saved work and land after the window opens",
-      { tape: Tape },
-      ({ tape }) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const w = yield* open({ ...defaults, writes: 2 });
-
-            for (const [n, c] of tape.entries()) {
-              const at = 1_000 + n * 120_002;
-              yield* TestClock.setTime(at);
-              const m = c.pick % 2 === 0 ? Msg.cases.work.make({}) : Msg.cases.schedule.make({ at: at + 1 });
-              expect(yield* w.input("alpha:1", `deferred:${n}`, m)).toHaveProperty("_tag", "placed");
-              yield* w.drain("alpha:1");
-              const saved = yield* w.checkpoint("alpha:1");
-              const journal = yield* w.journal("alpha:1");
-              const usage = yield* w.local("alpha:1");
-              yield* TestClock.setTime(at + 1);
-
-              for (let attempt = 0; attempt < 2 + (c.amount % 5); attempt++) {
-                yield* call(w, "alpha:1", (r) => r.due(at + 1));
-                expect(yield* w.alarm("alpha:1")).toBeGreaterThan(at + 1);
-
-                if (c.reopen) {
-                  yield* w.reopen;
-                }
-
-                expect(yield* w.checkpoint("alpha:1")).toEqual(saved);
-                expect(yield* w.journal("alpha:1")).toEqual(journal);
-                expect((yield* w.local("alpha:1")).recovery).toEqual(usage.recovery);
-                expect(Arr.filter(yield* w.entries, (e) => e._tag === "dead" || e._tag === "exited")).toEqual([]);
-              }
-
-              yield* TestClock.setTime(at + 60_001);
-              yield* call(w, "alpha:1", (r) => r.due(at + 60_001));
-              yield* w.drain("alpha:1");
-              const after = yield* w.checkpoint("alpha:1");
-              expect(after).not.toEqual(saved);
-              expect((yield* w.local("alpha:1")).fault).toBeNull();
-            }
-          }),
-        ),
+      { tape: Timers },
+      ({ tape }) => lands(tape),
       options,
     );
+
+    it.effect("pinned: Q19 holds the 25-cell tape", () => lands(WIDE_TAPE));
   });

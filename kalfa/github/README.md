@@ -92,6 +92,34 @@ Each call runs in one span, `github.call`, with `http.request.method`, `kalfa.gi
 reply came, `http.response.status_code`. No path, query, header or value is put in it. The package never logs and never
 prints.
 
+## Test a caller
+
+`@kalfa/github/test` holds a fake GitHub, a Layer of the `GitHub` service, so a caller's tests run its real decoding on
+GitHub's own JSON.
+
+```ts
+import * as GitHub from "@kalfa/github";
+import * as GitHubTest from "@kalfa/github/test";
+
+const layer = GitHubTest.layer([
+  GitHubTest.answer(ListCheckRuns, () => ({
+    total_count: 1,
+    check_runs: [{ id: 7, name: "lint", status: "completed", conclusion: null, head_sha: "abc" }],
+  })),
+  GitHubTest.refuse(CancelRun, { status: 409, message: "Cannot cancel a workflow run that is completed." }),
+]);
+```
+
+- **`answer(op, f)`** replies with `f`'s value written as JSON text, status 200. `f` is handed the params, the query and the
+  payload the request carried, as encoded (a number a Schema reads from text is the text), and the payload is `undefined`
+  when no body was sent. A route whose only 2xx is not 200 asks for the status: `answer(CancelRun, f, { status: 202 })`. The
+  value is part of the description's answer: every key is optional, at any depth, and a key the description lacks does not
+  compile. Fields the caller does not read are fine, as GitHub sends them.
+- **`refuse(op, said)`** replies with a 4xx and GitHub's own error body, which `call` reads as it reads GitHub's.
+- **`layer(answers, options)`** answers each request with the first answer for its route text. A request no answer covers dies,
+  naming the route, since a test that forgot to declare it has a bug. `poll` is the service's poll interval, 30 seconds by
+  default.
+
 ## What is checked at run time only
 
 These routes have an answer the description cannot describe to the compiler, so `route` takes any `success` for them:

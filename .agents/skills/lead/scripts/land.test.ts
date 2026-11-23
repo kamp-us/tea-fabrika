@@ -270,37 +270,41 @@ const land = (world: World) => {
 const fine: World = { behind: false, conflict: false, dirty: false, leak: false, signFails: false, leadCommit: false };
 
 describe("land.ts, today's tooling", () => {
-  it("T652 property: a quest lands only with no fault, and a refused run changes nothing and pushes nothing", () => {
-    fc.assert(
-      fc.property(
-        fc.record({
-          behind: fc.boolean(),
-          conflict: fc.boolean(),
-          dirty: fc.boolean(),
-          leak: fc.boolean(),
-          signFails: fc.boolean(),
-          leadCommit: fc.boolean(),
-        }),
-        (world) => {
-          const got = land(world);
-          // Signing is reached only when there is something to sign.
-          const signs = world.behind || world.conflict || world.leadCommit;
-          const faulted = world.dirty || world.conflict || world.leak || (world.signFails && signs);
+  // Each run builds a git origin and a clone and runs the script, 1.2 s, so the 10 runs took 12 s here and 26 s of CI's 60 s limit as one law. They are two
+  // laws by whether the tree is dirty, 5 runs each: the 10 runs the one law drew, and each is half the work.
+  for (const dirtyTree of [false, true]) {
+    it(`T652 property: a quest lands only with no fault, and a refused run changes nothing and pushes nothing, with${dirtyTree ? "" : "out"} a dirty tree`, () => {
+      fc.assert(
+        fc.property(
+          fc.record({
+            behind: fc.boolean(),
+            conflict: fc.boolean(),
+            dirty: fc.constant(dirtyTree),
+            leak: fc.boolean(),
+            signFails: fc.boolean(),
+            leadCommit: fc.boolean(),
+          }),
+          (world) => {
+            const got = land(world);
+            // Signing is reached only when there is something to sign.
+            const signs = world.behind || world.conflict || world.leadCommit;
+            const faulted = world.dirty || world.conflict || world.leak || (world.signFails && signs);
 
-          const sent = got.calls.filter((c) => /^(push|gh)/.test(c));
-          expect(got.code === 0, got.err).toBe(!faulted);
-          // A refused run leaves HEAD and the notes as they were, and sends nothing anywhere.
-          expect(faulted ? got.after : got.before).toEqual(got.before);
-          expect(faulted ? sent : []).toEqual([]);
-          // A clean one ends in the one pinned squash that adds it to the queue.
-          const queued = `gh pr merge 77 -R owner/repo --squash --match-head-commit ${got.head}`;
-          expect(faulted ? queued : got.calls.at(-1)).toBe(queued);
-          expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toHaveLength(faulted ? 0 : 1);
-        },
-      ),
-      { seed: 652, numRuns: 10 },
-    );
-  }, 300_000);
+            const sent = got.calls.filter((c) => /^(push|gh)/.test(c));
+            expect(got.code === 0, got.err).toBe(!faulted);
+            // A refused run leaves HEAD and the notes as they were, and sends nothing anywhere.
+            expect(faulted ? got.after : got.before).toEqual(got.before);
+            expect(faulted ? sent : []).toEqual([]);
+            // A clean one ends in the one pinned squash that adds it to the queue.
+            const queued = `gh pr merge 77 -R owner/repo --squash --match-head-commit ${got.head}`;
+            expect(faulted ? queued : got.calls.at(-1)).toBe(queued);
+            expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toHaveLength(faulted ? 0 : 1);
+          },
+        ),
+        { seed: 652, numRuns: 5 },
+      );
+    }, 300_000);
+  }
 
   it("T652 scenario: behind main with no conflict lands, the merge and the quest's own lead commit signed, oldest first", () => {
     const got = land({ ...fine, behind: true, leadCommit: true });
@@ -404,27 +408,30 @@ describe("land.ts, today's tooling", () => {
   });
 
   // A caller's `&&` stops only on a non-zero exit, so every refusal of the queue command must give one.
-  it("property: `land.ts queue` exits non-zero on every refusal and asks no merge then, zero when it queues", () => {
-    fc.assert(
-      fc.property(
-        fc.record({
-          state: fc.constantFrom("OPEN" as const, "CLOSED" as const),
-          draft: fc.boolean(),
-          red: fc.boolean(),
-          leak: fc.boolean(),
-        }),
-        (world) => {
-          const got = land({ ...fine, ...world, command: ["queue", "77"] });
-          const queues = world.state === "OPEN" && !world.red && !world.leak;
+  // The same split: 12 runs of a git fixture and the script, 14 s here, two laws by the pull request's state, 6 runs each.
+  for (const prState of ["OPEN", "CLOSED"] as const) {
+    it(`property: \`land.ts queue\` exits non-zero on every refusal and asks no merge then, zero when it queues, a ${prState} pull request`, () => {
+      fc.assert(
+        fc.property(
+          fc.record({
+            state: fc.constant(prState),
+            draft: fc.boolean(),
+            red: fc.boolean(),
+            leak: fc.boolean(),
+          }),
+          (world) => {
+            const got = land({ ...fine, ...world, command: ["queue", "77"] });
+            const queues = world.state === "OPEN" && !world.red && !world.leak;
 
-          expect(got.code, got.err).toBe(queues ? 0 : 1);
-          expect(got.err.includes("land: refused at the"), got.err).toBe(!queues);
-          expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toHaveLength(queues ? 1 : 0);
-        },
-      ),
-      { seed: 1942, numRuns: 12 },
-    );
-  }, 300_000);
+            expect(got.code, got.err).toBe(queues ? 0 : 1);
+            expect(got.err.includes("land: refused at the"), got.err).toBe(!queues);
+            expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toHaveLength(queues ? 1 : 0);
+          },
+        ),
+        { seed: 1942, numRuns: 6 },
+      );
+    }, 300_000);
+  }
 
   // Plant: read only ci-required in the wait, so a pull request GitHub starts no check on waits out its hour.
   it("scenario: `land.ts queue --wait` exits 1 at once when the pull request turns to conflict, naming the conflict and the command that merges main in", () => {
@@ -436,35 +443,38 @@ describe("land.ts, today's tooling", () => {
   }, 120_000);
 
   // Plants: run `check` on a part of the checks `queue` runs, or let it ask GitHub to change something.
-  it("property: `land.ts check` refuses the same bodies as `land.ts queue`, names each missing name with its file, and changes nothing", () => {
-    fc.assert(
-      fc.property(
-        fc.record({ named: fc.boolean(), leak: fc.boolean(), exports: fc.boolean() }),
-        ({ named, leak, exports }) => {
-          const section = named ? "\\n\\n## New names\\n\\n- `newThing`: the industry's word, with its source." : "";
-          const body = `What it does.${leak ? ` ${planted}` : ""}${section}`;
-          const world = { ...fine, body, ...(exports ? { patch: "newThing" } : {}) };
-          const checked = land({ ...world, command: ["check", "77"] });
-          const queued = land({ ...world, command: ["queue", "77"] });
-          const refused = leak || (exports && !named);
+  // The same split: 8 runs of two script runs each, 22 s here and 27 s of CI's 60 s limit, two laws by whether the body leaks, 4 runs each.
+  for (const leaking of [false, true]) {
+    it(`property: \`land.ts check\` refuses the same bodies as \`land.ts queue\`, names each missing name with its file, and changes nothing, ${leaking ? "with" : "without"} a leak`, () => {
+      fc.assert(
+        fc.property(
+          fc.record({ named: fc.boolean(), leak: fc.constant(leaking), exports: fc.boolean() }),
+          ({ named, leak, exports }) => {
+            const section = named ? "\\n\\n## New names\\n\\n- `newThing`: the industry's word, with its source." : "";
+            const body = `What it does.${leak ? ` ${planted}` : ""}${section}`;
+            const world = { ...fine, body, ...(exports ? { patch: "newThing" } : {}) };
+            const checked = land({ ...world, command: ["check", "77"] });
+            const queued = land({ ...world, command: ["queue", "77"] });
+            const refused = leak || (exports && !named);
 
-          expect(checked.code, checked.err).toBe(refused ? 1 : 0);
-          expect(queued.code, queued.err).toBe(refused ? 1 : 0);
-          expect(checked.err).not.toContain(planted);
+            expect(checked.code, checked.err).toBe(refused ? 1 : 0);
+            expect(queued.code, queued.err).toBe(refused ? 1 : 0);
+            expect(checked.err).not.toContain(planted);
 
-          if (exports && !named && !leak) {
-            for (const said of [checked.err, queued.err]) {
-              expect(said).toContain("new names its ## New names section does not name: newThing (src/thing.ts)");
+            if (exports && !named && !leak) {
+              for (const said of [checked.err, queued.err]) {
+                expect(said).toContain("new names its ## New names section does not name: newThing (src/thing.ts)");
+              }
             }
-          }
 
-          // `check` reads and asks nothing that changes: no ready, no merge, no edit.
-          expect(checked.calls.filter((c) => /^gh pr (ready|merge|edit)|-X (PATCH|POST)/.test(c))).toEqual([]);
-        },
-      ),
-      { seed: 1270, numRuns: 8 },
-    );
-  }, 300_000);
+            // `check` reads and asks nothing that changes: no ready, no merge, no edit.
+            expect(checked.calls.filter((c) => /^gh pr (ready|merge|edit)|-X (PATCH|POST)/.test(c))).toEqual([]);
+          },
+        ),
+        { seed: 1270, numRuns: 4 },
+      );
+    }, 300_000);
+  }
 
   // Plants: pass a close line whose number is a GitHub issue (pull requests 2009 and 2004 did, and `merged` closed nothing), or check it in `queue` only.
   it("scenario: `land.ts check` and `queue` refuse a `fabrika close ticket` line that names a GitHub issue, say to use `Closes #N`, and pass an open tracker ticket", () => {

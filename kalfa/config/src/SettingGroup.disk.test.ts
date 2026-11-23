@@ -392,61 +392,98 @@ it.effect.prop(
 // Plants: (v) write the new text into the file in place (in internal/disk.ts, write to the file's own path in place of the
 // lock, and skip the rename): a write to the file's path is recorded, red; (w) leave the lock behind when the rename
 // fails (do not remove the lock on failure): a lock is left, red.
-it.effect.prop(
-  "D4 the file sees one rename: on success no write touches the file's own path and one rename comes from its lock; with the lock's write or the rename refused the call fails `write`, the file is as it was and no lock is left",
-  DiskDraw.fields,
-  (draw) =>
-    Effect.gen(function* () {
-      const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:file", "w:lock-write", "w:rename"]);
+// D4 is three laws of its own with all of their runs, one for each way the call can go: a run of the whole took 14.7 s in CI as one law, since
+// each of its draw's changes runs the call three times on a watched disk. The success law runs it once and each fault law once, so each is a
+// third of the work.
+const renamedOnce = (draw: DiskDraw) =>
+  Effect.gen(function* () {
+    const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:file"]);
 
-      for (const [n, { p, value }] of changing(draw).entries()) {
-        const at = place(draw, p, p.file, n);
-        const path = at.path ?? "";
-        const lock = `${path}.lock`;
-        const group = groupFor(p);
-        const setting = targetSetting(p);
-        const wanted = mustText(yield* doSet(group, p.located.text, p.file, setting, value));
-        const named = label(p, at);
-        const base = held(draw, p.located.text);
-        const op = { kind: "set", value } as const;
+    for (const [n, { p, value }] of changing(draw).entries()) {
+      const at = place(draw, p, p.file, n);
+      const path = at.path ?? "";
+      const group = groupFor(p);
+      const setting = targetSetting(p);
+      const wanted = mustText(yield* doSet(group, p.located.text, p.file, setting, value));
+      const named = label(p, at);
+      const op = { kind: "set", value } as const;
 
-        const found = yield* run({ group, setting, place: at, seed: seedFor(at, "file", base), op });
+      const found = yield* run({
+        group,
+        setting,
+        place: at,
+        seed: seedFor(at, "file", held(draw, p.located.text)),
+        op,
+      });
 
-        expect(found.answer, named).toEqual(done);
-        expect(renames(found.calls), `${named}: one rename, from the lock over the file`).toEqual([[lock, path]]);
-        expect(writes(found.calls, path), `${named}: no write to the file's own path`).toEqual([]);
-        expect(found.after.files, `${named}: the file holds the new text and no lock is left`).toEqual({
-          [path]: wanted,
-        });
+      expect(found.answer, named).toEqual(done);
+      expect(renames(found.calls), `${named}: one rename, from the lock over the file`).toEqual([
+        [`${path}.lock`, path],
+      ]);
+      expect(writes(found.calls, path), `${named}: no write to the file's own path`).toEqual([]);
+      expect(found.after.files, `${named}: the file holds the new text and no lock is left`).toEqual({
+        [path]: wanted,
+      });
+      reach.mark(`u:${at.site}`, "v:file");
+    }
 
-        for (const [fault, id] of [
-          [writeRefused(lock, draw.disk.write), "w:lock-write"],
-          [renameRefused(lock, draw.disk.rename), "w:rename"],
-        ] as const) {
-          const refusedAt = yield* run({ group, setting, place: at, seed: seedFor(at, "file", base, [fault]), op });
-          const failing = `${named} with ${id}`;
+    reach.done();
+  });
 
-          expect(refusedAt.answer._tag, `${failing}: the call fails`).toBe("failed");
+const refusedAtLock = (id: "w:lock-write" | "w:rename") => (draw: DiskDraw) =>
+  Effect.gen(function* () {
+    const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:file", id]);
 
-          if (refusedAt.answer._tag === "failed") {
-            expect(refusedAt.answer.reason, `${failing}: it is a write error`).toBe("write");
-            expect(names(refusedAt.answer, at.name), `${failing}: it names the file`).toBe(true);
-            expect(refusedAt.answer.printed, `${failing}: it never holds the new text`).not.toContain(wanted);
-          }
+    for (const [n, { p, value }] of changing(draw).entries()) {
+      const at = place(draw, p, p.file, n);
+      const path = at.path ?? "";
+      const lock = `${path}.lock`;
+      const group = groupFor(p);
+      const setting = targetSetting(p);
+      const wanted = mustText(yield* doSet(group, p.located.text, p.file, setting, value));
+      const fault = id === "w:lock-write" ? writeRefused(lock, draw.disk.write) : renameRefused(lock, draw.disk.rename);
+      const base = held(draw, p.located.text);
+      const op = { kind: "set", value } as const;
+      const refusedAt = yield* run({ group, setting, place: at, seed: seedFor(at, "file", base, [fault]), op });
+      const failing = `${label(p, at)} with ${id}`;
 
-          expect(refusedAt.after.files, `${failing}: the file is as it was and no lock is left`).toEqual({
-            [path]: p.located.text,
-          });
-          expect(refusedAt.after.folders, `${failing}: the folders are as they were`).toEqual(refusedAt.before.folders);
-          expect(writes(refusedAt.calls, path), `${failing}: no write to the file's own path`).toEqual([]);
-          reach.mark(id);
-        }
+      expect(refusedAt.answer._tag, `${failing}: the call fails`).toBe("failed");
 
-        reach.mark(`u:${at.site}`, "v:file");
+      if (refusedAt.answer._tag === "failed") {
+        expect(refusedAt.answer.reason, `${failing}: it is a write error`).toBe("write");
+        expect(names(refusedAt.answer, at.name), `${failing}: it names the file`).toBe(true);
+        expect(refusedAt.answer.printed, `${failing}: it never holds the new text`).not.toContain(wanted);
       }
 
-      reach.done();
-    }),
+      expect(refusedAt.after.files, `${failing}: the file is as it was and no lock is left`).toEqual({
+        [path]: p.located.text,
+      });
+      expect(refusedAt.after.folders, `${failing}: the folders are as they were`).toEqual(refusedAt.before.folders);
+      expect(writes(refusedAt.calls, path), `${failing}: no write to the file's own path`).toEqual([]);
+      reach.mark(id, `u:${at.site}`, "v:file");
+    }
+
+    reach.done();
+  });
+
+it.effect.prop(
+  "D4 the file sees one rename: on success no write touches the file's own path and one rename comes from its lock",
+  DiskDraw.fields,
+  renamedOnce,
+  check,
+);
+
+it.effect.prop(
+  "D4 the file sees one rename: with the lock's write refused the call fails `write`, the file is as it was and no lock is left",
+  DiskDraw.fields,
+  refusedAtLock("w:lock-write"),
+  check,
+);
+
+it.effect.prop(
+  "D4 the file sees one rename: with the rename refused the call fails `write`, the file is as it was and no lock is left",
+  DiskDraw.fields,
+  refusedAtLock("w:rename"),
   check,
 );
 
@@ -777,51 +814,59 @@ it.effect.prop(
 
 // Plants: count every read failure as an empty file (in internal/disk.ts, answer "" for any failed read): a permission
 // fault writes a file, red; answer `read` for a refused lock create: red.
-it.effect.prop(
-  "D9 read and write faults: a refused read fails `read` and a refused lock create fails `write`, each naming the file and never its text, and nothing is written",
-  DiskDraw.fields,
-  (draw) =>
-    Effect.gen(function* () {
-      const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:file", "w:read", "w:lock-create"]);
+// D9 is two laws of its own with all of their runs, one for each fault: each draw's changes ran four faulted calls, and the one law took 11.3 s.
+const faulted = (only: "w:read" | "w:lock-create") => (draw: DiskDraw) =>
+  Effect.gen(function* () {
+    const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:file", only]);
 
-      for (const [n, { p, value }] of cases(draw).entries()) {
-        const at = place(draw, p, p.file, n);
-        const path = at.path ?? "";
-        const group = groupFor(p);
-        const setting = targetSetting(p);
-        const base = held(draw, p.located.text);
+    for (const [n, { p, value }] of cases(draw).entries()) {
+      const at = place(draw, p, p.file, n);
+      const path = at.path ?? "";
+      const group = groupFor(p);
+      const setting = targetSetting(p);
+      const base = held(draw, p.located.text);
 
-        for (const [fault, reason, id] of [
-          [readRefused(path, draw.disk.read), "read", "w:read"],
-          [createRefused(`${path}.lock`, draw.disk.create), "write", "w:lock-create"],
-        ] as const) {
-          for (const op of [{ kind: "set", value }, { kind: "remove" }] as const) {
-            const found = yield* run({ group, setting, place: at, seed: seedFor(at, "file", base, [fault]), op });
-            const named = `${label(p, at, op.kind)} with ${id}`;
+      const [fault, reason] =
+        only === "w:read"
+          ? ([readRefused(path, draw.disk.read), "read"] as const)
+          : ([createRefused(`${path}.lock`, draw.disk.create), "write"] as const);
 
-            expect(found.answer._tag, `${named}: the call fails`).toBe("failed");
+      for (const op of [{ kind: "set", value }, { kind: "remove" }] as const) {
+        const found = yield* run({ group, setting, place: at, seed: seedFor(at, "file", base, [fault]), op });
+        const named = `${label(p, at, op.kind)} with ${only}`;
 
-            if (found.answer._tag === "failed") {
-              expect(found.answer.reason, named).toBe(reason);
-              expect(names(found.answer, at.name), `${named}: it names the file`).toBe(true);
+        expect(found.answer._tag, `${named}: the call fails`).toBe("failed");
 
-              if (p.located.text !== "") {
-                expect(found.answer.printed, `${named}: it never holds the file's text`).not.toContain(p.located.text);
-              }
-            }
+        if (found.answer._tag === "failed") {
+          expect(found.answer.reason, named).toBe(reason);
+          expect(names(found.answer, at.name), `${named}: it names the file`).toBe(true);
 
-            asWas(found, named);
-            expect(found.after.files, `${named}: the file is as it was`).toEqual({ [path]: p.located.text });
+          if (p.located.text !== "") {
+            expect(found.answer.printed, `${named}: it never holds the file's text`).not.toContain(p.located.text);
           }
-
-          reach.mark(id);
         }
 
-        reach.mark(`u:${at.site}`, "v:file");
+        asWas(found, named);
+        expect(found.after.files, `${named}: the file is as it was`).toEqual({ [path]: p.located.text });
       }
 
-      reach.done();
-    }),
+      reach.mark(only, `u:${at.site}`, "v:file");
+    }
+
+    reach.done();
+  });
+
+it.effect.prop(
+  "D9 a refused read fails `read`, naming the file and never its text, and nothing is written",
+  DiskDraw.fields,
+  faulted("w:read"),
+  check,
+);
+
+it.effect.prop(
+  "D9 a refused lock create fails `write`, naming the file and never its text, and nothing is written",
+  DiskDraw.fields,
+  faulted("w:lock-create"),
   check,
 );
 

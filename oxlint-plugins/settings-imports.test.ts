@@ -149,10 +149,13 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
             }
           }
 
+          // The rule alone: each run starts one oxlint process, and with no JS plugin to load that costs 0.07 s in place of 0.35 s.
           const result = await plant(
             Object.fromEntries(
               planted.map((p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`]),
             ),
+            undefined,
+            "eslint/no-restricted-imports",
           );
 
           for (const p of planted) {

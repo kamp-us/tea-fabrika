@@ -445,7 +445,10 @@ jobs:
       # base commit or whose size step printed nothing, which then runs every file. A missing filter runs
       # all of next/. FILTER stays unquoted so each path is its own argument. `--project next` keeps
       # the run to the in-memory layer: a path filter alone finds a file in any project (a test that needs a real resource runs only in main's full run).
-      - run: pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # Every test step below also runs `.github/ci/slow-test-reporter.ts`: at full depth, which these steps set,
+      # one test over a share of its project's `testTimeout` fails the step, so a slow law shows on the pull
+      # request before it times out (the share is FABRIKA_SLOW_TEST_SHARE).
+      - run: pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/next.json"
         if: ${{ !startsWith(matrix.shard, 'e2e-') }}
         env:
           SHARD: ${{ matrix.shard }}/${{ needs.changes.outputs.vitest-legs || 5 }}
@@ -464,7 +467,7 @@ jobs:
       # the ones the size step sized these legs with, from the same base commit (changes' `base`).
       # A sized run of the reader tests alone, and a run the size step did not size, have no `base`,
       # and run every visual file.
-      - run: pnpm exec vitest run --project next-visual $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      - run: pnpm exec vitest run --project next-visual $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/next.json"
         if: startsWith(matrix.shard, 'e2e-')
         env:
           SHARD: ${{ matrix.shard }}/${{ needs.changes.outputs.e2e-legs || 2 }}
@@ -582,14 +585,14 @@ jobs:
         env:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project next-integration $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"
+        run: pnpm exec vitest run --project next-integration $FILES --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/related.json"
       - name: tooling
         if: fromJSON(needs.select.outputs.projects)[matrix.shard] == 'tooling'
         timeout-minutes: *related-tooling-limit
         env:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project tooling $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"
+        run: pnpm exec vitest run --project tooling $FILES --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/related.json"
       - name: consumer fault
         if: success() && needs.select.outputs.consumer == matrix.shard
         timeout-minutes: *related-tooling-limit
