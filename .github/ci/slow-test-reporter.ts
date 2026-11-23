@@ -1,8 +1,11 @@
 // Today's CI. At full depth, one test that took more than a share of its time limit fails the run, so a
 // slow law is seen on the pull request, before it grows into a timeout (two property laws passed every
-// local run at fast depth and timed out only at full depth in CI). The limit is the project's own
-// `testTimeout`, read from the resolved config (vitest.config.ts holds the number), and the share is
-// `FABRIKA_SLOW_TEST_SHARE`, read here and nowhere else. `FABRIKA_SLOW_TEST_MODE=report` prints the slow laws and fails nothing, to list every
+// local run at fast depth and timed out only at full depth in CI). The limit is the timeout the test
+// really runs under: Vitest resolves it when it collects the test (the test's own `timeout`, else its
+// describe's, else the project's `testTimeout`) and shows it as `TestCase.options.timeout`
+// (`vitest/dist/chunks/plugin.d.C8mmycim.d.ts`, `TaskOptions`; set in `vitest/dist/chunks/run.BPv-BBRv.js`,
+// `options.timeout ?? runner.config.testTimeout`). The project's `testTimeout` is the fallback if it is
+// unset. The share is `FABRIKA_SLOW_TEST_SHARE`, read here and nowhere else. `FABRIKA_SLOW_TEST_MODE=report` prints the slow laws and fails nothing, to list every
 // slow law of one run at a lower share; `fail` is the default.
 import { relative } from "node:path";
 import { depth } from "@kampus/vitest";
@@ -29,7 +32,7 @@ type Mode = typeof Mode.Type;
 /** The mode a value of `FABRIKA_SLOW_TEST_MODE` names: unset is `fail`, and any other word fails the run. */
 export const decodeMode = (value: string | undefined): Mode => Schema.decodeUnknownSync(Mode)(value ?? "fail");
 
-/** One finished test, with the limit its project gave it. */
+/** One finished test, with the timeout it ran under. */
 export interface Timed {
   readonly file: string;
   readonly name: string;
@@ -59,6 +62,7 @@ export const line = (test: Timed, share: number): string =>
 interface Case {
   readonly fullName: string;
   readonly module: { readonly moduleId: string };
+  readonly options: { readonly timeout: number | undefined };
   readonly project: { readonly config: { readonly root: string; readonly testTimeout: number } };
   diagnostic(): { readonly duration: number } | undefined;
 }
@@ -111,7 +115,7 @@ export default class SlowTestReporter implements Reporter {
                 file: relative(test.project.config.root, test.module.moduleId),
                 name: test.fullName,
                 ms: diagnostic.duration,
-                limit: test.project.config.testTimeout,
+                limit: test.options.timeout ?? test.project.config.testTimeout,
               },
             ];
       }),

@@ -473,10 +473,6 @@ jobs:
           SHARD: ${{ matrix.shard }}/${{ needs.changes.outputs.e2e-legs || 2 }}
           CHANGED: ${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}
           FABRIKA_TEST_DEPTH: full
-          # Report, not fail, until tracker ticket 1287 closes: four e2e laws run over half their limit on
-          # main's run and were never timed before the slow-test reporter. Back to `fail` (delete this
-          # line) when that ticket closes.
-          FABRIKA_SLOW_TEST_MODE: report
       # After both test steps, so a vitest leg and an e2e leg each feed it their own next.json.
       - name: shard times
         if: ${{ !cancelled() }}
