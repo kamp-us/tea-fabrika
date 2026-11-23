@@ -1,14 +1,14 @@
 # @kalfa/git
 
-Read commits and refs from a git repository that has no working copy, write a commit, move a ref and merge trees. One
-service, `Repository`, with five read calls and three write calls, a helper that writes a merge commit, two adapters
+Read commits, refs and changes from a git repository that has no working copy, write a commit, move a ref and merge trees.
+One service, `Repository`, with six read calls and three write calls, a helper that writes a merge commit, two adapters
 that answer the calls, and the laws both adapters pass.
 
 It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef` and `mergeTrees` change the
 repository, and none sends anything to a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
 so anything can import it.
 
-## The five calls
+## The six calls
 
 ```ts
 import { Effect, Schema } from "effect";
@@ -23,7 +23,8 @@ const program = Effect.gen(function* () {
   const own = yield* repo.walk({ include: [branch], exclude: main === undefined ? [] : [main.commit] }); // Commit[], oldest first
   const bases = yield* repo.mergeBases(branch, branch); // CommitId[], [] = no common history
   const landed = yield* repo.isAncestor(branch, branch); // boolean, true: a commit is its own ancestor
-  return { own, bases, landed };
+  const patch = yield* repo.patchId(branch, branch); // Option<PatchId>, none: the two commits hold the same files
+  return { own, bases, landed, patch };
 });
 ```
 
@@ -34,9 +35,12 @@ const program = Effect.gen(function* () {
   oldest first. Each commit comes after its parents.
 - `mergeBases(a, b)` answers the best common ancestors, sorted by id.
 - `isAncestor(ancestor, descendant)` answers whether `descendant` reaches `ancestor`. A commit is its own ancestor.
+- `patchId(from, to)` answers the patch id of the changes from `from`'s files to `to`'s, or none when the two hold
+  the same files. A commit's own patch id is `patchId(parent, commit)`. It reads no history, so it answers in a shallow
+  repository too.
 
 A call never answers a guess. A shallow repository fails `walk`, `mergeBases` and `isAncestor` with
-`HistoryTooShort`. An answer past a limit fails with `TooMany` or `TooLarge`, never a cut list. A ref that is
+`HistoryTooShort`. An answer past a limit fails with `TooMany`, `TooLarge` or `DiffTooLarge`, never a cut list. A ref that is
 symbolic, or points at a tag, a tree or a blob, fails `readRefs` with `RefNotCommit`.
 
 ## Write a commit and move a ref
@@ -148,6 +152,29 @@ letter case, trailing spaces and dots, a `:` stream, the characters an HFS volum
 store lacks a commit's tree. `empty` already holds git's empty tree. A host may refuse a tree for another reason, such as a
 link at `.gitmodules`: that check is not here.
 
+## Patch ids
+
+`patchId` names a change by the lines it adds and removes. Two ids are equal when the changes have the same paths and the
+same lines added and removed, each line with its own end, and the same mode changes. A mode counts only where it is new,
+gone or changed. Where a line sits, the lines around it and the blob ids of a text file do not count, so one edit gives one
+id on any base. Whitespace counts, and so does a line's end: `x` and `x\n` are two edits. A binary file counts by its
+blobs before and after, and a file that changes kind (a file made a link) counts once. The names of paths are compared by
+their UTF-8 bytes.
+
+```ts
+const edit = yield* repo.patchId(base, tip); // Option<PatchId>: 40 lowercase hex, or none for no change
+```
+
+An id compares only with ids the same adapter gave. `@kalfa/git/process` takes it from git's own `patch-id --verbatim`,
+fed the output of `diff-tree -p -U0 --no-renames`. `@kalfa/git/memory` finds the lines with its own diff and hashes the
+change, so its ids never equal git's. A change that git calls a binary file (a NUL byte in the first 8000 bytes) is one
+here too.
+
+Two limits keep a call small: `files` and `diff`. Both are checked before any content is read, in this order: the commits
+exist (`NoSuchCommit`), the changed files are at most `limits.files` (`TooMany` with `limit: "files"`), and their
+content, each changed file's bytes before and after, is at most `limits.diff` (`DiffTooLarge`). A diff over a limit
+fails and is never cut. A submodule counts as a changed file of no bytes.
+
 ## Settings
 
 The limits are required and have no default. The app gives each one where it builds the layer.
@@ -157,6 +184,8 @@ The limits are required and have no default. The app gives each one where it bui
 commits = 1000
 refs = 1000
 bytes = 1000000
+files = 1000
+diff = 10000000
 time = "10 seconds"
 
 [committer]
@@ -166,7 +195,8 @@ email = "bot@example.test"
 
 `commits` is the most commits a walk or a merge-base answer holds. `refs` is the most refs one `readRefs` answer
 holds. `bytes` is the most bytes one commit object holds, to read or to write, and the most stderr an error keeps.
-`time` is the longest one call may take. `committer` is the name and email every commit the package writes names as its
+`files` is the most files one diff names, and `diff` is the most bytes of file content one diff compares. `time` is the
+longest one call may take. `committer` is the name and email every commit the package writes names as its
 committer. A name takes what a signature's name takes (no `<`, `>`, line break or NUL) and an email what its email
 takes. A setting's value is plain data, so the time is duration text, which the package decodes. When a
 call runs out of time, git is asked to stop, and a git that ignores that is killed a fixed five seconds later, so the
@@ -184,5 +214,6 @@ optional peers, needed only by `/test`.
 ## What it never does
 
 It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and sends nothing
-to a remote. It imports no Node module and no package of its repo. It puts no message, name, email or repository path
-in a span. Diffs, reading a file, rebase, squash, fetch and push come in later tickets of this package.
+to a remote. It imports no Node module and no package of its repo. It puts no message, name, email, path, line or file
+content in a span. The range's patch id, the diff itself, reading a file, rebase, squash, fetch and push come in later
+tickets of this package.

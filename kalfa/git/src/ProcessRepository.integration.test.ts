@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-// The git-binary adapter on the real git binary (I1 to I7). Real git runs in temp folders, so this file runs
+// The git-binary adapter on the real git binary (I1 to I9). Real git runs in temp folders, so this file runs
 // only in CI's full run and in a cloud box, never on the laptop (the host's test config refuses it by name).
 // A stand-in cannot do this job: these laws are the proof that `/process` answers what `/memory` answers and
 // that the parser reads what real git writes.
@@ -11,6 +11,7 @@ import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
 import {
   TREE_CARRIER_CLASSES,
+  editCarrier,
   shapes,
   textureArb,
   treeCarrier,
@@ -51,7 +52,7 @@ const bytes = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
 
 const ADA = "Ada <ada@example.test> 1700000000 +0000";
 
-// I1 runs the shared laws S1 to S16 on real git, 10 runs each, over bare repositories the seeder fills with files.
+// I1 runs the shared laws S1 to S18 on real git, 10 runs each, over bare repositories the seeder fills with files.
 // Plant: each S law's plant, run once on `/process`.
 RepositoryTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
 
@@ -244,6 +245,131 @@ it.effect(
         Repository.NoRepository,
         {},
         "an empty folder inside a repository",
+      );
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+const idAt = (ids: ReadonlyArray<CommitId.CommitId>, index: number): CommitId.CommitId => {
+  const id = ids[index];
+
+  if (id === undefined) {
+    throw new Error(`the seeder gave no id for commit ${index}`);
+  }
+
+  return id;
+};
+
+const patchIdOrUndefined = (repo: Repository.Repository["Service"], from: CommitId.CommitId, to: CommitId.CommitId) =>
+  Effect.map(repo.patchId(from, to), Option.getOrUndefined);
+
+// Plant (I8): run porcelain `git diff` in place of `diff-tree`, which reads `diff.noprefix` and `diff.orderFile`; drop
+// `--verbatim`, which `patchid.stable` would change; leave `--no-renames` out. The ids of every edit of the generator, asked of one
+// bare repository, are the same before and after its config gets the four lines.
+it.effect.prop(
+  "I8 scenario: a repository's own config steers nothing: diff.noprefix, diff.orderFile, diff.algorithm=patience and patchid.stable=true change no patch id",
+  { texture: textureArb },
+  ({ texture }) =>
+    Effect.gen(function* () {
+      const carrier = editCarrier(texture);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const seeded = yield* processSubject.seed(carrier.history, settings);
+          const [dir] = seeded.hidden;
+
+          if (dir === undefined) {
+            return yield* Effect.die("the seeder gave no repository folder");
+          }
+
+          const ids = () =>
+            Effect.forEach(
+              carrier.cases,
+              (each) => patchIdOrUndefined(seeded.repository, idAt(seeded.ids, each.from), idAt(seeded.ids, each.to)),
+              { concurrency: 1 },
+            );
+
+          const without = yield* ids();
+          const fs = yield* FileSystem.FileSystem;
+          // A file that puts the paths ending in 0 first, which a porcelain diff would follow.
+          yield* fs.writeFileString(`${dir}/order`, "*0\n");
+
+          for (const [key, value] of [
+            ["diff.noprefix", "true"],
+            ["diff.orderFile", `${dir}/order`],
+            ["diff.algorithm", "patience"],
+            ["patchid.stable", "true"],
+          ] as const) {
+            yield* git(dir, ["config", key, value]);
+          }
+
+          expect(yield* ids(), "the same ids with the four config lines").toEqual(without);
+          expect(without.filter((id) => id !== undefined).length, "the edits have ids").toBeGreaterThan(20);
+        }),
+      );
+    }).pipe(Effect.provide(NodeServices.layer)),
+  { arbitrary: { runs: 5, seed: 119120 } },
+);
+
+const GITLINK_A = "a".repeat(40);
+
+const GITLINK_B = "b".repeat(40);
+
+// Plant (I9): ask `cat-file` the size of a gitlink's id, so `patchId` fails on the submodule; leave the file side of a `T` entry
+// out of the sizes, so the file made a submodule is not counted.
+it.effect(
+  "I9 scenario: a commit with a submodule entry gets a patch id on real git, which follows the submodule's commit, even when the diff limit is one byte, and a file made a submodule counts the file's bytes",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bareRepository;
+
+      const commit = (mark: number, parent: number | undefined, change: string): Uint8Array =>
+        bytes(
+          `commit refs/heads/main\nmark :${mark}\n`,
+          `author ${ADA}\ncommitter ${ADA}\n`,
+          "data 2\nc",
+          String(mark),
+          "\n",
+          parent === undefined ? "" : `from :${parent}\n`,
+          change,
+          "\n",
+        );
+
+      const [c0, c1, c2, c3, c4] = yield* fastImport(
+        dir,
+        bytes(
+          commit(1, undefined, "M 100644 inline a\ndata 2\nx\n\n"),
+          commit(2, 1, `M 160000 ${GITLINK_A} sub\n`),
+          commit(3, 2, `M 160000 ${GITLINK_B} sub\n`),
+          commit(4, 2, ""),
+          // The file `a` becomes a submodule: one `T` entry, whose file side is 2 bytes.
+          commit(5, 1, `M 160000 ${GITLINK_B} a\n`),
+        ),
+      );
+
+      const repo = yield* openRepository(dir, RepositoryTest.settings({ files: 1, diff: 1 }));
+      const [id0, id1, id2, id3, id4] = [c0, c1, c2, c3, c4].map((id) => commitIdFrom(id ?? ""));
+
+      if (id0 === undefined || id1 === undefined || id2 === undefined || id3 === undefined || id4 === undefined) {
+        return yield* Effect.die("fast-import gave fewer commits");
+      }
+
+      const added = yield* patchIdOrUndefined(repo, id0, id1);
+      const moved = yield* patchIdOrUndefined(repo, id1, id2);
+      const addedOther = yield* patchIdOrUndefined(repo, id0, id2);
+
+      expect(added, "a submodule added has an id").toBeDefined();
+      expect(moved, "a submodule moved to another commit has an id").toBeDefined();
+      expect(added, "another commit in the submodule is another change").not.toBe(moved);
+      expect(addedOther, "the same submodule at another commit added is another change").not.toBe(added);
+      expect(yield* patchIdOrUndefined(repo, id1, id3), "a commit with the same files is no change").toBeUndefined();
+
+      // A file made a submodule: the file's bytes count against the one-byte limit, though the other side is a submodule.
+      const error = yield* Effect.flip(repo.patchId(id0, id4));
+      expectFailure(
+        error,
+        Repository.DiffTooLarge,
+        { most: 1 },
+        "a file made a submodule is over a diff limit of one byte",
       );
     }).pipe(Effect.provide(NodeServices.layer)),
 );
