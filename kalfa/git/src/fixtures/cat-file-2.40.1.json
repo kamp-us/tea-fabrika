@@ -1,0 +1,606 @@
+{
+  "git": "git version 2.40.1",
+  "command": "git --no-replace-objects --git-dir=<bare repository> cat-file --batch, the ids on standard input one per line, standard output stored as base64; the repository made by fast-import --date-format=raw",
+  "rows": [
+    {
+      "note": "a root commit",
+      "output": "NzQ5MzkwMTM2MDg2NzlmY2Q5OGI4NGQxMDk1YmI4ZGUxMTcxNTFlOSBjb21taXQgMTY4CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCmZpcnN0Cgo=",
+      "expect": [
+        {
+          "id": "74939013608679fcd98b84d1095bb8de117151e9",
+          "parents": [],
+          "author": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "first\n"
+        }
+      ]
+    },
+    {
+      "note": "a second root commit",
+      "output": "Nzc2YmIxNmI2NTRhYzdjNWUwNzI4ZjI1ODhlZTkwZGU0M2JjMTFjOCBjb21taXQgMTI5CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgQm8gPGJvQGV4YW1wbGUudGVzdD4gMiArMDAwMApjb21taXR0ZXIgQm8gPGJvQGV4YW1wbGUudGVzdD4gMiArMDAwMAoKc2Vjb25kCgo=",
+      "expect": [
+        {
+          "id": "776bb16b654ac7c5e0728f2588ee90de43bc11c8",
+          "parents": [],
+          "author": {
+            "name": "Bo",
+            "email": "bo@example.test",
+            "at": {
+              "seconds": 2,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Bo",
+            "email": "bo@example.test",
+            "at": {
+              "seconds": 2,
+              "offset": "+0000"
+            }
+          },
+          "message": "second\n"
+        }
+      ]
+    },
+    {
+      "note": "a third root commit",
+      "output": "NDAyNGNmOTk1OWNhNjc1YzFhMjJjMDYxYTIzYjg3OGVkZjk4YzIxNyBjb21taXQgMTI4CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgQ3kgPGN5QGV4YW1wbGUudGVzdD4gMyArMDAwMApjb21taXR0ZXIgQ3kgPGN5QGV4YW1wbGUudGVzdD4gMyArMDAwMAoKdGhpcmQKCg==",
+      "expect": [
+        {
+          "id": "4024cf9959ca675c1a22c061a23b878edf98c217",
+          "parents": [],
+          "author": {
+            "name": "Cy",
+            "email": "cy@example.test",
+            "at": {
+              "seconds": 3,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Cy",
+            "email": "cy@example.test",
+            "at": {
+              "seconds": 3,
+              "offset": "+0000"
+            }
+          },
+          "message": "third\n"
+        }
+      ]
+    },
+    {
+      "note": "an empty name",
+      "output": "NDU0Y2UzYTRjMmRlNGIwODZlMDU4ZTJjNTIwYjhkMGU5YzA3Mjk0OSBjb21taXQgMTI3CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgIDxlQGV4YW1wbGUudGVzdD4gNCArMDAwMApjb21taXR0ZXIgIDxlQGV4YW1wbGUudGVzdD4gNCArMDAwMAoKZW1wdHkgbmFtZQoK",
+      "expect": [
+        {
+          "id": "454ce3a4c2de4b086e058e2c520b8d0e9c072949",
+          "parents": [],
+          "author": {
+            "name": "",
+            "email": "e@example.test",
+            "at": {
+              "seconds": 4,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "",
+            "email": "e@example.test",
+            "at": {
+              "seconds": 4,
+              "offset": "+0000"
+            }
+          },
+          "message": "empty name\n"
+        }
+      ]
+    },
+    {
+      "note": "a name with a space at its start",
+      "output": "ZGI4MjA4ZWI4ZWIyNmRlYmJmNDIzMTg2ZDk2MzFjNDAzOWVhNWY2NiBjb21taXQgMTM2CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgIEpvIDxqQGV4YW1wbGUudGVzdD4gNSArMDAwMApjb21taXR0ZXIgIEpvIDxqQGV4YW1wbGUudGVzdD4gNSArMDAwMAoKbGVhZGluZyBzcGFjZQoK",
+      "expect": [
+        {
+          "id": "db8208eb8eb26debbf423186d9631c4039ea5f66",
+          "parents": [],
+          "author": {
+            "name": " Jo",
+            "email": "j@example.test",
+            "at": {
+              "seconds": 5,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": " Jo",
+            "email": "j@example.test",
+            "at": {
+              "seconds": 5,
+              "offset": "+0000"
+            }
+          },
+          "message": "leading space\n"
+        }
+      ]
+    },
+    {
+      "note": "a name with a space at its end: two spaces before the angle bracket",
+      "output": "MGQ0YWRiNTFiMDliN2ExZjAwMDc1NjgzMGJiZTMzZjhmMTU1MjAxZCBjb21taXQgMTM3CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgSm8gIDxqQGV4YW1wbGUudGVzdD4gNiArMDAwMApjb21taXR0ZXIgSm8gIDxqQGV4YW1wbGUudGVzdD4gNiArMDAwMAoKdHJhaWxpbmcgc3BhY2UKCg==",
+      "expect": [
+        {
+          "id": "0d4adb51b09b7a1f000756830bbe33f8f155201d",
+          "parents": [],
+          "author": {
+            "name": "Jo ",
+            "email": "j@example.test",
+            "at": {
+              "seconds": 6,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Jo ",
+            "email": "j@example.test",
+            "at": {
+              "seconds": 6,
+              "offset": "+0000"
+            }
+          },
+          "message": "trailing space\n"
+        }
+      ]
+    },
+    {
+      "note": "the offset -0000",
+      "output": "MDMyODUzOTIyZTc1YzBiNThlMjg3M2FjZTljZjY2OTNjMjg2OTRlOSBjb21taXQgMTM3CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgQWRhIDxhZGFAZXhhbXBsZS50ZXN0PiA3IC0wMDAwCmNvbW1pdHRlciBBZGEgPGFkYUBleGFtcGxlLnRlc3Q+IDcgLTAwMDAKCm1pbnVzIHplcm8KCg==",
+      "expect": [
+        {
+          "id": "032853922e75c0b58e2873ace9cf6693c28694e9",
+          "parents": [],
+          "author": {
+            "name": "Ada",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 7,
+              "offset": "-0000"
+            }
+          },
+          "committer": {
+            "name": "Ada",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 7,
+              "offset": "-0000"
+            }
+          },
+          "message": "minus zero\n"
+        }
+      ]
+    },
+    {
+      "note": "a message with CR and NUL",
+      "output": "NGZkNzdmZjA2YmYwYjZjZDViZWIzMDg4NmMxNTFhMjhiNzU3OTVmOCBjb21taXQgMTcxCnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCmENCmINYwBkCgo=",
+      "expect": [
+        {
+          "id": "4fd77ff06bf0b6cd5beb30886c151a28b75795f8",
+          "parents": [],
+          "author": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "a\r\nb\rc\u0000d\n"
+        }
+      ]
+    },
+    {
+      "note": "an empty message",
+      "output": "ZmM0YTcwNTJjNmViYmJlNDAxOTBlNDZjNjJiZWMzYWZjY2NlNzA3NSBjb21taXQgMTIyCnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgRW0gPGVtQGV4YW1wbGUudGVzdD4gOCArMDAwMApjb21taXR0ZXIgRW0gPGVtQGV4YW1wbGUudGVzdD4gOCArMDAwMAoKCg==",
+      "expect": [
+        {
+          "id": "fc4a7052c6ebbbe40190e46c62bec3afccce7075",
+          "parents": [],
+          "author": {
+            "name": "Em",
+            "email": "em@example.test",
+            "at": {
+              "seconds": 8,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Em",
+            "email": "em@example.test",
+            "at": {
+              "seconds": 8,
+              "offset": "+0000"
+            }
+          },
+          "message": ""
+        }
+      ]
+    },
+    {
+      "note": "a message with no trailing newline",
+      "output": "OTcyZmJiOWY3Mjg5ZTc2NGVlMThjZGE3MDQ1NDg5NGMxNmEwYzIwMiBjb21taXQgMTMyCnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgTm4gPG5uQGV4YW1wbGUudGVzdD4gOSArMDAwMApjb21taXR0ZXIgTm4gPG5uQGV4YW1wbGUudGVzdD4gOSArMDAwMAoKbm8gbmV3bGluZQo=",
+      "expect": [
+        {
+          "id": "972fbb9f7289e764ee18cda70454894c16a0c202",
+          "parents": [],
+          "author": {
+            "name": "Nn",
+            "email": "nn@example.test",
+            "at": {
+              "seconds": 9,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Nn",
+            "email": "nn@example.test",
+            "at": {
+              "seconds": 9,
+              "offset": "+0000"
+            }
+          },
+          "message": "no newline"
+        }
+      ]
+    },
+    {
+      "note": "characters past U+024F, inside and outside the Basic Multilingual Plane",
+      "output": "YzdlZTkyZmQ2YmM1ZDNlNmI0ZDgyZjk2OGIwMDc2NWRhZGNmMGRmYiBjb21taXQgMTYxCnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3Ig6K6+IPCfmIAgPHVAZXhhbXBsZS50ZXN0PiAxMCArMDgwMApjb21taXR0ZXIgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCgrorr4g772aIPCfmIAKCg==",
+      "expect": [
+        {
+          "id": "c7ee92fd6bc5d3e6b4d82f968b00765dadcf0dfb",
+          "parents": [],
+          "author": {
+            "name": "设 😀",
+            "email": "u@example.test",
+            "at": {
+              "seconds": 10,
+              "offset": "+0800"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "设 ｚ 😀\n"
+        }
+      ]
+    },
+    {
+      "note": "a message whose lines look like headers",
+      "output": "NTEzNDI1NjYyOWE4MjZlYWMyOGYyMzgwNGMyYjZlYjRhYzljMGU0NSBjb21taXQgMTg3CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgSGQgPGhkQGV4YW1wbGUudGVzdD4gMTEgKzAwMDAKY29tbWl0dGVyIEhkIDxoZEBleGFtcGxlLnRlc3Q+IDExICswMDAwCgpwYXJlbnQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMApncGdzaWcgeAoKYm9keQoK",
+      "expect": [
+        {
+          "id": "5134256629a826eac28f23804c2b6eb4ac9c0e45",
+          "parents": [],
+          "author": {
+            "name": "Hd",
+            "email": "hd@example.test",
+            "at": {
+              "seconds": 11,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Hd",
+            "email": "hd@example.test",
+            "at": {
+              "seconds": 11,
+              "offset": "+0000"
+            }
+          },
+          "message": "parent 0000000000000000000000000000000000000000\ngpgsig x\n\nbody\n"
+        }
+      ]
+    },
+    {
+      "note": "a merge of root commits 1 and 2, in that order",
+      "output": "MmYwMTE0ZGYzYjk3YjcyYzE1YmM0YmM2NWEyNDk5MTY0MjIyZTE3YyBjb21taXQgMjY0CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNApwYXJlbnQgNzQ5MzkwMTM2MDg2NzlmY2Q5OGI4NGQxMDk1YmI4ZGUxMTcxNTFlOQpwYXJlbnQgNzc2YmIxNmI2NTRhYzdjNWUwNzI4ZjI1ODhlZTkwZGU0M2JjMTFjOAphdXRob3IgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCm1lcmdlCgo=",
+      "expect": [
+        {
+          "id": "2f0114df3b97b72c15bc4bc65a2499164222e17c",
+          "parents": [
+            "74939013608679fcd98b84d1095bb8de117151e9",
+            "776bb16b654ac7c5e0728f2588ee90de43bc11c8"
+          ],
+          "author": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "merge\n"
+        }
+      ]
+    },
+    {
+      "note": "a merge of root commits 2 and 1, in the other order",
+      "output": "MGQwMjUxZDQ2NTgyZDYxZjNhYzYzNTM2NDFkNmY0MmNkODI0NDE4YyBjb21taXQgMjM4CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNApwYXJlbnQgNzc2YmIxNmI2NTRhYzdjNWUwNzI4ZjI1ODhlZTkwZGU0M2JjMTFjOApwYXJlbnQgNzQ5MzkwMTM2MDg2NzlmY2Q5OGI4NGQxMDk1YmI4ZGUxMTcxNTFlOQphdXRob3IgTWcgPG1nQGV4YW1wbGUudGVzdD4gMTIgKzAwMDAKY29tbWl0dGVyIE1nIDxtZ0BleGFtcGxlLnRlc3Q+IDEyICswMDAwCgptZXJnZSBvdGhlciBvcmRlcgoK",
+      "expect": [
+        {
+          "id": "0d0251d46582d61f3ac6353641d6f42cd824418c",
+          "parents": [
+            "776bb16b654ac7c5e0728f2588ee90de43bc11c8",
+            "74939013608679fcd98b84d1095bb8de117151e9"
+          ],
+          "author": {
+            "name": "Mg",
+            "email": "mg@example.test",
+            "at": {
+              "seconds": 12,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Mg",
+            "email": "mg@example.test",
+            "at": {
+              "seconds": 12,
+              "offset": "+0000"
+            }
+          },
+          "message": "merge other order\n"
+        }
+      ]
+    },
+    {
+      "note": "an octopus merge of root commits 3, 1 and 2",
+      "output": "Nzg1YTRlNzAwYjNlZWNiZmI0NTRhZjFlODQ0NzA0MmFlZDZhMjkxZSBjb21taXQgMjc2CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNApwYXJlbnQgNDAyNGNmOTk1OWNhNjc1YzFhMjJjMDYxYTIzYjg3OGVkZjk4YzIxNwpwYXJlbnQgNzQ5MzkwMTM2MDg2NzlmY2Q5OGI4NGQxMDk1YmI4ZGUxMTcxNTFlOQpwYXJlbnQgNzc2YmIxNmI2NTRhYzdjNWUwNzI4ZjI1ODhlZTkwZGU0M2JjMTFjOAphdXRob3IgT2MgPG9jQGV4YW1wbGUudGVzdD4gMTMgKzAwMDAKY29tbWl0dGVyIE9jIDxvY0BleGFtcGxlLnRlc3Q+IDEzICswMDAwCgpvY3RvcHVzCgo=",
+      "expect": [
+        {
+          "id": "785a4e700b3eecbfb454af1e8447042aed6a291e",
+          "parents": [
+            "4024cf9959ca675c1a22c061a23b878edf98c217",
+            "74939013608679fcd98b84d1095bb8de117151e9",
+            "776bb16b654ac7c5e0728f2588ee90de43bc11c8"
+          ],
+          "author": {
+            "name": "Oc",
+            "email": "oc@example.test",
+            "at": {
+              "seconds": 13,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Oc",
+            "email": "oc@example.test",
+            "at": {
+              "seconds": 13,
+              "offset": "+0000"
+            }
+          },
+          "message": "octopus\n"
+        }
+      ]
+    },
+    {
+      "note": "a message in latin-1 under an encoding header",
+      "output": "ZTljMTdiMmVlYThmMDhhOTgzNGU1MjY0M2Y1OTcxYTVkNjdhNGUwNSBjb21taXQgMTQ5CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgTDEgPGwxQGV4YW1wbGUudGVzdD4gMTQgKzAwMDAKY29tbWl0dGVyIEwxIDxsMUBleGFtcGxlLnRlc3Q+IDE0ICswMDAwCmVuY29kaW5nIElTTy04ODU5LTEKCmNhZukKCg==",
+      "expect": [
+        {
+          "failure": "UnreadableCommit",
+          "id": "e9c17b2eea8f08a9834e52643f5971a5d67a4e05",
+          "reason": "message"
+        }
+      ]
+    },
+    {
+      "note": "an author name in latin-1",
+      "output": "NTQwOTc3ZmEyZWQwZDRkNGEzODEzNDRjNzU1NmE0N2UyN2ZjNDg3ZCBjb21taXQgMTQwCnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgQW5kcukgPGFuQGV4YW1wbGUudGVzdD4gMTUgKzAwMDAKY29tbWl0dGVyIE9rIDxva0BleGFtcGxlLnRlc3Q+IDE1ICswMDAwCgphdXRob3IgYnl0ZXMKCg==",
+      "expect": [
+        {
+          "failure": "UnreadableCommit",
+          "id": "540977fa2ed0d4d4a381344c7556a47e27fc487d",
+          "reason": "author"
+        }
+      ]
+    },
+    {
+      "note": "a committer name in latin-1",
+      "output": "ZTVlMjQwZjJlOTMzZmJhZGE5NjllMjFlMTE0ZDRiOGVkZjJmNTNjMiBjb21taXQgMTQyCnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgT2sgPG9rQGV4YW1wbGUudGVzdD4gMTYgKzAwMDAKY29tbWl0dGVyIFJlbukgPHJlQGV4YW1wbGUudGVzdD4gMTYgKzAwMDAKCmNvbW1pdHRlciBieXRlcwoK",
+      "expect": [
+        {
+          "failure": "UnreadableCommit",
+          "id": "e5e240f2e933fbada969e21e114d4b8edf2f53c2",
+          "reason": "committer"
+        }
+      ]
+    },
+    {
+      "note": "an id the repository does not hold",
+      "output": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2NyBtaXNzaW5nCg==",
+      "expect": [
+        {
+          "failure": "NoSuchCommit",
+          "id": "0123456789abcdef0123456789abcdef01234567"
+        }
+      ]
+    },
+    {
+      "note": "six commits in one output, as a walk asks for them",
+      "output": "NzQ5MzkwMTM2MDg2NzlmY2Q5OGI4NGQxMDk1YmI4ZGUxMTcxNTFlOSBjb21taXQgMTY4CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCmZpcnN0CgoyZjAxMTRkZjNiOTdiNzJjMTViYzRiYzY1YTI0OTkxNjQyMjJlMTdjIGNvbW1pdCAyNjQKdHJlZSA0YjgyNWRjNjQyY2I2ZWI5YTA2MGU1NGJmOGQ2OTI4OGZiZWU0OTA0CnBhcmVudCA3NDkzOTAxMzYwODY3OWZjZDk4Yjg0ZDEwOTViYjhkZTExNzE1MWU5CnBhcmVudCA3NzZiYjE2YjY1NGFjN2M1ZTA3MjhmMjU4OGVlOTBkZTQzYmMxMWM4CmF1dGhvciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKY29tbWl0dGVyIEFkYSBMb3ZlbGFjZSA8YWRhQGV4YW1wbGUudGVzdD4gMTcwMDAwMDAwMCArMDAwMAoKbWVyZ2UKCjBkMDI1MWQ0NjU4MmQ2MWYzYWM2MzUzNjQxZDZmNDJjZDgyNDQxOGMgY29tbWl0IDIzOAp0cmVlIDRiODI1ZGM2NDJjYjZlYjlhMDYwZTU0YmY4ZDY5Mjg4ZmJlZTQ5MDQKcGFyZW50IDc3NmJiMTZiNjU0YWM3YzVlMDcyOGYyNTg4ZWU5MGRlNDNiYzExYzgKcGFyZW50IDc0OTM5MDEzNjA4Njc5ZmNkOThiODRkMTA5NWJiOGRlMTE3MTUxZTkKYXV0aG9yIE1nIDxtZ0BleGFtcGxlLnRlc3Q+IDEyICswMDAwCmNvbW1pdHRlciBNZyA8bWdAZXhhbXBsZS50ZXN0PiAxMiArMDAwMAoKbWVyZ2Ugb3RoZXIgb3JkZXIKCjc4NWE0ZTcwMGIzZWVjYmZiNDU0YWYxZTg0NDcwNDJhZWQ2YTI5MWUgY29tbWl0IDI3Ngp0cmVlIDRiODI1ZGM2NDJjYjZlYjlhMDYwZTU0YmY4ZDY5Mjg4ZmJlZTQ5MDQKcGFyZW50IDQwMjRjZjk5NTljYTY3NWMxYTIyYzA2MWEyM2I4NzhlZGY5OGMyMTcKcGFyZW50IDc0OTM5MDEzNjA4Njc5ZmNkOThiODRkMTA5NWJiOGRlMTE3MTUxZTkKcGFyZW50IDc3NmJiMTZiNjU0YWM3YzVlMDcyOGYyNTg4ZWU5MGRlNDNiYzExYzgKYXV0aG9yIE9jIDxvY0BleGFtcGxlLnRlc3Q+IDEzICswMDAwCmNvbW1pdHRlciBPYyA8b2NAZXhhbXBsZS50ZXN0PiAxMyArMDAwMAoKb2N0b3B1cwoKNDU0Y2UzYTRjMmRlNGIwODZlMDU4ZTJjNTIwYjhkMGU5YzA3Mjk0OSBjb21taXQgMTI3CnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgIDxlQGV4YW1wbGUudGVzdD4gNCArMDAwMApjb21taXR0ZXIgIDxlQGV4YW1wbGUudGVzdD4gNCArMDAwMAoKZW1wdHkgbmFtZQoKNGZkNzdmZjA2YmYwYjZjZDViZWIzMDg4NmMxNTFhMjhiNzU3OTVmOCBjb21taXQgMTcxCnRyZWUgNGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAphdXRob3IgQWRhIExvdmVsYWNlIDxhZGFAZXhhbXBsZS50ZXN0PiAxNzAwMDAwMDAwICswMDAwCmNvbW1pdHRlciBBZGEgTG92ZWxhY2UgPGFkYUBleGFtcGxlLnRlc3Q+IDE3MDAwMDAwMDAgKzAwMDAKCmENCmINYwBkCgo=",
+      "expect": [
+        {
+          "id": "74939013608679fcd98b84d1095bb8de117151e9",
+          "parents": [],
+          "author": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "first\n"
+        },
+        {
+          "id": "2f0114df3b97b72c15bc4bc65a2499164222e17c",
+          "parents": [
+            "74939013608679fcd98b84d1095bb8de117151e9",
+            "776bb16b654ac7c5e0728f2588ee90de43bc11c8"
+          ],
+          "author": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "merge\n"
+        },
+        {
+          "id": "0d0251d46582d61f3ac6353641d6f42cd824418c",
+          "parents": [
+            "776bb16b654ac7c5e0728f2588ee90de43bc11c8",
+            "74939013608679fcd98b84d1095bb8de117151e9"
+          ],
+          "author": {
+            "name": "Mg",
+            "email": "mg@example.test",
+            "at": {
+              "seconds": 12,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Mg",
+            "email": "mg@example.test",
+            "at": {
+              "seconds": 12,
+              "offset": "+0000"
+            }
+          },
+          "message": "merge other order\n"
+        },
+        {
+          "id": "785a4e700b3eecbfb454af1e8447042aed6a291e",
+          "parents": [
+            "4024cf9959ca675c1a22c061a23b878edf98c217",
+            "74939013608679fcd98b84d1095bb8de117151e9",
+            "776bb16b654ac7c5e0728f2588ee90de43bc11c8"
+          ],
+          "author": {
+            "name": "Oc",
+            "email": "oc@example.test",
+            "at": {
+              "seconds": 13,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Oc",
+            "email": "oc@example.test",
+            "at": {
+              "seconds": 13,
+              "offset": "+0000"
+            }
+          },
+          "message": "octopus\n"
+        },
+        {
+          "id": "454ce3a4c2de4b086e058e2c520b8d0e9c072949",
+          "parents": [],
+          "author": {
+            "name": "",
+            "email": "e@example.test",
+            "at": {
+              "seconds": 4,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "",
+            "email": "e@example.test",
+            "at": {
+              "seconds": 4,
+              "offset": "+0000"
+            }
+          },
+          "message": "empty name\n"
+        },
+        {
+          "id": "4fd77ff06bf0b6cd5beb30886c151a28b75795f8",
+          "parents": [],
+          "author": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "committer": {
+            "name": "Ada Lovelace",
+            "email": "ada@example.test",
+            "at": {
+              "seconds": 1700000000,
+              "offset": "+0000"
+            }
+          },
+          "message": "a\r\nb\rc\u0000d\n"
+        }
+      ]
+    }
+  ]
+}
