@@ -2,8 +2,8 @@
 
 Read, write and set values in a Markdown file's frontmatter against a schema, and read its body into a document.
 Frontmatter is the YAML block between two `---` lines at the top of a file. This package knows nothing about what a file
-means: it turns text into data and back, and it is the one place that decides how that YAML and that Markdown are read and
-written. Words: [GLOSSARY.md](./GLOSSARY.md).
+means: it turns text into data and back, and it is the one place that decides how that YAML is read and written and how a
+body's Markdown is read. Words: [GLOSSARY.md](./GLOSSARY.md).
 
 It is private. Import `@kalfa/markdown/Frontmatter` for the frontmatter and `@kalfa/markdown/Markdown` for the body. It needs
 `effect`, `yaml` and the Markdown reader (`mdast-util-from-markdown`, `mdast-util-gfm`, `micromark-extension-gfm`, and
@@ -153,9 +153,9 @@ Every part has a position except a `link` and its `text` that GFM's link-literal
 has one. `see https://a.b now`, `www.x.com` and `a@b.co` alone keep their positions. The positions stay as mdast gives them:
 `parse` does not fill them in.
 
-Two parts that sit side by side can overlap: mdast starts a setext heading on the line of a link definition right above it,
-so the definition and the heading are siblings whose positions share that line (`[a]: /u\nT\n===` gives a definition at
-1:1 to 1:8 and a heading from 1:1 to 3:4).
+Only one pair of siblings overlaps: a setext heading and the run of link definitions right above it. mdast starts the
+heading where the run starts, at its first definition, and it ends below the run's last one. `[a]: /u\nT\n===` gives a
+definition at 1:1 to 1:8 and a heading from 1:1 to 3:4. An ATX heading after a definition does not overlap it.
 
 ## What it never does
 
