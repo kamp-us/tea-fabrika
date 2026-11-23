@@ -57,7 +57,7 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
         ]);
         expect(m.remote.branches.get(b)).toBe(head);
         expect(m.github.prs.filter((pr) => pr.head === b && pr.state === "OPEN")).toHaveLength(1);
-        expect(m.github.calls).toEqual(already === null ? [{ _tag: "draft", branch: b, title: text.title }] : []);
+        expect(m.github.calls).toEqual(already === null ? [{ _tag: "draft", branch: b, ...text }] : []);
       }).pipe(Effect.provide(m.layer));
     },
   );
@@ -137,6 +137,76 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
   );
 });
 
+describe("publish.ts's words: a new draft takes the title and body it is given", () => {
+  const Title = Schema.Literals(["Say what changes", "T7 build: a law", "x"]);
+  const File = Schema.Literals(["body.md", "/tmp/pr body.md", "a/b/c.md"]);
+
+  // Plant: read only the first flag, or drop the flags' order.
+  it.prop(
+    "property: the branch, a title and a body file are read in whichever order and whichever of them are given",
+    { b: Branch, title: Schema.NullOr(Title), file: Schema.NullOr(File), order: Schema.Literals(["bf", "fb"]) },
+    ({ b, title, file, order }) => {
+      const flags = [...(title === null ? [] : ["--title", title]), ...(file === null ? [] : ["--body-file", file])];
+      const args = order === "bf" ? [b, ...flags] : [...flags, b];
+
+      expect(Publish.words(args)).toEqual({ branch: b, title, bodyFile: file });
+    },
+  );
+
+  // Plant: accept a flag twice, an unknown flag, a flag with no value, two branches or none.
+  it("vector: anything but one branch and each flag at most once, with a value, is no words", () => {
+    for (const args of [
+      [],
+      ["--title", "T"],
+      ["a", "b"],
+      ["a", "--title"],
+      ["a", "--title", ""],
+      ["a", "--title", "--body-file", "f"],
+      ["a", "--title", "T", "--title", "U"],
+      ["a", "--body-file", "f", "--body-file", "g"],
+      ["a", "--body", "f"],
+      ["a", "--force"],
+    ]) {
+      expect(Publish.words(args), args.join(" ")).toBeNull();
+    }
+  });
+
+  // Plant: ignore the given title or body, or use the given words for a pull request already open.
+  it.effect.prop(
+    "property: a new draft opens with the given title and body, else the commit's subject and the placeholder",
+    {
+      b: Branch,
+      head: Sha,
+      title: Schema.NullOr(Title),
+      body: Schema.NullOr(Schema.Literals(["Why this", "## Summary\n\nWhat"])),
+    },
+    ({ b, head, title, body }) => {
+      const m = memory();
+      const given = Publish.draftText("the subject", { branch: b, title, bodyFile: body === null ? null : "f" }, body);
+
+      return Effect.gen(function* () {
+        yield* Publish.publish({ ...ask(b, head), text: given });
+        expect(m.github.calls).toEqual([
+          { _tag: "draft", branch: b, title: title ?? "the subject", body: body ?? Publish.DRAFT_BODY },
+        ]);
+      }).pipe(Effect.provide(m.layer));
+    },
+  );
+
+  it.effect.prop(
+    "property: a pull request already open keeps its own words",
+    { b: Branch, head: Sha },
+    ({ b, head }) => {
+      const m = memory([open(7, b, true)]);
+
+      return Effect.gen(function* () {
+        yield* Publish.publish({ ...ask(b, head), text: { title: "new", body: "new body" } });
+        expect(m.github.calls).toEqual([]);
+      }).pipe(Effect.provide(m.layer));
+    },
+  );
+});
+
 describe("ready: a quest's steps passed, so its pull request takes the brief's words and is ready (every commit is pushed when it is made, with a draft pull request from the first commit)", () => {
   it.effect.prop(
     "property: the PR gets the brief's text, a draft is marked ready, a ready one is left as it is",
@@ -147,7 +217,7 @@ describe("ready: a quest's steps passed, so its pull request takes the brief's w
         yield* Publish.ready(ask(b, head)).pipe(Effect.provide(m.layer));
         const pr = already === null ? 1 : 7;
         const readied = already === false ? [] : [{ _tag: "ready", number: pr }];
-        const opened = already === null ? [{ _tag: "draft", branch: b, title: text.title }] : [];
+        const opened = already === null ? [{ _tag: "draft", branch: b, ...text }] : [];
         expect(m.github.calls).toEqual([...opened, { _tag: "edit", number: pr, ...text }, ...readied]);
         expect(m.github.prs.find((p) => p.number === pr)?.draft).toBe(false);
       }),

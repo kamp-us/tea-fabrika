@@ -737,7 +737,7 @@
     {
       // The config engine moved to kalfa/config (our tooling is a few @kalfa packages grouped by domain) keeps the next/** rule block below, as its own
       // override, so the next/** block stays exactly next/** (edge-config.test.ts reads it by that).
-      "files": ["kalfa/config/src/**", "kalfa/config/*.ts", "kalfa/diagnostics/src/**", "kalfa/git/src/**"],
+      "files": ["kalfa/config/src/**", "kalfa/config/*.ts", "kalfa/diagnostics/src/**", "kalfa/git/src/**", "kalfa/markdown/src/**"],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
       "rules": {
         "fabrika/no-promises": "error",
@@ -5057,6 +5057,68 @@
           {
             "case": "pascalCase"
           }
+        ]
+      }
+    },
+    {
+      // @kalfa/markdown (ticket 1926) takes text and gives data: it imports no kalfa or repo package, no Telemetry (its one span is made with `Effect.fn`), no Node module and no platform package, and prints nothing.
+      // A bare builtin such as `fs` is refused for every file by `unicorn/prefer-node-protocol`; `fabrika/no-node-imports` checks nothing in kalfa/, so the `node:` group is here. `node:*` holds `node:fs` and not `node:fs/promises`, so both
+      // spellings are listed. Its tests and test support are left out. An override replaces a rule's options, so this repeats the base entries.
+      "files": ["kalfa/markdown/src/**"],
+      "excludeFiles": ["kalfa/markdown/src/**/*.test.ts", "kalfa/markdown/src/**/*.test-support.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "../../**"],
+                "message": "@kalfa/markdown imports no kalfa package and nothing of this repo (decision 0047): it is usable alone."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/markdown imports no Telemetry: its span is made with Effect.fn."
+              },
+              {
+                "group": ["node:*", "node:*/**", "@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/markdown takes text and does no IO: no Node module and no platform package."
+              }
+            ]
+          }
+        ],
+        "eslint/no-console": "error",
+        "eslint/no-restricted-globals": [
+          "error",
+          { "name": "console", "message": "@kalfa/markdown prints nothing." },
+          { "name": "process", "message": "@kalfa/markdown reads no process and no environment." },
+          { "name": "Buffer", "message": "@kalfa/markdown uses no Node global." },
+          {
+            "name": "globalThis",
+            "message": "A ban on `process` alone misses `globalThis.process`: no global object here."
+          },
+          { "name": "global", "message": "@kalfa/markdown uses no Node global." },
+          { "name": "self", "message": "@kalfa/markdown uses no global object." },
+          { "name": "window", "message": "@kalfa/markdown uses no global object." }
         ]
       }
     }

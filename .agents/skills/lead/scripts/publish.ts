@@ -2,11 +2,13 @@
 // has none (every commit is pushed when it is made, with a draft pull request from the first commit). Today's lead tooling, run on our own laptop; it is not product. stepcommit.sh runs
 // it right after each commit it signs; a person runs it where a commit step could not push.
 //
-//   node publish.ts <branch>    run in the checkout; one line on stdout, exit 0 pushed, 1 refused
+//   node publish.ts <branch> [--title <title>] [--body-file <path>]
+//                               run in the checkout; one line on stdout, exit 0 pushed, 1 refused
 //
-// pr/Publish.ts says what it does. GH_REPO (owner/name) names the repo, else the checkout's origin.
+// A new draft takes `--title` and the text of `--body-file` when they are given, else the first commit's
+// subject and a placeholder; a pull request already open keeps its own words. pr/Publish.ts says what it does. GH_REPO (owner/name) names the repo, else the checkout's origin.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer } from "effect";
+import { Console, Effect, FileSystem, Layer } from "effect";
 import { run } from "./pr/command.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
@@ -19,7 +21,8 @@ const setExit = (code: number) =>
 
 const git = (dir: string, ...args: string[]) => Effect.map(run("git", ["-C", dir, ...args], dir), (r) => r.out.trim());
 
-const main = Effect.fn("publish.main")(function* (branch: string) {
+const main = Effect.fn("publish.main")(function* (asked: Publish.Words) {
+  const { branch } = asked;
   const dir = process.cwd();
   const head = yield* git(dir, "rev-parse", "--verify", "HEAD");
   const repo = process.env.GH_REPO ?? PullRequestsGh.repoFromUrl(yield* git(dir, "remote", "get-url", "origin"));
@@ -32,7 +35,18 @@ const main = Effect.fn("publish.main")(function* (branch: string) {
 
   const title = yield* git(dir, "log", "-1", "--format=%s", head);
   const services = Layer.mergeAll(PushesProcess.layer(import.meta.dirname), PullRequestsGh.layer(repo, dir));
-  const text = { title, body: Publish.DRAFT_BODY };
+  const fs = yield* FileSystem.FileSystem;
+
+  const body =
+    asked.bodyFile === null ? null : yield* fs.readFileString(asked.bodyFile).pipe(Effect.orElseSucceed(() => ""));
+
+  if (body !== null && body.trim() === "") {
+    yield* Console.log("publish: refused: the body file is empty or cannot be read");
+
+    return yield* setExit(1);
+  }
+
+  const text = Publish.draftText(title, asked, body);
 
   const published = yield* Publish.publish({ dir, branch, head, text }).pipe(
     Effect.provide(services),
@@ -47,8 +61,12 @@ const main = Effect.fn("publish.main")(function* (branch: string) {
 if (import.meta.main) {
   const args = process.argv.slice(2);
 
+  const asked = Publish.words(args);
+
   const program =
-    args.length === 1 ? main(args[0] ?? "") : Effect.andThen(Console.error("usage: publish.ts <branch>"), setExit(2));
+    asked === null
+      ? Effect.andThen(Console.error("usage: publish.ts <branch> [--title <title>] [--body-file <path>]"), setExit(2))
+      : main(asked);
 
   NodeRuntime.runMain(
     program.pipe(

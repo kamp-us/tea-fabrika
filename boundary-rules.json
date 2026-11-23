@@ -36,6 +36,10 @@
       "imports": ["next-vitest"],
       "pure": false
     },
+    "kalfa-markdown": {
+      "imports": [],
+      "pure": false
+    },
     "kalfa-quality": {
       "imports": [],
       "pure": false
@@ -72,6 +76,7 @@
     "next/programs/pipeline": "next-program",
     "next/programs/tezgah": "next-program",
     "kalfa/config": "kalfa-config",
+    "kalfa/markdown": "kalfa-markdown",
     "kalfa/quality": "kalfa-quality",
     "kalfa/records": "kalfa-records",
     "kalfa/ci": "kalfa-ci",

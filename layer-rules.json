@@ -467,6 +467,12 @@
       "imports": []
     },
     {
+      "name": "kalfa-markdown",
+      "layer": 0,
+      "paths": ["kalfa/markdown/src"],
+      "imports": []
+    },
+    {
       "name": "apps",
       "paths": ["apps"]
     },
@@ -517,7 +523,8 @@
     "next/packages/vitest/src",
     "kalfa/config/src",
     "kalfa/diagnostics/src",
-    "kalfa/git/src"
+    "kalfa/git/src",
+    "kalfa/markdown/src"
   ],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],
   "allowed": [
