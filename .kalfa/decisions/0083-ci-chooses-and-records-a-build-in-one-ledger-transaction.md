@@ -10,8 +10,8 @@ https://github.com/kamp-us/tea-fabrika/issues/1887.
 
 ## Considered Options
 
-- Bring the expected revision back on an append: rejected, because Ledger's protocol dropped it and CI would be its
-  only user.
+- Bring the expected revision back on an append: rejected then, because Ledger's protocol dropped it and CI would be its
+  only user. Decision 0090 brings it back for a program on Cloudflare, with Program's takeover as a second user.
 - Lean on the host's find-or-start by build id: rejected, because it stops one request from starting twice, and does
   not stop two copies from each letting a different build into the last free slot.
 - A lock that lets only one copy of CI run: rejected, because it is one more thing to keep, and the transaction
@@ -19,7 +19,8 @@ https://github.com/kamp-us/tea-fabrika/issues/1887.
 
 ## Consequences
 
-- CI needs a Ledger with `transaction`. A `RemoteLedger` has none (decision 0076), so CI runs where the Ledger is and
+- CI needs a Ledger with `transaction`, except on Cloudflare, where decision 0090 has it read, choose and append once
+  with an expected revision. A `RemoteLedger` has no `transaction` (decision 0076), so CI runs where the Ledger is and
   never over the signed-in connection.
 - A transaction is synchronous, so the call to the host comes after it lands. A crash between the two leaves an admit
   with no build on the host. A restart replays the entries, and the host's start finds or starts by build id, so that
