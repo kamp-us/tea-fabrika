@@ -54,7 +54,8 @@
 //     the lead session, after it writes a pull request's body and before `queue`: runs exactly the body checks `queue`
 //     runs (Queue.body: the leak grep on the title and description, each new exported name named under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket),
 //     one function shared with `queue`. It also checks that every commit on the branch since main is signed (a note on
-//     refs/notes/fabrika, or a person's own signature), and names each one that is not. Changes nothing but the refs it
+//     refs/notes/fabrika, or a person's own signature) or made by `stepcommit.sh` (a `--commit-only` commit, signed at
+//     `land.ts run`, and a fix round's, which signs nothing), and names each one that is neither. Changes nothing but the refs it
 //     fetches. Prints each missing name with the file it comes from and exits 1 on any refusal; else prints one line and exits 0.
 //
 //   land.ts arm <pr>
@@ -182,7 +183,10 @@ class Ready extends Schema.Class<Ready>("Ready")({
  */
 const ReadyJson = Schema.fromJsonString(Schema.Union([Ready, Ready.pipe(Schema.encodeKeys({ quest: "lane" }))]));
 
-const BOT = ["-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com"];
+/** The identity `stepcommit.sh` commits as; a commit with this author is one of its own. */
+const BOT_EMAIL = "353269643+fabrikalfa[bot]@users.noreply.github.com";
+
+const BOT = ["-c", "user.name=fabrikalfa[bot]", "-c", `user.email=${BOT_EMAIL}`];
 
 type Ran = { readonly code: number; readonly out: string; readonly err: string };
 
@@ -782,9 +786,10 @@ const waitCommand = Command.make(
 );
 
 /**
- * The commits on the branch since main (merges of main included, oldest first) that carry no signature: no note on
- * refs/notes/fabrika and no signature of a person's own. CI never reads signatures on a PR branch, so this is where an
- * unsigned lead commit is found. Fetches main and, when the head is not here, the head; changes nothing else.
+ * The commits on the branch since main (merges of main included, oldest first) that no tool vouches for: no note on
+ * refs/notes/fabrika, no signature of a person's own, and not made by `stepcommit.sh` (a fix round's, which signs nothing, or a `--commit-only` commit, which `land.ts` signs later; its author is the bot's). A plain
+ * `git commit` is the one that slips; CI never reads signatures on a PR branch, so this is where it is found. Fetches
+ * main and, when the head is not here, the head; changes nothing else.
  */
 export const unsignedCommits = Effect.fn("land.unsignedCommits")(function* (tree: string, head: string) {
   const git = gitIn(tree);
@@ -809,7 +814,9 @@ export const unsignedCommits = Effect.fn("land.unsignedCommits")(function* (tree
     const noted = yield* sh(tree, "git", ["notes", "--ref=fabrika", "list", sha]);
     const raw = yield* git("check", `${sha} does not read`, "cat-file", "commit", sha);
 
-    if (noted.code !== 0 && !/^gpgsig /m.test(raw.split("\n\n")[0] ?? "")) {
+    const author = yield* git("check", `${sha} does not read`, "log", "-1", "--format=%ae", sha);
+
+    if (noted.code !== 0 && author !== BOT_EMAIL && !/^gpgsig /m.test(raw.split("\n\n")[0] ?? "")) {
       const subject = yield* git("check", `${sha} does not read`, "log", "-1", "--format=%s", sha);
       unsigned.push(`${sha.slice(0, 8)} ${subject}`);
     }
@@ -852,7 +859,7 @@ const checkCommand = Command.make(
     if (unsigned.length > 0) {
       return yield* new Refused({
         check: "body",
-        reason: `pr ${pr}: ${unsigned.length} commit(s) since main are not signed: ${unsigned.join("; ")}. Sign a lead commit with \`stepcommit.sh --commit-only lead <ticket> "<subject>" <files>\` (\`--empty\` for no files).`,
+        reason: `pr ${pr}: ${unsigned.length} commit(s) since main are not signed or made by stepcommit.sh: ${unsigned.join("; ")}. Make it with \`stepcommit.sh --commit-only lead <ticket> "<subject>" <files>\` (\`--empty\` for no files), not a plain git commit.`,
         output: "",
       });
     }
