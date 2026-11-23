@@ -102,6 +102,10 @@ type World = {
   readonly command?: ReadonlyArray<string>;
   /** The ready record names the quest `lane`, as one written before the rule that a lane is called a quest does. */
   readonly laneKey?: boolean;
+  /** The branch holds one more commit with no note, as a plain `git commit --allow-empty` makes. */
+  readonly unsignedCommit?: boolean;
+  /** The branch holds commits as `stepcommit.sh` makes them (its bot identity), with no note: a fix round's, and a `--commit-only` lead commit's, with files and with none. */
+  readonly toolCommits?: boolean;
 };
 
 const land = (world: World) => {
@@ -236,6 +240,27 @@ const land = (world: World) => {
 
     if (world.dirty) {
       writeFileSync(join(quest, "quest.txt"), "an edit nobody committed\n");
+    }
+
+    if (world.unsignedCommit) {
+      git(quest, "commit", "-q", "--allow-empty", "-m", "open the slice");
+    }
+
+    if (world.toolCommits) {
+      const bot = [
+        "-c",
+        "user.name=fabrikalfa[bot]",
+        "-c",
+        "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com",
+      ];
+
+      writeFileSync(join(quest, "fix.txt"), "a fix round\n");
+      git(quest, "add", "fix.txt");
+      git(quest, ...bot, "commit", "-q", "-m", "T652 fix: a fix round signs nothing");
+      writeFileSync(join(quest, "row.txt"), "a plan row\n");
+      git(quest, "add", "row.txt");
+      git(quest, ...bot, "commit", "-q", "-m", "T652 lead: approve the plan");
+      git(quest, ...bot, "commit", "-q", "--allow-empty", "-m", "T652 lead: begin the slice");
     }
 
     const before = [git(quest, "rev-parse", "HEAD"), git(quest, "rev-parse", "refs/notes/fabrika")];
@@ -508,6 +533,29 @@ describe("land.ts, today's tooling", () => {
 
     const ticket = land({ ...fine, body: text, tickets: "1843 5", command: ["check", "77"] });
     expect(ticket.code, ticket.err).toBe(0);
+  }, 120_000);
+
+  // Plants: skip the signature read in `check`, count only the branch's tip, or name no commit.
+  it("scenario: `land.ts check` refuses a commit since main with no signature, names it, and passes when every commit has a note", () => {
+    const unsigned = land({ ...fine, unsignedCommit: true, command: ["check", "77"] });
+    expect(unsigned.code, unsigned.err).toBe(1);
+    expect(unsigned.err).toContain("1 commit(s) since main are not signed or made by stepcommit.sh:");
+    expect(unsigned.err).toContain(`${unsigned.head.slice(0, 8)} open the slice`);
+    expect(unsigned.err).not.toContain("the quest's step");
+    const signed = land({ ...fine, command: ["check", "77"] });
+    expect(signed.code, signed.err).toBe(0);
+    expect(signed.out).toContain("every commit since main signed");
+  }, 120_000);
+
+  // Plants: refuse a commit `stepcommit.sh` made because it has no note (a fix round signs nothing, and a `--commit-only` lead commit is signed by `land.ts run`), or exempt every commit whatever its author.
+  it("scenario: `land.ts check` passes the commits stepcommit.sh made with no note, a fix round's and a --commit-only lead commit's, and still refuses a hand-made one beside them", () => {
+    const made = land({ ...fine, toolCommits: true, command: ["check", "77"] });
+    expect(made.code, made.err).toBe(0);
+    const mixed = land({ ...fine, toolCommits: true, unsignedCommit: true, command: ["check", "77"] });
+    expect(mixed.code, mixed.err).toBe(1);
+    expect(mixed.err).toContain("1 commit(s) since main are not signed or made by stepcommit.sh:");
+    expect(mixed.err).toContain(" open the slice");
+    expect(mixed.err).not.toContain("T652");
   }, 120_000);
 
   // Plant: let a wait for a good admin merge end in a refusal, as the command did after the merge.

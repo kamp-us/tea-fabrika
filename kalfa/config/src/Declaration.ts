@@ -30,7 +30,7 @@ export type Files = readonly [File, ...Array<File>];
  *
  * **Details**
  *
- * `name` is the dotted name a person writes, as `instance.port`. `default` is none for a required setting. `description` is the sentence a person reads, and a group refuses a setting without one. `files` is the file scope, both files unless `files` says less. `fileOnly` marks a setting that only a file may set.
+ * `name` is the dotted name a person writes, as `instance.port`. `default` is none for a required setting. `description` is the sentence a person reads, empty until `withDescription` gives one, and a group refuses a setting with an empty one. `files` is the file scope, both files unless `files` says less. `fileOnly` marks a setting that only a file may set.
  *
  * @category models
  */
@@ -38,7 +38,7 @@ export interface Setting<N extends string, A, L extends boolean = false, F exten
   readonly name: N;
   readonly schema: Schema.Codec<A, unknown>;
   readonly default: Option.Option<A>;
-  readonly description: string | undefined;
+  readonly description: string;
   readonly files: Files;
   readonly live: L;
   readonly fileOnly: F;
@@ -130,7 +130,7 @@ export function make(name: string, schema: Schema.Codec<any, unknown>): Setting<
     name,
     schema,
     default: Option.none(),
-    description: undefined,
+    description: "",
     files: ["repo", "user"],
     live: false,
     fileOnly: false,

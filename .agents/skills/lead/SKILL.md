@@ -112,6 +112,8 @@ Branch: fabrikalfa/<name>, from <origin/main or the parent branch>
 Plan file: .kalfa/quests/<quest>-PLAN.md
 Read also: <tier rows, notes and code the plan must start from>
 Owner away: <yes or no>
+Already ruled out: <what earlier rounds tried, or none>
+Other open PRs: <none, or their URLs. Naming one adds: `node oxlint-plugins/law-ids.ts` sees only this tree's `kalfa/` ids, so run it on a scratch merge of that PR's branch (`node oxlint-plugins/law-ids.ts <folder>`), and renumber against the ids it reports>
 This quest:
 - <what is decided, what this slice may build, what is out of scope>
 ```
@@ -123,6 +125,8 @@ Use the tests skill for ticket <id>, <title>, <today's tooling or next/>.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  PR: <full URL>
 Start: <git pull --ff-only, or merge origin/main because ...>
 Approved plan: .kalfa/quests/<quest>-PLAN.md
+Already ruled out: <what earlier rounds tried, or none>
+Other open PRs: <none, or their URLs. The plan brief says what naming one adds>
 This quest:
 - <facts settled after the plan, laws that wait, folders to stay out of>
 ```
@@ -135,6 +139,7 @@ Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  Head: <short SHA>  PR: <full 
 Start: <git pull --ff-only, or merge origin/main because ...>
 Approved plan: .kalfa/quests/<quest>-PLAN.md
 Laws: <the test files the test writer wrote, fast and integration>
+Already ruled out: <what earlier rounds tried, or none>
 This quest:
 - <facts settled after the plan, what the test writer found, clashes with open PRs>
 ```
@@ -147,6 +152,8 @@ Use the tests skill for ticket 1041, pipe plumbing, next/.
 Worktree: ../tf-pipe-plumbing  Branch: fabrikalfa/pipe-plumbing  PR: https://github.com/kamp-us/tea-fabrika/pull/1310
 Start: merge origin/main (the tile slice and docs landed since the branch was cut).
 Approved plan: .kalfa/quests/t1041-PLAN.md
+Already ruled out: none
+Other open PRs: none
 This quest:
 - Settled after the plan by experiment 295 (https://github.com/kamp-us/tea-fabrika/pull/1311), the lead's calls:
   mail.chunk is 64 KiB, mail.unread is 256, the cap's maximum is 16,384. A law that pins a default pins these.
@@ -171,6 +178,7 @@ Parent base: <branch and full signed SHA, or origin/main and full SHA>
 Reviewed head: <branch and full SHA>
 Decided notes: <every decided note the PR builds>
 Last fixes: <commit range and report, or none>
+Already ruled out: <what earlier rounds tried, or none>
 Waits for the owner: <no, or what he must decide>
 Look hardest at:
 1. <a call the plan did not spell out, or a doubt, as a question, with its source>
@@ -237,6 +245,7 @@ for how a law is written and the build skill for how product code is written; fo
 standing rules.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  Reviewed head: <full SHA>  PR: <full URL>
 Approved plan: <path>
+Already ruled out: <what earlier rounds tried, or none>
 
 Faults the review named:
 1. <path:line>: <what is wrong>. Input that shows it: <the call, the Msgs or the value>.
@@ -349,6 +358,7 @@ Read the header before you run one; this table only says what each is for.
 | `botpush.mjs` | push a branch and its step notes as the bot, in one atomic push |
 | `worktree.ts <name> <branch>` | make `../tf-<name>` on a new branch from `origin/main`, upstream `origin/<branch>`, packages installed |
 | `publish.ts <branch> [--title <t>] [--body-file <f>]` | leak-check, refuse unless the checkout is on `<branch>` (run it from that branch's worktree), push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it, and after `--commit-only` you run it, giving a new draft its title and its body (written with the pr skill) in place of the placeholder; on a branch whose PR is open, the same flags set that PR's title and body (draft state unchanged), so never `gh api -X PATCH` by hand |
+| `stepcommit.sh --empty lead <ticket> "<subject>"` | open a slice's draft PR on a fresh branch with a signed lead commit that holds no files, under an open ticket (`--commit-only` leaves the signing to `land.ts`); then run `publish.ts` as above. A plain `git commit --allow-empty` is by hand, and `land.ts check` refuses the PR for it; a commit `stepcommit.sh` made passes, signed or not |
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
@@ -503,6 +513,9 @@ visible, and never weaken the rules to hide this message.
    (above). No builder starts before tests that exist. Each brief names its skill.
    Before the build brief, read the tests report's reach table against the plan's `## Generators`
    ids. An id with no plant seen red goes back to tests; it is never a note in the build brief.
+   Start the review only once `node .agents/skills/mutation/scripts/survivors.ts --out <scratch> --head <build head> --answered`
+   exits 0: every survivor is killed by a law or carried as a `Survivor:` line with its evidence. A
+   survivor left goes back to the build.
    Never start a review while a host-only law the plan names has not passed on a real machine. The build runs it, or you run it right after
    the build (step 7). Launchd, real Electron and process-signal laws run on eligible disposable CI,
    never on the owner's laptop.
@@ -657,6 +670,10 @@ Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in th
   head the pull request holds on each read, and exits 0 only on a success; a cancelled run is named.
   `queue --wait` and `admin --wait` make the same wait, so a hand-written loop over `gh run list` or a
   workflow run picked by head SHA has no place (a ready event starts a second run at one head, and such a loop read the first).
+  Before you name a cause for a red or cancelled run, read the failed step's log:
+  `gh api repos/kamp-us/tea-fabrika/actions/jobs/<id>/logs --allow-escape-sequences`, on the job whose
+  step failed. A job GitHub shows as `cancelled` may be the red job itself, ended by its own
+  `stop the run` step.
 - **No agent approves a pull request, and no agent answers a question the machine put to a
   person.**
 - **A step is a program,** and a prompt you would have typed is its first source. A v0 has no

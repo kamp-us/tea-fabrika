@@ -12,9 +12,6 @@
     "./cli": "./src/cli.ts",
     "./package.json": "./package.json"
   },
-  "kalfa": {
-    "cli": "./cli"
-  },
   "dependencies": {
     "mdast-util-from-markdown": "catalog:",
     "mdast-util-gfm": "catalog:",

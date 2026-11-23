@@ -420,6 +420,18 @@
       "imports": ["kalfa-config"]
     },
     {
+      "name": "kalfa-cli",
+      "layer": 2,
+      "paths": ["kalfa/cli/src"],
+      "imports": ["kalfa-diagnostics"]
+    },
+    {
+      "name": "kalfa-secrets",
+      "layer": 2,
+      "paths": ["kalfa/secrets/src"],
+      "imports": ["kalfa-config"]
+    },
+    {
       "name": "next-telemetry",
       "layer": 1,
       "paths": ["next/packages/libfabrika/src/telemetry"],
@@ -533,11 +545,13 @@
     "next/packages/libfabrika/src",
     "next/packages/tuval/src",
     "next/packages/vitest/src",
+    "kalfa/cli/src",
     "kalfa/config/src",
     "kalfa/diagnostics/src",
     "kalfa/git/src",
     "kalfa/github/src",
     "kalfa/markdown/src",
+    "kalfa/secrets/src",
     "kalfa/transport/src"
   ],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],

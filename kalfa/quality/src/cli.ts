@@ -1,6 +1,6 @@
 /**
- * `./cli`: the `quality` command, the root a future `kalfa` finds through this package's `kalfa.cli`
- * field (our tooling is a few @kalfa packages grouped by domain). Its one tool so far is `stryker`:
+ * `./cli`: the `quality` command, the root a future `kalfa` will find once this package exports a `subcommand`
+ * made with `@kalfa/cli/Subcommand` (our tooling is a few @kalfa packages grouped by domain). Its one tool so far is `stryker`:
  *
  *   quality stryker plant <name> [--out <file>]
  *   quality stryker survey <file> --law <test file> [--from <line>] [--to <line>] [--out <file>]

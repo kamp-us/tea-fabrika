@@ -1,6 +1,6 @@
 // Law Q14 of .kalfa/quests/kalfa-quality-stryker-PLAN.md (our tooling is a few @kalfa packages grouped by domain): `./cli` exports an
-// effect/cli `Command` named `quality`, the root a future `kalfa` finds through the package's
-// `kalfa.cli` field. A compile-time law: tsc is red when the root is named anything else, and the
+// effect/cli `Command` named `quality`, the root a future `kalfa` will find through the package's
+// `kalfa.cli` field, which comes back with the package's refit to `Subcommand`. A compile-time law: tsc is red when the root is named anything else, and the
 // lead runs it with the typecheck. The command's subcommands are runtime data, which a type cannot
 // name: cli.test.ts holds them.
 import { expectTypeOf, it } from "@effect/vitest";

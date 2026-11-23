@@ -1,5 +1,6 @@
 #!/bin/sh
-# stepcommit.sh [--commit-only] [--body-file <file>] <step> <ticket> <subject> <file>...
+# stepcommit.sh [--commit-only] [--empty] [--body-file <file>] <step> <ticket> <subject> <file>...
+# --empty makes a commit with no files (name none), to open a slice's draft PR on a fresh branch; only the lead step may, and it is signed like any lead commit.
 # --body-file puts the file's text in the commit body. A tests commit needs one with a plant line
 # ("Plant: <law>: <what was broken>: <first red line>"; a fix commit needs it only when it names a
 # *.test.ts or *.test-support.ts file), so a reviewer reads the plants in git log;
@@ -13,15 +14,19 @@ exec python3 - "$here" "$@" <<'PY'
 import hashlib, json, os, pathlib, re, subprocess, sys, tempfile
 here = pathlib.Path(sys.argv[1])
 args = sys.argv[2:]
-only, body_file = False, None
+only, empty, body_file = False, False, None
 def refuse(why, code=1):
     print("stepcommit: " + why, file=sys.stderr); sys.exit(code)
-while args and args[0] in ("--commit-only", "--body-file"):
-    if args.pop(0) == "--commit-only": only = True
+while args and args[0] in ("--commit-only", "--empty", "--body-file"):
+    flag = args.pop(0)
+    if flag == "--commit-only": only = True
+    elif flag == "--empty": empty = True
     elif args: body_file = args.pop(0)
     else: refuse("--body-file needs a file", 2)
-if len(args) < 4: refuse("name step, ticket, subject and named paths", 2)
+if len(args) < (3 if empty else 4): refuse("name step, ticket, subject" + ("" if empty else " and named paths"), 2)
 step, ticket, subject, *paths = args
+if empty and paths: refuse("--empty makes a commit with no files; name none", 2)
+if empty and step != "lead": refuse("--empty is for the lead step only: it opens a slice's pull request; a " + step + " commit holds its files", 2)
 if step not in ("tests", "build", "mutation", "lead", "fix"): refuse("unknown step " + step, 2)
 role = "tests" if step == "mutation" else step
 body = ""
@@ -301,8 +306,8 @@ for n in named:
     for t in tracked:
         if t != n and t.lower() == n.lower() and t not in named:
             if git("--literal-pathspecs", "rm", "--cached", "-q", "--", t).returncode: refuse("case rename could not be staged: " + t)
-added = git("--literal-pathspecs", "add", "--", *named)
-if added.returncode: refuse("named path could not be staged")
+added = git("--literal-pathspecs", "add", "--", *named) if named else None
+if added is not None and added.returncode: refuse("named path could not be staged")
 # --no-renames lists both sides as add/delete, including a removed exam path.
 staged = [p for p in staged_names() if p not in brought]
 try:
@@ -371,7 +376,7 @@ if not coauthor:
     name = git("config", "--global", "user.name").stdout.decode().strip()
     email = git("config", "--global", "user.email").stdout.decode().strip()
     coauthor = f"{name} <{email}>"
-commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", "-m", subject, *(["-m", body] if body else []), "-m", "Co-authored-by: " + coauthor])
+commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", *(["--allow-empty"] if empty else []), "-m", subject, *(["-m", body] if body else []), "-m", "Co-authored-by: " + coauthor])
 if commit.returncode: sys.exit(commit.returncode)
 if not only and step != "fix":
     # STEPCOMMIT_SIGNER: drive.ts names main's own signer when the tree holds an agent's edits.
