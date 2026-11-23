@@ -293,13 +293,13 @@ export interface Edit<R extends ReadonlyArray<Setting.Any>> {
  *
  * **Details**
  *
- * `file` says which file the text is, `"repo"` or `"user"`, and the errors name it as a person reads it: `.<app>/<app>.toml` or `~/.<app>/<app>.toml`. Only the changed value's text is replaced, so every comment and line break and every other key stays as it was. A set of the value the file already holds, or a remove of a key the file lacks, answers the same text.
+ * `file` says which file the text is, `"repo"` or `"user"`, and the errors name it as a person reads it: `.<app>/<app>.toml` or `~/.<app>/<app>.toml`. Only the changed value's text is replaced, so every comment and line break and every other key stays as it was. A record written over several lines (under its own header, under the headers of its items, or by dotted keys) is compared key by key: a key that is the same keeps its lines, a changed key has only its value replaced, a new item is written beside its siblings, and an item that leaves takes its lines, with the comments inside it and the comment lines right above its header. An array is replaced whole, in the form it had. A set of the value the file already holds, or a remove of a key the file lacks, answers the same text.
  *
  * Before the text is changed, the setting must be one of the group's, the file must be one its file scope allows, a value must pass its schema and be one the file can write, and the whole text must pass the start's check with this setting's own old value left out, so an edit can fix a bad value. After it, the new text is read again: it must hold only that one change and pass the whole check. The first fault is the one error, and no text comes back. A message ends `<file> was not changed.` and never holds a value.
  *
  * **Gotchas**
  *
- * Fails `edit` for a record setting written under its own header, as dotted sub-keys or as an array of tables: it is not one key in the text.
+ * Fails `edit` when the answer would change other data or would not be valid TOML.
  *
  * @category combinators
  */

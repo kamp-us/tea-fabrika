@@ -124,6 +124,13 @@ a line of its own at the end of its table, or under a new header at the end. `re
 (and its comma in an inline table). A set of the value the file already holds, or a remove of a key the file lacks,
 answers the same text.
 
+A record written over several lines (under its own header, under the headers of its items, or by dotted keys) is
+compared key by key, so `set` writes only what differs. A key that is the same keeps its lines. A new item goes beside
+its siblings, under its own header when its siblings have one. An item that leaves takes its lines, the comments inside
+it and the comment lines right above its header; a comment with a blank line between it and the header stays. An
+array is replaced whole, in the form it had: an inline array stays inline, and an array of `[[name]]` blocks comes
+back as blocks, with the comment lines above its first block kept.
+
 Each call answers an `Effect` of the new text that fails with one `SettingsError`, and then no text comes back:
 
 - `unknown`: the setting is not one of the group's.
@@ -132,8 +139,7 @@ Each call answers an `Effect` of the new text that fails with one `SettingsError
 - `syntax`: the text is not valid TOML. Other faults in the file, an unknown key or another setting's bad value,
   fail with their own reason and their own line. The edited setting's old value is left out of this check, so a set
   or a remove can fix a bad value.
-- `edit`: the setting is not one key in this text, as a record written under its own header, as dotted sub-keys or
-  as an array of tables, or the edited text would change other data.
+- `edit`: the edited text would change other data, or would not be valid TOML.
 
 A message ends `<file> was not changed.` and never holds a value.
 

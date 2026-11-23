@@ -7,8 +7,10 @@
 // scenario: three stand-in formats, each wrong in one way (the reason label `fabrika/law-shape` takes for a guard no
 // real input reaches). Plant, run once and never kept: drop the kept check in `change.ts`, so the first stand-in's
 // text comes back and the law is red.
+import { inspect } from "node:util";
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, Result, Schema } from "effect";
+import { runsFor } from "@kampus/vitest";
+import { Cause, Effect, Exit, Result, Schema } from "effect";
 import { Setting, SettingGroup } from "../index.ts";
 import { set } from "./change.ts";
 import type { Format } from "./format.ts";
@@ -76,4 +78,75 @@ it.effect(
         expect(errors[0]?.file, name).toBe(".demo/demo.toml");
       }
     }),
+);
+
+// ---------------------------------------------------------------------------------------------
+// RC8, the guard half (ticket 1844, plan .kalfa/quests/kalfa-config-record-PLAN.md)
+// ---------------------------------------------------------------------------------------------
+
+/** A secret-looking word, with a character that changes in JSON and in a URL. */
+const Hidden = Schema.String.check(Schema.isPattern(/^sk-([A-Za-z0-9]{6,12})["/ +\\&][A-Za-z0-9]{3}$/u));
+
+const rules = Setting.make("a.rules", Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Int))).pipe(
+  Setting.withDefault({}),
+  Setting.withDescription("Rules by name."),
+);
+
+const withRules = SettingGroup.make("demo", rules, port("b.three"));
+
+// [secrets] The guard that keeps a format honest names no key and no value of the record it refuses. The stand-in is the
+// real format, so a record written under the headers of its items is compared as the plan says, and then one more change
+// is made to another key: the guard must refuse it with the one error `edit`, and nothing the record holds may appear in
+// the message or the cause, in any form (raw, JSON-escaped, URL-encoded). The law also holds that the stand-in was
+// reached: a format that refuses the record itself never gets to the guard. Plant, run once and never kept: name the keys
+// that differ in the `edit` message of `change.ts`: red.
+it.effect.prop(
+  "RC8 [secrets] values stay out: a secret-looking item name or value never appears in the guard's edit error, for a format that also changes another key",
+  { secret: Hidden, other: Hidden },
+  ({ secret, other }) =>
+    Effect.gen(function* () {
+      let reached = false;
+
+      const format: Format = {
+        ...toml,
+        set: (text, path, value) =>
+          Result.flatMap(toml.set(text, path, value), (answer) => {
+            reached = true;
+
+            const next = toml.set(answer, ["b", "three"], 99);
+
+            return Result.succeed(Result.isSuccess(next) ? next.success : answer);
+          }),
+      };
+
+      const text = `[a.rules.${JSON.stringify(secret)}]\nn = 1\n\n[b]\nthree = 3\n`;
+      const value = { [secret]: { n: 2, [other]: 3 } };
+      const exit = yield* Effect.exit(set(withRules, format, place, text, rules, value));
+
+      expect(reached, "the stand-in's set ran: the record under its own header is edited by the format").toBe(true);
+      expect(Exit.isFailure(exit), "no text comes back").toBe(true);
+
+      const errors = Exit.isFailure(exit)
+        ? exit.cause.reasons.flatMap((reason) => (reason._tag === "Fail" ? [reason.error] : []))
+        : [];
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.reason).toBe("edit");
+
+      const printed = Exit.isFailure(exit)
+        ? [
+            Cause.pretty(exit.cause),
+            errors[0]?.message ?? "",
+            String(errors[0]?.cause),
+            inspect(errors[0], { depth: null, customInspect: false, showHidden: true }),
+          ].join("\n")
+        : "";
+
+      for (const word of [secret, other]) {
+        for (const form of [word, JSON.stringify(word).slice(1, -1), encodeURIComponent(word)]) {
+          expect(printed.includes(form), `the error holds the secret as ${form}`).toBe(false);
+        }
+      }
+    }),
+  { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } },
 );
