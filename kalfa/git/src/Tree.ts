@@ -3,7 +3,7 @@
  *
  * **Details**
  *
- * A tree id and a blob id are 40 lowercase hex digits, as a commit id is, and not each other. A path is checked by the rules of git's own `verify_path`, written out here, so a path that passes can be put in a tree and sent to a host that checks every tree it receives.
+ * A tree id and a blob id are 40 lowercase hex digits, as a commit id is, and not each other. A path is checked by the rules of git's own `verify_path` for the name `.git`, written out here, so no path that passes is a name `git fsck` reads as `.git`. A path that passes can still be refused by a host for another reason, such as a link at `.gitmodules`: the mode check belongs to the push.
  */
 import { Schema } from "effect";
 import { OBJECT_ID } from "./internal/object.ts";
@@ -30,7 +30,7 @@ export type BlobId = typeof BlobId.Type;
 const LONE_SURROGATE = /\p{Surrogate}/u;
 
 // What git's HFS check ignores inside a name: U+200C to U+200F, U+202A to U+202E, U+206A to U+206F and U+FEFF.
-const HFS_IGNORED = /[‌-‏‪-‮⁪-⁯﻿]/g;
+const HFS_IGNORED = /[\u200C-\u200F\u202A-\u202E\u206A-\u206F\uFEFF]/g;
 
 // A name an HFS volume reads as `.git`.
 const isHfsDotGit = (part: string): boolean => part.replace(HFS_IGNORED, "").toLowerCase() === ".git";

@@ -70,10 +70,11 @@ const { store, id: tree } = yield* MemoryRepository.tree(MemoryRepository.empty,
 const made = yield* MemoryRepository.commit({ tree, parents: [], author, committer, message });
 ```
 
-`Tree.Path` refuses what git refuses: an empty part, `.` and `..`, and every name git's `fsck` reads as `.git` (any
+`Tree.Path` refuses an empty part, `.` and `..`, and every name git's `fsck` reads as `.git` (any
 letter case, trailing spaces and dots, a `:` stream, the characters an HFS volume ignores, `git~1`). `tree` fails
 `BadStore` with `path-conflict` when one path is a folder of another, and `add` fails with `missing-tree` when the
-store lacks a commit's tree. `empty` already holds git's empty tree.
+store lacks a commit's tree. `empty` already holds git's empty tree. A host may refuse a tree for another reason, such as a
+link at `.gitmodules`: that check is not here.
 
 ## Settings
 
