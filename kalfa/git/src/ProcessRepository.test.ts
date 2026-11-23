@@ -880,7 +880,12 @@ it.effect.prop(
 
       const RAW = ["diff-tree", "-r", "-z", "--no-renames", first, second];
 
+      // The two pins before the command: no file passes the content limit, and no attributes file marks a file binary.
       const PATCH = [
+        "-c",
+        `core.bigFileThreshold=${bytes + 1}`,
+        "-c",
+        "core.attributesFile=/dev/null",
         "diff-tree",
         "-r",
         "-p",
@@ -1217,7 +1222,12 @@ it.effect.prop(
 
       const RAW = ["diff-tree", "-r", "-z", "--no-renames", first, second];
 
+      // The two pins before the command: no file passes the content limit, and no attributes file marks a file binary.
       const PATCH = [
+        "-c",
+        `core.bigFileThreshold=${bytes + 1}`,
+        "-c",
+        "core.attributesFile=/dev/null",
         "diff-tree",
         "-r",
         "-p",

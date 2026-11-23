@@ -424,7 +424,7 @@ it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output 
   }
 
   // A raw entry that names a file no tree holds is unreadable, and one that names a file a tree holds reads.
-  const empty = [Diff.Text.make({ lines: [] })];
+  const empty = Diff.Text.make({ lines: [] });
 
   const entryWith = (mode: string): Parse.Change => ({
     status: "A",
@@ -433,6 +433,6 @@ it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output 
     gitlink: false,
   });
 
-  expect(unreadable(Parse.files([entryWith("040000")], empty)), "hand-made: a tree's mode is no file").toBe(true);
-  expect(Result.isSuccess(Parse.files([entryWith("100644")], empty)), "hand-made: a file's mode reads").toBe(true);
+  expect(unreadable(Parse.files([[entryWith("040000"), empty]])), "hand-made: a tree's mode is no file").toBe(true);
+  expect(Result.isSuccess(Parse.files([[entryWith("100644"), empty]])), "hand-made: a file's mode reads").toBe(true);
 });
