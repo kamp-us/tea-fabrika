@@ -6,7 +6,7 @@ an answer field.
 
 This package has no area of GitHub in it (no pull requests, no check runs). It holds two things: declaring an operation with
 `GitHub.route`, and calling it with `GitHub.call`. A caller declares the operations it needs, with only the fields it reads.
-There is no live Layer yet: `call` sends through the `GitHub` service, and a program provides one.
+There is no live Layer yet: `call` sends through the `GitHub` service, and a program provides one; the fake below is one.
 
 ## Declare an operation
 
@@ -42,6 +42,14 @@ export const ListCheckRuns = GitHub.route("GET /repos/{owner}/{repo}/commits/{re
 - **`bodiless`** is needed on a route that has a 2xx with no body beside a 2xx with one, such as a workflow dispatch, which
   answers 204 or 200. The list of statuses must be exactly the description's.
 
+- **`body`** says how the answer is read: `"json"` unless declared. A route GitHub answers only in text (`GET /zen`,
+  `GET /octocat`, `POST /markdown`, `POST /markdown/raw`) must say `body: "text"`, and so may a route whose media type turns
+  a JSON answer into text (a file read with `accept: "application/vnd.github.raw+json"`). A text route's `success` is any
+  Schema that starts at a string, and it is read from the raw text with no JSON step: a text that is also JSON stays a text.
+- **`auth: "none"`** declares a route that sends no token, however the service is logged in. Such a route takes no `token`
+  in `call`.
+- **`accept`** is the media type the route asks for, there only when declared.
+
 A path parameter's name comes from the route text, and its type from the description (the run id of a cancel is a
 number). `GitHub.apiVersion` is the date of the REST API the types describe.
 
@@ -57,6 +65,11 @@ const runs = GitHub.call(ListCheckRuns, {
   query: { per_page: 100 },
 });
 ```
+
+`call` takes a third argument, `{ token }`, a `Redacted` string: the token this one call is sent with, in place of the
+service's login. It does not compile on a route that may be `auth: "none"`; a cast that gets one past the types makes the call
+die, naming the route and never the token, before anything is sent. The token is never put in the path, the query, a span or an
+error.
 
 The input is what the route declared, and nothing else: `params` when the route text has `{name}` parts, `query` when a query
 was declared (required when it holds a required key), and `payload` when a payload was declared. A payload is the decoded
@@ -78,8 +91,13 @@ A call fails with `GitHubError`, which names the route text in `operation` and h
 the `GitHub` service gives.
 
 - `ClientError`: GitHub answered 4xx. It holds the `status`, and a `message`, a `documentationUrl` and `errors` exactly when
-  GitHub's body had them.
-- `Undecodable`: the input could not be encoded (`side` is `input`, and nothing was sent), or the answer could not be read
+  GitHub's body had them, each read on its own, so a field of another kind never hides the others. `errors` is a list of
+  objects or texts, or the one text GitHub sometimes sends. A rate limit answer (403 or 429) is a `ClientError` too.
+- `ServerError`: GitHub answered 5xx. `mayHaveApplied` is `true` for a write, which GitHub may have carried out before it
+  failed, and `false` for a read.
+- `Unavailable`: the request got no answer at all. It comes from a live client, never from `call` alone. `mayHaveApplied` is as
+  for `ServerError`, and `cause` is the failure under the HTTP client's error.
+- `Undecodable`: the input could not be encoded (`side` is `input`, and nothing was sent; a query value a URL cannot carry, such as a `null` or an object, is one), or the answer could not be read
   (`side` is `answer`: the SchemaError is its `cause`, and a status this client does not read has none). Its `message` says
   the path and what was expected, and holds no value; the `cause` does, so read it as private.
 
@@ -136,7 +154,7 @@ No 2xx status:
 - `GET /repos/{owner}/{repo}/zipball/{ref}`
 - `GET /user/migrations/{migration_id}/archive`
 
-An answer that is not JSON:
+An answer that is not JSON (declared `body: "text"`):
 
 - `GET /octocat`
 - `GET /zen`
