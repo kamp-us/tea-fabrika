@@ -82,6 +82,8 @@ interface Scene {
   readonly setting: Setting.Any;
   readonly place: Place;
   readonly seed: MemoryFiles.Seed;
+  /** The environment cannot be read: its provider fails, as a source that is down does. */
+  readonly unreadable?: boolean;
   readonly op: { readonly kind: "set"; readonly value: unknown } | { readonly kind: "remove" };
 }
 
@@ -134,7 +136,11 @@ const run = (scene: Scene) => {
       Layer.mergeAll(
         Recorder.layer(FileSystem.FileSystem, disk.fileSystem),
         Path.layer,
-        ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...place.env } })),
+        ConfigProvider.layer(
+          scene.unreadable === true
+            ? ConfigProvider.make(() => Effect.fail(new ConfigProvider.SourceError({ message: "refused" })))
+            : ConfigProvider.fromEnv({ env: { ...place.env } }),
+        ),
       ),
     ),
     Effect.provide(Logger.layer([logger])),
@@ -243,65 +249,80 @@ it.effect.prop(
 // D2, a refused edit writes nothing
 // ---------------------------------------------------------------------------------------------
 
-// Plant: rename the lock over the file even when the edit refused, writing the old text back (in internal/disk.ts, after
-// the edit fails, write the old text into the lock and rename it): a rename is recorded, red.
+// Plants: rename the lock over the file even when the edit refused, writing the old text back (in internal/disk.ts, after
+// the edit fails, write the old text into the lock and rename it): a rename is recorded, red. Make the app's own folder
+// before the edit is checked and leave it when the edit refuses: a set into a repo with no `.<app>/` folder leaves one
+// behind, red. Check a remove's scope only after the lock is made: a remove of a user-only key from a file whose folder
+// is missing succeeds, red.
 it.effect.prop(
-  "D2 a refused edit writes nothing: each refusal of the in-memory edit fails the same way on disk, the file is as it was, no rename is recorded and no lock is left",
+  "D2 a refused edit writes nothing: each refusal of the in-memory edit fails the same way on disk, the file is as it was, no rename is recorded, no lock is left, and a folder the call made is gone while one that was there stays",
   DiskDraw.fields,
   (draw) =>
     Effect.gen(function* () {
-      const reach = new Reach<string>(["u:repo", ...USER_PLACES]);
+      const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:file", "v:no-file", "v:no-folder", "v:no-parent"]);
       const port = draw.values.port;
 
+      // A refusal that needs no text (a file scope, a value) is also tried with no file, no folder and no parent.
       const scenes = [
-        ...scoped(draw).map((s) => ({ ...s, value: port, removes: true })),
-        ...refused(draw).map((s) => ({ ...s, removes: false })),
-        ...faulty(draw).map((s) => ({ ...s, value: port, removes: true })),
-        ...flat(draw).map((s) => ({ ...s, removes: true })),
-        ...broken(draw).map((s) => ({ ...s, value: port, removes: true })),
-        ...tabled(draw).map((s) => ({ ...s, removes: true })),
+        ...scoped(draw).map((s) => ({ ...s, value: port, removes: true, bare: true })),
+        ...refused(draw).map((s) => ({ ...s, removes: false, bare: true })),
+        ...faulty(draw).map((s) => ({ ...s, value: port, removes: true, bare: false })),
+        ...flat(draw).map((s) => ({ ...s, removes: true, bare: false })),
+        ...broken(draw).map((s) => ({ ...s, value: port, removes: true, bare: false })),
+        ...tabled(draw).map((s) => ({ ...s, removes: true, bare: false })),
       ];
 
       for (const [n, s] of scenes.entries()) {
         const at = placeFor(s.app, siteFor(draw, s.file, n), draw.disk.moved);
-        const seed = seedFor(at, "file", held(draw, s.text));
 
-        const set = yield* run({
-          group: s.group,
-          setting: s.target,
-          place: at,
-          seed,
-          op: { kind: "set", value: s.value },
-        });
+        for (const state of s.bare ? (["file", "no-file", "no-folder", "no-parent"] as const) : (["file"] as const)) {
+          const seed = seedFor(at, state, held(draw, s.text));
+          const text = state === "file" ? s.text : "";
+          const named = `${s.target.name} in ${at.site} ${state}`;
 
-        const pure = yield* doSet(s.group, s.text, s.file, s.target, s.value);
-        const named = `${s.target.name} in ${at.site}`;
+          const set = yield* run({
+            group: s.group,
+            setting: s.target,
+            place: at,
+            seed,
+            op: { kind: "set", value: s.value },
+          });
 
-        expect(pure._tag, `${named}: the in-memory edit refuses`).toBe("error");
-        expect(set.answer._tag, `${named}: the disk call refuses`).toBe("failed");
+          const pure = yield* doSet(s.group, text, s.file, s.target, s.value);
 
-        if (pure._tag === "error" && set.answer._tag === "failed") {
-          expect(set.answer.reason, `${named}: the edit's reason`).toBe(pure.reason);
-          expect(set.answer.line, `${named}: the edit's line`).toBe(pure.line);
-          expect(names(set.answer, at.name), `${named}: it names the file`).toBe(true);
-        }
+          expect(pure._tag, `${named}: the in-memory edit refuses`).toBe("error");
+          expect(set.answer._tag, `${named}: the disk call refuses`).toBe("failed");
 
-        asWas(set, named);
-        expect(set.after.files, `${named}: the file is as it was`).toEqual({ [at.path ?? ""]: s.text });
+          // With the folder's parent missing the call may fail on the folder first: it fails, and writes nothing.
+          if (pure._tag === "error" && set.answer._tag === "failed" && state !== "no-parent") {
+            expect(names(set.answer, at.name), `${named}: it names the file`).toBe(true);
 
-        if (s.removes) {
-          const remove = yield* run({ group: s.group, setting: s.target, place: at, seed, op: { kind: "remove" } });
-          const pureRemove = yield* doRemove(s.group, s.text, s.file, s.target);
-
-          expect(pureRemove._tag, `${named}: the in-memory remove refuses`).toBe("error");
-          expect(remove.answer._tag, `${named}: the disk remove refuses`).toBe("failed");
-
-          if (pureRemove._tag === "error" && remove.answer._tag === "failed") {
-            expect(remove.answer.reason, `${named}: the remove's reason`).toBe(pureRemove.reason);
-            expect(remove.answer.line, `${named}: the remove's line`).toBe(pureRemove.line);
+            // A `$DEMO_HOME` that is not there is refused as a place, before the edit.
+            if (!(state === "no-folder" && at.site === "demo-home")) {
+              expect(set.answer.reason, `${named}: the edit's reason`).toBe(pure.reason);
+              expect(set.answer.line, `${named}: the edit's line`).toBe(pure.line);
+            }
           }
 
-          asWas(remove, `${named} remove`);
+          // The files, the folders and the links are as they were: a folder this call made is gone.
+          asWas(set, named);
+
+          if (s.removes) {
+            const remove = yield* run({ group: s.group, setting: s.target, place: at, seed, op: { kind: "remove" } });
+            const pureRemove = yield* doRemove(s.group, text, s.file, s.target);
+
+            expect(pureRemove._tag, `${named}: the in-memory remove refuses`).toBe("error");
+            expect(remove.answer._tag, `${named}: the disk remove refuses, whatever the disk holds`).toBe("failed");
+
+            if (pureRemove._tag === "error" && remove.answer._tag === "failed") {
+              expect(remove.answer.reason, `${named}: the remove's reason`).toBe(pureRemove.reason);
+              expect(remove.answer.line, `${named}: the remove's line`).toBe(pureRemove.line);
+            }
+
+            asWas(remove, `${named} remove`);
+          }
+
+          reach.mark(`v:${state}`);
         }
 
         reach.mark(`u:${at.site}`);
@@ -435,8 +456,9 @@ it.effect.prop(
 // D5, a missing folder or file
 // ---------------------------------------------------------------------------------------------
 
-// Plant: skip making the folder (in internal/disk.ts, drop the `makeDirectory` call): a set into a repo with no
-// `.<app>/` folder fails, red.
+// Plants: skip making the folder (in internal/disk.ts, drop the `makeDirectory` call): a set into a repo with no
+// `.<app>/` folder fails, red; make a `$<APP>_HOME` that is not there when its parent is: the set succeeds where it must
+// fail `write`, red; leave a folder this call made when a later step fails: a folder is left, red.
 it.effect.prop(
   "D5 a missing folder or file: a set makes the file and the app's own folder and no more, a missing parent of that folder fails `write`, and a remove of a missing file or folder succeeds and writes nothing",
   DiskDraw.fields,
@@ -450,28 +472,22 @@ it.effect.prop(
         const value = valuesFor(draw, p)[0];
         const wanted = mustText(yield* doSet(group, "", p.file, setting, value));
 
-        // `$DEMO_HOME` that is not there is not made when its parent is not there either: the folder of the user file at
-        // `$DEMO_HOME` is that folder itself, so only a missing parent is taken for the case.
         const at = place(draw, p, p.file, n);
         const path = at.path ?? "";
         const dir = at.dir ?? "";
+        const lock = `${path}.lock`;
 
-        for (const state of ["no-file", at.site === "demo-home" ? "no-parent" : "no-folder", "no-parent"] as const) {
+        for (const state of ["no-file", "no-folder", "no-parent"] as const) {
           const seed = seedFor(at, state, held(draw, ""));
           const named = label(p, at, state);
 
+          // A `.<app>/` folder is made. A `$<APP>_HOME` that is not there is not, with its parent there or not, and nor is
+          // a folder whose parent is not there: the call fails `write` and makes nothing.
+          const made = state === "no-file" || (state === "no-folder" && at.site !== "demo-home");
+
           const set = yield* run({ group, setting, place: at, seed, op: { kind: "set", value } });
 
-          if (state === "no-parent") {
-            expect(set.answer._tag, `${named}: a missing parent fails`).toBe("failed");
-
-            if (set.answer._tag === "failed") {
-              expect(set.answer.reason, `${named}: it is a write error`).toBe("write");
-              expect(names(set.answer, at.name), `${named}: it names the file`).toBe(true);
-            }
-
-            asWas(set, named);
-          } else {
+          if (made) {
             expect(set.answer, named).toEqual(done);
             expect(set.after.files, `${named}: the file is made with the edit's text and no lock is left`).toEqual({
               [path]: wanted,
@@ -480,6 +496,40 @@ it.effect.prop(
             expect(set.after.folders, `${named}: the app's own folder is made, and no other`).toEqual(
               [...new Set([...set.before.folders, dir])].sort(),
             );
+          } else {
+            expect(set.answer._tag, `${named}: a missing home or parent fails`).toBe("failed");
+
+            if (set.answer._tag === "failed") {
+              expect(set.answer.reason, `${named}: it is a write error`).toBe("write");
+              expect(names(set.answer, at.name), `${named}: it names the file`).toBe(true);
+            }
+
+            asWas(set, named);
+          }
+
+          // A folder this call made is gone when the call then fails: at the lock's create, its write and the rename.
+          if (state === "no-folder" && made) {
+            for (const fault of [
+              createRefused(lock, draw.disk.create),
+              writeRefused(lock, draw.disk.write),
+              renameRefused(lock, draw.disk.rename),
+            ]) {
+              const failed = yield* run({
+                group,
+                setting,
+                place: at,
+                seed: seedFor(at, state, held(draw, ""), [fault]),
+                op: { kind: "set", value },
+              });
+
+              expect(failed.answer._tag, `${named}: a refused write fails`).toBe("failed");
+              const after = `${named} with a refused write`;
+
+              expect(failed.after.folders, `${after}: the folder this call made is gone`).toEqual(
+                failed.before.folders,
+              );
+              expect(failed.after.files, `${after}: no file or lock is left`).toEqual(failed.before.files);
+            }
           }
 
           const remove = yield* run({ group, setting, place: at, seed, op: { kind: "remove" } });
@@ -826,6 +876,102 @@ it.effect.prop(
         expect(remove.answer, `${named} remove`).toEqual(done);
         expect(remove.calls, `${named} remove: no file call`).toEqual([]);
         reach.mark("u:no-home");
+      }
+
+      reach.done();
+    }),
+  check,
+);
+
+// ---------------------------------------------------------------------------------------------
+// D11, every failure says the file was not changed
+// ---------------------------------------------------------------------------------------------
+
+/** A failure's message ends with the closing sentence of an edit: the file as a person reads it, and that it was not changed. */
+const closes = (found: Seen, name: string, named: string) => {
+  expect(found.answer._tag, `${named}: the call fails`).toBe("failed");
+
+  if (found.answer._tag === "failed") {
+    const last = found.answer.message.trimEnd().split("\n").at(-1)?.trim();
+
+    expect(last, `${named}: the closing sentence`).toBe(`${name} was not changed.`);
+  }
+};
+
+// Plant: end a disk failure with the start's closing sentence, `<app> did not start.` (in internal/place.ts, where `stop`
+// takes its default closing, or in internal/disk.ts where `fail` builds a message): the closing sentence is the start's,
+// red.
+it.effect.prop(
+  "D11 every disk failure ends by naming the file and saying it was not changed: a refused edit, a held lock, a refused read, a refused lock, a missing parent, an environment that cannot be read and no home",
+  DiskDraw.fields,
+  (draw) =>
+    Effect.gen(function* () {
+      const reach = new Reach<string>([
+        "u:repo",
+        ...USER_PLACES,
+        "u:no-home",
+        "v:lock",
+        "v:no-parent",
+        "w:read",
+        "w:lock-create",
+        "w:environment",
+      ]);
+
+      for (const [n, s] of scoped(draw).entries()) {
+        const at = placeFor(s.app, siteFor(draw, s.file, n), draw.disk.moved);
+        const seed = seedFor(at, "file", held(draw, s.text));
+
+        for (const op of [{ kind: "set", value: draw.values.port }, { kind: "remove" }] as const) {
+          closes(
+            yield* run({ group: s.group, setting: s.target, place: at, seed, op }),
+            at.name,
+            `${s.target.name} in ${at.site} ${op.kind}`,
+          );
+        }
+
+        reach.mark(`u:${at.site}`);
+      }
+
+      for (const [n, p] of positions(draw).entries()) {
+        const at = place(draw, p, p.file, n);
+        const path = at.path ?? "";
+        const group = groupFor(p);
+        const setting = targetSetting(p);
+        const op = { kind: "set", value: valuesFor(draw, p)[0] } as const;
+        const base = held(draw, p.located.text);
+
+        const failures = [
+          ["a held lock", seedFor(at, "lock", base), "v:lock"],
+          ["a refused read", seedFor(at, "file", base, [readRefused(path, draw.disk.read)]), "w:read"],
+          [
+            "a refused lock",
+            seedFor(at, "file", base, [createRefused(`${path}.lock`, draw.disk.create)]),
+            "w:lock-create",
+          ],
+          ["a missing parent", seedFor(at, "no-parent", base), "v:no-parent"],
+        ] as const;
+
+        for (const [cause, seed, id] of failures) {
+          closes(yield* run({ group, setting, place: at, seed, op }), at.name, `${label(p, at)} ${cause}`);
+          reach.mark(id);
+        }
+
+        closes(
+          yield* run({ group, setting, place: at, seed: seedFor(at, "file", base), unreadable: true, op }),
+          at.name,
+          `${label(p, at)} an environment that cannot be read`,
+        );
+
+        reach.mark("w:environment");
+
+        if (p.file === "user") {
+          const none = placeFor(p.app, "no-home", draw.disk.moved);
+
+          closes(yield* run({ group, setting, place: none, seed: {}, op }), none.name, `${label(p, none)} no home`);
+          reach.mark("u:no-home");
+        }
+
+        reach.mark(`u:${at.site}`);
       }
 
       reach.done();
