@@ -42,6 +42,7 @@ import {
   listing,
   settingName,
   quiet,
+  readFaults,
   nearest,
   OBJECT_NAMES,
   oneEdit,
@@ -255,6 +256,14 @@ it.effect.prop(
           ).toContain(out.message);
           expect(ran.stdout, `get ${JSON.stringify(name)}: nothing is printed`).toBe("");
           reach.mark(id, near.length === 0 ? "unsuggested" : "suggested");
+
+          // `Nothing was read.` is true: a name that is no setting is refused before a file is found or read. Each read of a
+          // file would fail here, and none is made.
+          const unread = yield* run({ ...world, faults: readFaults(s, ROOT) }, ["get", name]);
+          const refused = failure(unread);
+
+          expect(refused.reason, `get ${JSON.stringify(name)} with no readable file: the reason`).toBe("unknown");
+          expect(unread.calls, `get ${JSON.stringify(name)}: no call of the file system`).toEqual([]);
         }
       }
 
@@ -312,153 +321,192 @@ it.effect.prop(
   { draw: CliDraw },
   ({ draw }) =>
     Effect.gen(function* () {
-      const reach = new Reach<Written>(WRITTEN);
-      const s = writable(draw);
-      const world = worldFrom(s, ROOT);
-      const oracle = joinedGroup(s);
-      const names = placeNames(s.app, s.userAt);
-      const paths = { repo: repoPath(s, ROOT), user: userPath(s) } as const;
-      const by = (n: number) => s.entries.find((e) => e.setting === oracle.settings[n]);
+      const reach = new Reach<Written | "home:home" | "home:app-home">([...WRITTEN, "home:home", "home:app-home"]);
 
-      const row = (n: number) => {
-        const found = by(n);
+      // The user configuration is at `~/.<app>/<app>.toml` or at `$<APP>_HOME/<app>.toml`: each message names the one it is.
+      for (const user of ["home", "app-home"] as const) {
+        reach.mark(`home:${user}`);
+        const s = writable(draw, user);
+        const world = worldFrom(s, ROOT);
+        const oracle = joinedGroup(s);
+        const names = placeNames(s.app, s.userAt);
+        const paths = { repo: repoPath(s, ROOT), user: userPath(s) } as const;
+        const by = (n: number) => s.entries.find((e) => e.setting === oracle.settings[n]);
 
-        if (found === undefined) {
-          return expect.fail(`the scene has no row ${n}`);
+        const row = (n: number) => {
+          const found = by(n);
+
+          if (found === undefined) {
+            return expect.fail(`the scene has no row ${n}`);
+          }
+
+          return found;
+        };
+
+        /** One `set`: where it is to write, what the join's edit makes of the old text, and what the run left. */
+        const setting = Effect.fnUntraced(function* (
+          id: Written,
+          n: number,
+          file: "repo" | "user",
+          flag: boolean,
+          value: { readonly text: string; readonly value: unknown },
+        ) {
+          const e = row(n);
+          const ran = yield* run(world, ["set", e.spec.name, value.text, ...(flag ? ["--file", file] : [])]);
+          const old = world.files[paths[file]] ?? "";
+          const expected = yield* SettingGroup.edit(oracle, old, file).set(e.setting, value.value);
+
+          ended(ran, id);
+          expect(ran.stdout, `${id}: nothing is printed`).toBe("");
+          expect(ran.files, `${id}: the file is the edit's, every other file as it was`).toEqual({
+            ...world.files,
+            [paths[file]]: expected,
+          });
+          spanned(ran, "set", e.spec.name, id);
+          reach.mark(id);
+        });
+
+        yield* setting("set:default-repo", 0, "repo", false, textFor(draw, "int", 3));
+        yield* setting("set:default-user", 1, "user", false, textFor(draw, "text", 4));
+        yield* setting("set:user-only", 2, "user", false, textFor(draw, "literal", 5));
+        yield* setting("set:explicit-user", 0, "user", true, textFor(draw, "int", 6));
+        yield* setting("set:explicit-repo", 1, "repo", true, textFor(draw, "text", 7));
+        yield* setting("set:file-only", 4, "repo", false, textFor(draw, "branded", 2));
+
+        // The quiet window is a setting of the joined group: a set of it passes the whole-file check.
+        const window = s.entries.find((e) => e.setting === debounce);
+
+        if (window !== undefined) {
+          const ran = yield* run(world, ["set", WINDOW, "2 seconds"]);
+          const old = world.files[paths.repo] ?? "";
+          const expected = yield* SettingGroup.edit(oracle, old, "repo").set(debounce, "2 seconds");
+
+          ended(ran, "set:window");
+          expect(ran.files, "set:window: the file is the edit's").toEqual({ ...world.files, [paths.repo]: expected });
+          reach.mark("set:window");
         }
 
-        return found;
-      };
+        // A file the setting's scope leaves out is `scope`, and nothing changes.
+        const outside = row(3);
+        const scoped = yield* run(world, ["set", outside.spec.name, "abc", "--file", "user"]);
+        const scopedOut = failure(scoped);
 
-      /** One `set`: where it is to write, what the join's edit makes of the old text, and what the run left. */
-      const setting = Effect.fnUntraced(function* (
-        id: Written,
-        n: number,
-        file: "repo" | "user",
-        flag: boolean,
-        value: { readonly text: string; readonly value: unknown },
-      ) {
-        const e = row(n);
-        const ran = yield* run(world, ["set", e.spec.name, value.text, ...(flag ? ["--file", file] : [])]);
-        const old = world.files[paths[file]] ?? "";
-        const expected = yield* SettingGroup.edit(oracle, old, file).set(e.setting, value.value);
-
-        ended(ran, id);
-        expect(ran.stdout, `${id}: nothing is printed`).toBe("");
-        expect(ran.files, `${id}: the file is the edit's, every other file as it was`).toEqual({
-          ...world.files,
-          [paths[file]]: expected,
-        });
-        reach.mark(id);
-      });
-
-      yield* setting("set:default-repo", 0, "repo", false, textFor(draw, "int", 3));
-      yield* setting("set:default-user", 1, "user", false, textFor(draw, "text", 4));
-      yield* setting("set:user-only", 2, "user", false, textFor(draw, "literal", 5));
-      yield* setting("set:explicit-user", 0, "user", true, textFor(draw, "int", 6));
-      yield* setting("set:explicit-repo", 1, "repo", true, textFor(draw, "text", 7));
-      yield* setting("set:file-only", 4, "repo", false, textFor(draw, "branded", 2));
-
-      // The quiet window is a setting of the joined group: a set of it passes the whole-file check.
-      const window = s.entries.find((e) => e.setting === debounce);
-
-      if (window !== undefined) {
-        const ran = yield* run(world, ["set", WINDOW, "2 seconds"]);
-        const old = world.files[paths.repo] ?? "";
-        const expected = yield* SettingGroup.edit(oracle, old, "repo").set(debounce, "2 seconds");
-
-        ended(ran, "set:window");
-        expect(ran.files, "set:window: the file is the edit's").toEqual({ ...world.files, [paths.repo]: expected });
-        reach.mark("set:window");
-      }
-
-      // A file the setting's scope leaves out is `scope`, and nothing changes.
-      const outside = row(3);
-      const scoped = yield* run(world, ["set", outside.spec.name, "abc", "--file", "user"]);
-      const scopedOut = failure(scoped);
-
-      expect(scopedOut.reason, "set:scope: the reason").toBe("scope");
-      expect(scopedOut.message, "set:scope: the file is named").toMatch(
-        new RegExp(`${escaped(names.user)} was not changed\\.$`, "u"),
-      );
-      expect(scoped.files, "set:scope: no file changed").toEqual(world.files);
-      expect(scoped.stdout, "set:scope: nothing is printed").toBe("");
-      reach.mark("set:scope");
-
-      // A text the schema refuses fails before any file is touched, and the message does not hold it.
-      for (const [n, kind] of [
-        [0, "int"],
-        [2, "literal"],
-        [3, "pattern"],
-      ] as const) {
-        const e = row(n);
-        const text = REFUSED[kind] ?? "";
-        const file = e.spec.files[0];
-        const ran = yield* run(world, ["set", e.spec.name, text]);
-        const out = failure(ran);
-
-        expect(out.reason, `set:invalid ${kind}: the reason`).toBe("invalid");
-        expect(out.message, `set:invalid ${kind}: the closing`).toMatch(
-          new RegExp(`The ${file} configuration was not changed\\.$`, "u"),
+        expect(scopedOut.reason, "set:scope: the reason").toBe("scope");
+        expect(scopedOut.message, "set:scope: the file is named").toMatch(
+          new RegExp(`${escaped(names.user)} was not changed\\.$`, "u"),
         );
-        expect(out.message, `set:invalid ${kind}: names the setting`).toContain(e.spec.name);
-        expect(ran.files, `set:invalid ${kind}: no file changed`).toEqual(world.files);
-        expect(ran.stdout, `set:invalid ${kind}: nothing is printed`).toBe("");
-        reach.mark("set:invalid");
-      }
+        expect(scoped.files, "set:scope: no file changed").toEqual(world.files);
+        expect(scoped.stdout, "set:scope: nothing is printed").toBe("");
+        reach.mark("set:scope");
 
-      // A name that is no setting, for both writes: `unknown`, nothing changed.
-      const declared = s.entries.map((e) => e.spec.name);
-      const typed = oneEdit(declared[0] ?? "");
+        // A text the schema refuses fails before any file is touched, and the message does not hold it.
+        for (const [n, kind, flag] of [
+          [0, "int", undefined],
+          [0, "int", "user"],
+          [2, "literal", undefined],
+          [3, "pattern", undefined],
+        ] as const) {
+          const e = row(n);
+          const text = REFUSED[kind] ?? "";
+          const file = flag ?? e.spec.files[0];
+          const ran = yield* run(world, ["set", e.spec.name, text, ...(flag === undefined ? [] : ["--file", flag])]);
+          const out = failure(ran);
 
-      for (const sub of ["set", "remove"] as const) {
-        const ran = yield* run(world, sub === "set" ? ["set", typed, "1"] : ["remove", typed]);
-        const out = failure(ran);
+          expect(out.reason, `set:invalid ${kind}: the reason`).toBe("invalid");
+          // The file is named as the write would name it, and every other message of the run names it: `~/...` or `$<APP>_HOME/...`.
+          expect(out.file, `set:invalid ${kind}: the file`).toBe(names[file]);
+          expect(out.message, `set:invalid ${kind}: opens with the file`).toMatch(
+            new RegExp(`^${escaped(names[file])}: `, "u"),
+          );
+          expect(spannedNames(ran, "set"), `set:invalid ${kind}: a span`).not.toEqual([]);
+          expect(out.message, `set:invalid ${kind}: the closing`).toMatch(
+            new RegExp(`The ${file} configuration was not changed\\.$`, "u"),
+          );
+          expect(out.message, `set:invalid ${kind}: names the setting`).toContain(e.spec.name);
+          expect(ran.files, `set:invalid ${kind}: no file changed`).toEqual(world.files);
+          expect(ran.stdout, `set:invalid ${kind}: nothing is printed`).toBe("");
+          reach.mark("set:invalid");
+        }
 
-        expect(out.reason, `${sub}:unknown: the reason`).toBe("unknown");
-        expect(out.file, `${sub}:unknown: no file`).toBeUndefined();
-        expect(
-          unknownTexts(declared, typed).map((text) => `${text}\n  Nothing was changed.`),
-          `${sub}:unknown: the message`,
-        ).toContain(out.message);
-        expect(ran.files, `${sub}:unknown: no file changed`).toEqual(world.files);
-        reach.mark(`${sub}:unknown`);
-      }
+        // A name that is no setting, for both writes: `unknown`, nothing changed.
+        const declared = s.entries.map((e) => e.spec.name);
+        const typed = oneEdit(declared[0] ?? "");
 
-      /** One `remove`: the join's edit of the old text without the key. */
-      const removing = Effect.fnUntraced(function* (id: Written, e: Entry, file: "repo" | "user", flag: boolean) {
-        const ran = yield* run(world, ["remove", e.spec.name, ...(flag ? ["--file", file] : [])]);
-        const old = world.files[paths[file]] ?? "";
-        const expected = yield* SettingGroup.edit(oracle, old, file).remove(e.setting);
+        for (const sub of ["set", "remove"] as const) {
+          const ran = yield* run(world, sub === "set" ? ["set", typed, "1"] : ["remove", typed]);
+          const out = failure(ran);
 
-        ended(ran, id);
-        expect(ran.stdout, `${id}: nothing is printed`).toBe("");
-        expect(ran.files, `${id}: the file is the edit's, every other file as it was`).toEqual({
-          ...world.files,
-          [paths[file]]: expected,
+          expect(out.reason, `${sub}:unknown: the reason`).toBe("unknown");
+          expect(out.file, `${sub}:unknown: no file`).toBeUndefined();
+          expect(
+            unknownTexts(declared, typed).map((text) => `${text}\n  Nothing was changed.`),
+            `${sub}:unknown: the message`,
+          ).toContain(out.message);
+          expect(ran.files, `${sub}:unknown: no file changed`).toEqual(world.files);
+          expect(spannedNames(ran, sub), `${sub}:unknown: a span`).not.toEqual([]);
+          reach.mark(`${sub}:unknown`);
+        }
+
+        /** One `remove`: the join's edit of the old text without the key. */
+        const removing = Effect.fnUntraced(function* (id: Written, e: Entry, file: "repo" | "user", flag: boolean) {
+          const ran = yield* run(world, ["remove", e.spec.name, ...(flag ? ["--file", file] : [])]);
+          const old = world.files[paths[file]] ?? "";
+          const expected = yield* SettingGroup.edit(oracle, old, file).remove(e.setting);
+
+          ended(ran, id);
+          expect(ran.stdout, `${id}: nothing is printed`).toBe("");
+          expect(ran.files, `${id}: the file is the edit's, every other file as it was`).toEqual({
+            ...world.files,
+            [paths[file]]: expected,
+          });
+          spanned(ran, "remove", e.spec.name, id);
+          reach.mark(id);
         });
-        reach.mark(id);
-      });
 
-      yield* removing("remove:default", row(0), "repo", false);
-      yield* removing("remove:explicit", row(1), "user", true);
-      // A key the file lacks: nothing to take out, so the text is the same.
-      yield* removing("remove:absent", row(3), "repo", false);
+        yield* removing("remove:default", row(0), "repo", false);
+        yield* removing("remove:explicit", row(1), "user", true);
+        // A key the file lacks: nothing to take out, so the text is the same.
+        yield* removing("remove:absent", row(3), "repo", false);
 
-      if (window !== undefined) {
-        yield* removing("remove:window", window, "repo", false);
+        if (window !== undefined) {
+          yield* removing("remove:window", window, "repo", false);
+        }
+
+        const scopedRemove = yield* run(world, ["remove", outside.spec.name, "--file", "user"]);
+
+        expect(failure(scopedRemove).reason, "remove:scope: the reason").toBe("scope");
+        expect(failure(scopedRemove).message, "remove:scope: the file is named").toMatch(
+          new RegExp(`${escaped(names.user)} was not changed\\.$`, "u"),
+        );
+        expect(scopedRemove.files, "remove:scope: no file changed").toEqual(world.files);
+        reach.mark("remove:scope");
       }
-
-      const scopedRemove = yield* run(world, ["remove", outside.spec.name, "--file", "user"]);
-
-      expect(failure(scopedRemove).reason, "remove:scope: the reason").toBe("scope");
-      expect(scopedRemove.files, "remove:scope: no file changed").toEqual(world.files);
-      reach.mark("remove:scope");
 
       reach.done();
     }),
   check,
 );
+
+/** The names of the spans a `set` or a `remove` run left whose name opens `config.`; each is `config.<subcommand>`. */
+const spannedNames = (ran: Ran, sub: "set" | "remove") => {
+  const names = configSpans(ran).map((span) => span.name);
+
+  expect(
+    names.filter((name) => name !== `config.${sub}`),
+    `${sub}: no other span`,
+  ).toEqual([]);
+
+  return names;
+};
+
+/** A run of `set` or `remove` that went through leaves a span with the app, the setting and no value. */
+const spanned = (ran: Ran, sub: "set" | "remove", name: string, id: string) => {
+  expect(spannedNames(ran, sub), `${id}: a span`).not.toEqual([]);
+
+  for (const span of configSpans(ran)) {
+    expect(span.attributes.get("kalfa.config.setting"), `${id}: the setting`).toBe(name);
+  }
+};
 
 const escaped = (text: string) => text.replace(/[\\^$.*+?()[\]{}|]/gu, "\\$&");
 
@@ -864,7 +912,8 @@ it.effect.prop(
             spans.map((span) => span.name).filter((name) => name !== `config.${f.sub}`),
             `${f.id}: no other span`,
           ).toEqual([]);
-          expect(spans.length, `${f.id}: at most one span`).toBeLessThanOrEqual(1);
+          // Every run of `set` and `remove` leaves a span, a refusal before the disk call included.
+          expect(spans.length, `${f.id}: a span`).toBeGreaterThanOrEqual(1);
         } else {
           expect(
             spans.map((span) => span.name),
@@ -1040,6 +1089,57 @@ it.effect.prop(
       expect(absent.stdout, "missing: no other folder's file is read").toBe(listing(bare));
       clean("missing", absent, s.repoText);
       reach.mark("missing");
+
+      reach.done();
+    }),
+  check,
+);
+
+// ---------------------------------------------------------------------------------------------
+// C12, a fault in the environment ends as the run says
+// ---------------------------------------------------------------------------------------------
+
+type Ended = "list" | "get" | "set" | "remove";
+
+// The user configuration is found from the environment, and a fault there ends with the run's own closing sentence: a read
+// says `<app> would not start with these settings.`, a write `The <file> configuration was not changed.`
+// Plants: delete the `closing` of the user file's place in `load` (internal/start.ts): a read ends `<app> did not start.`,
+// red; delete it in the disk call's place: a write ends with the same, red.
+it.effect.prop(
+  "C12 a fault in the environment ends as the run says: when the environment cannot be read, `list` and `get` fail `read` naming `<APP>_HOME` and ending `<app> would not start with these settings.`, and `set` and `remove` end `The <file> configuration was not changed.`, with nothing printed or changed",
+  { draw: CliDraw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const reach = new Reach<Ended>(["list", "get", "set", "remove"]);
+      const s = writable(draw);
+      const world = { ...worldFrom(s, ROOT), unreadable: true };
+      const home = `${s.app.toUpperCase()}_HOME`;
+      const name = s.entries[0]?.spec.name ?? "";
+      const row = (n: number) => joinedGroup(s).settings[n]?.name ?? "";
+
+      const cases: ReadonlyArray<readonly [Ended, ReadonlyArray<string>, string]> = [
+        ["list", ["list"], `${s.app} would not start with these settings.`],
+        ["get", ["get", name], `${s.app} would not start with these settings.`],
+        ["set", ["set", row(0), "4200"], "The repo configuration was not changed."],
+        ["set", ["set", row(0), "4200", "--file", "user"], "The user configuration was not changed."],
+        ["remove", ["remove", row(1)], "The user configuration was not changed."],
+        ["remove", ["remove", row(0), "--file", "repo"], "The repo configuration was not changed."],
+      ];
+
+      for (const [id, args, closing] of cases) {
+        const ran = yield* run(world, args);
+        const out = failure(ran);
+
+        expect(out.reason, `${args.join(" ")}: the reason`).toBe("read");
+        expect(
+          out.message.startsWith(`${home} could not be read.`),
+          `${args.join(" ")}: names ${home}: ${out.message}`,
+        ).toBe(true);
+        expect(out.message.endsWith(closing), `${args.join(" ")}: ends ${closing}: ${out.message}`).toBe(true);
+        expect(ran.stdout, `${args.join(" ")}: nothing is printed`).toBe("");
+        expect(ran.files, `${args.join(" ")}: no file changed`).toEqual(world.files);
+        reach.mark(id);
+      }
 
       reach.done();
     }),

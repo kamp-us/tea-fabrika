@@ -39,7 +39,7 @@ import { config } from "./Cli.ts";
 import { Setting, SettingGroup } from "./index.ts";
 import { debounce } from "./internal/window.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
-import { answer } from "./SettingGroup.disk.test-support.ts";
+import { answer, readRefused } from "./SettingGroup.disk.test-support.ts";
 import { Reach } from "./SettingGroup.edit.test-support.ts";
 import { BREAKS, describe, TEXTS } from "./SettingGroup.text.test-support.ts";
 
@@ -599,6 +599,10 @@ export interface World {
   readonly repo: string;
   readonly env: Readonly<Record<string, string>>;
   readonly files: Readonly<Record<string, string>>;
+  /** Calls of the file system that fail with the error planted there. */
+  readonly faults?: ReadonlyArray<MemoryFiles.Fault>;
+  /** The environment cannot be read: its provider fails, as a source that is down does. */
+  readonly unreadable?: boolean;
 }
 
 /** What a scene stands on: the repo folder, the files at the paths the start finds them at, and the environment. */
@@ -637,7 +641,7 @@ const terminal = Terminal.make({
 
 /** Runs `config <args>` on the world, through `Command.runWith`, on a disk in memory with every call recorded. */
 export const run = (world: World, args: ReadonlyArray<string>) => {
-  const disk = MemoryFiles.writable({ files: world.files });
+  const disk = MemoryFiles.writable({ files: world.files, faults: world.faults ?? [] });
   const spans: Array<Tracer.NativeSpan> = [];
   const logs: Array<string> = [];
 
@@ -678,7 +682,11 @@ export const run = (world: World, args: ReadonlyArray<string>) => {
       Layer.mergeAll(
         Recorder.layer(FileSystem.FileSystem, disk.fileSystem),
         Path.layer,
-        ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...world.env } })),
+        ConfigProvider.layer(
+          world.unreadable === true
+            ? ConfigProvider.make(() => Effect.fail(new ConfigProvider.SourceError({ message: "refused" })))
+            : ConfigProvider.fromEnv({ env: { ...world.env } }),
+        ),
         Stdio.layerTest({}),
         Layer.succeed(Terminal.Terminal, terminal),
         Layer.succeed(
@@ -709,6 +717,13 @@ export const failure = (ran: Ran) => {
 };
 
 /** The spans a run ended whose name opens `config.`. */
+/** The faults a read of either configuration file would meet: each call that finds or reads one fails. */
+export const readFaults = (s: Scene, repo: string): ReadonlyArray<MemoryFiles.Fault> =>
+  [repoPath(s, repo), userPath(s)].map((path) => ({
+    ...readRefused(path, "PermissionDenied"),
+    method: ["exists", "readFile", "readFileString"],
+  }));
+
 export const configSpans = (ran: Ran) => ran.spans.filter((span) => span.name.startsWith("config."));
 
 /** What a failed run can print: the cause as pretty-printed, and each error's message, cause and every property. */
@@ -1079,7 +1094,7 @@ export const quiet = (draw: CliDraw): Scene =>
   );
 
 /** The setting rows `set` and `remove` are tried on: each scope, a file-only setting and a live one, in two groups. */
-export const writable = (draw: CliDraw): Scene =>
+export const writable = (draw: CliDraw, user: "home" | "app-home" = "home"): Scene =>
   scene(
     draw,
     [
@@ -1094,6 +1109,7 @@ export const writable = (draw: CliDraw): Scene =>
       [0, 1, 2],
       [3, 4, 5],
     ],
+    { user },
   );
 
 /** A value text for a setting of a kind, and the value it reads as: what a variable of that text would give. */
