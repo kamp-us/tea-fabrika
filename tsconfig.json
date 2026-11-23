@@ -1,4 +1,5 @@
 {
+  // survey
   // The workspace root. Each package checks its own types (`pnpm typecheck`
   // runs them all); this file is for editors and for the tools that read the
   // whole repo (structure-sweep, code-graph).
