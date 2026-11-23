@@ -5,7 +5,7 @@ import { type Detail, type Patch, type PullRequest, PullRequests, PullRequestsEr
 
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
-  draft: { branch: Schema.String, title: Schema.String },
+  draft: { branch: Schema.String, title: Schema.String, body: Schema.String },
   edit: { number: Schema.Finite, title: Schema.String, body: Schema.String },
   ready: { number: Schema.Finite },
   enqueue: { number: Schema.Finite, oid: Schema.String },
@@ -63,7 +63,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
         Effect.map(fails("draft"), () => {
           const number = Math.max(0, ...Arr.map(w.prs, (pr) => pr.number)) + 1;
           w.prs.push({ number, head: branch, oid: "", state: "OPEN", draft: true });
-          w.calls.push(Call.cases.draft.make({ branch, title: text.title }));
+          w.calls.push(Call.cases.draft.make({ branch, title: text.title, body: text.body }));
 
           return number;
         }),
