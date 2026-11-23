@@ -24,6 +24,7 @@ const EXPORTS = [
   "./CommitId",
   "./Ref",
   "./Commit",
+  "./Tree",
   "./Settings",
   "./Repository",
   "./memory",

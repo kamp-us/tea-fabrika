@@ -1,5 +1,5 @@
-// The laws of the values (G1 to G5): a commit id, a ref name, a branch name, a commit and its signatures,
-// and the settings. Every class a generator must reach is applied to each run's drawn value, and the law
+// The laws of the values (G1 to G7): a commit id, a ref name, a branch name, a commit and its signatures,
+// the settings, a path in a tree, and a tree id, a blob id and a file mode. Every class a generator must reach is applied to each run's drawn value, and the law
 // names the classes it needs, so a class dropped from a generator fails here loudly.
 import { expect, it } from "@effect/vitest";
 import { Option, Result, Schema } from "effect";
@@ -7,6 +7,14 @@ import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
 import checkRefFormat from "./fixtures/check-ref-format-2.40.1.json" with { type: "json" };
 import {
+  DOT_GIT_FORMS,
+  MODE_ACCEPT,
+  MODE_REFUSALS,
+  NEAR_DOT_GIT,
+  PROTOTYPE_NAMES,
+  pathAccepted,
+  pathArb,
+  pathRefused,
   branchAccepted,
   branchRefused,
   commitIdArb,
@@ -29,6 +37,7 @@ import {
 import * as Ref from "./Ref.ts";
 import { expectFailure } from "./Repository.test-support.ts";
 import * as Settings from "./Settings.ts";
+import * as Tree from "./Tree.ts";
 
 const RUNS = { arbitrary: { runs: 200, seed: 119120 } };
 
@@ -235,11 +244,11 @@ it.prop(
 );
 
 // Plant: trim the message; store the offset as a number of minutes, so `-0000` comes back `+0000`; refuse an
-// empty name or email; refuse a space at either end of a name.
+// empty name or email; refuse a space at either end of a name; leave `tree` out of the value, so it does not come back.
 it.prop(
   "G4 a commit's values: Commit and Signature round-trip every class and refuse what git's format cannot hold",
-  { base: flatSignatureArb, word: wordArb, id: commitIdArb, parent: commitIdArb },
-  ({ base, word, id, parent }) => {
+  { base: flatSignatureArb, word: wordArb, id: commitIdArb, parent: commitIdArb, tree: commitIdArb },
+  ({ base, word, id, parent, tree }) => {
     const messages = messageVariants(word);
     const signatures = signatureVariants(base);
     expect(
@@ -253,6 +262,7 @@ it.prop(
 
     const plainCommit = (over: Partial<typeof Commit.Commit.Encoded>): typeof Commit.Commit.Encoded => ({
       id,
+      tree,
       parents: [parent, id],
       author: toPlain(base),
       committer: toPlain(base),
@@ -344,4 +354,241 @@ it.prop(
     expect(Result.isFailure(decoded({ limits: {} })), "{ limits: {} } has no default").toBe(true);
   },
   { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+const NOT_DOT_GIT = [
+  "an empty part: the empty text",
+  "an empty part: a leading slash",
+  "an empty part: a trailing slash",
+  "an empty part: two slashes inside",
+  "a part .: alone",
+  "a part .: first",
+  "a part .: inside",
+  "a part .: last",
+  "a part ..: alone",
+  "a part ..: first",
+  "a part ..: inside",
+  "a part ..: last",
+  "a NUL: inside a part",
+  "a NUL: alone as a part",
+  "a NUL: first in a part",
+  "a NUL: last in a path",
+  "a lone surrogate: a high one inside",
+  "a lone surrogate: a low one inside",
+  "a lone surrogate: one at the end",
+];
+
+// Every part git's own check calls `.git` (`git fsck --strict` on git 2.40.1 answered `hasDotgit` for each one).
+const DOT_GIT_PARTS = [
+  ".git",
+  ".GIT",
+  ".Git",
+  ".git ",
+  ".git  ",
+  ".git.",
+  ".GIT. ",
+  ".git .",
+  "git~1",
+  "GIT~1",
+  "git~1 ",
+  "git~1.",
+  ".git:x",
+  ".git:",
+  ".g\u200Cit",
+  ".g\u200Fit",
+  ".g\u202Ait",
+  ".g\u202Eit",
+  ".g\u206Ait",
+  ".g\u206Fit",
+  ".g\uFEFFit",
+  ".git\u200C",
+  "\u200C.git",
+  ".git\uFEFF",
+  "\uFEFF.git",
+];
+
+// Parts the same run showed git accepts, next to the ones above.
+const NEAR_PARTS = [
+  ".gitx",
+  "git",
+  "..a",
+  "a.",
+  ".git2",
+  "git~2",
+  "git~10",
+  ".g\u200Bit",
+  ".g\u2010it",
+  ".g\u2029it",
+  ".g\u202Fit",
+  ".g\u2069it",
+  ".g\u2070it",
+  ".g\uFEFEit",
+];
+
+const ACCEPTED_FIRST = [
+  "plain",
+  "a character past U+024F inside the Basic Multilingual Plane",
+  "a character outside the Basic Multilingual Plane",
+  "a character from U+E000 to U+FFFF",
+  "a space",
+  "a line break",
+  "a tab and a carriage return",
+  "a backslash",
+  "a leading dash",
+  "a leading quote",
+  "a part of 300 bytes",
+  "forty folders deep",
+];
+
+const decodePath = Schema.decodeUnknownResult(Tree.Path);
+
+// Plant, one per class, each a wrong rule in Tree.ts: delete the empty-part rule; delete the `.` and `..` rule; delete
+// the `.git` rule; compare `.git` case by case, so `.GIT` passes; keep the rule for `.git` and drop each other form's
+// check in turn (a trailing space or dot, `git~1`, a stream name after a colon, each of the seven characters git's HFS
+// check ignores, one before, inside and after); delete the NUL rule; delete the surrogate check; refuse characters past
+// U+024F; refuse a part that starts with `.`, so `.gitx` is refused; refuse a part that starts with `_`.
+it.prop(
+  "G6 paths: Path accepts what git's tree can hold and refuses an empty part, `.`, `..`, every form of `.git`, a NUL and a lone surrogate",
+  { path: pathArb },
+  ({ path }) => {
+    expect(
+      DOT_GIT_FORMS.map(([, part]) => part),
+      "the generator reaches every form of .git",
+    ).toEqual(DOT_GIT_PARTS);
+    expect(
+      NEAR_DOT_GIT.map(([, part]) => part),
+      "the generator reaches every part next to .git",
+    ).toEqual(NEAR_PARTS);
+    expect(PROTOTYPE_NAMES, "the names on the object prototype").toEqual([
+      "__proto__",
+      "constructor",
+      "hasOwnProperty",
+      "toString",
+    ]);
+
+    const accepted = pathAccepted(path);
+    const refused = pathRefused(path);
+
+    expect(
+      accepted.slice(0, ACCEPTED_FIRST.length).map(([label]) => label),
+      "the generator reaches every accepted class",
+    ).toEqual(ACCEPTED_FIRST);
+    expect(
+      accepted.map(([, text]) => text),
+      "the near parts and the prototype names are accepted at the top",
+    ).toEqual(expect.arrayContaining([...NEAR_PARTS, ...PROTOTYPE_NAMES]));
+    expect(
+      refused.filter(([label]) => !label.startsWith(".git form")).map(([label]) => label),
+      "the generator reaches every refused class",
+    ).toEqual(NOT_DOT_GIT);
+    expect(refused.length, "each form of .git at the top, as a folder and three folders deep").toBe(
+      NOT_DOT_GIT.length + DOT_GIT_PARTS.length * 3,
+    );
+
+    for (const [label, text] of accepted) {
+      const result = decodePath(text);
+      expect(Result.isSuccess(result), `${label} is accepted: ${JSON.stringify(text)}`).toBe(true);
+
+      if (Result.isSuccess(result)) {
+        expect(result.success, `${label} is kept as it was`).toBe(text);
+      }
+    }
+
+    for (const [label, text] of refused) {
+      expect(Result.isFailure(decodePath(text)), `${label} is refused: ${JSON.stringify(text)}`).toBe(true);
+    }
+  },
+  RUNS,
+);
+
+// Plant: drop the pattern from `BlobId` and keep its brand; drop it from `TreeId`; accept `644`; accept `160000`; type
+// `Commit.tree` as a plain string.
+it.prop(
+  "G7 ids, modes and a commit's tree: TreeId and BlobId accept 40 lowercase hex and refuse each wrong form; Mode and Entry accept the three file kinds only; a commit's tree is a TreeId",
+  { id: commitIdArb, tree: commitIdArb, base: flatSignatureArb, word: wordArb },
+  ({ id, tree, base, word }) => {
+    const refusals = idRefusals(id);
+    expect(
+      refusals.map(([label]) => label),
+      "the generator reaches every refused form",
+    ).toEqual(ID_REFUSE_CLASSES);
+
+    const ids: ReadonlyArray<readonly [string, (text: string) => Result.Result<unknown, unknown>]> = [
+      ["TreeId", Schema.decodeUnknownResult(Tree.TreeId)],
+      ["BlobId", Schema.decodeUnknownResult(Tree.BlobId)],
+    ];
+
+    for (const [name, decode] of ids) {
+      const good = decode(id);
+      expect(Result.isSuccess(good), `${name} accepts lowercase hex`).toBe(true);
+
+      if (Result.isSuccess(good)) {
+        expect(good.success, `${name} keeps the text`).toBe(id);
+      }
+
+      for (const [label, text] of refusals) {
+        expect(Result.isFailure(decode(text)), `${name} refuses ${label}`).toBe(true);
+      }
+    }
+
+    expect(MODE_ACCEPT, "the accepted file kinds").toEqual(["100644", "100755", "120000"]);
+    expect(MODE_REFUSALS.map(([label]) => label)).toEqual([
+      "a submodule",
+      "a folder with a leading zero",
+      "a folder",
+      "a mode with three digits",
+      "a mode git does not write",
+      "the empty text",
+    ]);
+
+    for (const mode of MODE_ACCEPT) {
+      expect(Schema.decodeUnknownSync(Tree.Mode)(mode), `${mode} is a mode`).toBe(mode);
+      const entry = Schema.decodeUnknownSync(Tree.Entry)({ mode, blob: id });
+      expect(Schema.encodeSync(Tree.Entry)(entry), `${mode} with its blob comes back`).toEqual({ mode, blob: id });
+    }
+
+    for (const [label, mode] of MODE_REFUSALS) {
+      expect(Result.isFailure(Schema.decodeUnknownResult(Tree.Mode)(mode)), `${label} is no mode`).toBe(true);
+      expect(Result.isFailure(Schema.decodeUnknownResult(Tree.Entry)({ mode, blob: id })), `${label} is no entry`).toBe(
+        true,
+      );
+    }
+
+    for (const [label, text] of refusals) {
+      expect(
+        Result.isFailure(Schema.decodeUnknownResult(Tree.Entry)({ mode: "100644", blob: text })),
+        `an entry refuses a blob id with ${label}`,
+      ).toBe(true);
+    }
+
+    const plain = {
+      id,
+      tree,
+      parents: [],
+      author: toPlain(base),
+      committer: toPlain(base),
+      message: word,
+    };
+
+    const kept = Schema.decodeUnknownResult(Commit.Commit)(plain);
+    expect(Result.isSuccess(kept), "a commit with a tree decodes").toBe(true);
+
+    if (Result.isSuccess(kept)) {
+      expect(kept.success.tree, "the tree is kept").toBe(tree);
+    }
+
+    const { tree: _gone, ...without } = plain;
+    expect(
+      Result.isFailure(Schema.decodeUnknownResult(Commit.Commit)(without)),
+      "a commit with no tree is refused",
+    ).toBe(true);
+
+    for (const [label, text] of refusals) {
+      expect(
+        Result.isFailure(Schema.decodeUnknownResult(Commit.Commit)({ ...plain, tree: text })),
+        `a commit whose tree is ${label} is refused`,
+      ).toBe(true);
+    }
+  },
+  RUNS,
 );

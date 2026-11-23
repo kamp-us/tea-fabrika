@@ -2,6 +2,7 @@
 import { expectTypeOf, it } from "@effect/vitest";
 import type * as CommitId from "./CommitId.ts";
 import type * as Ref from "./Ref.ts";
+import type * as Tree from "./Tree.ts";
 
 // Plant: drop the brand on `BranchName`, so the `@ts-expect-error` lines below go unused.
 const brands = (text: string, id: CommitId.CommitId, ref: Ref.RefName, branch: Ref.BranchName) => {
@@ -29,4 +30,51 @@ const brands = (text: string, id: CommitId.CommitId, ref: Ref.RefName, branch: R
 it("type: a plain string is not a CommitId, a RefName or a BranchName, and a BranchName is not a RefName", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(brands).toBeFunction();
+});
+
+// Plant: give `BlobId` the brand `@kalfa/git/TreeId`, so the `@ts-expect-error` lines below go unused.
+const treeBrands = (text: string, tree: Tree.TreeId, blob: Tree.BlobId, commit: CommitId.CommitId, path: Tree.Path) => {
+  // @ts-expect-error A plain string is not a tree id.
+  const treeFromText: Tree.TreeId = text;
+  // @ts-expect-error A plain string is not a blob id.
+  const blobFromText: Tree.BlobId = text;
+  // @ts-expect-error A plain string is not a path.
+  const pathFromText: Tree.Path = text;
+  // @ts-expect-error A blob id is not a tree id.
+  const treeFromBlob: Tree.TreeId = blob;
+  // @ts-expect-error A tree id is not a blob id.
+  const blobFromTree: Tree.BlobId = tree;
+  // @ts-expect-error A commit id is not a tree id.
+  const treeFromCommit: Tree.TreeId = commit;
+  // @ts-expect-error A tree id is not a commit id.
+  const commitFromTree: CommitId.CommitId = tree;
+  // @ts-expect-error A blob id is not a commit id.
+  const commitFromBlob: CommitId.CommitId = blob;
+  // @ts-expect-error A path is not a tree id.
+  const treeFromPath: Tree.TreeId = path;
+  // @ts-expect-error A tree id is not a path.
+  const pathFromTree: Tree.Path = tree;
+  expectTypeOf<Tree.TreeId>().toExtend<string>();
+  expectTypeOf<Tree.BlobId>().toExtend<string>();
+  expectTypeOf<Tree.Path>().toExtend<string>();
+  expectTypeOf<Tree.TreeId>().not.toEqualTypeOf<Tree.BlobId>();
+  expectTypeOf<Tree.TreeId>().not.toEqualTypeOf<CommitId.CommitId>();
+
+  return [
+    treeFromText,
+    blobFromText,
+    pathFromText,
+    treeFromBlob,
+    blobFromTree,
+    treeFromCommit,
+    commitFromTree,
+    commitFromBlob,
+    treeFromPath,
+    pathFromTree,
+  ];
+};
+
+it("type: a plain string is no TreeId, BlobId or Path, and a TreeId, a BlobId and a CommitId are none of each other", () => {
+  // These compile-time laws need tsc, which the lead runs after build.
+  expectTypeOf(treeBrands).toBeFunction();
 });
