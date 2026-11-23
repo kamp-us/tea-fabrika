@@ -500,9 +500,11 @@ visible, and never weaken the rules to hide this message.
    law. Launchd, real Electron and process-signal laws use eligible disposable CI, never the owner's
    laptop. A workflow's green result
    proves only the laws it actually ran. A proof run you start runs the `.integration.` laws its
-   change reaches, so an adapter's real-binary laws run before merge; pull requests and the merge
-   queue run none. Start one with `gh workflow run scheduled.yaml --ref <branch>`, on a branch that
-   has main's `.github/ci/proof.ts`; a rerun trigger in the change runs the full set.
+   changed set reaches, so an adapter's real-binary laws run before merge; a full set and pull
+   requests and the merge queue run none. To run named ones alone, on one leg and one slot, about
+   3 runner minutes: `gh workflow run scheduled.yaml --ref <branch> -f integration=<path>`, more
+   paths split by spaces, each an `.integration.test.ts` file the branch has (`.github/ci/proof.ts`
+   refuses any other). The branch needs main's `.github/ci/proof.ts` and `scheduled.yaml`.
    Keep the test's own temp home, label, files and processes;
    one Electron app at a time, each with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`.
    No focus taken and nothing left behind. Look at every screenshot.

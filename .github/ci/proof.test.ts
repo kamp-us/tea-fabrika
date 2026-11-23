@@ -9,7 +9,10 @@ import { readers } from "./changes.mjs";
 import { E2E_SETUP, room } from "./legs.ts";
 import {
   choose,
+  FULL_PROJECTS,
+  inIntegration,
   inProjects,
+  integrationOf,
   type Inputs,
   inputsOf,
   isTrigger,
@@ -616,7 +619,7 @@ it.prop(
 
     reachedP10.add(`${listsIt ? "listed" : "unlisted"}${longer.length > 0 ? " with a longer path" : ""}`);
     expect(held).toBe(listsIt);
-    expect(listed).toEqual([[...PROJECTS.flatMap((project) => ["--project", project]), wanted]]);
+    expect(listed).toEqual([[...FULL_PROJECTS.flatMap((project) => ["--project", project]), wanted]]);
   },
   lawOptions,
 );
@@ -762,14 +765,166 @@ it.prop(
   propertyOptions,
 );
 
-// The full set runs main's projects on a branch too (scheduled.yaml's `tests` legs, SC7 and SC8), so
-// its summary says the `.integration.` laws are in it. Plant, run once on proof.ts and restored: the
-// summary says the full set leaves them out again (red: the text names them as left out).
-it("pinned: a full set's summary says it runs the .integration. laws too, for a trigger and for a hand start", () => {
-  for (const inputs of [changedInputs, { _tag: "full", law: KALFA_REAL } as const]) {
-    const said = summary(choose(seen(["pnpm-lock.yaml"], inputs), ["pnpm-lock.yaml"], [], real));
+// scenario: a branch's full set runs no integration project (the 2026-11-18 rule stands for it), so
+// a full start's `law` is a test file of the full set's projects, and the reached call of a changed
+// set is the only one that names the integration projects. Plant, run once on proof.ts and restored:
+// `FULL_PROJECTS` takes next-integration (red: it holds an integration project).
+it("pinned: a full set's projects, and so a law's, are next, next-visual and tooling, no integration project", () => {
+  expect([...FULL_PROJECTS]).toEqual(["next", "next-visual", "tooling"]);
+  expect(PROJECTS.filter((project) => !FULL_PROJECTS.includes(project as never))).toEqual([
+    "next-integration",
+    "tooling-integration",
+  ]);
+});
 
-    expect(said, inputs._tag).toContain("the `.integration.` laws included");
-    expect(said, inputs._tag).not.toContain("but the `.integration.` laws");
-  }
+// The hand start's `integration` input (the owner decided on 2026-11-22): the `.integration.` test
+// files a lead names, one or more, split on whitespace. Real files of both integration projects.
+const NAMED = [KALFA_REAL, ...TOOLING_REAL];
+
+const integrationProjects = ["--project", "next-integration", "--project", "tooling-integration"];
+
+// A path the input may hold: a real integration file, a near miss of the name, a flag, or any text.
+const Given = Schema.Union([
+  Schema.Literals(NAMED),
+  Schema.Literals([
+    "kalfa/git/src/ProcessRepository.test.ts",
+    "kalfa/git/src/ProcessRepository.integration.ts",
+    "next/a/b.visual.test.ts",
+    "--project=today",
+    "-t",
+    "kalfa/git/src/Gone.integration.test.ts",
+  ]),
+  Schema.String.check(Schema.isPattern(/^\S{1,20}$/)),
+]);
+
+const reachedI1 = new Set<string>();
+
+reachesAll(reachedI1, [
+  "empty",
+  "named",
+  "refused by name",
+  "refused by list",
+  "refused as a repeat",
+  "refused for full",
+]);
+
+// scenario: the review of this change asked for one leg of named integration files, refused for a
+// file that is not a real `.integration.test.ts` file of the branch. Plants, each run once on
+// proof.ts and restored: the name check dropped (red: `kalfa/git/src/ProcessRepository.test.ts`
+// passes); the list check dropped (red: `Gone.integration.test.ts` passes); a full start keeps the
+// input (red: full with files decodes).
+it.prop(
+  "property: integrationOf keeps the inputs for an empty input, names the files for a real list of integration files, and refuses a bad name, an unlisted file, a repeat or a full start",
+  {
+    paths: Schema.Array(Given).check(Schema.isMaxLength(4)),
+    gaps: Schema.Literals([" ", "\n", "  ", " \t"]),
+    full: Schema.Boolean,
+    edge: Schema.Literals(["", " ", "\n"]),
+  },
+  ({ paths, gaps, full, edge }) => {
+    const inputs: Inputs = full ? { _tag: "full", law: LAWS[0]! } : changedInputs;
+    const given = `${edge}${paths.join(gaps)}${edge}`;
+    const calls: string[][] = [];
+
+    // The lister gives every integration file the branch has: the named ones.
+    const lister = (args: readonly string[]) => {
+      calls.push([...args]);
+
+      return NAMED.filter((path) => args.includes(path));
+    };
+
+    const named = /^[^\s-]\S*\.integration\.test\.tsx?$/;
+
+    const expected =
+      paths.length === 0
+        ? "empty"
+        : new Set(paths).size !== paths.length
+          ? "refused as a repeat"
+          : !paths.every((path) => named.test(path))
+            ? "refused by name"
+            : full
+              ? "refused for full"
+              : !paths.every((path) => NAMED.includes(path))
+                ? "refused by list"
+                : "named";
+
+    reachedI1.add(expected);
+
+    // A refusal's own words begin `proof: INTEGRATION `, so every refusal reads as one word here.
+    const outcome = Result.match(
+      Result.try(() => integrationOf(inputs, given, inIntegration(lister))),
+      {
+        onSuccess: (decoded): unknown => decoded,
+        onFailure: (error) => (/^Error: proof: INTEGRATION /.test(String(error)) ? "refused" : String(error)),
+      },
+    );
+
+    // What each case gives, and the `vitest list` calls it makes: a name, a repeat or a full start is
+    // refused before any list, so no path reaches it as a flag; an unlisted file is refused after one.
+    const listedOnce = [[...integrationProjects, ...paths]];
+
+    const wanted: Record<typeof expected, { outcome: unknown; calls: string[][] }> = {
+      empty: { outcome: inputs, calls: [] },
+      named: { outcome: { _tag: "integration", files: paths }, calls: listedOnce },
+      "refused by list": { outcome: "refused", calls: listedOnce },
+      "refused by name": { outcome: "refused", calls: [] },
+      "refused as a repeat": { outcome: "refused", calls: [] },
+      "refused for full": { outcome: "refused", calls: [] },
+    };
+
+    expect({ outcome, calls }).toEqual(wanted[expected]);
+  },
+  lawOptions,
+);
+
+// One leg, one slot: a named start runs exactly its files on leg `1`, whatever the change touches,
+// a rerun trigger included, and whatever Vitest would list. Plants, each run once on proof.ts and
+// restored: `choose` checks the triggers first (red: a trigger makes it the full set); `choose`
+// adds the listed files (red: the leg holds more than the named ones).
+it.prop(
+  "property: a named start runs only its integration files, on one leg, whatever the change touches and the lists give",
+  {
+    files: Schema.Array(Schema.Literals(NAMED)).check(Schema.isMinLength(1), Schema.isUnique()),
+    changes: Changes,
+    listed: Listed,
+  },
+  ({ files, changes, listed }) => {
+    const changed = [...changes.plain, ...changes.triggers];
+    const inputs: Inputs = { _tag: "integration", files };
+    const proof = choose(seen(changed, inputs), triggered(changed, isTrigger), listed, real);
+
+    expect(proof._tag).toBe("integration");
+    expect(proof._tag === "integration" ? proof.legs : {}).toEqual({ "1": files });
+    expect(proof.inputs).toEqual(inputs);
+    expect(proof.changed).toEqual(changed);
+
+    // The workflow's `changed` job runs it: scope changed, one leg, its files as one line.
+    const lines = outputs(proof, 8, real.most);
+    expect(lines.slice(0, 3)).toEqual([
+      "scope=changed",
+      'legs=["1"]',
+      `files=${JSON.stringify({ "1": files.join(" ") })}`,
+    ]);
+
+    // The summary names each file and says it is the hand start's list.
+    const said = summary(proof);
+    expect(said).toContain("`integration`");
+
+    for (const path of files) {
+      expect(said).toContain(`- \`${path}\``);
+    }
+  },
+  lawOptions,
+);
+
+// The real select step reads the input as INTEGRATION, and the changed legs, which run a named
+// start's one leg, name both integration projects. Plant, run once on scheduled.yaml and restored:
+// the set step's INTEGRATION removed (red: undefined).
+it("pinned: the select step reads the integration input as INTEGRATION, and the changed legs can run what it names", () => {
+  const set = workflow.jobs["select"]!.steps.find((s) => s["id"] === "set")! as { env: Record<string, unknown> };
+  expect(String(set.env["INTEGRATION"]).replace(/\s/g, "")).toBe(`\${{inputs.integration}}`);
+
+  const command = String(workflow.jobs["changed"]!.steps.find((s) => s["name"] === "vitest")!["run"]);
+  expect(command).toContain("--project next-integration ");
+  expect(command).toContain("--project tooling-integration ");
 });

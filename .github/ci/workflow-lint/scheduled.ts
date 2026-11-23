@@ -191,7 +191,7 @@ const RECORD = `\${{ runner.temp }}/proof-set.json`;
 // default, which only select's set step reads, as `SCOPE` and `LAW` (SC17, SC21). The default is
 // The proof-run rule's ruling, not a free setting (a choice that makes sense as a setting is a setting, declared once): a default of `full` would make every hand start the full
 // set, so the lint holds it the way SC16 holds the gap's floor.
-const SELECT_READS = { SCOPE: "inputs.scope", LAW: "inputs.law" };
+const SELECT_READS = { SCOPE: "inputs.scope", LAW: "inputs.law", INTEGRATION: "inputs.integration" };
 
 // Whether `value` is exactly the `${{ }}` expression `read`, its spacing free. A bare `inputs.scope` is
 // text the step would get as words, not a read of the input.
@@ -249,25 +249,29 @@ const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions 
 
 // Every layer of next/ (a test that needs a real resource runs only in main's full run): the vitest legs run the in-memory and the real-resource projects, and
 // the e2e legs the visual one. A project, not a path, picks the files: `next/` as a path would start
-// `next-visual` on legs with no Chromium, and a project ignores `--exclude`. The vitest legs run the
-// in-memory and the real-resource projects on main and on a branch's full set alike: the owner
-// decided on 2026-11-22 that a proof run the lead starts runs the integration laws its change
-// reaches, and a full set is reached whole.
-const WHOLE_NEXT = `pnpm exec vitest run --project next --project next-integration --shard "$SHARD" ${REPORTERS}`;
+// `next-visual` on legs with no Chromium, and a project ignores `--exclude`. The vitest legs read
+// their projects from the ref (NEXT_PROJECTS): main's full run never drops a real-resource law, and
+// a branch's full set, a proof run, starts none (integration laws run only in main's full run).
+const WHOLE_NEXT = `pnpm exec vitest run $PROJECTS --shard "$SHARD" ${REPORTERS}`;
+
+const NEXT_PROJECTS = `\${{ ${ON_MAIN} && '--project next --project next-integration' || '--project next' }}`;
 
 const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
 
 // Today's version is frozen (today's version is frozen and takes no new work; CI runs none of today's version's tests), so the schedule's vitest call of the tooling tests runs the
 // tooling projects alone: next/ and the three trees of today's tests are projects of their own, and
 // a project ignores `--exclude` (vitest.config.ts; merge-line.test.ts holds the tooling projects'
-// globs). The tooling legs run `tooling` and `tooling-integration`, the tooling laws that start a
-// process (a test's kind follows what it uses, never its name), on main and on a branch's full set
-// alike, as the vitest legs do.
-const WHOLE_TOOLING = `pnpm exec vitest run --project tooling --project tooling-integration --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+// globs). The tooling legs read their projects from the ref (TOOLING_PROJECTS), as the vitest legs
+// do: main's full run runs `tooling` and `tooling-integration`, the tooling laws that start a
+// process (a test's kind follows what it uses, never its name), and a branch's full set, a proof run, runs `tooling` alone (integration laws run only in main's full run).
+const WHOLE_TOOLING = `pnpm exec vitest run $PROJECTS --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+
+const TOOLING_PROJECTS = `\${{ ${ON_MAIN} && '--project tooling --project tooling-integration' || '--project tooling' }}`;
 
 // A changed leg's one command: its own list, `$FILES` from `select`, over every project proof.ts
-// lists, the two integration projects included (the owner decided on 2026-11-22): today's left out
-// (CI runs none of today's version's tests). No `--changed` and no `--shard`: the list is the leg.
+// lists, the two integration projects included (the owner decided on 2026-11-22: a proof run the
+// lead starts runs the integration laws its changed set reaches, or the ones it names), and today's
+// left out (CI runs none of today's version's tests). No `--changed` and no `--shard`: the list is the leg.
 const CHANGED_RUN = `pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling --project tooling-integration $FILES ${REPORTERS}`;
 
 // The schedule's test depth (pull request 1274): its laws run their full case count.
@@ -426,18 +430,19 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
 };
 
 /**
- * SC21. The hand start's two inputs, and who reads them (a branch's proof run runs only the tests its change reaches, ticket 1161). On main `select` never
+ * SC21. The hand start's three inputs (`integration` since the owner decided on 2026-11-22), and who reads them (a branch's proof run runs only the tests its change reaches, ticket 1161). On main `select` never
  * runs (SC17), so `scope` does nothing there: no other step, `if`, group or env may read the inputs.
  */
 const dispatchInputs = (workflow: Record<string, unknown>, require: Require): void => {
   const inputs = map(map(map(workflow["on"])["workflow_dispatch"])["inputs"]);
   const scope = map(inputs["scope"]);
   const law = map(inputs["law"]);
+  const integration = map(inputs["integration"]);
 
   const described = (input: Record<string, unknown>) =>
     Predicate.isString(input["description"]) && input["description"] !== "";
 
-  require(JSON.stringify(Rec.keys(inputs).toSorted()) === JSON.stringify(["law", "scope"]) &&
+  require(JSON.stringify(Rec.keys(inputs).toSorted()) === JSON.stringify(["integration", "law", "scope"]) &&
     scope["type"] === "choice" &&
     scope["required"] === true &&
     scope["default"] === "changed" &&
@@ -446,9 +451,13 @@ const dispatchInputs = (workflow: Record<string, unknown>, require: Require): vo
     law["type"] === "string" &&
     law["required"] === false &&
     law["default"] === "" &&
+    described(law) &&
+    integration["type"] === "string" &&
+    integration["required"] === false &&
+    integration["default"] === "" &&
     described(
-      law,
-    ), "SC21: a hand start takes scope, changed or full and changed by default, and law, text that is empty by default, and no other input, each with a description");
+      integration,
+    ), "SC21: a hand start takes scope, changed or full and changed by default, law and integration, text that is empty by default, and no other input, each with a description");
 
   // Everything but `on`, with select's set step's SCOPE and LAW taken out, reads no input.
   const rest = structuredClone(workflow);
@@ -456,9 +465,10 @@ const dispatchInputs = (workflow: Record<string, unknown>, require: Require): vo
   const set = steps(map(map(rest["jobs"])[SELECT_JOB])).find((s) => s["id"] === SELECT_STEP);
   Reflect.deleteProperty(map(set?.["env"]), "SCOPE");
   Reflect.deleteProperty(map(set?.["env"]), "LAW");
+  Reflect.deleteProperty(map(set?.["env"]), "INTEGRATION");
   require(!readsInputs(
     JSON.stringify(rest),
-  ), "SC21: only select's set step reads the hand start's inputs, as SCOPE and LAW, so main's runs never read scope");
+  ), "SC21: only select's set step reads the hand start's inputs, as SCOPE, LAW and INTEGRATION, so main's runs never read scope");
 };
 
 /**
@@ -764,7 +774,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const selectRuns = selectSteps.filter((s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile");
   const selectEnv = map(selectRuns[0]?.["env"]);
   const selectOutputs = { ...SELECT_OUTPUTS, slots: SLOT_OUTPUT };
-  const selectKeys = ["MOST", "LIMIT", "RECORD", "RUN_NUMBER", "SCOPE", "LAW"];
+  const selectKeys = ["MOST", "LIMIT", "RECORD", "RUN_NUMBER", "SCOPE", "LAW", "INTEGRATION"];
   const selectCheckouts = selectSteps.filter((s) => uses(s, "actions/checkout"));
   const records = selectSteps.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === RECORD);
   require(SELECT_JOB in jobs &&
@@ -780,6 +790,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     selectEnv["RECORD"] === RECORD &&
     readsOnly(selectEnv["SCOPE"], SELECT_READS.SCOPE) &&
     readsOnly(selectEnv["LAW"], SELECT_READS.LAW) &&
+    readsOnly(selectEnv["INTEGRATION"], SELECT_READS.INTEGRATION) &&
     selectCheckouts.length === 1 &&
     map(selectCheckouts[0]?.["with"])["fetch-depth"] === 0 &&
     records.length === 1 &&
@@ -938,7 +949,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
   require(vitest.length === 1 &&
     compact(vitest[0]?.["if"]) === compact(`!${ON_E2E} && !${ON_TOOLING}`) &&
     map(vitest[0]?.["env"])["SHARD"] ===
-      `\${{ matrix.shard }}/${vitestCount}`, "SC7: next runs vitest once, on the numbered legs, each its share of them, over the next and next-integration projects on main and on a branch's full set alike");
+      `\${{ matrix.shard }}/${vitestCount}`, "SC7: next runs vitest once, on the numbered legs, each its share of them");
+  require(compact(map(vitest[0]?.["env"])["PROJECTS"]) ===
+    compact(
+      NEXT_PROJECTS,
+    ), "SC7: next's vitest legs run the next and next-integration projects on main, and next alone on a branch's full set, which runs no real-resource law");
   require(e2e.length === 1 &&
     compact(e2e[0]?.["if"]) === ON_E2E &&
     map(e2e[0]?.["env"])["SHARD"] ===
@@ -956,7 +971,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(toolingLegs.toSorted()) ===
       JSON.stringify(
         Array.from({ length: toolingLegs.length }, (_, i) => `${TOOLING_LEG}${i + 1}`),
-      ), "SC8: the tooling legs run every tooling test once, legs tooling-1 to tooling-N, each its share of them, over the tooling and tooling-integration projects on main and on a branch's full set alike");
+      ), "SC8: the tooling legs run every tooling test once, legs tooling-1 to tooling-N, each its share of them");
+  require(compact(map(toolingRuns[0]?.["env"])["PROJECTS"]) ===
+    compact(
+      TOOLING_PROJECTS,
+    ), "SC8: the tooling legs run the tooling and tooling-integration projects on main, and tooling alone on a branch's full set, which runs no tooling law that starts a process");
 
   // SC9. The commands are only these: no step runs another test command or narrows one.
   require(JSON.stringify(commandsOf(tests).toSorted()) ===

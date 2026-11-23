@@ -1053,32 +1053,31 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC7: next runs next/ as a path, so next-visual starts on legs with no Chromium",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "next/ ");
+      s["run"] = String(s["run"]).replace("$PROJECTS ", "next/ ");
     },
   ],
-  // Main's full run and a branch's full set run every real-resource law alike: the owner decided on
-  // 2026-11-22 that a proof run the lead starts runs the integration laws its change reaches, and a
-  // full set is reached whole. Each plant was run once on the real scheduled.yaml and restored.
+  // Main's full run runs every real-resource law, and a branch's full set none. Plants, each
+  // run once on scheduled.ts and restored: SC7's PROJECTS check dropped (red on the first three, the
+  // fourth caught by the command check above it).
   [
     "SC7: main's full run drops next-integration, so the real-resource laws run nowhere",
-    (w) => {
-      const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "--project next ");
-    },
+    (w) => (step(w, "tests", "vitest").env!["PROJECTS"] = `\${{ ${REF} && '--project next' || '--project next' }}`),
   ],
   [
-    "SC7: a branch's full set runs next alone again, so a proof run misses the real-resource laws its change reaches",
-    (w) => {
-      const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "$PROJECTS ");
-      s.env!["PROJECTS"] = `\${{ ${REF} && '--project next --project next-integration' || '--project next' }}`;
-    },
+    "SC7: a branch's full set runs the real-resource laws, which only main's full run runs",
+    (w) =>
+      (step(w, "tests", "vitest").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project next --project next-integration' || '--project next --project next-integration' }}`),
   ],
   [
-    "SC7: next's vitest legs lose their projects, so they run every project",
+    "SC7: next's vitest legs lose their projects, so an empty $PROJECTS runs every project",
+    (w) => Reflect.deleteProperty(step(w, "tests", "vitest").env!, "PROJECTS"),
+  ],
+  [
+    "SC7: next's vitest legs name both projects in the command again, so a branch's full set runs next-integration",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "");
+      s["run"] = String(s["run"]).replace("$PROJECTS ", "--project next --project next-integration ");
     },
   ],
   [
@@ -1119,48 +1118,45 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   [
     "SC8: tooling runs today's tests too",
-    (w) => {
-      const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace(
-        "--project tooling-integration ",
-        "--project tooling-integration --project today ",
-      );
-    },
+    (w) =>
+      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project tooling --project tooling-integration --project today' || '--project tooling' }}`),
   ],
   [
-    "SC8: tooling loses its projects, so it runs every project",
-    (w) => {
-      const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--project tooling --project tooling-integration ", "");
-    },
+    "SC8: tooling loses its projects, so an empty $PROJECTS runs every project",
+    (w) => Reflect.deleteProperty(step(w, "tests", "tooling tests").env!, "PROJECTS"),
   ],
   [
     "SC8: tooling leaves the trees out with --exclude, which a project ignores",
     (w) => {
       const s = step(w, "tests", "tooling tests");
       s["run"] = String(s["run"]).replace(
-        "--project tooling --project tooling-integration ",
+        "$PROJECTS ",
         "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' ",
       );
     },
   ],
-  // A test's kind follows what it uses, never its name: main's full run and a branch's full set both
-  // run every tooling law that starts a process (the owner decided on 2026-11-22 that a proof run the
-  // lead starts runs the integration laws its change reaches). Each plant was run once on the real
-  // scheduled.yaml and restored.
+  // Integration laws run only in main's full run; a test's kind follows what it uses, never its name: main's full run runs every tooling law that starts a process, and a branch's full
+  // set none. Plants, each run once on scheduled.ts and restored: SC8's PROJECTS check dropped (red on
+  // the first two, and on "tooling runs today's tests too" and "tooling loses its projects" above;
+  // the third is caught by the command check above it).
   [
     "SC8: main's full run drops tooling-integration, so the tooling laws that start a process run nowhere",
-    (w) => {
-      const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--project tooling --project tooling-integration ", "--project tooling ");
-    },
+    (w) =>
+      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project tooling' || '--project tooling' }}`),
   ],
   [
-    "SC8: a branch's full set runs tooling alone again, so a proof run misses the tooling laws that start a process",
+    "SC8: a branch's full set runs tooling-integration, which only main's full run runs",
+    (w) =>
+      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project tooling --project tooling-integration' || '--project tooling --project tooling-integration' }}`),
+  ],
+  [
+    "SC8: the tooling legs name both projects in the command again, so a branch's full set runs tooling-integration",
     (w) => {
       const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--project tooling --project tooling-integration ", "$PROJECTS ");
-      s.env!["PROJECTS"] = `\${{ ${REF} && '--project tooling --project tooling-integration' || '--project tooling' }}`;
+      s["run"] = String(s["run"]).replace("$PROJECTS ", "--project tooling --project tooling-integration ");
     },
   ],
   [
@@ -1297,6 +1293,15 @@ const plants: [string, (w: Workflow) => void][] = [
   // seven: the literal, the two bare names, the two swapped and the github.event.inputs read).
   ["SC17: select's step has no SCOPE", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "SCOPE")],
   ["SC17: select's step has no LAW", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "LAW")],
+  [
+    "SC17: select's step has no INTEGRATION",
+    (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "INTEGRATION"),
+  ],
+  [
+    "SC17: INTEGRATION is the bare text inputs.integration",
+    (w) => (step(w, "select", "set").env!["INTEGRATION"] = "inputs.integration"),
+  ],
+  ["SC17: INTEGRATION reads the law", (w) => (step(w, "select", "set").env!["INTEGRATION"] = `\${{ inputs.law }}`)],
   ["SC17: SCOPE is the literal full", (w) => (step(w, "select", "set").env!["SCOPE"] = "full")],
   // A bare name is text, not a read: the step would get the words `inputs.scope`, not the input.
   ["SC17: SCOPE is the bare text inputs.scope", (w) => (step(w, "select", "set").env!["SCOPE"] = "inputs.scope")],
@@ -1312,7 +1317,7 @@ const plants: [string, (w: Workflow) => void][] = [
       [env["SCOPE"], env["LAW"]] = [env["LAW"], env["SCOPE"]];
     },
   ],
-  ["SC17: select's step gets a seventh env key", (w) => (step(w, "select", "set").env!["EXTRA"] = "x")],
+  ["SC17: select's step gets an eighth env key", (w) => (step(w, "select", "set").env!["EXTRA"] = "x")],
   // SC21, ticket 1161: the hand start's two inputs. Plants, each run once on scheduled.ts and restored:
   // SC21's input check dropped (red on each of these).
   ["SC21: the scope default is full", (w) => (hand(w)["scope"]!["default"] = "full")],
@@ -1323,7 +1328,17 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC21: the scope is not required", (w) => (hand(w)["scope"]!["required"] = false)],
   ["SC21: the scope has no description", (w) => Reflect.deleteProperty(hand(w)["scope"]!, "description")],
   ["SC21: the law has no description", (w) => Reflect.deleteProperty(hand(w)["law"]!, "description")],
-  ["SC21: a third input", (w) => (hand(w)["extra"] = { type: "string", required: false, default: "" })],
+  ["SC21: a fourth input", (w) => (hand(w)["extra"] = { type: "string", required: false, default: "" })],
+  // The named integration files (the owner decided on 2026-11-22): text, empty by default, so a hand
+  // start names none unless the lead does.
+  ["SC21: the integration input is missing", (w) => Reflect.deleteProperty(hand(w), "integration")],
+  ["SC21: the integration is required", (w) => (hand(w)["integration"]!["required"] = true)],
+  [
+    "SC21: the integration has a default of a path",
+    (w) => (hand(w)["integration"]!["default"] = "kalfa/git/src/ProcessRepository.integration.test.ts"),
+  ],
+  ["SC21: the integration has no description", (w) => Reflect.deleteProperty(hand(w)["integration"]!, "description")],
+  ["SC21: the integration is a choice", (w) => (hand(w)["integration"]!["type"] = "choice")],
   ["SC21: the law input is missing", (w) => Reflect.deleteProperty(hand(w), "law")],
   ["SC21: the law is required", (w) => (hand(w)["law"]!["required"] = true)],
   ["SC21: the law has a default of a path", (w) => (hand(w)["law"]!["default"] = ".github/ci/proof.test.ts")],
@@ -1434,8 +1449,8 @@ const plants: [string, (w: Workflow) => void][] = [
     (w) => (w.jobs["changed"]!["if"] = "needs.gate.outputs.start == 'true' && needs.select.outputs.scope == 'changed'"),
   ],
   // The owner decided on 2026-11-22 that a proof run the lead starts runs the integration laws its
-  // change reaches: a changed leg runs both integration projects. proof.test.ts holds the same list
-  // against proof.ts's PROJECTS.
+  // changed set reaches, or the ones it names: a changed leg runs both integration projects.
+  // proof.test.ts holds the same list against proof.ts's PROJECTS.
   [
     "SC18: a changed leg drops next-integration, so the real-resource laws its change reaches never run",
     (w) =>
@@ -1821,14 +1836,15 @@ effectIt.prop(
   { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } },
 );
 
-it("S12 scenario: on the real scheduled.yaml the only reads of the inputs are select's SCOPE and LAW, and a read added to tests's if is named by SC15 and SC21", () => {
+it("S12 scenario: on the real scheduled.yaml the only reads of the inputs are select's SCOPE, LAW and INTEGRATION, and a read added to tests's if is named by SC15 and SC21", () => {
   // Plant, run once on scheduled.ts and restored: SC21's read check dropped (red: the plant gives
   // SC15's error alone).
   const w = real();
   expect(lint(w)).toEqual([]);
-  expect(JSON.stringify(w.jobs).match(/\binputs\b/g)).toHaveLength(2);
+  expect(JSON.stringify(w.jobs).match(/\binputs\b/g)).toHaveLength(3);
   expect(step(w, "select", "set").env!["SCOPE"]).toContain("inputs.scope");
   expect(step(w, "select", "set").env!["LAW"]).toContain("inputs.law");
+  expect(step(w, "select", "set").env!["INTEGRATION"]).toContain("inputs.integration");
 
   w.jobs["tests"]!["if"] = `${String(w.jobs["tests"]!["if"]).replace(/ \}\}$/, "")} && inputs.scope != 'changed' }}`;
   const errors = lint(w);
