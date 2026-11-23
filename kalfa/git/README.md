@@ -1,14 +1,14 @@
 # @kalfa/git
 
 Read commits, refs and changes from a git repository that has no working copy, write a commit, move a ref and merge trees.
-One service, `Repository`, with eight read calls and three write calls, a helper that writes a merge commit, two adapters
+One service, `Repository`, with ten read calls and three write calls, a helper that writes a merge commit, two adapters
 that answer the calls, and the laws both adapters pass.
 
 It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef` and `mergeTrees` change the
 repository, and none sends anything to a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
 so anything can import it.
 
-## The eight read calls
+## The ten read calls
 
 ```ts
 import { Effect, Schema } from "effect";
@@ -26,7 +26,9 @@ const program = Effect.gen(function* () {
   const patch = yield* repo.patchId(branch, branch); // Option<PatchId>, none: the two commits hold the same files
   const range = yield* repo.rangePatchId({ upstream: branch, commit: branch }); // Option<PatchId>, none: no own changes
   const files = yield* repo.diff(branch, branch); // FileChange[], []: the two commits hold the same files
-  return { own, bases, landed, patch, range, files };
+  const raw = yield* repo.readFile(branch, path("config/app.toml")); // Option<Uint8Array>, none: no file there
+  const text = yield* repo.readText(branch, path("config/app.toml")); // Option<string>, or NotUtf8
+  return { own, bases, landed, patch, range, files, raw, text };
 });
 ```
 
@@ -45,6 +47,8 @@ const program = Effect.gen(function* () {
   one with the upstream merged in and one squashed into a commit give one id when they make the same edit. It fails
   `UnclearBase` naming the merge bases when there is none (no common history) or more than one (a criss-cross), and
   `HistoryTooShort` in a shallow repository. It is one call: one span and one time limit around both of its reads.
+- `readFile(commit, path)` answers the bytes of the file at `path`, or none. `readText` is the same read as UTF-8. See
+  "Reading a file" below.
 - `diff(from, to)` answers every file the two commits differ in, sorted by the path's UTF-8 bytes, or `[]` when they hold
   the same files. See "The diff" below.
 
@@ -214,6 +218,40 @@ text, so it answers for the same change.
 2. **Binary by attributes.** git may read a `.gitattributes` file and call a text file binary. The memory adapter uses only
    the NUL rule.
 
+## Reading a file
+
+`readFile(commit, path)` answers the bytes of the file at `path` in the files of `commit`, kept exactly and as a copy the
+caller owns, or none when git proved no file is there: nothing at a part of the path, a name that only shares its start or
+its end with a file, or a path below a file. An empty file is `Some` of no bytes, never none. `readText` is `readFile` read
+as UTF-8 with no replacement: a byte that is not UTF-8 fails `NotUtf8` naming the path, and a BOM, a CR and a NUL byte are
+text and are kept. It is one call, with one span and one time limit. Neither reads history, so both answer in a shallow
+repository.
+
+The checks run in this order, each before any content is read: the commit exists (`NoSuchCommit`), then what the path holds.
+A folder, a link or a submodule at the path fails `NotAFile` naming the path, with `holds` saying which. A link or a
+submodule above the path fails `NotAFile` naming that part, never none: a checkout would reach a file through a link, so
+"no file" would be a guess. Last, the file holds at most `limits.blob` bytes (`FileTooLarge`).
+
+`@kalfa/git/process` walks the tree one folder at a time with `ls-tree -z`, top down, and matches each part of the path to a
+listed name by its bytes. **No path ever reaches git's command line or stdin**, so no pathspec magic (`ls-tree <c> -- :foo`
+reads the file `foo`), quoting or path config can act. It asks `cat-file --batch-check` for the file's size, then runs
+`cat-file blob <id>`, whose bytes must be exactly that many.
+
+What git prints for each command, the config that could change it, and what pins it:
+
+| Command | Could change what it prints | Pinned on the call |
+|---|---|---|
+| `ls-tree -z <tree-ish>` | `core.quotePath`, `core.precomposeUnicode`, `core.ignoreCase`, pathspec magic and `GIT_*_PATHSPECS`: each acts only on quoting or on path arguments | `-z`, and no path argument is ever given |
+| `cat-file --batch-check` | none: it prints the stored object's type and size | nothing more |
+| `cat-file blob <id>` | `core.autocrlf`, `core.eol`, `core.safecrlf`, `filter.<driver>.smudge`, `core.attributesFile`, `info/attributes`, `core.bigFileThreshold`: each acts only with `--filters`, `--textconv` or `--path` | none of those flags is given |
+
+**The two adapters differ where the memory adapter holds no such tree,** and the shared laws draw neither case:
+
+1. **Submodules.** The memory adapter holds none. `readFile` at or below one fails `NotAFile` with `holds: "submodule"` on
+   git.
+2. **Names that are not UTF-8.** A `Path` is text, so the memory adapter holds none. git can hold a name of any bytes, and
+   `readFile` never matches a `Path` to such a name.
+
 ## Settings
 
 The limits are required and have no default. The app gives each one where it builds the layer.
@@ -225,6 +263,7 @@ refs = 1000
 bytes = 1000000
 files = 1000
 diff = 10000000
+blob = 10000000
 time = "10 seconds"
 
 [committer]
@@ -234,7 +273,7 @@ email = "bot@example.test"
 
 `commits` is the most commits a walk or a merge-base answer holds. `refs` is the most refs one `readRefs` answer
 holds. `bytes` is the most bytes one commit object holds, to read or to write, and the most stderr an error keeps.
-`files` is the most files one diff names, and `diff` is the most bytes of file content one diff compares. `time` is the
+`files` is the most files one diff names, and `diff` is the most bytes of file content one diff compares, and `blob` is the most bytes of one file `readFile` reads. `time` is the
 longest one call may take. `committer` is the name and email every commit the package writes names as its
 committer. A name takes what a signature's name takes (no `<`, `>`, line break or NUL) and an email what its email
 takes. A setting's value is plain data, so the time is duration text, which the package decodes. When a
@@ -254,5 +293,4 @@ optional peers, needed only by `/test`.
 
 It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and sends nothing
 to a remote. It imports no Node module and no package of its repo. It puts no message, name, email, path, line or file
-content in a span: the diff's span says how many files and lines, and the range's span names its merge base. Reading a
-file, rebase, squash, fetch and push come in later tickets of this package.
+content in a span: the diff's span says how many files and lines, the range's span names its merge base, and a read's span says whether there is a file and how big it is. Rebase, squash, fetch and push come in later tickets of this package.

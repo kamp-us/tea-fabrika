@@ -731,3 +731,64 @@ export const files = (
       }),
     ),
   );
+
+/**
+ * One entry of `ls-tree -z`: the mode and the type as printed, the object's id, the name as the bytes git printed, and the whole entry's bytes without its closing NUL.
+ *
+ * @internal
+ */
+export interface Listed {
+  readonly mode: string;
+  readonly type: string;
+  readonly id: string;
+  readonly name: Uint8Array;
+  readonly line: Uint8Array;
+}
+
+// What `ls-tree` prints before an entry's name: a six digit mode, the type and the id, each after one space, and a tab. No such head
+// is longer than 55 bytes, so the front of the entry is all that is read.
+const HEAD_BYTES = 60;
+
+const LISTED_HEAD = /^[0-7]{6} (?:blob|tree|commit) [0-9a-f]{40}\t/;
+
+/**
+ * Reads `ls-tree -z` of one folder: each entry as `<mode> <type> <id>`, a tab, the name and a NUL.
+ *
+ * **Details**
+ *
+ * The name is the bytes after the first tab, kept as they are: it may hold a space, a tab, a line break or bytes that are not UTF-8, and no quote or escape is read. A listing that ends before an entry's NUL, or an entry whose head has another form, is `Unreadable`.
+ *
+ * @internal
+ */
+export const listing = (output: Uint8Array): Result.Result<ReadonlyArray<Listed>, Repository.GitUnavailable> =>
+  Result.gen(function* () {
+    const read: Array<Listed> = [];
+
+    for (let start = 0; start < output.length;) {
+      const end = output.indexOf(NUL, start);
+
+      if (end === -1) {
+        return yield* Result.fail(unreadable("a listing entry is cut"));
+      }
+
+      const line = output.subarray(start, end);
+      const head = LISTED_HEAD.exec(String.fromCharCode(...line.subarray(0, HEAD_BYTES)));
+
+      if (head === null) {
+        return yield* Result.fail(unreadable("a listing entry has an unexpected head"));
+      }
+
+      // The head is a mode, a type, an id and a tab, so its parts sit at fixed places counting from either end.
+      const [text] = head;
+      read.push({
+        mode: text.slice(0, 6),
+        type: text.slice(7, -42),
+        id: text.slice(-41, -1),
+        name: line.subarray(text.length),
+        line,
+      });
+      start = end + 1;
+    }
+
+    return read;
+  });

@@ -12,6 +12,7 @@ import { CommitId } from "./CommitId.ts";
 import * as Diff from "./Diff.ts";
 import { joined } from "./internal/bytes.ts";
 import * as Lines from "./internal/lines.ts";
+import * as Lookup from "./internal/lookup.ts";
 import { byBytes, bytes, FOLDER, hashed, treeBytes, type Line } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
@@ -472,6 +473,45 @@ const modes = (file: Changed, kind: Kind): ReadonlyArray<Uint8Array> => {
   return kind === "modified" && sides[0] === sides[1] ? [] : sides.map((mode) => word("m", mode));
 };
 
+// What a commit's files hold at a path: an entry is a link or a file, and a path that is the start of another is a folder.
+const kindAt =
+  (files: ReadonlyMap<string, Tree.Entry>): Lookup.At =>
+  (path) => {
+    const entry = files.get(path);
+
+    if (entry !== undefined) {
+      return entry.mode === "120000" ? "link" : "file";
+    }
+
+    return [...files.keys()].some((name) => name.startsWith(`${path}/`)) ? "folder" : undefined;
+  };
+
+// The bytes of the file at a path, a copy the caller owns, or none. The checks in order: the commit, what the path holds, the size.
+const readFile = (
+  store: Store,
+  limits: Settings.Settings["limits"],
+  commit: CommitId,
+  path: Tree.Path,
+): Result.Result<Option.Option<Uint8Array>, Repository.NoSuchCommit | Repository.NotAFile | Repository.FileTooLarge> =>
+  Result.gen(function* () {
+    yield* found(store, commit);
+    const files: ReadonlyMap<string, Tree.Entry> = filesAt(store, commit);
+    yield* Lookup.find(path, kindAt(files));
+    const entry = files.get(path);
+
+    if (entry === undefined) {
+      return Option.none();
+    }
+
+    const content = store.blobs.get(entry.blob) ?? NO_BYTES;
+
+    if (content.length > limits.blob) {
+      return yield* Result.fail(new Repository.FileTooLarge({ path, most: limits.blob }));
+    }
+
+    return Option.some(content.slice());
+  });
+
 // Whether a file's bytes are the same on both sides, so only its mode changed: no line is printed for it, binary or not. A file
 // that changes kind is never the same, since git prints it as a deleted file and a new one.
 const isModeOnly = (before: Held | undefined, after: Held | undefined, kind: Kind): boolean =>
@@ -747,6 +787,7 @@ export const layer = (
             mergeBases: (a, b) => read((held) => mergeBases(held, limits, a, b)),
             isAncestor: (ancestor, descendant) => read((held) => isAncestor(held, ancestor, descendant)),
             patchId,
+            readFile: (commit, path) => read((held) => readFile(held, limits, commit, path)),
             diff,
             writeCommit: (fields) =>
               commit(fields).pipe(
