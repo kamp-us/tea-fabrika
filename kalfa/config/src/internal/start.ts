@@ -1,7 +1,7 @@
 /**
  * The start of a setting group, in the order the protocol fixes: the repo configuration is read, its minimum version is checked, both files are checked whole, and only then is each value resolved by precedence with its origin kept. A group with a live setting then goes on following its files, in the layer's scope.
  */
-import { ConfigProvider, Effect, Option, Ref, Schema, type SubscriptionRef } from "effect";
+import { ConfigProvider, Effect, Option, Ref, Schema, type Stream, SubscriptionRef } from "effect";
 import * as Arr from "effect/Array";
 import type { Origin } from "../Sources.ts";
 import type { Group } from "./check.ts";
@@ -10,13 +10,15 @@ import type { Format } from "./format.ts";
 import { reading } from "./live.ts";
 import { field } from "./names.ts";
 import { repoPlace, userPlace } from "./place.ts";
-import { type Held, readRepo, readUser, type Setup, settle } from "./read.ts";
+import { type Held, readRepo, readUser, type Settled, type Setup, settle } from "./read.ts";
 import { debounce } from "./window.ts";
 
 /** What a start leaves: each value under its field, and the origins as they are now, each under its setting name. */
 export interface Resolved {
   readonly values: Readonly<Record<string, unknown>>;
   readonly origins: Effect.Effect<Readonly<Record<string, Origin>>>;
+  /** Every resolved list as taken: the one now, then one each time a change is taken. */
+  readonly taken: Stream.Stream<ReadonlyArray<Settled>>;
 }
 
 /**
@@ -70,16 +72,21 @@ export const start = Effect.fnUntraced(function* (
 
   const started = new Map(held.settled.map(({ setting, origin }) => [setting.name, Object.freeze(origin)]));
   const origins = yield* Ref.make(Object.freeze(Object.fromEntries(started)));
+  const taking = yield* SubscriptionRef.make(held.settled);
   const window = Arr.findFirst(held.settled, ({ setting }) => setting === debounce);
 
   if (Option.isSome(window)) {
     // The window was checked when the file was read, so it decodes.
     const length = yield* Schema.decodeUnknownEffect(Schema.DurationFromString)(window.value.value).pipe(Effect.orDie);
 
-    yield* follow(setup, { lives, origins, started }, held, length);
+    yield* follow(setup, { lives, origins, started, taken: taking }, held, length);
   }
 
-  const resolved: Resolved = { values: Object.freeze(values), origins: Ref.get(origins) };
+  const resolved: Resolved = {
+    values: Object.freeze(values),
+    origins: Ref.get(origins),
+    taken: SubscriptionRef.changes(taking),
+  };
 
   return resolved;
 });

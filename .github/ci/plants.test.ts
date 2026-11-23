@@ -210,25 +210,31 @@ const starts = (words: ReadonlyArray<string>, where: (typeof ALLOWED)[number] | 
 
 // Plant: read the law file from fixed argument spots again (`args[2]` for `plant`, the word after `--law`
 // for `survey`), which a flag before the name, `--law=` or `--out=` all miss.
-it.effect.prop(
-  "property: no command line, in any order or spelling, starts a host-only law where the host may not, and every one still runs where it may",
-  { shape: Shape },
-  ({ shape }) =>
-    Effect.gen(function* () {
-      for (const { plant, law } of LAWS) {
-        if (plant === undefined && shape.verb === "plant") {
-          continue;
+// 60 full runs took 17.9 s of CI's 60 s limit, so the law is 3 laws of 20 runs (4 fast each) with their own seeds, which together are its full count.
+const PARTS = [1, 2, 3] as const;
+
+for (const part of PARTS) {
+  it.effect.prop(
+    "property: no command line, in any order or spelling, starts a host-only law where the host may not, and every one still runs where it may" +
+      ` (part ${part} of ${PARTS.length})`,
+    { shape: Shape },
+    ({ shape }) =>
+      Effect.gen(function* () {
+        for (const { plant, law } of LAWS) {
+          if (plant === undefined && shape.verb === "plant") {
+            continue;
+          }
+
+          const words = argv(shape, { plant: plant ?? "", law });
+          const here = yield* starts(words, ALLOWED[shape.allowed] ?? ALLOWED[0]);
+          const away = yield* starts(words, AWAY[shape.away] ?? AWAY[0]);
+
+          // The word list parsed and reached the run: without this, a refusal below could be a typo.
+          expect(here.started, words.join(" ")).toBe(1);
+          expect(away.started, words.join(" ")).toBe(hostOnly(law, AWAY[shape.away] ?? AWAY[0]) ? 0 : 1);
+          expect(Exit.isFailure(away.exit), words.join(" ")).toBe(true);
         }
-
-        const words = argv(shape, { plant: plant ?? "", law });
-        const here = yield* starts(words, ALLOWED[shape.allowed] ?? ALLOWED[0]);
-        const away = yield* starts(words, AWAY[shape.away] ?? AWAY[0]);
-
-        // The word list parsed and reached the run: without this, a refusal below could be a typo.
-        expect(here.started, words.join(" ")).toBe(1);
-        expect(away.started, words.join(" ")).toBe(hostOnly(law, AWAY[shape.away] ?? AWAY[0]) ? 0 : 1);
-        expect(Exit.isFailure(away.exit), words.join(" ")).toBe(true);
-      }
-    }),
-  { arbitrary: { seed: 119120, runs: runsFor({ fast: 12, full: 60 }) } },
-);
+      }),
+    { arbitrary: { seed: 119120 + part, runs: runsFor({ fast: 4, full: 20 }) } },
+  );
+}

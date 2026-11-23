@@ -1,9 +1,22 @@
 // T1 as a value: what `GitHub.route` makes from a route text. The type laws are in GitHub.types.test.ts; this one runs, so a
 // route that compiles but carries the wrong method or path is caught before `call` (ticket 1944's second slice) reads it.
 import { assert, describe, expect, it } from "@effect/vitest";
-import { Cause, DateTime, Duration, Effect, Exit, Option, Predicate, Schema } from "effect";
+import { Cause, DateTime, Duration, Effect, Exit, Inspectable, Option, Predicate, Redacted, Schema } from "effect";
 import {
   answerBody,
+  GetRepo,
+  LooseQuery,
+  METHOD_CALLS,
+  Readme,
+  reachable,
+  slice1,
+  textAnswers,
+  tokenForms,
+  spanText,
+  Zen,
+  ZenAsLogin,
+  ZenCounted,
+  ZenUnread,
   between,
   CancelRun,
   CancelRunUnread,
@@ -74,7 +87,7 @@ it("T1 vector: route holds the route text, the method and the path template of e
     GitHub.route(DISPATCH, { payload: RefOnly, bodiless: [204] }),
     GitHub.route(GET_BRANCH),
     GitHub.route(GET_PULL),
-    GitHub.route(ZEN),
+    GitHub.route(ZEN, { body: "text" }),
     GitHub.route(LANGUAGES),
     GitHub.route(DELETE_ORG),
     GitHub.route(STAR),
@@ -121,6 +134,21 @@ it("T1 vector: a made Route holds a declared part as an own key, and holds no ke
   // The declared status list is kept as given, and a route that declared none has none.
   expect(GitHub.route(DISPATCH, { payload: RefOnly, bodiless: [204] }).bodiless).toEqual([204]);
   expect(GitHub.route(CHECK_RUNS).bodiless).toBeUndefined();
+});
+
+// T18. Plant: leave `body` or `auth` off the made Route, or set `accept` to `undefined` when none was declared.
+it("T18 vector: a made Route holds body and auth, json and login unless declared, and holds accept only when declared", () => {
+  // vector: one route for each combination of the new options; no generated input says what a route's options are.
+  expect(GitHub.route(CHECK_RUNS).body).toBe("json");
+  expect(GitHub.route(CHECK_RUNS).auth).toBe("login");
+  expect(Object.hasOwn(GitHub.route(CHECK_RUNS), "accept")).toBe(false);
+  expect(GitHub.route(CHECK_RUNS, { body: "json" }).body).toBe("json");
+  expect(GitHub.route(ZEN, { body: "text" }).body).toBe("text");
+  expect(GitHub.route(ZEN, { body: "text", auth: "none" }).auth).toBe("none");
+  expect(GitHub.route(CHECK_RUNS, { accept: "application/vnd.github.raw+json" }).accept).toBe(
+    "application/vnd.github.raw+json",
+  );
+  expect(Object.hasOwn(GitHub.route(CHECK_RUNS, { auth: "none" }), "accept")).toBe(false);
 });
 
 const enc = encodeURIComponent;
@@ -688,7 +716,8 @@ describe("C5, an answer that cannot be read", () => {
 
 type ErrorBody = Record<string, unknown>;
 
-// C6. Plant: require `message`; read `errors` as objects only; keep `errors` and drop the `value` key.
+// C6, widened in 1945 for `errors` as one text. Plant (1945): read `errors` as a list only, so (j) loses its message; read the
+// body as one Struct, not field by field, so a number where a text goes loses the message. Plant (1944): require `message`; read `errors` as objects only; keep `errors` and drop the `value` key.
 describe("C6, GitHub's 4xx", () => {
   it.effect.prop(
     "a 4xx fails with ClientError holding the reply's status, and a message, a documentation URL and errors exactly when GitHub's body had them, each as GitHub said it",
@@ -757,6 +786,28 @@ describe("C6, GitHub's 4xx", () => {
           { name: "P: a list", reply: json([message], status), expect: {} },
           { name: "P: null", reply: text("null", status), expect: {} },
           { name: "R: only a message", reply: json({ message }, status), expect: { message } },
+          // 1945, (j): `errors` as the one text GitHub sends beside the others, alone, and with a field of another kind.
+          {
+            name: "j: errors as one text, beside message and documentation_url",
+            reply: json({ message, documentation_url: `https://docs.github.com/${slug}`, errors: echo }, status),
+            expect: { message, documentationUrl: `https://docs.github.com/${slug}`, errors: echo },
+          },
+          { name: "j: errors as one text, alone", reply: json({ errors: echo }, status), expect: { errors: echo } },
+          {
+            name: "j: a number where documentation_url is a text keeps the others",
+            reply: json({ message, documentation_url: number, errors: echo }, status),
+            expect: { message, errors: echo },
+          },
+          {
+            name: "j: errors as a number keeps the message",
+            reply: json({ message, errors: number }, status),
+            expect: { message },
+          },
+          {
+            name: "j: errors as null keeps the message and the address",
+            reply: json({ message, documentation_url: `https://docs.github.com/${slug}`, errors: null }, status),
+            expect: { message, documentationUrl: `https://docs.github.com/${slug}` },
+          },
         ];
 
         for (const each of bodies) {
@@ -799,19 +850,20 @@ describe("C6, GitHub's 4xx", () => {
 
 // ---- C7, other statuses
 
-// C7. Plant: read a 5xx as ClientError; treat only 200 as a success.
+// C7, widened in 1945: a 5xx is no longer here (C14 reads it), and 600 and over is not one. Plant: read 300 to 399 as ServerError; read
+// 600 and over as ServerError; treat only 200 as a success.
 describe("C7, other statuses", () => {
   it.effect.prop(
-    "a status that is not 2xx or 4xx fails with Undecodable on the answer side, naming the status and holding no cause; each 2xx status is a success",
+    "a status that is not 2xx, 4xx or 5xx fails with Undecodable on the answer side, naming the status and holding no cause; each 2xx status is a success",
     {
       informational: between(100, 199),
       redirect: between(300, 399),
-      server: between(500, 599),
+      beyond: between(600, 999),
       success: between(200, 299),
     },
-    ({ informational, redirect, server, success }) =>
+    ({ informational, redirect, beyond, success }) =>
       Effect.gen(function* () {
-        for (const status of [informational, redirect, server]) {
+        for (const status of [informational, redirect, beyond, 600]) {
           const { exit } = yield* observed(callRuns(), () => json({ check_runs: [], message: "nope" }, status));
           const found = reasonHeld(exit);
 
@@ -1101,5 +1153,293 @@ describe("C11, a Schema that may be async stays an Effect", () => {
         expect(reasonHeld(broken.exit)?.reason._tag).toBe("Undecodable");
       }),
     { arbitrary: { seed: SEED, runs: 100 } },
+  );
+});
+
+// ---- 1945, slice 1
+
+const REPO = { owner: "o", repo: "r" } as const;
+
+const REPO_JSON = { id: 1296269, full_name: "o/r", private: false };
+
+// C12, a text answer. Plant: decode with `Schema.fromJsonString` on a text route, so a text that is also JSON is parsed (b);
+// trim the body (a); read the body through a hand unescape (c); cut the body at 4,096 characters (d).
+describe("C12, a text answer", () => {
+  it.effect.prop(
+    "call on a body: text route gives the success Schema's decoding of the raw body, a text that is also JSON is never parsed, and a route with no success gives void",
+    { drawn: slice1 },
+    ({ drawn }) =>
+      Effect.gen(function* () {
+        for (const answer of textAnswers(drawn.base, drawn.length)) {
+          const body = answer.value;
+
+          const plain = yield* observed(GitHub.call(ZenAsLogin, {}), () => text(body));
+          assert.deepStrictEqual(succeeded(plain.exit), Schema.decodeUnknownSync(Schema.String)(body), answer.name);
+          expect(Exit.isSuccess(plain.exit), answer.name).toBe(true);
+
+          const none = yield* observed(GitHub.call(Zen, {}), () => text(body, 200));
+          assert.deepStrictEqual(succeeded(none.exit), body, `${answer.name}: no token`);
+
+          // A Schema from a text to a Struct is read from the raw text.
+          const counted = yield* observed(GitHub.call(ZenCounted, {}), () => text(body));
+          assert.deepStrictEqual(succeeded(counted.exit), { text: body, length: body.length }, answer.name);
+
+          // With nothing declared to read, the answer is `void`, whatever the text.
+          const unread = yield* observed(GitHub.call(ZenUnread, {}), () => text(body));
+          expect(Exit.isSuccess(unread.exit), answer.name).toBe(true);
+          expect(succeeded(unread.exit), answer.name).toBeUndefined();
+
+          // The file asked for as text by media type is read the same way.
+          const readme = yield* observed(GitHub.call(Readme, { params: REPO }), () => text(body));
+          assert.deepStrictEqual(succeeded(readme.exit), body, `${answer.name}: a media type`);
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 300 } },
+  );
+});
+
+// C13, who a request is sent as. Plant: drop `options.token` (g); let a token win on an `auth: "none"` route, or drop it and
+// send as None, in place of dying (g); fill `accept` with a default in `call` (h). F2 (TestGitHub.test.ts) holds the same
+// defect on a route whose value lies about its type, with every form of the token; here it is the declared `Zen`.
+describe("C13, who a request is sent as", () => {
+  it.effect.prop(
+    "the Request says Token with the call's own token, None on an auth: none route, else Login, a token forced past the types onto an auth: none route is a defect that names the route and sends nothing, and the Request carries accept exactly when the route declared one",
+    { drawn: slice1 },
+    ({ drawn }) =>
+      Effect.gen(function* () {
+        const token = Redacted.make(drawn.token);
+
+        const repo = (options?: { readonly token?: Redacted.Redacted<string> }) =>
+          observed(GitHub.call(GetRepo, { params: REPO }, options), () => json(REPO_JSON));
+
+        // (g) A token given, none given, and a text route that takes the login's.
+        const given = yield* repo({ token });
+        const given0 = given.requests[0]?.auth;
+
+        expect(given0?._tag, "g: a token given").toBe("Token");
+        expect(given0?._tag === "Token" ? Redacted.value(given0.token) : undefined).toBe(drawn.token);
+
+        const none = yield* repo();
+
+        expect(none.requests[0]?.auth._tag).toBe("Login");
+
+        const textual = yield* observed(GitHub.call(ZenAsLogin, {}, { token }), () => text("z"));
+        const textual0 = textual.requests[0]?.auth;
+
+        expect(textual0?._tag === "Token" ? Redacted.value(textual0.token) : undefined, "g: a text route").toBe(
+          drawn.token,
+        );
+
+        // (g) A route that sends no token sends none, and a token forced past the types is a defect and no request.
+        const bare = yield* observed(GitHub.call(Zen, {}), () => text("z"));
+
+        expect(bare.requests[0]?.auth._tag).toBe("None");
+
+        const secret = `ghp_zq${drawn.length.toString(36)}x${drawn.token}`;
+
+        const forced = yield* observed(GitHub.call(Zen, {}, untyped({ token: Redacted.make(secret) })), () =>
+          text("z"),
+        );
+
+        expect(Exit.isFailure(forced.exit) && Cause.hasDies(forced.exit.cause), "g: a token past the types dies").toBe(
+          true,
+        );
+        expect(forced.requests, "g: nothing sent").toHaveLength(0);
+
+        if (Exit.isFailure(forced.exit)) {
+          const rendered = [Cause.pretty(forced.exit.cause), String(Cause.squash(forced.exit.cause))].join("\n");
+
+          expect(rendered, "g: the route").toContain("GET /zen");
+
+          for (const form of tokenForms(secret)) {
+            expect(rendered, `g: shows ${form}`).not.toContain(form);
+          }
+        }
+
+        // (h) `accept` is there exactly when the route declared it, and is the one declared.
+        const asked = yield* observed(GitHub.call(Readme, { params: REPO }), () => text("z"));
+
+        expect(asked.requests[0]?.accept, "h: declared").toBe("application/vnd.github.raw+json");
+
+        for (const request of [given.requests[0], none.requests[0], bare.requests[0], textual.requests[0]]) {
+          expect(Object.hasOwn(request ?? {}, "accept"), "h: undeclared").toBe(false);
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 200 } },
+  );
+});
+
+// C14, a 5xx. Plant: set `mayHaveApplied` true always (the GET fails); set it from `method === "POST"` (the PUT fails); leave a
+// 5xx as Undecodable.
+describe("C14, a 5xx", () => {
+  it.effect.prop(
+    "a 5xx fails with ServerError holding the status, and mayHaveApplied is false for a GET and true for every other method, never a defect",
+    { drawn: slice1 },
+    ({ drawn }) =>
+      Effect.gen(function* () {
+        for (const { method, program } of METHOD_CALLS) {
+          for (const status of [drawn.serverStatus, 500, 599]) {
+            for (const reply of [json({ message: "m" }, status), text("<html>bad</html>", status)]) {
+              const { exit } = yield* observed(program, () => reply);
+              const found = reasonHeld(exit);
+              const label = `${method} ${status}`;
+
+              expect(Exit.isFailure(exit) && !Cause.hasDies(exit.cause), `${label}: no defect`).toBe(true);
+              expect(found?.reason._tag, label).toBe("ServerError");
+
+              if (found?.reason._tag === "ServerError") {
+                expect(found.reason.status, label).toBe(status);
+                expect(found.reason.mayHaveApplied, label).toBe(method !== "GET");
+              }
+            }
+          }
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 200 } },
+  );
+});
+
+// C15, a query value a URL cannot carry. Plant: delete the value check (the stand-in is reached); write the value into the message.
+describe("C15, a query value a URL cannot carry", () => {
+  it.effect.prop(
+    "a null, an object, or a list holding either fails with Undecodable input naming the key and holding no value, and nothing is sent; texts, numbers, booleans and lists of them are sent",
+    { drawn: slice1 },
+    ({ drawn }) =>
+      Effect.gen(function* () {
+        const marker = `zq${drawn.length.toString(36)}x${drawn.marker}`;
+
+        const loose = (value: Schema.Json) =>
+          observed(
+            GitHub.call(LooseQuery, untyped({ params: { ...REPO, ref: "main" }, query: { per_page: value } })),
+            () => json({ check_runs: [] }),
+          );
+
+        // (i) What a URL cannot carry.
+        const refused: ReadonlyArray<{ readonly name: string; readonly value: Schema.Json }> = [
+          { name: "i: null", value: null },
+          { name: "i: an object", value: { [marker]: marker } },
+          { name: "i: a list holding an object", value: [1, { k: marker }] },
+          { name: "i: a list holding null", value: [marker, null] },
+          { name: "i: a list holding a list", value: [[marker]] },
+        ];
+
+        for (const each of refused) {
+          const { exit, requests } = yield* loose(each.value);
+          const found = reasonHeld(exit);
+
+          expect(refusedInput(exit, LooseQuery.route), each.name).toBe(true);
+          expect(requests, `${each.name}: nothing was sent`).toEqual([]);
+
+          if (Predicate.isTagged(found?.reason, "Undecodable")) {
+            expect(found?.reason.message, `${each.name}: names the key`).toContain("per_page");
+            expect(found?.reason.message, `${each.name}: holds no value`).not.toContain(marker);
+          }
+        }
+
+        // What a URL carries is sent as it was, as before.
+        const carried: ReadonlyArray<GitHub.QueryValue> = [
+          marker,
+          "",
+          0,
+          -1.5,
+          true,
+          false,
+          [],
+          [marker],
+          [1, "b", true, marker],
+        ];
+
+        for (const value of carried) {
+          const { exit, requests } = yield* loose(value);
+
+          expect(Exit.isSuccess(exit), JSON.stringify(value)).toBe(true);
+          assert.deepStrictEqual(requests[0]?.query, { per_page: value });
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
+});
+
+// C16 [secrets], a call's own token never shows. Plant: write the token into the refusal's message; annotate the span with it;
+// carry it in the 5xx's fields; put it in the path.
+describe("C16, a call's own token never shows", () => {
+  it.effect.prop(
+    "for each way a call ends, the token's text, its percent-encoded form, its JSON form and its base64 are in no span, no URL the stand-in saw, nor in anything the failure renders or holds",
+    { drawn: slice1 },
+    ({ drawn }) =>
+      Effect.gen(function* () {
+        const secret = `ghp_zq${drawn.length.toString(36)}x${drawn.token}`;
+        const forms = tokenForms(secret);
+        const token = Redacted.make(secret);
+
+        const outcomes: ReadonlyArray<{
+          readonly name: string;
+          readonly program: Effect.Effect<unknown, GitHub.GitHubError | GitHub.RateLimited, GitHub.GitHub>;
+          readonly reply: GitHub.Reply;
+        }> = [
+          { name: "a 2xx", program: GitHub.call(GetRepo, { params: REPO }, { token }), reply: json(REPO_JSON) },
+          {
+            name: "a 4xx",
+            program: GitHub.call(GetRepo, { params: REPO }, { token }),
+            reply: json({ message: "Not Found", errors: "gone" }, 404),
+          },
+          { name: "a 5xx", program: GitHub.call(GetRepo, { params: REPO }, { token }), reply: json({}, 502) },
+          { name: "a 3xx", program: GitHub.call(GetRepo, { params: REPO }, { token }), reply: json({}, 302) },
+          {
+            name: "an answer that cannot be read",
+            program: GitHub.call(GetRepo, { params: REPO }, { token }),
+            reply: text("not json"),
+          },
+          {
+            name: "a refused query value",
+            program: GitHub.call(LooseQuery, untyped({ params: { ...REPO, ref: "main" }, query: { per_page: null } }), {
+              token,
+            }),
+            reply: json({}),
+          },
+          {
+            name: "a refused path value",
+            program: GitHub.call(GetRepo, { params: { owner: "..", repo: "r" } }, { token }),
+            reply: json(REPO_JSON),
+          },
+          {
+            name: "a text answer",
+            program: GitHub.call(ZenAsLogin, {}, { token }),
+            reply: text("Keep it logically awesome."),
+          },
+        ];
+
+        for (const outcome of outcomes) {
+          const { exit, requests, spans } = yield* observed(outcome.program, () => outcome.reply);
+
+          // What the stand-in was handed, but for the token's own wrapper: the URL's parts, the query and the body.
+          const sent = requests.map(({ route, method, path, params, query, body, accept }) =>
+            JSON.stringify({ route, method, path, params, query, body, accept }),
+          );
+
+          const shown: Array<string> = [...sent, ...spans.map(spanText)];
+
+          if (Exit.isFailure(exit)) {
+            for (const error of Cause.prettyErrors(exit.cause, { includeCauseInStack: true })) {
+              shown.push(error.name, error.message, error.stack ?? "");
+            }
+
+            shown.push(Cause.pretty(exit.cause), ...Cause.prettyErrors(exit.cause).map(String));
+
+            const held = failure(exit);
+
+            if (held !== undefined) {
+              shown.push(String(held), Inspectable.toStringUnknown(held), JSON.stringify(held), ...reachable(held));
+            }
+          }
+
+          for (const each of shown) {
+            for (const form of forms) {
+              expect(each, `${outcome.name}: shows ${form}`).not.toContain(form);
+            }
+          }
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 200 } },
   );
 });

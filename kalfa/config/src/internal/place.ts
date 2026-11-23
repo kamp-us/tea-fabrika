@@ -37,6 +37,15 @@ export const shown = (app: string, format: Format): Names => {
   return { repo: `${folder}/${file}`, user: `~/${folder}/${file}` };
 };
 
+/** The user file's name under `$<APP>_HOME`: `$DEMO_HOME/demo.toml`. */
+const homeName = (app: string, format: Format): string => `$${app.toUpperCase()}_HOME/${parts(app, format).file}`;
+
+/** Every name a person reads for each file: the repo's one, the user's under `~` and under `$<APP>_HOME`. */
+export const fileNames = (app: string, format: Format): Readonly<Record<Setting.File, ReadonlyArray<string>>> => ({
+  repo: [shown(app, format).repo],
+  user: [shown(app, format).user, homeName(app, format)],
+});
+
 /** Where the repo configuration is, inside the folder that holds `.<app>/`, and that `.<app>/` folder, which a set may make. */
 export const repoPlace = Effect.fnUntraced(function* (app: string, format: Format, repo: string) {
   const path = yield* Path.Path;
@@ -61,7 +70,7 @@ export const userPlace = Effect.fnUntraced(function* (
   const { folder, file } = parts(app, format);
 
   return moved !== undefined
-    ? { path: path.join(moved, file), name: `$${app.toUpperCase()}_HOME/${file}`, folder: undefined }
+    ? { path: path.join(moved, file), name: homeName(app, format), folder: undefined }
     : {
         path: home === undefined ? undefined : path.join(home, folder, file),
         name: shown(app, format).user,
