@@ -239,12 +239,9 @@ const whole = Effect.fnUntraced(function* (run: Run) {
   }
 });
 
-// The bytes of content a changed file holds on each side, from the sizes `cat-file --batch-check` gave. A side the file lacks has none.
-const blobBytes = (change: Parse.Change, sizes: ReadonlyMap<string, Parse.Checked>): number =>
-  [change.before, change.after].reduce(
-    (total, side) => total + (side === undefined ? 0 : (sizes.get(side.id)?.size ?? 0)),
-    0,
-  );
+// The sides of a changed file that hold a blob: a side the file lacks and a submodule's side hold none.
+const blobSides = (change: Parse.Change): ReadonlyArray<Parse.Side> =>
+  [change.before, change.after].flatMap((side) => (side === undefined || Parse.isGitlink(side) ? [] : [side]));
 
 const calls = (run: Run, listed: Listed, settings: Settings.Settings): Repository.Raw => {
   const { limits } = settings;
@@ -353,17 +350,12 @@ const calls = (run: Run, listed: Listed, settings: Settings.Settings): Repositor
         return Option.none();
       }
 
-      // The size of each file's blobs, asked of git before any content is read. A submodule holds no blob.
-      const blobs = [
-        ...new Set(
-          changed
-            .filter((each) => !each.gitlink)
-            .flatMap((each) => [each.before, each.after].flatMap((side) => side?.id ?? [])),
-        ),
-      ];
-
+      // The size of each file's blobs, asked of git before any content is read. A submodule holds no blob, and a file made a
+      // submodule still holds one on its file side.
+      const blobs = [...new Set(changed.flatMap(blobSides).map((side) => side.id))];
       const sizes = blobs.length === 0 ? new Map<string, Parse.Checked>() : yield* blobSizes(run, blobs);
-      const bytes = changed.reduce((total, each) => total + (each.gitlink ? 0 : blobBytes(each, sizes)), 0);
+
+      const bytes = changed.flatMap(blobSides).reduce((total, side) => total + (sizes.get(side.id)?.size ?? 0), 0);
 
       if (bytes > limits.diff) {
         return yield* new Repository.DiffTooLarge({ most: limits.diff });

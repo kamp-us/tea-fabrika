@@ -352,6 +352,13 @@ export interface Change {
   readonly gitlink: boolean;
 }
 
+/**
+ * Whether one side of an entry is a submodule, which holds a commit and no file. A file made a submodule has a file on one side and a submodule on the other.
+ *
+ * @internal
+ */
+export const isGitlink = (side: Side): boolean => side.mode === GITLINK;
+
 const side = (mode: string, id: string): Result.Result<Side | undefined, Repository.GitUnavailable> =>
   mode === ABSENT
     ? Result.succeed(undefined)

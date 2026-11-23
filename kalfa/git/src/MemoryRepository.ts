@@ -433,14 +433,8 @@ const patchLimits = (
 const encoder = new TextEncoder();
 
 // A field of what a patch id hashes: a letter for what it is, its length and its bytes, so no two changes write the same bytes.
-const field = (kind: string, octets: Uint8Array): Uint8Array => {
-  const head = encoder.encode(`${kind}${octets.length}:`);
-  const whole = new Uint8Array(head.length + octets.length);
-  whole.set(head);
-  whole.set(octets, head.length);
-
-  return whole;
-};
+const field = (kind: string, octets: Uint8Array): Uint8Array =>
+  joined([encoder.encode(`${kind}${octets.length}:`), octets]);
 
 const word = (kind: string, text: string): Uint8Array => field(kind, encoder.encode(text));
 
@@ -471,12 +465,12 @@ const modes = (file: Changed, kind: Kind): ReadonlyArray<Uint8Array> => {
 // What a changed file's bytes add to the id. A binary file counts by its blobs on both sides, as git names it. A text file
 // counts by its removed and added lines, each with its own end, and where a line sits and the lines around it count for nothing.
 // A file that changed kind has every old line removed and every new line added, as git prints it. A file with the same bytes on
-// both sides, and a new mode, adds nothing.
+// both sides and a new mode, but the same kind, adds nothing.
 const edits = ({ before, after }: Changed, kind: Kind): ReadonlyArray<Uint8Array> => {
   const old = before?.content ?? NO_BYTES;
   const next = after?.content ?? NO_BYTES;
 
-  if (before !== undefined && before.entry.blob === after?.entry.blob) {
+  if (kind !== "kind" && before !== undefined && before.entry.blob === after?.entry.blob) {
     return [];
   }
 
