@@ -45,7 +45,7 @@ export const hash = Effect.fnUntraced(function* (values: Snapshot["values"]) {
 const codec = (setting: Setting.Any) => Schema.toCodecJson(setting.schema);
 
 /** The snapshot of one resolved list: the group's settings, the window included, in the group's order. */
-export const make = Effect.fnUntraced(function* (group: Group, taken: ReadonlyArray<Settled>) {
+export const make = Effect.fnUntraced(function* (app: string, taken: ReadonlyArray<Settled>) {
   const values = Rec.fromEntries(
     yield* Effect.forEach(
       taken,
@@ -59,7 +59,7 @@ export const make = Effect.fnUntraced(function* (group: Group, taken: ReadonlyAr
   );
 
   return {
-    app: group.app,
+    app,
     values,
     origins: Rec.fromEntries(taken.map(({ setting, origin }) => [setting.name, origin])),
     hash: yield* hash(values),

@@ -14,7 +14,6 @@ import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Setting from "./Declaration.ts";
 import * as change from "./internal/change.ts";
-import type { Group } from "./internal/check.ts";
 import * as disk from "./internal/disk.ts";
 import { SettingsError } from "./internal/error.ts";
 import { type FlagValues, type Flags, make as build } from "./internal/flags.ts";
@@ -190,11 +189,11 @@ const clashes = (app: string, a: Setting.Any, b: Setting.Any) => {
 // SAFETY: `start` fills one field of `values` for each setting the program declared, named by `field`, with that
 // setting's value, and one origin for each setting read, named by the setting's name, the quiet window included for a
 // group with a live setting. `Values` and `Origins` are those same keys, written as types.
-const typed = <R extends ReadonlyArray<Setting.Any>>(group: Group, started: Resolved): Started<R> => ({
+const typed = <R extends ReadonlyArray<Setting.Any>>(app: string, started: Resolved): Started<R> => ({
   values: started.values as Values<R>,
   origins: Effect.map(started.origins, (origins) => origins as Origins<R>),
   snapshots: started.taken.pipe(
-    Stream.mapEffect((taken) => snapshot(group, taken)),
+    Stream.mapEffect((taken) => snapshot(app, taken)),
     Stream.changesWith(same),
   ),
 });
@@ -263,7 +262,7 @@ export const layer = <App extends string, R extends ReadonlyArray<Setting.Any>>(
   Layer.effect(
     key(group.app, group.settings),
     start({ app: group.app, settings: watched(group.settings) }, toml, options).pipe(
-      Effect.map((started) => typed<R>({ app: group.app, settings: watched(group.settings) }, started)),
+      Effect.map((started) => typed<R>(group.app, started)),
       Effect.withSpan("config.layer", { attributes: { "kalfa.config.app": group.app } }),
     ),
   );
@@ -325,7 +324,7 @@ export const layerFromSnapshots = <App extends string, R extends ReadonlyArray<S
   Layer.effect(
     key(group.app, group.settings),
     receive({ app: group.app, settings: watched(group.settings) }, snapshots).pipe(
-      Effect.map((started) => typed<R>({ app: group.app, settings: watched(group.settings) }, started)),
+      Effect.map((started) => typed<R>(group.app, started)),
       Effect.withSpan("config.layer", { attributes: { "kalfa.config.app": group.app } }),
     ),
   );
