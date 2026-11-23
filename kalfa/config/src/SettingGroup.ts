@@ -5,7 +5,8 @@
  *
  * A program reads its settings by yielding the group, which needs the group's layer, so a program that forgot it does not compile. A restart setting reads as its plain value. A live setting reads as a `Live`: yield it for the value now, or read its `changes` for the value now and then each new value, which the layer publishes when a configuration file changes while the program runs.
  */
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Stream } from "effect";
+import type * as Digest from "effect/crypto/Digest";
 import * as Effectable from "effect/Effectable";
 import type * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -13,6 +14,7 @@ import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Setting from "./Declaration.ts";
 import * as change from "./internal/change.ts";
+import type { Group } from "./internal/check.ts";
 import * as disk from "./internal/disk.ts";
 import { SettingsError } from "./internal/error.ts";
 import { type FlagValues, type Flags, make as build } from "./internal/flags.ts";
@@ -20,6 +22,7 @@ import { frozen } from "./internal/frozen.ts";
 import type { Live } from "./internal/live.ts";
 import { field, variable } from "./internal/names.ts";
 import { shown } from "./internal/place.ts";
+import { make as snapshot, same, type Snapshot } from "./internal/snapshot.ts";
 import { type Resolved, start } from "./internal/start.ts";
 import { toml } from "./internal/toml.ts";
 import { debounce, type Watched, watched } from "./internal/window.ts";
@@ -112,6 +115,8 @@ interface Started<R extends ReadonlyArray<Setting.Any>> {
   readonly values: Values<R>;
   /** The origins as they are now: a live setting's origin follows its value. */
   readonly origins: Effect.Effect<Origins<R>>;
+  /** The files as last taken, as snapshots: the one now, then one each time a taken change says something new. */
+  readonly snapshots: Stream.Stream<Snapshot, never, Digest.Digest>;
 }
 
 // The key is its app and the names of its settings, so two groups of one app with different settings never share a slot.
@@ -184,9 +189,13 @@ const clashes = (app: string, a: Setting.Any, b: Setting.Any) => {
 // SAFETY: `start` fills one field of `values` for each setting the program declared, named by `field`, with that
 // setting's value, and one origin for each setting read, named by the setting's name, the quiet window included for a
 // group with a live setting. `Values` and `Origins` are those same keys, written as types.
-const typed = <R extends ReadonlyArray<Setting.Any>>(started: Resolved): Started<R> => ({
+const typed = <R extends ReadonlyArray<Setting.Any>>(group: Group, started: Resolved): Started<R> => ({
   values: started.values as Values<R>,
   origins: Effect.map(started.origins, (origins) => origins as Origins<R>),
+  snapshots: started.taken.pipe(
+    Stream.mapEffect((taken) => snapshot(group, taken)),
+    Stream.changesWith(same),
+  ),
 });
 
 /**
@@ -253,7 +262,7 @@ export const layer = <App extends string, R extends ReadonlyArray<Setting.Any>>(
   Layer.effect(
     key(group.app, group.settings),
     start({ app: group.app, settings: watched(group.settings) }, toml, options).pipe(
-      Effect.map(typed<R>),
+      Effect.map((started) => typed<R>({ app: group.app, settings: watched(group.settings) }, started)),
       Effect.withSpan("config.layer", { attributes: { "kalfa.config.app": group.app } }),
     ),
   );
@@ -271,6 +280,29 @@ export const origins = <App extends string, R extends ReadonlyArray<Setting.Any>
   group: SettingGroup<App, R>,
 ): Effect.Effect<Origins<R>, never, Identifier<App, R>> =>
   Effect.flatMap(key(group.app, group.settings), (started) => started.origins);
+
+/**
+ * The group's settings as snapshots, for a process that cannot read files: the one now, then one each time a change to a file is taken and the snapshot says something new. A change that is refused gives none.
+ *
+ * **Details**
+ *
+ * A snapshot holds the files as last taken: a restart setting that changed in a file shows its new value and origin, though the running process keeps its start value. It is plain JSON, so an app carries it as it likes. Needs the group's layer and the `Digest` service; the layer from files does not need `Digest`.
+ *
+ * @category combinators
+ */
+export const snapshots = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+  group: SettingGroup<App, R>,
+): Stream.Stream<Snapshot, never, Identifier<App, R> | Digest.Digest> =>
+  Stream.unwrap(Effect.map(key(group.app, group.settings), (started) => started.snapshots));
+
+export type {
+  /**
+   * Every loaded value of one app, where each came from, and a hash of the values alone, as plain JSON.
+   *
+   * @category models
+   */
+  Snapshot,
+};
 
 /**
  * One edit of one configuration file's text: set one setting of the group, or take it out.

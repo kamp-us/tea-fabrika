@@ -181,6 +181,43 @@ Each call ends one span, `config.set` or `config.remove`, with `kalfa.config.app
 The new reason is `write`: the file or its lock could not be written, or another change holds the lock. A file that
 exists and cannot be read fails `read`. Every other fault is the edit's, with its own reason and line.
 
+## Settings for a process that cannot read files
+
+A Worker cannot read the configuration files. The process that can, the loading process, gives it the settings as a
+stream of snapshots, and carrying them is the app's job: `postMessage`, a socket, anything.
+
+```ts
+import { NodeServices } from "@effect/platform-node";
+import { Setting, SettingGroup } from "@kalfa/config";
+import { Effect, Schema, Stream } from "effect";
+import { Digest } from "effect/crypto";
+
+const port = Setting.make("instance.port", Schema.Int).pipe(
+  Setting.withDefault(18800),
+  Setting.withDescription("The port the service listens on."),
+);
+
+const Demo = SettingGroup.make("demo", port);
+
+// The loading process: its group is started from the files, as always, and the stream is read inside that layer.
+// `Digest.layerWebCrypto` gives the stream its hash; the layer from files needs only the file system and the path.
+const first = await Effect.runPromise(
+  SettingGroup.snapshots(Demo).pipe(
+    Stream.take(1),
+    Stream.runCollect,
+    Effect.provide(SettingGroup.layer(Demo, { version: "1.0.0" })),
+    Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+  ),
+);
+// [{ app: "demo", values: { "instance.port": 18800 }, origins: { "instance.port": { _tag: "default" } }, hash: "008d9371f1e4..." }]
+```
+
+`snapshots(group)` gives the snapshot of the files now, then one more each time a change to a file is taken and the
+snapshot says something new: another value, or only another origin, as a line moved. A refused change gives none. A
+snapshot holds the files as last taken, so a restart setting that changed in a file shows its new value though the
+loading process keeps the one it started with. It is plain JSON, and it holds the app's name, so one app's snapshot
+is never read as another's. It needs the group's layer and `Digest`; the layer from files does not need `Digest`.
+
 ## Public modules
 
 Import these explicit subpaths: `App`, `Setting`, `Sources`, `Toml`, `TomlParser`, `Codec`,
