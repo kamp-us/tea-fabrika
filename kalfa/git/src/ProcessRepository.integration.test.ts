@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-// The git-binary adapter on the real git binary (I1 to I7). Real git runs in temp folders, so this file runs
+// The git-binary adapter on the real git binary (I1 to I9). Real git runs in temp folders, so this file runs
 // only in CI's full run and in a cloud box, never on the laptop (the host's test config refuses it by name).
 // A stand-in cannot do this job: these laws are the proof that `/process` answers what `/memory` answers and
 // that the parser reads what real git writes.
@@ -52,7 +52,7 @@ const bytes = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
 
 const ADA = "Ada <ada@example.test> 1700000000 +0000";
 
-// I1 runs the shared laws S1 to S16 on real git, 10 runs each, over bare repositories the seeder fills with files.
+// I1 runs the shared laws S1 to S18 on real git, 10 runs each, over bare repositories the seeder fills with files.
 // Plant: each S law's plant, run once on `/process`.
 RepositoryTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
 
@@ -314,10 +314,10 @@ const GITLINK_A = "a".repeat(40);
 
 const GITLINK_B = "b".repeat(40);
 
-// Plant (I7): ask `cat-file` the size of a gitlink's id, so `patchId` fails on the submodule; leave the file side of a `T` entry
+// Plant (I9): ask `cat-file` the size of a gitlink's id, so `patchId` fails on the submodule; leave the file side of a `T` entry
 // out of the sizes, so the file made a submodule is not counted.
 it.effect(
-  "I7 scenario: a commit with a submodule entry gets a patch id on real git, which follows the submodule's commit, even when the diff limit is one byte, and a file made a submodule counts the file's bytes",
+  "I9 scenario: a commit with a submodule entry gets a patch id on real git, which follows the submodule's commit, even when the diff limit is one byte, and a file made a submodule counts the file's bytes",
   () =>
     Effect.gen(function* () {
       const dir = yield* bareRepository;

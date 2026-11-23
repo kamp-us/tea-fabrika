@@ -1,4 +1,4 @@
-// The laws every adapter of `Repository` passes (S1 to S16), exported as `/test`. A runner gives a
+// The laws every adapter of `Repository` passes (S1 to S18), exported as `/test`. A runner gives a
 // `Subject`: how to seed a history into its own kind of store. The suite draws a texture, makes one
 // history for each shape class from it, seeds each, and compares every answer with the model in
 // History.test-support.ts. A subject that passes these laws answers as every other one does.
@@ -1335,7 +1335,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // Plant: delete the files check, (h) red; delete the size check, (h) red; count `>=` for `>` on either limit: red; check the
     // size before the files: red; count the files that do not change: red; count only one side's bytes: red.
     it.effect.prop(
-      "S15 limits never cut: at exactly limits.files files and limits.diff bytes patchId answers, one more fails with TooMany or DiffTooLarge, over both is TooMany",
+      "S17 limits never cut: at exactly limits.files files and limits.diff bytes patchId answers, one more fails with TooMany or DiffTooLarge, over both is TooMany",
       { texture: textureArb },
       ({ texture }) =>
         Effect.gen(function* () {
@@ -1382,7 +1382,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // Plant: answer none for an unknown `from`, (i) red; answer none for an unknown `to`, (i) red; check the limits before the
     // ids, red.
     it.effect.prop(
-      "S16 unknown ids: an id the store lacks, or a tree's id, on either side fails patchId with NoSuchCommit naming it, never none, even when a limit would fail first",
+      "S18 unknown ids: an id the store lacks, or a tree's id, on either side fails patchId with NoSuchCommit naming it, never none, even when a limit would fail first",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), settings({ files: 1, diff: 1 }), (seeded, shape) =>

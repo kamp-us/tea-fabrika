@@ -1,4 +1,4 @@
-// M6: the line diff of the memory adapter (ticket 1933). It splits bytes into lines that keep their own ends, follows git's rule
+// M7: the line diff of the memory adapter (ticket 1933). It splits bytes into lines that keep their own ends, follows git's rule
 // for a binary file, and answers the smallest change blocks between two texts, each block's removed lines first.
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
@@ -64,7 +64,7 @@ const join = (parts: ReadonlyArray<Uint8Array>): string => parts.map(latin1).joi
 // give a block its added lines before its removed ones; end a block one kept line late, so two blocks run into one; start a
 // text with no newline at the end as one line more.
 it.prop(
-  "M6 lines: split keeps every line's own end, and blocks turn the first text into the second by the fewest lines, removed first",
+  "M7 lines: split keeps every line's own end, and blocks turn the first text into the second by the fewest lines, removed first",
   { before: textArb, after: textArb },
   ({ before, after }) => {
     const old = Lines.split(before);
@@ -137,7 +137,7 @@ const FILLER = Arbitrary.array(int(1, 255), { minLength: 0, maxLength: 40 });
 
 // Plant: look for the NUL in the whole file; look in the first 8001 bytes; look in the first 7999.
 it.prop(
-  "M6 lines: a file is binary exactly when a NUL byte is among its first 8000 bytes",
+  "M7 lines: a file is binary exactly when a NUL byte is among its first 8000 bytes",
   { filler: FILLER, tail: FILLER, near: int(0, 3), index: int(0, 5) },
   ({ filler, tail, near, index }) => {
     const text = (length: number): Uint8Array =>
