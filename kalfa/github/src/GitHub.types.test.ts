@@ -597,7 +597,8 @@ const callOptions = () => {
 // and `"json"` and `"login"` where they say none, so the type must say exactly that where the options fix it, and both
 // values wherever the options leave them open. Judging a `{ token }`: a route that may be `"none"` drops a token, whatever
 // else it may be, and a token silently dropped is T15's hole, so a route whose `auth` type includes `"none"` refuses it.
-// Plant: read an optional `body` or `auth` key as the default, and the `viaTypeArgument`, `optional` and `fromParameter` lines
+// Plant: read a union of options by the keys they share (so `fromUnion` reads as the defaults), and its `body` and `auth` lines
+// fail; read an optional `body` or `auth` key as the default, and the `viaTypeArgument`, `optional` and `fromParameter` lines
 // fail; let a route whose `auth` may be `"none"` take a token, and the `maybeNone` lines compile; make the options never
 // required, and the `bareText` line compiles.
 type None = Record<never, never>;
@@ -651,6 +652,21 @@ const everyWay = () => {
   expectTypeOf(widened("text").body).toEqualTypeOf<"json" | "text">();
   expectTypeOf(widened("text").auth).toEqualTypeOf<"login">();
 
+  // Options typed as a union: each member fixes one key and leaves the other open, so each key may be either value.
+  const pick = (n: number): { readonly body: "text" } | { readonly auth: "none" } =>
+    n === 0 ? { body: "text" } : { auth: "none" };
+
+  const fromUnion = GitHub.route(GET_REPO, pick(1));
+  expectTypeOf(fromUnion.body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(fromUnion.auth).toEqualTypeOf<"login" | "none">();
+  // A key whose value may be `undefined` reads as the default when it is, so it is no `"text"` or `"none"` for certain. This
+  // repo's config has `exactOptionalPropertyTypes` on, which refuses the options; a config without it would accept them, and
+  // F2 (the run-time law) is what holds then.
+  // @ts-expect-error a text that may be undefined is not a text for certain
+  const maybeText = (body: "text" | undefined) => GitHub.route(GET_REPO, { body });
+  // @ts-expect-error nor is a none that may be undefined
+  const maybeNobody = (auth: "none" | undefined) => GitHub.route(GET_REPO, { auth });
+
   // A token: taken where the route sends the login, refused wherever it may send none.
   const token = { token: Redacted.make("t") };
   const taken = [GitHub.call(bare, input, token), GitHub.call(text, input, token), GitHub.call(zen, {}, token)];
@@ -661,7 +677,21 @@ const everyWay = () => {
   // @ts-expect-error a route that may be none drops a token, however it was built
   const maybeNoneFromType = GitHub.call(viaTypeArgument, input, token);
 
-  expectTypeOf([taken, bareText, emptyNone, noAuth, noneToken, maybeNone, maybeNoneFromType]).toBeArray();
+  // @ts-expect-error a route built from options of a union may be none
+  const maybeNoneFromUnion = GitHub.call(fromUnion, input, token);
+
+  expectTypeOf([
+    taken,
+    bareText,
+    emptyNone,
+    noAuth,
+    noneToken,
+    maybeNone,
+    maybeNoneFromType,
+    maybeNoneFromUnion,
+    maybeText,
+    maybeNobody,
+  ]).toBeArray();
 };
 
 it("T14 type: route takes body: text where GitHub answers text, a success read from text, auth: none and a media type, and refuses the rest", () => {

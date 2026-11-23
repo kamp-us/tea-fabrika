@@ -1,7 +1,8 @@
 // C10: the fake `GitHubTest.layer`, answered by `GitHubTest.answer` and `GitHubTest.refuse`, run through `call` and through the
 // service's own `send`. It runs in memory: the fake is the whole of the GitHub side. The type laws are in TestGitHub.types.test.ts.
 import { assert, describe, expect, it } from "@effect/vitest";
-import { Cause, Data, Duration, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Data, Duration, Effect, Exit, Option, Predicate, Redacted, Schema } from "effect";
+import type { GetRepo } from "./GitHub.test-support.ts";
 import {
   between,
   CancelRun,
@@ -12,9 +13,12 @@ import {
   SEED,
   slice1,
   textAnswers,
+  tokenForms,
+  untyped,
   Zen,
 } from "./GitHub.test-support.ts";
 import * as GitHub from "./GitHub.ts";
+import { GET_REPO } from "./Octokit.test-support.ts";
 import { CreatedIssue, EchoIssue, fakeCalls, goodTexts } from "./TestGitHub.test-support.ts";
 import * as GitHubTest from "./TestGitHub.ts";
 
@@ -325,6 +329,100 @@ describe("F1, the fake on a text route", () => {
           expect(held.reason.status).toBe(status);
           expect(held.reason.message).toBe(drawn.base);
           expect(held.reason.errors).toBe(drawn.marker);
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 200 } },
+  );
+});
+
+// F2, a route whose value says more than its type. The types keep a route's `body` and `auth` as its value holds them, but a cast
+// can write a route that disagrees, so `call` reads the value and fails loudly on a token it would drop. Each route here is typed
+// as `GetRepo` and holds something else, through `untyped`, which is the lie a cast tells. Plant: send the request, and die after
+// it; drop the token and send the request (what the code did before); fail with a `GitHubError` in place of dying; write the
+// token into the defect's message; die with no route in the message; read a text route's answer through `Schema.fromJsonString`;
+// read the answer by the route's type (as JSON) when the value says text; send `Auth.Token` on a route that holds none.
+const REPO = { owner: "o", repo: "r" } as const;
+
+const REPO_ANSWER = { id: 1296269, full_name: "o/r", private: false };
+
+const REPO_SHAPE = Schema.Struct({ id: Schema.Int, full_name: Schema.String, private: Schema.Boolean });
+
+/** Typed as `GetRepo`, which sends the login; its value sends nobody. */
+const LyingNone: typeof GetRepo = untyped(GitHub.route(GET_REPO, { auth: "none", success: REPO_SHAPE }));
+
+/** Typed as `GetRepo`, which reads JSON into a Struct; its value reads a text. */
+const LyingText: typeof GetRepo = untyped(GitHub.route(GET_REPO, { body: "text", success: Schema.String }));
+
+describe("F2, a route that lies about its type", () => {
+  it.effect.prop(
+    "call with a token on a route whose value sends none dies with a plain defect that names the route and never the token, and sends nothing; the same route with no token sends nobody; a text route's answer is read as text, whatever its type says",
+    { drawn: slice1 },
+    ({ drawn }) =>
+      Effect.gen(function* () {
+        const secret = `ghp_zq${drawn.length.toString(36)}x${drawn.token}`;
+        const token = Redacted.make(secret);
+        const forms = tokenForms(secret);
+
+        const seen: Array<GitHub.Request> = [];
+
+        /** An answer that also keeps what it was asked. */
+        const keeping = (inner: GitHubTest.Answer): GitHubTest.Answer => ({
+          route: inner.route,
+          reply: (request) => {
+            seen.push(request);
+
+            return inner.reply(request);
+          },
+        });
+
+        const layer = GitHubTest.layer([keeping(GitHubTest.answer(LyingNone, () => REPO_ANSWER))]);
+
+        const exit = yield* GitHub.call(LyingNone, { params: REPO }, { token }).pipe(
+          Effect.provide(layer),
+          Effect.exit,
+        );
+
+        if (!Exit.isFailure(exit)) {
+          return assert.fail("a token on a route that sends none was taken");
+        }
+
+        expect(Cause.hasDies(exit.cause), "a defect").toBe(true);
+        expect(Cause.hasFails(exit.cause), "no failure in the Effect's error channel").toBe(false);
+
+        const defect = Cause.squash(exit.cause);
+        expect(Predicate.isString(defect) || defect instanceof Error, "a plain defect").toBe(true);
+
+        const shown = [
+          Cause.pretty(exit.cause),
+          String(defect),
+          ...Cause.prettyErrors(exit.cause, { includeCauseInStack: true }).flatMap((error) => [
+            error.name,
+            error.message,
+            error.stack ?? "",
+          ]),
+        ];
+
+        expect(shown.join("\n"), "the route").toContain(GET_REPO);
+
+        for (const each of shown) {
+          for (const form of forms) {
+            expect(each, `the defect shows ${form}`).not.toContain(form);
+          }
+        }
+
+        expect(seen, "nothing was sent").toHaveLength(0);
+
+        // Without a token the same route is sent, as nobody.
+        const read = yield* GitHub.call(LyingNone, { params: REPO }).pipe(Effect.provide(layer));
+        assert.deepStrictEqual(read, REPO_ANSWER);
+        expect(seen.map((request) => request.auth._tag)).toStrictEqual(["None"]);
+
+        // A text route whose type says JSON is read as text, and a text that is also JSON stays a text.
+        for (const answer of textAnswers(drawn.base, drawn.length)) {
+          const text = GitHubTest.layer([GitHubTest.answer(LyingText, () => untyped(answer.value))]);
+          const got: unknown = yield* GitHub.call(LyingText, { params: REPO }).pipe(Effect.provide(text));
+
+          assert.deepStrictEqual(got, answer.value, answer.name);
         }
       }),
     { arbitrary: { seed: SEED, runs: 200 } },
