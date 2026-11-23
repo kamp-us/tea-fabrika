@@ -12,11 +12,13 @@ import * as Option from "effect/Option";
 import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Setting from "./Declaration.ts";
+import { remove, set } from "./internal/change.ts";
 import { SettingsError } from "./internal/error.ts";
 import { type FlagValues, type Flags, make as build } from "./internal/flags.ts";
 import { frozen } from "./internal/frozen.ts";
 import type { Live } from "./internal/live.ts";
 import { field, variable } from "./internal/names.ts";
+import { shown } from "./internal/place.ts";
 import { type Resolved, start } from "./internal/start.ts";
 import { toml } from "./internal/toml.ts";
 import type { Origin } from "./Sources.ts";
@@ -261,3 +263,47 @@ export const origins = <App extends string, R extends ReadonlyArray<Setting.Any>
   group: SettingGroup<App, R>,
 ): Effect.Effect<Origins<R>, never, Identifier<App, R>> =>
   Effect.map(key(group.app, group.settings), (started) => started.origins);
+
+/**
+ * One edit of one configuration file's text: set one setting of the group, or take it out.
+ *
+ * @category models
+ */
+export interface Edit<R extends ReadonlyArray<Setting.Any>> {
+  /**
+   * The text with the setting's value replaced, or added where the file puts it. Fails with one `SettingsError`, and then no text comes back.
+   */
+  readonly set: <S extends R[number]>(setting: S, value: Setting.Type<S>) => Effect.Effect<string, SettingsError>;
+  /**
+   * The text without the setting's key, or the same text when the key is not there.
+   */
+  readonly remove: (setting: R[number]) => Effect.Effect<string, SettingsError>;
+}
+
+/**
+ * Edits one setting of one configuration file's text, in memory: no file is read or written, and the text is the only input.
+ *
+ * **Details**
+ *
+ * `file` says which file the text is, `"repo"` or `"user"`, and the errors name it as a person reads it: `.<app>/<app>.toml` or `~/.<app>/<app>.toml`. Only the changed value's text is replaced, so every comment and line break and every other key stays as it was. A set of the value the file already holds, or a remove of a key the file lacks, answers the same text.
+ *
+ * Before the text is changed, the setting must be one of the group's, the file must be one its file scope allows, a value must pass its schema and be one the file can write, and the whole text must pass the start's check with this setting's own old value left out, so an edit can fix a bad value. After it, the new text is read again: it must hold only that one change and pass the whole check. The first fault is the one error, and no text comes back. A message ends `<file> was not changed.` and never holds a value.
+ *
+ * **Gotchas**
+ *
+ * Fails `edit` for a record setting written under its own header, as dotted sub-keys or as an array of tables: it is not one key in the text.
+ *
+ * @category combinators
+ */
+export const edit = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+  group: SettingGroup<App, R>,
+  text: string,
+  file: Setting.File,
+): Edit<R> => {
+  const place = { file, names: shown(group.app, toml) };
+
+  return {
+    set: (setting, value) => set(group, toml, place, text, setting, value),
+    remove: (setting) => remove(group, toml, place, text, setting),
+  };
+};

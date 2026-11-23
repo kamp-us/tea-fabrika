@@ -2,6 +2,7 @@
  * Where an app's configuration files are, and how each is read: the repo's at `<repo>/.<app>/<app>.<extension>`, the user's at `$<APP>_HOME/<app>.<extension>` or else `$HOME/.<app>/<app>.<extension>`.
  */
 import { type ConfigProvider, Effect, FileSystem, Path } from "effect";
+import * as Result from "effect/Result";
 import type * as Setting from "../Declaration.ts";
 import { stop } from "./error.ts";
 import type { Document, Format } from "./format.ts";
@@ -59,6 +60,27 @@ export const userPlace = Effect.fnUntraced(function* (
 
 export const empty: Document = { value: {}, spans: [] };
 
+/** The two files as a person reads them where no environment is read: `.<app>/<app>.<extension>` and `~/.<app>/<app>.<extension>`. */
+export const shown = (app: string, format: Format): Names => ({
+  repo: `.${app}/${app}.${format.extension}`,
+  user: `~/.${app}/${app}.${format.extension}`,
+});
+
+/** Parses one file's text. Fails as `syntax` with the parser's line. The message ends with `closing`, the start's own sentence when none is given. */
+export const parse = (app: string, format: Format, name: string, text: string, closing?: string) =>
+  Result.mapBoth(format.parse(text), {
+    onSuccess: (document): Loaded => ({ name, document }),
+    onFailure: (fault) =>
+      stop(
+        app,
+        "syntax",
+        `this is not valid ${format.name}.`,
+        { file: name, line: fault._tag === "Value" ? undefined : fault.line },
+        fault.cause,
+        closing,
+      ),
+  });
+
 /** Reads and parses one file. A missing file counts as empty, any other failure to read it fails as `read`. */
 export const load = Effect.fnUntraced(function* (app: string, format: Format, place: Place) {
   const fs = yield* FileSystem.FileSystem;
@@ -73,17 +95,5 @@ export const load = Effect.fnUntraced(function* (app: string, format: Format, pl
       ),
     );
 
-  const document = yield* Effect.fromResult(format.parse(text)).pipe(
-    Effect.mapError((fault) =>
-      stop(
-        app,
-        "syntax",
-        `this is not valid ${format.name}.`,
-        { file: place.name, line: fault._tag === "Value" ? undefined : fault.line },
-        fault.cause,
-      ),
-    ),
-  );
-
-  return { name: place.name, document };
+  return yield* Effect.fromResult(parse(app, format, place.name, text));
 });

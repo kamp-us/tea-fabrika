@@ -56,6 +56,11 @@ How an app's configuration files are written: how its text is read, and how one 
 the only one built. It is inside the package, and no public name is a format.
 _Avoid_: syntax, grammar, parser, serializer
 
+**Edit**:
+One change to one setting in a configuration file's text: setting its value or removing it. Every other line and
+comment stays as it was, and the whole edited text is checked before any text comes back.
+_Avoid_: patch, update, write, mutation
+
 **File scope**:
 Which of the repo configuration and the user configuration may set a setting.
 _Avoid_: scope, level, layer

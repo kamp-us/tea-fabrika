@@ -69,7 +69,8 @@ export const read = (value: Index["value"], path: Path): unknown =>
     value,
   );
 
-const equal = (left: unknown, right: unknown): boolean => {
+/** @internal */
+export const equal = (left: unknown, right: unknown): boolean => {
   if (Predicate.isDate(left) || Predicate.isDate(right)) {
     return Equal.equals(left, right);
   }

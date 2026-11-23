@@ -6,7 +6,7 @@ import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import type * as Setting from "../Declaration.ts";
 import { Origin } from "../Sources.ts";
-import { distance, leaf, lineAt, same } from "./document.ts";
+import { distance, drop, leaf, lineAt, type Path, same } from "./document.ts";
 import { type Position, type SettingsError, stop } from "./error.ts";
 import { segments, variable } from "./names.ts";
 import type { Loaded, Names } from "./place.ts";
@@ -22,8 +22,12 @@ interface Minimum {
   readonly position: Position;
 }
 
-/** The minimum version the repo configuration asks for, or none. Fails when `<app>-version` does not read as a version. */
-export const version = (app: string, repo: Loaded): Result.Result<Option.Option<Minimum>, SettingsError> => {
+/** The minimum version the repo configuration asks for, or none. Fails when `<app>-version` does not read as a version. The message ends with `closing`, the start's own sentence when none is given. */
+export const version = (
+  app: string,
+  repo: Loaded,
+  closing?: string,
+): Result.Result<Option.Option<Minimum>, SettingsError> => {
   const key = `${app}-version`;
   const wanted = repo.document.value[key];
 
@@ -34,7 +38,7 @@ export const version = (app: string, repo: Loaded): Result.Result<Option.Option<
   const position = { file: repo.name, line: lineAt(repo.document, [key]) };
 
   return Schema.decodeUnknownResult(Schema.SemVerFromString)(wanted).pipe(
-    Result.mapError(() => stop(app, "invalid", `${key} is not a version, as 1.2.3.`, position)),
+    Result.mapError(() => stop(app, "invalid", `${key} is not a version, as 1.2.3.`, position, undefined, closing)),
     Result.map((asked) => Option.some({ version: asked, position })),
   );
 };
@@ -67,20 +71,27 @@ export const places = (app: string, s: Setting.Any, names: Names) =>
     .join("");
 
 /** The one message for the first issue of `file`. An unknown key is named, and its value never is. */
-const explain = (group: Group, file: Setting.File, found: Loaded, names: Names, issue: SchemaIssue.Issue) => {
+const explain = (
+  group: Group,
+  file: Setting.File,
+  found: Loaded,
+  names: Names,
+  issue: SchemaIssue.Issue,
+  closing: string | undefined,
+) => {
   const { app, settings } = group;
   const path = (SchemaIssue.makeFormatterStandardSchemaV1()(issue).issues[0]?.path ?? []).map(String);
   const own = settings.filter((s) => s.files.includes(file));
 
   const stopped = (reason: SettingsError["reason"], text: string, key: ReadonlyArray<string>) =>
-    stop(app, reason, text, { file: found.name, line: lineAt(found.document, key) });
+    stop(app, reason, text, { file: found.name, line: lineAt(found.document, key) }, undefined, closing);
 
   if (own.some((s) => under(s, path))) {
     const s = own.find((s) => same(segments(s.name), path));
 
     return s === undefined
       ? stopped("invalid", `${path.join(".")} is a table of settings, not a value.`, path)
-      : refused(app, s, Origin.cases.file.make({ file: found.name, line: lineAt(found.document, path) ?? 0 }));
+      : refused(app, s, Origin.cases.file.make({ file: found.name, line: lineAt(found.document, path) ?? 0 }), closing);
   }
 
   const key = leaf(found.document.value, path);
@@ -108,32 +119,54 @@ const explain = (group: Group, file: Setting.File, found: Loaded, names: Names, 
   );
 };
 
-/** The `invalid` error for a value its setting's schema refuses, naming where it was and never what it was. */
-export const refused = (app: string, s: Setting.Any, origin: Origin) => {
+/** What a setting's schema asks for, as a message says it, in place of the value it refused. */
+const wanted = (s: Setting.Any, name: string) => {
   const expected = SchemaAST.resolveTitle(s.schema.ast) ?? "a valid value";
   const rule = SchemaAST.resolveDescription(s.schema.ast);
-  const text = (name: string) => `${name} is not ${expected}.${rule === undefined ? "" : ` ${rule}`}`;
 
-  return Origin.matchOrElse(
-    origin,
-    {
-      file: ({ file, line }) => stop(app, "invalid", text(s.name), { file, line }),
-      default: () => stop(app, "invalid", text(s.name)),
-    },
-    ({ name }) => stop(app, "invalid", text(name)),
-  );
+  return `${name} is not ${expected}.${rule === undefined ? "" : ` ${rule}`}`;
 };
 
+/** The `invalid` error for a value its setting's schema refuses, naming where it was and never what it was. */
+export const refused = (app: string, s: Setting.Any, origin: Origin, closing?: string) =>
+  Origin.matchOrElse(
+    origin,
+    {
+      file: ({ file, line }) => stop(app, "invalid", wanted(s, s.name), { file, line }, undefined, closing),
+      default: () => stop(app, "invalid", wanted(s, s.name), undefined, undefined, closing),
+    },
+    ({ name }) => stop(app, "invalid", wanted(s, name), undefined, undefined, closing),
+  );
+
+/** The `invalid` error for a value an edit was asked to write that its setting's schema refuses: the file is named, no line, and never the value. */
+export const unfit = (app: string, s: Setting.Any, file: string, closing: string) =>
+  stop(app, "invalid", wanted(s, s.name), { file }, undefined, closing);
+
+/** How a check of one file differs from the start's: the closing sentence, and one key left out. */
+interface Options {
+  /** The sentence that ends each message. The start's own, `<app> did not start.`, when none is given. */
+  readonly closing?: string;
+  /** A key whose value is not decoded: an edit is about to replace or take out its old value. */
+  readonly without?: Path | undefined;
+}
+
 /** Checks one file against the settings that may be set in it. Its first fault is the one error. */
-export const check = Effect.fnUntraced(function* (group: Group, file: Setting.File, found: Loaded, names: Names) {
+export const check = Effect.fnUntraced(function* (
+  group: Group,
+  file: Setting.File,
+  found: Loaded,
+  names: Names,
+  options: Options = {},
+) {
   const own = group.settings.filter((s) => s.files.includes(file));
   // The repo's minimum version was checked on its own, ahead of everything else.
-  const value = file === "repo" ? Rec.remove(found.document.value, `${group.app}-version`) : found.document.value;
+  const whole = file === "repo" ? Rec.remove(found.document.value, `${group.app}-version`) : found.document.value;
+  const value = options.without === undefined ? whole : drop(whole, options.without);
 
   // A file no setting may be set in refuses every key, where an empty Struct would take any object.
   const schema = own.length === 0 ? Schema.Record(Schema.String, Schema.Never) : struct(own, 0);
 
   yield* Schema.decodeUnknownEffect(schema)(value, { onExcessProperty: "error" }).pipe(
-    Effect.mapError((error) => explain(group, file, found, names, error.issue)),
+    Effect.mapError((error) => explain(group, file, found, names, error.issue, options.closing)),
   );
 });
