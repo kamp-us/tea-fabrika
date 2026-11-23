@@ -41,7 +41,17 @@ for the product code.
    percentage. Under that, build the plan's reading and name the doubt.
 6. **Run** every law the test writer wrote and the laws that read the files you changed, one file
    at a time, until each is green.
-7. **Commit, push and report** by the standing rules below.
+7. **Run the guard check** once the laws are green, since a guard no law reaches passes every law:
+   `node .agents/skills/mutation/scripts/survivors.ts --out <your scratch folder>/survivors`.
+   It mutates the product files your diff touches, in the mutation container, against the laws
+   that load them, and prints one line per mutant that lived (`lived`, `no law ran`, `no law
+   loads`) with its file, line and what changed. When it refuses the scope as too wide, name the
+   files that hold the guarding checks with `--files`. Answer each survivor in a guarding check:
+   a law is missing, so list it in your report and end with `answer: send tests <the survivors>`;
+   or it guards nothing, so write `Survivor: <file>:<line> <one-line reason>` in the commit body,
+   such as a log text or a mutant that changes no behavior. Leave the `static` lines as they are:
+   code that runs as the module loads, which Stryker skips and the reviewer plants by hand.
+8. **Commit, push and report** by the standing rules below.
 
 ## Outside your task
 
@@ -110,7 +120,8 @@ These hold in every build round, so the brief does not repeat them.
 - **Report** for a reader who saw none of the work, the answer first: every law green, yes or no,
   file by file. Then what changed, a line a file; every call you took with its percentage; any law
   you think is wrong (untouched) and why; any file you needed but may not touch; what the lead's
-  own run must show (Electron, screenshots, a host-only law); each check's result; and the new
+  own run must show (Electron, screenshots, a host-only law); each check's result; the guard
+  check's survivor and `static` lines, its run time and what a capped run did not reach; and the new
   head. If every law was already green at the start and you changed nothing, do not commit: put
   `laws: green <the narrow test paths you ran>` just before the last line. End with one line:
   `answer: done <why>`, or `answer: send tests <why>` or `send plan <why>`.

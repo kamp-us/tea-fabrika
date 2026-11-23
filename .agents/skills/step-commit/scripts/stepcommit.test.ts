@@ -141,6 +141,14 @@ if(args.includes("--paginate")) {
  if(compared.trim()==="fail"){console.error("gh: compare unavailable");process.exit(1);}
  process.stdout.write(compared);process.exit(0);
 }
+if(args[0]==="issue"&&args[1]==="view"){
+ // T_ISSUES: "N:STATE" pairs, STATE OPEN, CLOSED or PR (a pull request answers issue view too); "fail" is a GitHub that cannot be read.
+ const issues=process.env.T_ISSUES??"";
+ if(issues==="fail"){console.error("gh: offline");process.exit(1);}
+ const hit=issues.split(" ").map(x=>x.split(":")).find(([n])=>n===args[2]);
+ if(!hit){console.error("GraphQL: Could not resolve to an issue or pull request with the number of "+args[2]+". (repository.issue)");process.exit(1);}
+ process.stdout.write(JSON.stringify({state:hit[1]==="PR"?"MERGED":hit[1],url:"https://github.com/o/r/"+(hit[1]==="PR"?"pull":"issues")+"/"+hit[0]}));process.exit(0);
+}
 const f=process.env.T390_PRS;
 const prs=f&&fs.existsSync(f)?fs.readFileSync(f,"utf8"):JSON.stringify({data:{repository:{pullRequests:{totalCount:0,nodes:[]}}}});
 if(prs.trim()==="fail"){console.error("gh: offline");process.exit(1);}
@@ -166,6 +174,20 @@ console.log("publish: pushed");
 
     writeFileSync(join(bin, "publish"), `#!${process.execPath}\n${publish}`, { mode: 0o755 });
     this.env.STEPCOMMIT_PUBLISHER = join(bin, "publish");
+
+    // The tracker's list, as the app prints it: one line for each open ticket in T_TICKETS (default: 321 and 999); "fail" is a tracker that cannot be read.
+    const tickets = String.raw`
+const fs=require("node:fs");
+fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["tickets",...process.argv.slice(2)])+"\n");
+const open=process.env.T_TICKETS??"321 999";
+if(open==="fail"){console.error("ERROR tracker offline");process.exit(1);}
+console.log("[00:00:00.000] INFO (#5): agent_session { agent: 'lead' }");
+for(const n of open.split(" ").filter(Boolean)) console.log("[00:00:00.000] INFO (#2): #"+n+" open c0 a ticket");
+console.log("[00:00:00.000] INFO (#2): #7 closed c0 a closed ticket");
+`;
+
+    writeFileSync(join(bin, "tickets"), `#!${process.execPath}\n${tickets}`, { mode: 0o755 });
+    this.env.STEPCOMMIT_TICKETS = join(bin, "tickets");
     symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(bin, "oxfmt"));
     this.git("init", "-q", "-b", "fabrikalfa/one", `--separate-git-dir=${join(this.dir, "gitdata")}`);
     put(join(this.dir, "gitdata/info/exclude"), "node_modules/\n");
@@ -1009,6 +1031,76 @@ describe("1271 a tests commit carries its plant record in the body, today's tool
       expect(done.code, done.text).toBe(0);
     });
   });
+});
+
+describe("a lead link signs only under a real open ticket, today's tooling", () => {
+  // Plants: drop the check; accept a closed ticket or issue, a made-up number or a pull request's number; refuse an open GitHub issue
+  // (the kalfa build tickets are issues); pass when neither the tracker nor GitHub can be read; check --commit-only or another step;
+  // ask GitHub when the tracker already knows the ticket. Ticket 0 and 9902 were made up on 2026-11-22 to get past stale_link.
+  it("scenario: a signed lead commit is refused exactly when the ticket is no open tracker ticket and no open GitHub issue, so a made-up number cannot sign", () => {
+    // `says` is what a refusal says; the box's own ticket is 321, so a signing case uses 321.
+    type Case = { ticket: string; tracker: string; issues: string; step: Step; only: boolean; says?: string };
+
+    // SAFETY: "lead" is a member of Owner, so this only widens a literal.
+    const lead = { ticket: "321", tracker: "7", issues: "", step: "lead" as Owner, only: false };
+    const unknown = "is not an open tracker ticket or an open GitHub issue";
+    const cannot = "and GitHub cannot say if it is an open issue";
+
+    const cases: Case[] = [
+      { ...lead, tracker: "321 999" },
+      { ...lead, issues: "321:OPEN" },
+      { ...lead, tracker: "fail", issues: "321:OPEN" },
+      { ...lead, issues: "321:CLOSED", says: unknown },
+      { ...lead, issues: "321:PR", says: unknown },
+      { ...lead, says: unknown },
+      { ...lead, ticket: "0", says: unknown },
+      { ...lead, ticket: "9902", tracker: "321", says: unknown },
+      { ...lead, tracker: "fail", says: unknown },
+      { ...lead, issues: "fail", says: cannot },
+      { ...lead, tracker: "fail", issues: "fail", says: `the tracker cannot be read) ${cannot}` },
+      // The unchecked ones sign under the box's ticket, which neither the tracker nor GitHub knows.
+      { ...lead, only: true },
+      { ...lead, step: "build" },
+      { ...lead, step: "fix" },
+    ];
+
+    each(cases, ({ ticket, tracker, issues, step, only, says }) =>
+      withRepo([["src/owned.ts", step === "fix" ? "build" : step]], (r) => {
+        r.env.T_TICKETS = tracker;
+        r.env.T_ISSUES = issues;
+        r.changed("src/owned.ts");
+
+        const got = r.call("sh", [
+          script,
+          ...(only ? ["--commit-only"] : []),
+          step,
+          ticket,
+          `T${ticket} ${step}: fixture`,
+          "src/owned.ts",
+        ]);
+
+        const checked = step === "lead" && !only;
+
+        if (checked && says !== undefined) {
+          expect(got.code, got.text).toBe(5);
+          expect(got.text).toContain(says);
+          expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+          expect(r.git("diff", "--cached", "--name-only")).toBe("");
+          expect(r.signs()).toEqual([]);
+          // The open-PR read comes after the ticket check.
+          expect(r.calls().some((call) => call.includes("graphql"))).toBe(false);
+        } else {
+          expect(got.code, got.text).toBe(0);
+        }
+
+        const calls = r.calls();
+        const trackerKnows = tracker.split(" ").includes(ticket);
+        expect(calls.some((call) => call[0] === "tickets")).toBe(checked);
+        // GitHub is asked about the ticket only when the tracker does not hold it.
+        expect(calls.some((call) => call[0] === "gh" && call[1] === "issue")).toBe(checked && !trackerKnows);
+      }),
+    );
+  }, 180_000);
 });
 
 describe("T390 a lead link never lands on another branch's open PR ticket, today's tooling", () => {

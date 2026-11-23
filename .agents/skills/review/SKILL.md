@@ -81,6 +81,17 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      ends your turn with no answer, so plant by reading there.
    - Delete at least one guarding check (a scope, a re-read, an equality, a schema, an own-key read)
      and report whether a law went red. A guarding check whose deletion turns no law red is a finding.
+   - The build ran the guard check and answered each survivor with a `Survivor:` line in its
+     commit body or a law sent back to tests. Read those lines with `git log --format=%B`, then run
+     it yourself on the branch:
+     `node .agents/skills/mutation/scripts/survivors.ts --out <your scratch folder>/survivors --head HEAD`,
+     with `--files` naming the guarding files when it refuses the scope as too wide. Each `lived`,
+     `no law ran` or `no law loads` line in a guarding check that no `Plant:` or `Survivor:` line
+     explains is a finding. Plant each `static` line that guards by hand: Stryker skips code that
+     runs as the module loads. Stryker also never moves or reorders code, so a race (a read, a
+     yield and a write in place of one atomic update) needs your own plant too. Give its run time
+     and the mutants a capped run did not reach. Where your box cannot start Docker, say so, and
+     the lead runs it.
    - A law moved onto a schema's Arbitrary keeps its old reach.
    - If secrets must stay out of records, URLs or spans, the plan's Law cell has `[secrets]` and
      the law generates flows: made-up words, keys and passes, operation orders, refusals and

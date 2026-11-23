@@ -5,7 +5,18 @@ import { Effect, Schema } from "effect";
 import { duplicatesCell } from "./duplicates.ts";
 import { foldersCell } from "./folders.ts";
 import { clockRunner, loadCell, pollRunner, saveCell, saveHintsCell } from "./ledger.ts";
-import { Find, over, Show, Shown, shownOf, statusOf, Tracker, type TrackerMsg, tracker as tickets } from "./machine.ts";
+import {
+  Find,
+  over,
+  Show,
+  Shown,
+  settledOf,
+  shownOf,
+  statusOf,
+  Tracker,
+  type TrackerMsg,
+  tracker as tickets,
+} from "./machine.ts";
 import { pullRequestsCell, pullRequestsWaitRunner } from "./pull-requests.ts";
 import {
   Answer,
@@ -206,7 +217,7 @@ export const tracker = defineProgram({
   inputs: {
     file: input(
       File,
-      'File a new ticket: its title and body, and from: the PR and step, the lane run, or the walk it came out of; leave it out only if none. {_tag: "pr", url, step?} | {_tag: "run", ticket, run, head?} | {_tag: "walk", url}. Writes its `filed`.',
+      'File a new ticket: its title and body, and from: the PR and step, the lane run, or the walk it came out of; leave it out only if none. {_tag: "pr", url, step?} | {_tag: "run", ticket, run, head?} | {_tag: "walk", url}. Writes its `filed`. The answer view has `filed`: the number the new ticket got.',
     ),
     comment: input(Comment, 'Comment on a ticket. `asks: "changes"` requests changes. Writes one `commented`.'),
     close: input(OneTicket, "Close a ticket. Writes its `closed`."),
@@ -253,7 +264,7 @@ export const tracker = defineProgram({
     ),
   },
   machines: { tickets: ticketsKind },
-  view: { machine: "tickets", data: Shown, of: shownOf },
+  view: { machine: "tickets", data: Shown, of: shownOf, settled: settledOf },
   main: ({ serve, send, watch }) =>
     Effect.gen(function* () {
       const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
