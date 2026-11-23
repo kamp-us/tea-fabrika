@@ -258,7 +258,7 @@ jobs:
       # anchor below; workflow-lint.ts holds it there, last, in every job but ci-required.
       - &stop
         name: stop the run
-        if: ${{ failure() && github.event_name != 'push' }}
+        if: ${{ false }} # TEMPORARY, so one run lists every slow law
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
