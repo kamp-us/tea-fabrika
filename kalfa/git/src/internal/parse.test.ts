@@ -1,11 +1,14 @@
-// P1 and P15: what internal/parse.ts reads out of git's own output. The files under fixtures/ were recorded from
+// P1, P15 and P17: what internal/parse.ts reads out of git's own output. The files under fixtures/ were recorded from
 // real git runs (each names the git version and the command), one row per case with the value its note gives.
 import { expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Predicate, Result, Schema } from "effect";
 import * as Commit from "../Commit.ts";
+import * as Diff from "../Diff.ts";
 import catFile from "../fixtures/cat-file-2.40.1.json" with { type: "json" };
+import diffTreePatch from "../fixtures/diff-tree-patch-2.40.1.json" with { type: "json" };
 import diffTreeRaw from "../fixtures/diff-tree-raw-2.40.1.json" with { type: "json" };
 import forEachRef from "../fixtures/for-each-ref-2.40.1.json" with { type: "json" };
+import { ModelDiff } from "../History.test-support.ts";
 import * as Ref from "../Ref.ts";
 import { expectFailure } from "../Repository.test-support.ts";
 import * as Repository from "../Repository.ts";
@@ -220,4 +223,124 @@ it("P15 vector: parse.changes reads every entry of each diff-tree -r -z output r
   expect(Result.isSuccess(both) ? both.success.length : -1, "two outputs read as one list").toBe(
     first.expect.length + second.expect.length,
   );
+});
+
+const DiffTreePatch = Schema.Struct({
+  git: Schema.String,
+  command: Schema.String,
+  rows: Schema.Array(
+    Schema.Struct({
+      note: Schema.String,
+      raw: Schema.String,
+      output: Schema.String,
+      expect: Schema.Union([
+        Schema.Array(ModelDiff.Content),
+        Schema.Struct({ failure: Schema.Literal("NotUtf8"), path: Schema.String }),
+      ]),
+    }),
+  ),
+});
+
+// Built when it is called, so this file loads before the product names exist.
+const encodeContents = (contents: ReadonlyArray<typeof Diff.Content.Type>) =>
+  Schema.encodeSync(Schema.Array(Diff.Content))(contents);
+
+const isUnavailable = Schema.is(Repository.GitUnavailable);
+
+const isUnreadableReason = Schema.is(Repository.Unreadable);
+
+/** The reader failed with GitUnavailable for the reason Unreadable: git printed what no call reads. */
+const unreadable = (result: Result.Result<unknown, Repository.GitUnavailable | Repository.NotUtf8>): boolean =>
+  Result.isFailure(result) && isUnavailable(result.failure) && isUnreadableReason(result.failure.reason);
+
+// Plant: read the text after a hunk header's second `@@` as a line; delete the section count check, so a raw list with more or
+// fewer entries than the patch has sections still reads; stop a hunk at a line that looks like a header; name the last file in the
+// raw list and not the failing one; strip the line end of every line; number every line from 1, or a removed line in the new file;
+// decode a line with replacement, so the latin-1 rows read; read a binary file's bytes as lines; read a type change as one section.
+it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output recorded from git to the value its note gives, one section for each raw entry and two for a type change", () => {
+  const recorded = Schema.decodeUnknownSync(DiffTreePatch)(diffTreePatch);
+  expect(recorded.git).toContain("git version");
+  expect(recorded.rows.length).toBeGreaterThan(20);
+
+  const contents = recorded.rows.flatMap((row) => ("failure" in row.expect ? [] : row.expect));
+  expect(
+    contents.filter((each) => Predicate.isTagged(each, "Binary")).length,
+    "the rows hold binary files",
+  ).toBeGreaterThan(3);
+
+  expect(
+    contents.filter((each) => Predicate.isTagged(each, "Text") && each.lines.length === 0).length,
+    "the rows hold files with no line",
+  ).toBeGreaterThan(3);
+
+  expect(
+    contents.some((each) => Predicate.isTagged(each, "Text") && each.lines.some((line) => line.text.endsWith("\r\n"))),
+    "the rows hold CRLF lines",
+  ).toBe(true);
+
+  expect(
+    contents.some((each) => Predicate.isTagged(each, "Text") && each.lines.some((line) => !line.text.endsWith("\n"))),
+    "the rows hold a line with no end",
+  ).toBe(true);
+
+  expect(
+    recorded.rows.filter((row) => "failure" in row.expect).length,
+    "the rows hold lines that are not UTF-8",
+  ).toBeGreaterThanOrEqual(3);
+
+  for (const row of recorded.rows) {
+    const listed = Parse.changes(fromBase64(row.raw));
+    expect(Result.isSuccess(listed), `${row.note}: the raw list reads`).toBe(true);
+
+    if (!Result.isSuccess(listed)) {
+      continue;
+    }
+
+    const result = Parse.patch(listed.success, fromBase64(row.output));
+
+    if ("failure" in row.expect) {
+      expect(Result.isFailure(result), `${row.note}: fails`).toBe(true);
+
+      if (Result.isFailure(result)) {
+        expectFailure(result.failure, Repository.NotUtf8, { path: row.expect.path }, row.note);
+      }
+
+      continue;
+    }
+
+    expect(Result.isSuccess(result), `${row.note}: reads`).toBe(true);
+
+    if (Result.isSuccess(result)) {
+      expect(encodeContents(result.success), row.note).toEqual(row.expect);
+    }
+
+    // A raw list with one entry fewer, or one more, than the patch has sections is no answer. A type change is two sections.
+    if (listed.success.length > 0) {
+      const fewer = Parse.patch(listed.success.slice(0, -1), fromBase64(row.output));
+      expect(unreadable(fewer), `${row.note}: one entry fewer is unreadable`).toBe(true);
+    }
+
+    const last = listed.success.at(-1);
+
+    if (last !== undefined) {
+      const more = Parse.patch([...listed.success, last], fromBase64(row.output));
+      expect(unreadable(more), `${row.note}: one entry more is unreadable`).toBe(true);
+    }
+
+    if (listed.success.some((each) => each.status === "T")) {
+      const one = listed.success.map((each) => ({ ...each, status: "M" as const }));
+      const miscounted = Parse.patch(one, fromBase64(row.output));
+      expect(unreadable(miscounted), `${row.note}: a type change is two sections`).toBe(true);
+    }
+
+    // A patch cut after a line of a hunk holds fewer lines than its header says: it is cut, which is no answer.
+    const patch = fromBase64(row.output);
+    const lines = new TextDecoder("latin1").decode(patch).split("\n").slice(0, -1);
+    const lastLine = lines.at(-1) ?? "";
+
+    if (lastLine.startsWith("+") || lastLine.startsWith("-")) {
+      const cut = Parse.patch(listed.success, patch.subarray(0, patch.length - lastLine.length - 1));
+      expect(unreadable(cut), `${row.note}: a patch cut short is unreadable`).toBe(true);
+    }
+  }
 });

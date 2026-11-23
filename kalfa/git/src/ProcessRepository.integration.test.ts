@@ -4,11 +4,12 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 // A stand-in cannot do this job: these laws are the proof that `/process` answers what `/memory` answers and
 // that the parser reads what real git writes.
 import { expect, it } from "@effect/vitest";
-import { Effect, Option, Predicate, Schema, Tracer } from "effect";
+import { Effect, Option, Predicate, Result, Schema, Tracer } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as FileSystem from "effect/FileSystem";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
+import * as Diff from "./Diff.ts";
 import {
   TREE_CARRIER_CLASSES,
   editCarrier,
@@ -52,7 +53,7 @@ const bytes = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
 
 const ADA = "Ada <ada@example.test> 1700000000 +0000";
 
-// I1 runs the shared laws S1 to S18 on real git, 10 runs each, over bare repositories the seeder fills with files.
+// I1 runs the shared laws S1 to S24 on real git, 10 runs each, over bare repositories the seeder fills with files.
 // Plant: each S law's plant, run once on `/process`.
 RepositoryTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
 
@@ -259,14 +260,26 @@ const idAt = (ids: ReadonlyArray<CommitId.CommitId>, index: number): CommitId.Co
   return id;
 };
 
+// Built when it is called, so this file loads before the product names exist.
+const encodeDiff = (files: Diff.Diff) => Schema.encodeSync(Schema.Array(Diff.FileChange))(files);
+
+/** What `diff` came to as plain data: the files, or the failure's tag and the path it names. */
+const diffOutcome = (repo: Repository.Repository["Service"], from: CommitId.CommitId, to: CommitId.CommitId) =>
+  Effect.map(Effect.result(repo.diff(from, to)), (result) =>
+    Result.isSuccess(result)
+      ? { files: encodeDiff(result.success) }
+      : { failure: result.failure._tag, path: "path" in result.failure ? result.failure.path : undefined },
+  );
+
 const patchIdOrUndefined = (repo: Repository.Repository["Service"], from: CommitId.CommitId, to: CommitId.CommitId) =>
   Effect.map(repo.patchId(from, to), Option.getOrUndefined);
 
 // Plant (I8): run porcelain `git diff` in place of `diff-tree`, which reads `diff.noprefix` and `diff.orderFile`; drop
-// `--verbatim`, which `patchid.stable` would change; leave `--no-renames` out. The ids of every edit of the generator, asked of one
-// bare repository, are the same before and after its config gets the four lines.
+// `--verbatim`, which `patchid.stable` would change; leave `--no-renames` out; run porcelain `git diff` for the patch of `diff`; drop
+// `--no-ext-diff` or `--no-textconv` from it. The ids and the diffs of every edit of the generator, asked of one bare repository, are
+// the same before and after its config gets the four lines.
 it.effect.prop(
-  "I8 scenario: a repository's own config steers nothing: diff.noprefix, diff.orderFile, diff.algorithm=patience and patchid.stable=true change no patch id",
+  "I8 scenario: a repository's own config steers nothing: diff.noprefix, diff.orderFile, diff.algorithm=patience and patchid.stable=true change no patch id and no diff",
   { texture: textureArb },
   ({ texture }) =>
     Effect.gen(function* () {
@@ -288,7 +301,15 @@ it.effect.prop(
               { concurrency: 1 },
             );
 
+          const diffs = () =>
+            Effect.forEach(
+              carrier.cases,
+              (each) => diffOutcome(seeded.repository, idAt(seeded.ids, each.from), idAt(seeded.ids, each.to)),
+              { concurrency: 1 },
+            );
+
           const without = yield* ids();
+          const diffsWithout = yield* diffs();
           const fs = yield* FileSystem.FileSystem;
           // A file that puts the paths ending in 0 first, which a porcelain diff would follow.
           yield* fs.writeFileString(`${dir}/order`, "*0\n");
@@ -303,7 +324,13 @@ it.effect.prop(
           }
 
           expect(yield* ids(), "the same ids with the four config lines").toEqual(without);
+          expect(yield* diffs(), "the same diffs with the four config lines").toEqual(diffsWithout);
           expect(without.filter((id) => id !== undefined).length, "the edits have ids").toBeGreaterThan(20);
+
+          expect(
+            diffsWithout.filter((each) => "files" in each && each.files.length > 0).length,
+            "the edits have diffs",
+          ).toBeGreaterThan(20);
         }),
       );
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -315,9 +342,10 @@ const GITLINK_A = "a".repeat(40);
 const GITLINK_B = "b".repeat(40);
 
 // Plant (I9): ask `cat-file` the size of a gitlink's id, so `patchId` fails on the submodule; leave the file side of a `T` entry
-// out of the sizes, so the file made a submodule is not counted.
+// out of the sizes, so the file made a submodule is not counted; read 160000 as a file in `diff`, so it answers; check the size before
+// the submodule in `diff`, so the file made a submodule is `DiffTooLarge`.
 it.effect(
-  "I9 scenario: a commit with a submodule entry gets a patch id on real git, which follows the submodule's commit, even when the diff limit is one byte, and a file made a submodule counts the file's bytes",
+  "I9 scenario: a commit with a submodule entry gets a patch id on real git, which follows the submodule's commit, even when the diff limit is one byte, a file made a submodule counts the file's bytes, and diff over any of them fails with NotAFile naming it before the size limit",
   () =>
     Effect.gen(function* () {
       const dir = yield* bareRepository;
@@ -370,6 +398,23 @@ it.effect(
         Repository.DiffTooLarge,
         { most: 1 },
         "a file made a submodule is over a diff limit of one byte",
+      );
+
+      // A diff answers files and lines, and a submodule is neither: it names the submodule's path, with the size limit at one byte
+      // and the files limit at one, so the check that names it comes before the size and after the count.
+      const diffs: ReadonlyArray<readonly [string, CommitId.CommitId, CommitId.CommitId]> = [
+        ["a submodule added", id0, id1],
+        ["a submodule moved to another commit", id1, id2],
+        ["a file made a submodule", id0, id4],
+      ];
+
+      for (const [label, from, to] of diffs) {
+        const named = yield* Effect.flip(repo.diff(from, to));
+        expectFailure(named, Repository.NotAFile, { path: label === "a file made a submodule" ? "a" : "sub" }, label);
+      }
+
+      expect(yield* repo.diff(id1, id3), "a commit with the same files is no change, whatever the submodule").toEqual(
+        [],
       );
     }).pipe(Effect.provide(NodeServices.layer)),
 );

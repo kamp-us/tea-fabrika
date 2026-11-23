@@ -1,18 +1,32 @@
-// The laws of the git-binary adapter on a stand-in spawner (P2 to P14): what each exit code means, the time
+// The laws of the git-binary adapter on a stand-in spawner (P2 to P16): what each exit code means, the time
 // limit, git's version, the command's environment, the arguments of each call, that sizes are read before objects,
 // how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, that no
-// call reaches a remote, what `merge-tree` printed, the version a merge needs and the commands of a patch id. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
+// call reaches a remote, what `merge-tree` printed, the version a merge needs and the commands of a patch id and of a diff. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
 import { expect, it } from "@effect/vitest";
-import { Arbitrary, ConfigProvider, Context, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
+import {
+  Arbitrary,
+  ConfigProvider,
+  Context,
+  Duration,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+} from "effect";
 import { TestClock } from "effect/testing";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
+import * as Diff from "./Diff.ts";
 import mergeTreeRows from "./fixtures/merge-tree-2.40.1.json" with { type: "json" };
 import {
   commitIdArb,
   committerFrom,
   flatSignatureArb,
   messageVariants,
+  ModelDiff,
   partArb,
   wordArb,
 } from "./History.test-support.ts";
@@ -1072,6 +1086,321 @@ it.effect.prop(
           unavailable(result.failure, Repository.Unreadable, {}, label);
         }
       }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// Built when it is called, so this file loads before the product names exist.
+const encodeDiff = (files: Diff.Diff) => Schema.encodeSync(Schema.Array(Diff.FileChange))(files);
+
+const encoder = new TextEncoder();
+
+const concat = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
+  const chunks = parts.map((part) => (Predicate.isString(part) ? encoder.encode(part) : part));
+  const out = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
+  let at = 0;
+
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.length;
+  }
+
+  return out;
+};
+
+/** The line an entry's section holds, as bytes: text, or the one byte that is no UTF-8 for the entries a law marks. */
+type Lines = (index: number) => Uint8Array | string;
+
+// One entry's sections of `diff-tree -p -U0`, as git prints them: a new file, a deleted file, a changed file that is binary (a
+// mode change and `Binary files`), and a type change, which is a deleted section and a new one with no newline on its last line.
+const sectionText = (entry: Entry, index: number, line: Lines): Uint8Array => {
+  const { path } = entry;
+  const head = `diff --git a/${path} b/${path}\n`;
+
+  switch (entry.status) {
+    case "A":
+      return concat(
+        head,
+        `new file mode ${entry.mode.after}\nindex ${ZEROS}..${entry.id.after}\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1 @@\n+`,
+        line(index),
+        "\n",
+      );
+    case "D":
+      return concat(
+        head,
+        `deleted file mode ${entry.mode.before}\nindex ${entry.id.before}..${ZEROS}\n--- a/${path}\n+++ /dev/null\n@@ -1 +0,0 @@\n-`,
+        line(index),
+        "\n",
+      );
+    case "M":
+      return concat(
+        head,
+        `old mode ${entry.mode.before}\nnew mode ${entry.mode.after}\nindex ${entry.id.before}..${entry.id.after}\nBinary files a/${path} and b/${path} differ\n`,
+      );
+    case "T":
+      return concat(
+        head,
+        `deleted file mode ${entry.mode.before}\nindex ${entry.id.before}..${ZEROS}\n--- a/${path}\n+++ /dev/null\n@@ -1 +0,0 @@\n-`,
+        line(index),
+        "\n",
+        head,
+        `new file mode ${entry.mode.after}\nindex ${ZEROS}..${entry.id.after}\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1 @@\n+target\n\\ No newline at end of file\n`,
+      );
+  }
+};
+
+const patchText = (entries: ReadonlyArray<Entry>, line: Lines): Uint8Array =>
+  concat(...entries.map((entry, index) => sectionText(entry, index, line)));
+
+/** What `diff` must answer for the entries of a scene, as plain data. */
+const expectedFiles = (entries: ReadonlyArray<Entry>) =>
+  entries.map((entry, index) => {
+    const before = { mode: entry.mode.before, blob: entry.id.before };
+    const after = { mode: entry.mode.after, blob: entry.id.after };
+    const removed = ModelDiff.Removed.make({ at: 1, text: `line${index}\n` });
+    const added = ModelDiff.Added.make({ at: 1, text: `line${index}\n` });
+
+    if (entry.status === "A") {
+      return ModelDiff.New.make({ path: entry.path, after, content: ModelDiff.Text.make({ lines: [added] }) });
+    }
+
+    if (entry.status === "D") {
+      return ModelDiff.Deleted.make({ path: entry.path, before, content: ModelDiff.Text.make({ lines: [removed] }) });
+    }
+
+    // A changed file is binary in the scene, and a type change holds the old line and a link with no newline.
+    const content =
+      entry.status === "M"
+        ? ModelDiff.Binary.make({})
+        : ModelDiff.Text.make({ lines: [removed, ModelDiff.Added.make({ at: 1, text: "target" })] });
+
+    return ModelDiff.Modified.make({ path: entry.path, before, after, content });
+  });
+
+const lineText: Lines = (index) => `line${index}`;
+
+// The scene of P14 without its submodules: the files the raw list names, in path order as git prints them, one of each status.
+const diffScene = (spec: Spec) => {
+  const made = scene(spec);
+
+  const real = [...made.real]
+    .map((entry, i) => ({ ...entry, path: `${entry.path}-${i}` }))
+    .sort((a, b) => byBytes(a.path, b.path));
+
+  const sides = real.flatMap(fileSides);
+
+  return {
+    ...made,
+    real,
+    files: real.length,
+    bytes: sides.reduce((total, side) => total + side.size, 0),
+    blobs: new Set(sides.map((side) => side.id)),
+  };
+};
+
+// Plant: run `patch-id` after the patch, red; run `diff-tree -p` before the size check, red; delete the submodule check, or check it after
+// the size, (j) red; delete the size check, or count `>=` for `>` on it, (h) red; run the later commands after an empty raw list, red;
+// ignore the exit code of the patch, red; delete the check that both commits are known, (i) red; answer a gitlink as a file, (j) red;
+// in the reader: delete the section count check, decode a line with replacement, (e) red, or name the last file and not the first, red.
+it.effect.prop(
+  "P16 a diff's commands: known, the raw list, a files limit, a submodule, the sizes, a size limit, the patch and its lines, in that order and each before the next command; an empty raw list is [] and nothing runs after it",
+  SPEC,
+  (spec) =>
+    Effect.gen(function* () {
+      const { first, second, real, script: made, files, bytes, blobs } = diffScene(spec);
+      expect(real.map((e) => e.status).sort(), "every status of the raw list is read").toEqual(
+        expect.arrayContaining([...STATUSES]),
+      );
+
+      const withPatch = (entries: ReadonlyArray<Entry>, patch: Uint8Array) => ({ ...made, entries, patch });
+      const good = withPatch(real, patchText(real, lineText));
+
+      const RAW = ["diff-tree", "-r", "-z", "--no-renames", first, second];
+
+      const PATCH = [
+        "diff-tree",
+        "-r",
+        "-p",
+        "-U0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--full-index",
+        first,
+        second,
+      ];
+
+      const ask = (
+        scripted: Script,
+        limits: Parameters<typeof settings>[0],
+        rest?: (call: Call) => Reply | undefined,
+      ) =>
+        Effect.gen(function* () {
+          const { repo, stand } = yield* open(patchScript(scripted, rest), limits);
+
+          return { result: yield* Effect.result(repo.diff(first, second)), seen: yield* stand.calls };
+        });
+
+      const ran = (...commands: ReadonlyArray<ReadonlyArray<string>>) =>
+        [...OPENING, ...commands].map((rest) => [...START, ...rest]);
+
+      // Exactly at both limits: every command in order, no `patch-id`, and the answer is what the raw list and the patch say.
+      const whole = yield* ask(good, { files, diff: bytes });
+      expect(Result.isSuccess(whole.result), "at both limits it answers").toBe(true);
+
+      if (Result.isSuccess(whole.result)) {
+        expect(encodeDiff(whole.result.success), "the raw list's entries and the patch's lines").toEqual(
+          expectedFiles(real),
+        );
+      }
+
+      expect(commandsSeen(whole.seen), "every command, in order").toEqual(ran(CHECK, RAW, CHECK, PATCH));
+      expect(
+        whole.seen.some((seen) => seen.piped),
+        "no command is a pipe",
+      ).toBe(false);
+      expect(asked(whole.seen[4]), "the sizes are asked of each blob of the raw list").toEqual(blobs);
+
+      // One entry more than `files`: TooMany, and nothing after the raw list runs.
+      const crowded = yield* ask(good, { files: files - 1, diff: bytes });
+      expect(Result.isFailure(crowded.result), "one file too many fails").toBe(true);
+
+      if (Result.isFailure(crowded.result)) {
+        expectFailure(
+          crowded.result.failure,
+          Repository.TooMany,
+          { limit: "files", most: files - 1 },
+          "the files limit",
+        );
+      }
+
+      expect(commandsSeen(crowded.seen), "no size is asked before the files limit").toEqual(ran(CHECK, RAW));
+
+      // A submodule in the raw list: NotAFile naming its path, before any size is asked, and after the files limit.
+      const gitlinks: ReadonlyArray<readonly [string, Entry]> = [
+        ["a submodule added", GITLINK],
+        ...submodules(1, 1).map((entry): readonly [string, Entry] => [`${entry.path}`, entry]),
+      ];
+
+      for (const [label, gitlink] of gitlinks) {
+        const entries = [...real, gitlink];
+        const scripted = withPatch(entries, patchText(real, lineText));
+
+        const named = yield* ask(scripted, { files: entries.length, diff: 1 });
+        expect(Result.isFailure(named.result), `${label} fails`).toBe(true);
+
+        if (Result.isFailure(named.result)) {
+          expectFailure(
+            named.result.failure,
+            Repository.NotAFile,
+            { path: gitlink.path },
+            `${label} is named, before the size limit`,
+          );
+        }
+
+        expect(commandsSeen(named.seen), `${label}: no size is asked and no patch is printed`).toEqual(ran(CHECK, RAW));
+
+        const crowdedToo = yield* ask(scripted, { files: entries.length - 1, diff: 1 });
+        expect(Result.isFailure(crowdedToo.result), `${label}: over the files limit it fails`).toBe(true);
+
+        if (Result.isFailure(crowdedToo.result)) {
+          expectFailure(
+            crowdedToo.result.failure,
+            Repository.TooMany,
+            { limit: "files", most: entries.length - 1 },
+            `${label}: the files limit comes first`,
+          );
+        }
+      }
+
+      // One byte more than `diff`: DiffTooLarge, and no patch is printed.
+      const heavy = yield* ask(good, { files, diff: bytes - 1 });
+      expect(Result.isFailure(heavy.result), "one byte too many fails").toBe(true);
+
+      if (Result.isFailure(heavy.result)) {
+        expectFailure(heavy.result.failure, Repository.DiffTooLarge, { most: bytes - 1 }, "the diff limit");
+      }
+
+      expect(commandsSeen(heavy.seen), "no patch is printed before the size limit").toEqual(ran(CHECK, RAW, CHECK));
+
+      // Nothing changed: the answer is [], and nothing runs after the raw list.
+      const quiet = yield* ask(withPatch([], new Uint8Array()), { files, diff: bytes });
+      expect(Result.isSuccess(quiet.result) ? quiet.result.success : undefined, "an empty raw list is []").toEqual([]);
+      expect(commandsSeen(quiet.seen), "nothing runs after an empty raw list").toEqual(ran(CHECK, RAW));
+
+      // Lines that are not UTF-8: the first file in path order that holds one is named, and a binary file never fails.
+      const odd =
+        (marked: ReadonlySet<number>): Lines =>
+        (index) =>
+          marked.has(index) ? Uint8Array.of(0x78, 0xe9) : `line${index}`;
+
+      // The last two files that hold a line are marked, so the first of them is not the first file: it is named, and no later one is.
+      const lined = real.flatMap((entry, i) => (entry.status === "M" ? [] : [i]));
+      const marked = new Set(lined.slice(-2));
+      const firstMarked = real[Math.min(...marked)];
+      expect(marked.size, "two files hold lines that are not UTF-8").toBe(2);
+
+      const broken = yield* ask(withPatch(real, patchText(real, odd(marked))), { files, diff: bytes });
+      expect(Result.isFailure(broken.result), "lines that are not UTF-8 fail").toBe(true);
+
+      if (Result.isFailure(broken.result)) {
+        expectFailure(
+          broken.result.failure,
+          Repository.NotUtf8,
+          { path: firstMarked?.path },
+          "the first file in path order is named",
+        );
+      }
+
+      // A patch with a section more or fewer than the raw list has is no answer, and a failed command is never no change.
+      const patched = patchText(real, lineText);
+      const fewer = yield* ask(withPatch(real, patchText(real.slice(0, -1), lineText)), { files, diff: bytes });
+
+      const more = yield* ask(withPatch(real, concat(patched, sectionText(real[0] ?? GITLINK, 0, lineText))), {
+        files,
+        diff: bytes,
+      });
+
+      for (const [label, outcome] of [
+        ["a section fewer", fewer],
+        ["a section more", more],
+      ] as const) {
+        expect(Result.isFailure(outcome.result), `${label} fails`).toBe(true);
+
+        if (Result.isFailure(outcome.result)) {
+          unavailable(outcome.result.failure, Repository.Unreadable, {}, label);
+        }
+      }
+
+      const fails: ReadonlyArray<readonly [string, (call: Call) => boolean]> = [
+        ["the raw list", (call) => call.verb === "diff-tree" && call.rest.includes("-z")],
+        ["the patch", (call) => call.verb === "diff-tree" && call.rest.includes("-p")],
+      ];
+
+      for (const [label, is] of fails) {
+        const failing = yield* ask(good, { files, diff: bytes }, (call) =>
+          is(call) ? { code: 128, stderr: "fatal" } : undefined,
+        );
+
+        expect(Result.isFailure(failing.result), `${label} that exits 128 fails the call`).toBe(true);
+
+        if (Result.isFailure(failing.result)) {
+          unavailable(failing.result.failure, Repository.Exited, { code: 128 }, `${label} exits 128`);
+        }
+      }
+
+      // The commits are asked about before anything: an unknown id is NoSuchCommit and no other command runs.
+      const unknown = yield* ask(good, { files, diff: bytes }, (call) =>
+        call.verb === "cat-file" ? { code: 0, stdout: `${first} missing\n` } : undefined,
+      );
+
+      expect(Result.isFailure(unknown.result), "an unknown commit fails").toBe(true);
+
+      if (Result.isFailure(unknown.result)) {
+        expectFailure(unknown.result.failure, Repository.NoSuchCommit, { id: first }, "the unknown commit is named");
+      }
+
+      expect(commandsSeen(unknown.seen), "nothing runs after the commits are found unknown").toEqual(ran(CHECK));
     }),
   { arbitrary: { runs: 100, seed: 119120 } },
 );
