@@ -424,6 +424,9 @@ importers:
       '@kalfa/github':
         specifier: workspace:*
         version: link:kalfa/github
+      '@kalfa/ledger':
+        specifier: workspace:*
+        version: link:kalfa/ledger
       '@kalfa/markdown':
         specifier: workspace:*
         version: link:kalfa/markdown
@@ -806,6 +809,28 @@ importers:
       '@rslib/core':
         specifier: 'catalog:'
         version: 1.0.5(typescript@7.0.2)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(patch_hash=a6bb69c3bcb136e22a97f79cea68a82a9d95f9fffeb606d2f216dc44c1536d59)(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+
+  kalfa/ledger:
+    dependencies:
+      fast-sha256:
+        specifier: 1.3.0
+        version: 1.3.0
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.1.3(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(vitest@5.0.5(patch_hash=a6bb69c3bcb136e22a97f79cea68a82a9d95f9fffeb606d2f216dc44c1536d59)(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6

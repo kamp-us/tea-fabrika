@@ -485,6 +485,12 @@
       "imports": []
     },
     {
+      "name": "kalfa-ledger",
+      "layer": 0,
+      "paths": ["kalfa/ledger/src"],
+      "imports": []
+    },
+    {
       "name": "kalfa-markdown",
       "layer": 0,
       "paths": ["kalfa/markdown/src"],
@@ -544,6 +550,7 @@
     "kalfa/diagnostics/src",
     "kalfa/git/src",
     "kalfa/github/src",
+    "kalfa/ledger/src",
     "kalfa/markdown/src",
     "kalfa/secrets/src"
   ],
