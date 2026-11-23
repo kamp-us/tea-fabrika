@@ -236,7 +236,12 @@ export class GitHub extends Context.Service<
   }
 >()("@kalfa/github/GitHub") {}
 
-type Any = Route<RouteName, Schema.Constraint, Schema.Constraint, Schema.Constraint>;
+/**
+ * Any declared operation: the bound `call` takes, and what a test's fake is declared over.
+ *
+ * @category models
+ */
+export type AnyRoute = Route<RouteName, Schema.Constraint, Schema.Constraint, Schema.Constraint>;
 
 /**
  * What a caller hands `call` for a declared operation: its path names, its query and its payload, each there exactly when the
@@ -244,7 +249,7 @@ type Any = Route<RouteName, Schema.Constraint, Schema.Constraint, Schema.Constra
  *
  * @category models
  */
-export type Input<Op extends Any> =
+export type Input<Op extends AnyRoute> =
   Op extends Route<infer R, Schema.Constraint, infer Q extends Schema.Constraint, infer P extends Schema.Constraint>
     ? Check.Input<R, Q, P>
     : never;
@@ -255,7 +260,7 @@ export type Input<Op extends Any> =
  *
  * @category models
  */
-export type Success<Op extends Any> =
+export type Success<Op extends AnyRoute> =
   Op extends Route<infer R, infer S extends Schema.Constraint, Schema.Constraint, Schema.Constraint>
     ? Check.Returned<R, S>
     : never;
@@ -265,7 +270,7 @@ export type Success<Op extends Any> =
  *
  * @category models
  */
-export type Services<Op extends Any> =
+export type Services<Op extends AnyRoute> =
   Op extends Route<
     RouteName,
     infer S extends Schema.Constraint,
@@ -285,7 +290,7 @@ interface CallInput {
 // A key the Schema lacks is refused when encoding, and dropped when decoding: the caller reads only some fields of GitHub's.
 const ENCODING = { onExcessProperty: "error" } as const;
 
-const run = Effect.fn("github.call")(function* (op: Any, given: CallInput) {
+const run = Effect.fn("github.call")(function* (op: AnyRoute, given: CallInput) {
   yield* Effect.annotateCurrentSpan({ "http.request.method": op.method, "kalfa.github.operation": op.route });
 
   const refuse = (side: "input" | "answer", message: string, cause?: unknown) =>
@@ -393,7 +398,7 @@ const run = Effect.fn("github.call")(function* (op: Any, given: CallInput) {
  */
 // SAFETY: `run` reads a route and its input as the loose types they have under every route; `Input`, `Success` and
 // `Services` name what each route's declared parts make of them, and `route` checked those parts when it was made.
-export const call = run as <Op extends Any>(
+export const call = run as <Op extends AnyRoute>(
   op: Op,
   input: Input<Op>,
 ) => Effect.Effect<Success<Op>, GitHubError | RateLimited, GitHub | Services<Op>>;
