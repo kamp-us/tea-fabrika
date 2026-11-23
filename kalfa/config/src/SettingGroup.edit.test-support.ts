@@ -1219,6 +1219,59 @@ export const faulty = (draw: Draws): ReadonlyArray<Faulty> => {
   );
 };
 
+/** (p) A plain value where the edited key's table goes, at each depth of the key's path. */
+interface Flat extends Scene {
+  readonly depth: number;
+  readonly kind: (typeof FLAT_KINDS)[number];
+  readonly value: unknown;
+}
+
+const FLAT_KINDS = ["integer", "float", "text", "boolean", "array"] as const;
+
+export const flat = (draw: Draws): ReadonlyArray<Flat> =>
+  [false, true].flatMap((three) =>
+    FLAT_KINDS.flatMap((kind, k) =>
+      Array.from({ length: three ? 2 : 1 }, (_, n) => n + 1).map((depth): Flat => {
+        const { r, c } = frame(draw, k + depth, three);
+        const raw = { integer: "5", float: "1.5", text: '"x"', boolean: "true", array: "[1, 2]" }[kind];
+        const above = r.path.slice(0, depth);
+
+        // A plain value stands where a table goes: a root key at depth 1, a key under its parent's header deeper.
+        const lines =
+          depth === 1
+            ? [`${K}${above[0]}${c.G}${raw}`]
+            : [`[${above.slice(0, -1).join(".")}]`, `${K}${above.at(-1)}${c.G}${raw}`];
+
+        const located = locate(body(c, [...fillers(draw), ...lines]));
+        const target = declare("port", r.path.join("."));
+
+        return {
+          app: draw.app,
+          group: sceneGroup(draw, target, declare("port", r.other.join("."))),
+          target,
+          file: FILES[(k + depth) % 2] ?? "repo",
+          text: located.text,
+          depth,
+          kind,
+          value: draw.values.port,
+        };
+      }),
+    ),
+  );
+
+/** What a start over the file refuses with, as the edit must refuse: the reason, the file and the line. */
+export const startRefusal = (exit: Exit.Exit<unknown, unknown>) => {
+  const errors = Exit.isFailure(exit)
+    ? exit.cause.reasons.flatMap((reason) => (reason._tag === "Fail" ? [reason.error] : []))
+    : [];
+
+  const error = errors[0];
+
+  return Schema.is(SettingGroup.SettingsError)(error)
+    ? { reason: error.reason, file: error.file, line: error.line }
+    : undefined;
+};
+
 /** (q) A fault at the edited setting itself: a bad old value, as a position the set and the remove can both read. */
 export const ownFaults = (draw: Draws): ReadonlyArray<Position> => {
   const olds: ReadonlyArray<readonly [Kind, string, unknown]> = [

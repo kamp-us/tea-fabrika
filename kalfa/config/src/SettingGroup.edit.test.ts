@@ -32,6 +32,7 @@ import {
   FALLBACK,
   type Files,
   faulty,
+  flat,
   field,
   forms,
   groupFor,
@@ -54,6 +55,7 @@ import {
   SET_IDS,
   scoped,
   sibling,
+  startRefusal,
   spliceFor,
   startOn,
   tabled,
@@ -424,7 +426,8 @@ it.effect.prop(
 // E7, the whole text is checked
 // ---------------------------------------------------------------------------------------------
 
-// Plants: (p) check only the answer: a fault after an inserted line is named one line late, red; (p) skip both
+// Plants: (p) turn a plain value where the key's table goes into an empty table before the first check, as `drop`
+// does for a value above the key: the edit fails `edit` where the start fails `invalid`, red; (p) check only the answer: a fault after an inserted line is named one line late, red; (p) skip both
 // whole-file checks: a file with an unknown key gets text, red; (q) check the input whole with the edited setting in
 // it: a bad old value cannot be fixed, red.
 it.effect.prop(
@@ -456,6 +459,35 @@ it.effect.prop(
 
       // Six faults, before and after the table, except the version's, which only fits before it.
       expect(seen.size, "every fault, on each side").toBe(11);
+
+      // A plain value where the key's table goes, of each kind and at each depth: the edit refuses as the start does.
+      const depths = new Set<string>();
+
+      for (const scene of flat(draw)) {
+        const label = `a ${scene.kind} at depth ${scene.depth} of ${scene.target.name} in ${scene.file}`;
+        const files: Files = scene.file === "repo" ? { repo: scene.text } : { user: scene.text };
+        const refusal = startRefusal(yield* startOn(scene.group, scene.app, files));
+
+        expect(refusal, `${label}: the start refuses it`).toBeDefined();
+
+        for (const found of [
+          yield* doSet(scene.group, scene.text, scene.file, scene.target, scene.value),
+          yield* doRemove(scene.group, scene.text, scene.file, scene.target),
+        ]) {
+          expect(found._tag, label).toBe("error");
+
+          if (found._tag === "error") {
+            expect(found.reason, `${label}: the start's reason`).toBe(refusal?.reason);
+            expect(found.file, label).toBe(refusal?.file);
+            expect(found.line, `${label}: the start's line`).toBe(refusal?.line);
+          }
+        }
+
+        depths.add(`${scene.kind}:${scene.target.name.split(".").length}:${scene.depth}`);
+      }
+
+      // Five kinds, at the one depth of a two-word name and the two of a three-word name.
+      expect(depths.size, "every kind at every depth").toBe(15);
       reach.mark("p");
 
       const own = ownFaults(draw);
