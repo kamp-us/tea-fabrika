@@ -10,7 +10,7 @@ import * as change from "./change.ts";
 import type { Group } from "./check.ts";
 import { type SettingsError, stop } from "./error.ts";
 import type { Format } from "./format.ts";
-import { contents, type Names, repoPlace, shown, userPlace } from "./place.ts";
+import { contents, type Names, repoPlace, userPlace } from "./place.ts";
 
 /** What one disk call is about: the edit it makes, and the file as a person reads it. */
 interface Call {
@@ -161,8 +161,8 @@ const write = Effect.fnUntraced(function* (
 ) {
   const { app } = group;
   const provider = yield* ConfigProvider.ConfigProvider;
-  // A failure to read the environment is the call's, so it ends as the call's failures do.
-  const closing = `${shown(app, format)[file === "repo" ? "repo" : "user"]} was not changed.`;
+  // No file is known before the environment is read, so a failure to read it names the configuration.
+  const closing = `The ${file === "repo" ? "repo" : "user"} configuration was not changed.`;
   const found = { repo: yield* repoPlace(app, format, repo), user: yield* userPlace(app, format, provider, closing) };
   const names = { repo: found.repo.name, user: found.user.name };
   // A file name cast past the types reaches the user configuration, never a key that `Object` holds.
