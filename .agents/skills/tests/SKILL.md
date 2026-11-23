@@ -162,12 +162,16 @@ These hold in every tests round, so the brief does not repeat them.
 - **Checks before the commit:** `pnpm format`, `pnpm lint` once, and the list ratchet CI runs that
   local lint does not:
   `node next/apps/fabrika/src/exam/ratchet.ts --base "$(git merge-base origin/main HEAD)"` exits 0.
-- **Commit and push:** commit your own paths by name with plain `git commit`, a plain-word subject,
-  no trailer naming a chat tool and no session link. Then
-  `sh .agents/skills/lead/scripts/leakgrep.sh --commits origin/<branch>..HEAD` (never with no
-  arguments), and push with `node .agents/skills/lead/scripts/botpush.mjs "$PWD" <branch>`. No force push. A refused push
-  is reported with its exact command, never worked around. When `drive.ts` runs you in a box,
-  commit nothing: drive commits.
+- **Commit and push:** commit your own paths by name with the step-commit skill's
+  `stepcommit.sh --body-file <file> tests <ticket> "<subject>" <path>...`, a plain-word subject,
+  no trailer naming a chat tool and no session link. The body file is your plant record: one line
+  per new law, `Plant: <law title>: <what you broke>: <the failure's first line>`, and the reach
+  table under them when the plan has a `## Generators` section. The reviewer reads it from
+  `git log`, not from your answer, and `stepcommit.sh` refuses a tests commit with no `Plant:`
+  line. A fix round sent back to the tests step commits the same way, with the plants it ran.
+  `stepcommit.sh` leak-checks and pushes. No force push. A refused push is reported with its
+  exact command, never worked around. When `drive.ts` runs you in a box, commit nothing: drive
+  commits.
 - **Public repo:** no secrets, no absolute paths from anyone's machine, no personal names in
   committed text.
 - **Report** for a reader who saw none of the work, the answer first: every planned law written,

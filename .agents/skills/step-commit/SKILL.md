@@ -12,6 +12,7 @@ repo root.
 ```sh
 sh .agents/skills/step-commit/scripts/stepcommit.sh <step> <ticket> "T<ticket> <step>: <subject>" <path>...
 sh .agents/skills/step-commit/scripts/stepcommit.sh --commit-only <step> <ticket> "T<ticket> <step>: <subject>" <path>...
+sh .agents/skills/step-commit/scripts/stepcommit.sh --body-file plants.md tests 277 "T277 tests: one refusal per request" <path>...
 sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one refusal per request" next/apps/fabrika/src/door.ts
 ```
 
@@ -24,6 +25,11 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one r
   writes the law and the fix, so the commit may hold exam paths and takes the paths the plan gives to
   `tests` or `build`, and an exam path it gives to no step. A path the plan gives to any other step is
   refused. It signs nothing; it still pushes.
+- **A `tests` commit carries its plant record.** `--body-file <file>` puts the file's text in the
+  commit body. For `tests` the body needs a `Plant: <law title>: <what you broke>: <the failure's first line>`
+  line per new law, and the reach table when the plan has a `## Generators` section, or the script
+  refuses (exit 7) and commits nothing. The review reads the record from `git log`. A box's commit
+  (drive's) needs none. Other steps may pass a body; none must.
 - **Start with nothing staged.** If the index already holds changes, the script refuses (exit 4)
   before it stages anything, and lists them. Do not unstage another step's work: name the staged
   paths in your report, and finish the work that does not need the commit.
