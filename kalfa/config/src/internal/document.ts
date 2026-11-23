@@ -3,17 +3,17 @@
  */
 import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
-import type { TomlDocument } from "../Toml.ts";
+import type { Document } from "./format.ts";
 
 export type Path = ReadonlyArray<string>;
 
 export const same = (a: Path, b: Path) => a.length === b.length && a.every((s, n) => s === b[n]);
 
-export const at = (value: TomlDocument["value"], path: Path) =>
+export const at = (value: Document["value"], path: Path) =>
   path.reduce<unknown>((v, key) => (Predicate.isObject(v) ? v[key] : undefined), value);
 
 /** The first key/value at or under `path`. */
-export const leaf = (value: TomlDocument["value"], path: Path): Path => {
+export const leaf = (value: Document["value"], path: Path): Path => {
   const below = at(value, path);
   const key = Predicate.isObject(below) ? Rec.keys(below)[0] : undefined;
 
@@ -25,7 +25,7 @@ export const shape = (value: unknown) =>
   Array.isArray(value) ? "[…]" : Predicate.isObject(value) ? "{…}" : JSON.stringify(value);
 
 /** The line of the key at `path`, or of its nearest table with a line. */
-export const lineAt = (document: TomlDocument, path: Path): number | undefined => {
+export const lineAt = (document: Document, path: Path): number | undefined => {
   for (let n = path.length; n > 0; n--) {
     const span = document.spans.find((s) => same(s.path, path.slice(0, n)));
 

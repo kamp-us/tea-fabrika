@@ -1887,3 +1887,44 @@ it.effect.prop(
     }),
   check,
 );
+
+// ---------------------------------------------------------------------------------------------
+// O2, a schema that decodes asynchronously (ticket 1843, slice 1, amendment 1)
+// ---------------------------------------------------------------------------------------------
+
+const AsyncCase = Schema.Struct({ app: Word, entry: Entry });
+
+// A schema whose decode finishes on a later tick, as one built with `transformEffect` may. The start decodes the file with
+// `Schema.decodeUnknownEffect`, so it waits; a decode that must answer at once dies on it. A scenario of main's
+// behavior, which the move of the check must keep: no new behavior, so no new refusal.
+// Plant: decode the file with `Schema.decodeUnknownResult` in `internal/check.ts`: the start dies with
+// "Result adapter can only return schema issues".
+it.effect.prop(
+  "O2 a setting whose schema decodes asynchronously starts with the value in the repo file",
+  { input: AsyncCase },
+  ({ input: { app, entry } }) =>
+    Effect.gen(function* () {
+      const Later = Schema.Int.pipe(
+        Schema.decodeTo(Schema.Int, {
+          decode: SchemaGetter.transformEffect((n: number) =>
+            Effect.callback<number>((resume) => queueMicrotask(() => resume(Effect.succeed(n)))),
+          ),
+          encode: SchemaGetter.passthrough(),
+        }),
+      );
+
+      const later = Setting.make(named(entry), Later).pipe(
+        Setting.withDescription("Decoded later."),
+        Setting.withDefault(DEFAULT),
+      );
+
+      const group = makeGroup(app, [later]);
+      const body = toml(0, [{ entry, raw: String(entry.seed) }]);
+      const { exit } = yield* start(group, { disk: { files: { [repoFile(app).path]: body.text } } });
+      const loaded = mustStart(exit);
+
+      expect(loaded.values[field(entry)]).toBe(entry.seed);
+      expect(loaded.origins[named(entry)]).toEqual(inFile(repoFile(app).name, body.at[named(entry)] ?? -1));
+    }),
+  check,
+);
