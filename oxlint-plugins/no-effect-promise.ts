@@ -35,7 +35,7 @@ export const noEffectPromise: CreateRule = {
           context.report({
             node: node.arguments[0] ?? node,
             message:
-              "`Effect.promise(...)` is discouraged: a rejection becomes an uncatchable defect with an empty error channel (.kalfa/patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`, or lift the pure core to an `Effect.fn` returning a typed `Effect`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
+              "`Effect.promise(...)` is discouraged: a rejection becomes an uncatchable defect with an empty error channel (.kalfa/patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedError`, or lift the pure core to an `Effect.fn` returning a typed `Effect`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
           });
         }
 
@@ -52,7 +52,7 @@ export const noEffectPromise: CreateRule = {
           context.report({
             node: only ?? node,
             message:
-              "Single-arg `Effect.tryPromise(() => ...)` is discouraged: with no `catch` a rejection becomes an uncatchable defect with an empty error channel (.kalfa/patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
+              "Single-arg `Effect.tryPromise(() => ...)` is discouraged: with no `catch` a rejection becomes an uncatchable defect with an empty error channel (.kalfa/patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedError`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
           });
         }
       },

@@ -26,7 +26,7 @@ on:
   # catch-up, at most once an hour (main's full run starts on a push to main and an hourly catch-up). A ready pull request and a group add the plain tooling
   # tests their change reaches (the related job), and neither runs an `.integration.` law, of
   # next/ or of tooling: only main's full run carries those (integration laws run only in main's full run, related.ts's `onMergeLine`), and
-  # a branch's proof run runs none either (proof.ts). A group whose tree
+  # a branch's proof run, which the lead starts by hand, runs those its change reaches (proof.ts). A group whose tree
   # and base tree a ready pull request run already tested green runs no tests (the changes job
   # below).
   merge_group:
@@ -402,7 +402,7 @@ jobs:
   # on a push to main, and on a pull request only with the `visual` label; a merge queue group
   # never runs them (a test that needs a real resource runs only in main's full run). Main's full run (scheduled.yaml) runs every visual file. The related
   # job below adds the tooling project's plain laws. Every `.integration.` law runs only on main's
-  # full run, never on a pull request, a group or a branch's proof run (integration laws run only in main's full run, related.ts's
+  # full run and in a branch's proof run the lead starts, never on a pull request or a group (related.ts's
   # `onMergeLine`). Global triggers select all files at full depth. The full next matrix has two
   # visual legs and five in-memory legs; its fallback starts the visual legs only where they may
   # run. Sized runs use fewer legs when fewer files are affected. No test job takes a job group

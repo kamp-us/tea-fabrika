@@ -191,7 +191,7 @@ const RECORD = `\${{ runner.temp }}/proof-set.json`;
 // default, which only select's set step reads, as `SCOPE` and `LAW` (SC17, SC21). The default is
 // The proof-run rule's ruling, not a free setting (a choice that makes sense as a setting is a setting, declared once): a default of `full` would make every hand start the full
 // set, so the lint holds it the way SC16 holds the gap's floor.
-const SELECT_READS = { SCOPE: "inputs.scope", LAW: "inputs.law" };
+const SELECT_READS = { SCOPE: "inputs.scope", LAW: "inputs.law", INTEGRATION: "inputs.integration" };
 
 // Whether `value` is exactly the `${{ }}` expression `read`, its spacing free. A bare `inputs.scope` is
 // text the step would get as words, not a read of the input.
@@ -269,9 +269,10 @@ const WHOLE_TOOLING = `pnpm exec vitest run $PROJECTS --shard "\${SHARD#${TOOLIN
 const TOOLING_PROJECTS = `\${{ ${ON_MAIN} && '--project tooling --project tooling-integration' || '--project tooling' }}`;
 
 // A changed leg's one command: its own list, `$FILES` from `select`, over every project proof.ts
-// lists: today's left out (CI runs none of today's version's tests), and `next-integration`, which only main's full run runs. No
-// `--changed` and no `--shard`: the list is the leg.
-const CHANGED_RUN = `pnpm exec vitest run --project next --project next-visual --project tooling $FILES ${REPORTERS}`;
+// lists, the two integration projects included (the owner decided on 2026-11-22: a proof run the
+// lead starts runs the integration laws its changed set reaches, or the ones it names), and today's
+// left out (CI runs none of today's version's tests). No `--changed` and no `--shard`: the list is the leg.
+const CHANGED_RUN = `pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling --project tooling-integration $FILES ${REPORTERS}`;
 
 // The schedule's test depth (pull request 1274): its laws run their full case count.
 const DEPTH = "full";
@@ -429,18 +430,19 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
 };
 
 /**
- * SC21. The hand start's two inputs, and who reads them (a branch's proof run runs only the tests its change reaches, ticket 1161). On main `select` never
+ * SC21. The hand start's three inputs (`integration` since the owner decided on 2026-11-22), and who reads them (a branch's proof run runs only the tests its change reaches, ticket 1161). On main `select` never
  * runs (SC17), so `scope` does nothing there: no other step, `if`, group or env may read the inputs.
  */
 const dispatchInputs = (workflow: Record<string, unknown>, require: Require): void => {
   const inputs = map(map(map(workflow["on"])["workflow_dispatch"])["inputs"]);
   const scope = map(inputs["scope"]);
   const law = map(inputs["law"]);
+  const integration = map(inputs["integration"]);
 
   const described = (input: Record<string, unknown>) =>
     Predicate.isString(input["description"]) && input["description"] !== "";
 
-  require(JSON.stringify(Rec.keys(inputs).toSorted()) === JSON.stringify(["law", "scope"]) &&
+  require(JSON.stringify(Rec.keys(inputs).toSorted()) === JSON.stringify(["integration", "law", "scope"]) &&
     scope["type"] === "choice" &&
     scope["required"] === true &&
     scope["default"] === "changed" &&
@@ -449,9 +451,13 @@ const dispatchInputs = (workflow: Record<string, unknown>, require: Require): vo
     law["type"] === "string" &&
     law["required"] === false &&
     law["default"] === "" &&
+    described(law) &&
+    integration["type"] === "string" &&
+    integration["required"] === false &&
+    integration["default"] === "" &&
     described(
-      law,
-    ), "SC21: a hand start takes scope, changed or full and changed by default, and law, text that is empty by default, and no other input, each with a description");
+      integration,
+    ), "SC21: a hand start takes scope, changed or full and changed by default, law and integration, text that is empty by default, and no other input, each with a description");
 
   // Everything but `on`, with select's set step's SCOPE and LAW taken out, reads no input.
   const rest = structuredClone(workflow);
@@ -459,9 +465,10 @@ const dispatchInputs = (workflow: Record<string, unknown>, require: Require): vo
   const set = steps(map(map(rest["jobs"])[SELECT_JOB])).find((s) => s["id"] === SELECT_STEP);
   Reflect.deleteProperty(map(set?.["env"]), "SCOPE");
   Reflect.deleteProperty(map(set?.["env"]), "LAW");
+  Reflect.deleteProperty(map(set?.["env"]), "INTEGRATION");
   require(!readsInputs(
     JSON.stringify(rest),
-  ), "SC21: only select's set step reads the hand start's inputs, as SCOPE and LAW, so main's runs never read scope");
+  ), "SC21: only select's set step reads the hand start's inputs, as SCOPE, LAW and INTEGRATION, so main's runs never read scope");
 };
 
 /**
@@ -767,7 +774,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const selectRuns = selectSteps.filter((s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile");
   const selectEnv = map(selectRuns[0]?.["env"]);
   const selectOutputs = { ...SELECT_OUTPUTS, slots: SLOT_OUTPUT };
-  const selectKeys = ["MOST", "LIMIT", "RECORD", "RUN_NUMBER", "SCOPE", "LAW"];
+  const selectKeys = ["MOST", "LIMIT", "RECORD", "RUN_NUMBER", "SCOPE", "LAW", "INTEGRATION"];
   const selectCheckouts = selectSteps.filter((s) => uses(s, "actions/checkout"));
   const records = selectSteps.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === RECORD);
   require(SELECT_JOB in jobs &&
@@ -783,6 +790,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     selectEnv["RECORD"] === RECORD &&
     readsOnly(selectEnv["SCOPE"], SELECT_READS.SCOPE) &&
     readsOnly(selectEnv["LAW"], SELECT_READS.LAW) &&
+    readsOnly(selectEnv["INTEGRATION"], SELECT_READS.INTEGRATION) &&
     selectCheckouts.length === 1 &&
     map(selectCheckouts[0]?.["with"])["fetch-depth"] === 0 &&
     records.length === 1 &&
@@ -795,7 +803,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC18. `changed` runs a changed set's legs (a branch's proof run runs only the tests its change reaches): only when `select` said `changed` with a leg,
   // so it and `tests` never run in one run, each leg exactly its own list over every project
-  // proof.ts lists, `next-integration` not among them (integration laws run only in main's full run), at next's test step limit with the
+  // proof.ts lists, both integration projects among them, at next's test step limit with the
   // same backstop, chromium first when its list holds a visual file, and nothing else.
   const changed = map(jobs[CHANGED_JOB]);
   const changedSteps = steps(changed);
@@ -820,7 +828,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(commandsOf(changed).toSorted()) ===
       JSON.stringify(
         ["pnpm install --frozen-lockfile", chromium, CHANGED_RUN, TIME_TABLE].toSorted(),
-      ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (integration laws run only in main's full run), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
+      ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over proof.ts's projects, both integration projects among them, at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
 
   const changedKept = changedSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,

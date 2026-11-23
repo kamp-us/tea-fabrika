@@ -1,4 +1,6 @@
 // T1076 P2. Plants: ship a source export, omit parser JS/declarations, or keep a workspace runtime dependency.
+// Ticket 1839 P1: the root entry `.` ships beside the twelve modules, mapped to `dist/index`. Plant: drop `.` from the
+// published exports, so the manifest check below and the consumer's import of `@kalfa/config` fail.
 // scenario: only a real build, archive and installation prove installed Node and compiler resolution.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -20,6 +22,15 @@ const modules = [
   "Snapshot",
   "Load",
 ] as const;
+
+/** The root entry: `import { Setting, SettingGroup } from "@kalfa/config"`. */
+const rootEntry = {
+  name: ".",
+  types: "./dist/index.d.ts",
+  default: "./dist/index.js",
+  js: "dist/index.js",
+  declarations: "dist/index.d.ts",
+} as const;
 
 const Manifest = Schema.Struct({
   name: Schema.String,
@@ -201,7 +212,13 @@ it.effect(
         Object.keys(manifest.exports)
           .filter((name) => manifest.exports[name] !== null && name !== "./package.json")
           .sort(),
-      ).toEqual(modules.map((name) => `./${name}`).sort());
+      ).toEqual([rootEntry.name, ...modules.map((name) => `./${name}`)].sort());
+
+      expect(manifest.exports[rootEntry.name]).toEqual({ types: rootEntry.types, default: rootEntry.default });
+
+      expect(yield* fs.exists(path.join(installed, rootEntry.js))).toBe(true);
+
+      expect(yield* fs.exists(path.join(installed, rootEntry.declarations))).toBe(true);
 
       for (const name of modules) {
         expect(manifest.exports[`./${name}`]).toEqual({ types: `./dist/${name}.d.ts`, default: `./dist/${name}.js` });

@@ -3,9 +3,11 @@
 // so nothing here merges main in, waits on a check or runs one again. Today's lead tooling, run on
 // our own laptop; it is not product.
 //
-//   add      the pull request is open, ready and into main -> leak grep on its net change, on each
+//   add      the pull request is open and into main -> leak grep on its net change, on each
 //            of its commits and on its title and description, each failing closed -> each new
-//            exported name is named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> `ci-required`
+//            exported name is named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> a draft whose head has a CI run
+//            (never in the seconds after a push; with a wait, one is given time to appear) is marked ready
+//            (as `land.ts admin` does), which starts its real `ci-required` -> `ci-required`
 //            is green on its head (read once; a quest may wait for it to end, within a limit) -> one
 //            squash pinned to that head, which adds it to the queue
 //   settle   later, one read of the pull request and no wait: merged -> close each ticket its
@@ -80,6 +82,37 @@ export const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, 
   return Option.getOrElse(yield* ended, () => last);
 });
 
+/**
+ * Whether a CI run has started at `oid`: any check run GitHub Actions made there, which a push's own
+ * run makes within seconds. Marking a draft ready in the seconds after a push starts a second run on
+ * the same commit, and GitHub then reports the required check as "expected" and will not queue the
+ * pull request (2026-11-22). Read once, or with a wait again until one appears or the wait is over;
+ * a read that fails counts as not started.
+ */
+export const startedAt = Effect.fn("Queue.startedAt")(function* (oid: string, wait: Wait | undefined) {
+  const checks = yield* Checks;
+
+  if (wait === undefined) {
+    return yield* checks.started(oid);
+  }
+
+  const began = checks.started(oid).pipe(
+    Effect.filterOrFail(
+      (started) => started,
+      () => Pending.make(),
+    ),
+    Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)) }),
+    Effect.catchTag("Pending", () => Effect.succeed(false)),
+    Effect.timeoutOption(Duration.minutes(wait.minutes)),
+  );
+
+  return Option.getOrElse(yield* began, () => false);
+});
+
+/** The refusal for a draft whose head has no CI run yet: it is not marked ready, and nothing else is asked. */
+export const notStarted = (oid: string): string =>
+  `no CI run has started at ${oid} yet, so it is not marked ready (a ready event seconds after a push starts a second run on one commit, and the required check stays expected); give it a wait, or try again`;
+
 /** What `add` did: added it to the queue at this head, or found it merged already. */
 export const Added = Schema.TaggedUnion({
   queued: { pr: Schema.Finite, oid: Schema.String },
@@ -88,7 +121,11 @@ export const Added = Schema.TaggedUnion({
 
 export type Added = typeof Added.Type;
 
-/** Why a pull request may not enter the queue as it stands, or `null` when it may. */
+/**
+ * Why a pull request may not enter the queue as it stands, or `null` when it may. A draft is
+ * refused here for callers that do not mark it ready (an admin merge with no wait); `add` marks
+ * one ready itself and asks about it as ready.
+ */
 export const refusal = (found: Detail): string | null =>
   found.state === "CLOSED"
     ? "closed, not merged"
@@ -108,7 +145,9 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
     return Added.cases.merged.make({ pr: found.number, commit: found.mergeCommit ?? found.oid });
   }
 
-  const refused = refusal(found);
+  // A draft is not refused for being a draft: it is marked ready below, once every refusal that needs no ready pull request has passed.
+  const marking = found.state === "OPEN" && found.draft;
+  const refused = refusal(marking ? { ...found, draft: false } : found);
 
   if (refused !== null) {
     return yield* NotQueued.make({ reason: `pr ${found.number}: ${refused}` });
@@ -119,6 +158,17 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
 
   if (unnamed !== null) {
     return yield* NotQueued.make({ reason: `pr ${found.number}: ${unnamed}` });
+  }
+
+  // Marking a draft ready starts its real `ci-required`, which has not registered yet: a read with no wait finds it missing and
+  // refuses, and a read with a wait gives it time to appear and end. It waits first for the push's own run to start, so a ready
+  // event never lands in the seconds after a push.
+  if (marking) {
+    if (!(yield* startedAt(found.oid, a.wait))) {
+      return yield* NotQueued.make({ reason: `pr ${found.number}: ${notStarted(found.oid)}` });
+    }
+
+    yield* prs.ready(found.number);
   }
 
   // With a queue on, a merge call on a head that is not green yet arms auto-merge (a pull request whose steps passed lands on green CI and a clean leak check alone). So the

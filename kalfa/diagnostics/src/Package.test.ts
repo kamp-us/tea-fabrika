@@ -1,6 +1,6 @@
-// D10 to D12: what the package
-// exports, what its manifest says, and that none of its files names this repo. They read the package's own
-// module and files, so they run in memory on every pull request. The words D12 looks for are spelled in
+// D10 to D12 and D24: what the package
+// exports, what its manifest says, that none of its files names this repo, and that its README shows each kind of
+// place and its examples compile. They read the package's own module and files, so they run in memory on every pull request. The words D12 looks for are spelled in
 // pieces below, so this file is not itself a hit.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -113,5 +113,63 @@ it.effect("D12 scenario: no file of the package names this repo", () =>
     expect(texts.filter(({ text }) => FORBIDDEN.some((word) => text.includes(word))).map(({ file }) => file)).toEqual(
       [],
     );
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+// D24. Plant: delete the flag example from the README, and its tag is missing from the failure.
+it.effect("D24 scenario: the README shows each kind of place with its text form", () =>
+  Effect.gen(function* () {
+    // scenario: the package's own README at head; no generated input says what a README shows.
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+
+    const readme = yield* fs.readFileString(path.join(yield* packageDir, "README.md"));
+
+    const tags = ["repo", "home", "environment", "flag"].filter((tag) => !readme.includes(`_tag: "${tag}"`));
+
+    expect(tags).toEqual([]);
+    // A home place is shown both ways: starting with the home folder, and starting with a variable.
+    expect(readme).toMatch(/_tag: "home",\s*path: "~\//);
+    expect(readme).toMatch(/_tag: "home",\s*path: "\$[A-Z][A-Z0-9_]*\//);
+    // The text form of each kind: a file with a line and column, an environment variable, and a flag.
+    expect(readme).toMatch(/\S+:\d+:\d+/);
+    expect(readme).toMatch(/environment variable [A-Z][A-Z0-9_]*/);
+    expect(readme).toMatch(/flag --[a-z][a-z0-9.-]*/);
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+// The README's code blocks, as written, without their import lines (the types file holds each import once, at its
+// top), and with runs of whitespace made one space, so a formatter's line breaks do not matter.
+const readmeBlocks = (readme: string): ReadonlyArray<string> =>
+  [...readme.matchAll(/```ts\n([\s\S]*?)```/g)].map(([, code = ""]) =>
+    code
+      .split("\n")
+      .filter((line) => !line.startsWith("import "))
+      .join("\n")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+
+// D24, the README's examples compile. They are kept word for word in README.types.test.ts, which the package's own
+// compiler checks (`tsc`, and the root `typecheck`), as it checks the other type laws. This law runs in memory: it
+// reads both files and checks that every code block of the README is in that file, so an example cannot change in the
+// README without the compiler seeing it, and a block cannot leave the file.
+// Plant: edit one README block so it no longer matches the types file, and that block is in the failure. And in the
+// types file: drop `: Diagnostic.Place` from one example, and `tsc` refuses `formatPlace` on it.
+it.effect("D24 scenario: every code block of the README is in the file the compiler checks, each place typed", () =>
+  Effect.gen(function* () {
+    // scenario: the package's own README and types file at head; no generated input says what a README example holds.
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* packageDir;
+
+    const readme = yield* fs.readFileString(path.join(root, "README.md"));
+    const checked = (yield* fs.readFileString(path.join(root, "src", "README.types.test.ts"))).replace(/\s+/g, " ");
+    const blocks = readmeBlocks(readme);
+
+    expect(blocks.length).toBeGreaterThan(0);
+    expect(blocks.filter((block) => !checked.includes(block))).toEqual([]);
+    // A place written as a bare object is not typed, so the compiler would see only a string for its tag.
+    expect(checked).not.toMatch(/(?:const|let) \w+ = \{ _tag:/);
   }).pipe(Effect.provide(NodeServices.layer)),
 );

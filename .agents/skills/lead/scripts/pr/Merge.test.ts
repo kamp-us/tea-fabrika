@@ -14,8 +14,8 @@
 // - A fix is admitted only when its head holds origin/main's head, which Merge reads through the `Branches`
 //   service (`behind(oid)` is 0 when the head holds main), beside `ci-required` and the leak gate. A ready pull
 //   request in a sev0 lands with no catch-up (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order), and still needs `ci-required` green, as a sev0 branch does today.
-// - `Done`'s admin case says why: `for` is `fix`, `ready` or `asked`, and `level` is `sev0` or `sev1` for a fix or a
-//   ready one, and `null` when the owner asked (any other pull request). Every admin merge needs `ci-required` green
+// - `Done`'s admin case says why: `for` is `fix`, `ready` or `other`, and `level` is `sev0` or `sev1` for a fix or a
+//   ready one, and `null` for any other pull request, whose line gives no reason. Every admin merge needs `ci-required` green
 //   at the head, docs included.
 // The `sev` label is no input of Merge in B1: PullRequests reads none, and the route alone grants, so a label
 // alone grants nothing by construction and no law here can vary it.
@@ -36,6 +36,7 @@ import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
+import type * as Queue from "./Queue.ts";
 
 const oid = "0123456789abcdef0123456789abcdef01234567";
 
@@ -179,17 +180,15 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
   );
 
   it.effect(
-    "scenario: a clean pull request with ci-required green is admin-merged at its head, code or docs, and the line says the owner asked",
+    "scenario: a clean pull request with ci-required green is admin-merged at its head, code or docs, and the line says only what happened",
     () =>
       Effect.gen(function* () {
         for (const files of ["code", "docs"] as const) {
           const m = memory({ files });
           const done = yield* merge(m, admin());
-          expect(done).toMatchObject({ _tag: "admin", for: "asked", level: null });
+          expect(done).toMatchObject({ _tag: "admin", for: "other", level: null });
           expect(m.github.calls).toEqual([{ _tag: "admin", number: 1415, oid }]);
-          expect(Merge.line(done)).toBe(
-            `pr 1415: admin-merged at ${oid}, the owner asked; read the push run on main next`,
-          );
+          expect(Merge.line(done)).toBe(`pr 1415: admin-merged at ${oid}; read the push run on main next`);
         }
       }),
   );
@@ -277,9 +276,9 @@ const routeFor = (level: "sev1" | "sev0", listing: Listing, alsoY: boolean) => {
         : admin([], null, []);
 };
 
-/** What the branch is to the route: `fix` or `ready`, and any other branch is `asked`, the owner's own ask. */
+/** What the branch is to the route: `fix` or `ready`, and any other branch is `other`. */
 const roleFor = (level: "sev1" | "sev0", listing: Listing) =>
-  listing === "fix" ? "fix" : level === "sev0" && listing === "ready" ? "ready" : "asked";
+  listing === "fix" ? "fix" : level === "sev0" && listing === "ready" ? "ready" : "other";
 
 describe("merge: a sev fix is admin-merged in both levels, on current main", () => {
   // R6 of .kalfa/quests/sev-runbooks-PLAN.md. In a sev0 `sev.ts allow` lets in fixes and other ready pull
@@ -288,7 +287,7 @@ describe("merge: a sev fix is admin-merged in both levels, on current main", () 
   // ancestor check of a ready pull request too (a sev0 ready one behind main is refused: red); read the sev1 fix
   // as any branch (a sev1 that names fix y admits x); skip ci-required; ask the catch-up of a branch the level does not name as a fix.
   it.effect.prop(
-    "property: --admin lands a pull request as a fix (the sev1 log's fix, or a sev0's `open --allow` or `next` branch), a ready one (a sev0's `allow` branch) or one the owner asked for; each needs ci-required green at its head and a clean leak gate, and a fix also a head that holds origin/main, the others no catch-up",
+    "property: --admin lands a pull request as a fix (the sev1 log's fix, or a sev0's `open --allow` or `next` branch), a ready one (a sev0's `allow` branch) or any other pull request; each needs ci-required green at its head and a clean leak gate, and a fix also a head that holds origin/main, the others no catch-up",
     {
       level: Schema.Literals(["sev1", "sev0"]),
       listing: Listing,
@@ -322,13 +321,13 @@ describe("merge: a sev fix is admin-merged in both levels, on current main", () 
         expect(answer._tag).toBe(merges ? "Success" : "Failure");
 
         if (merges && answer._tag === "Success") {
-          // Why it was allowed: a fix at its level, a ready one in a sev0, or the owner asked, with no level.
+          // Why it was allowed: a fix at its level, a ready one in a sev0, or neither, with no level.
           expect(answer.success).toMatchObject({
             _tag: "admin",
             pr: 1415,
             oid,
             for: role,
-            level: role === "asked" ? null : level,
+            level: role === "other" ? null : level,
           });
         }
       }),
@@ -557,6 +556,157 @@ describe("merge: land.ts admin never merges ahead of ci-required, a can/ branch 
 
       expect(fiber.reason).toContain(`its head moved from ${oid} to ${moved}`);
       expect(m.github.calls).toEqual([]);
+    }),
+  );
+});
+
+/** An entry of the merge queue, as GitHub lists it. */
+const entry = (number: number, state = "AWAITING_CHECKS") => ({ number, state });
+
+describe("merge: an admin merge waits for the merge queue to empty (2026-11-22: three restarts of one entry's build in six minutes)", () => {
+  const Role = Schema.Literals(["other", "fix", "ready"]);
+
+  const routeAs = (role: typeof Role.Type) =>
+    role === "fix" ? admin([], branch) : role === "ready" ? admin([branch]) : admin();
+
+  /** One admin merge on a queue that answers these reads, with or without a queue wait, and 61 minutes for it to finish. */
+  const queued = (
+    m: ReturnType<typeof memory>,
+    reads: ReadonlyArray<ReadonlyArray<ReturnType<typeof entry>>>,
+    role: typeof Role.Type,
+    queueWait: Queue.Wait | undefined,
+    extra: Layer.Layer<never> = Layer.empty,
+  ) =>
+    Effect.gen(function* () {
+      m.github.queue.push(...reads);
+
+      const fiber = yield* Merge.merge({
+        dir: ".",
+        pr: 1415,
+        route: routeAs(role),
+        wait: { minutes: 5, every: 10 },
+        ...(queueWait ? { queueWait } : {}),
+      }).pipe(Effect.provide(Layer.merge(m.layer, extra)), Effect.result, Effect.forkChild);
+
+      yield* TestClock.adjust("61 minutes");
+
+      return yield* Fiber.join(fiber);
+    });
+
+  const everyMinute: Queue.Wait = { minutes: 60, every: 60 };
+
+  // Plants: admin-merge with an entry in the queue; give a sev fix or a sev0's ready pull request the wait (it is never
+  // slowed); read the queue once with a wait; count the pull request's own entry; read a queue that failed to read as empty;
+  // drop the wait's limit.
+  it.effect.prop(
+    "property: an admin merge of a pull request that is no fix and no sev0 ready one is asked only once the queue holds no other entry (read again with a wait, once without one); a fix or a sev0's ready one never waits on it",
+    {
+      role: Role,
+      busy: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
+      end: Schema.Literals(["empty", "never"]),
+      waits: Schema.Boolean,
+      own: Schema.Boolean,
+    },
+    ({ role, busy, end, waits, own }) =>
+      Effect.gen(function* () {
+        const m = memory({ head: branch });
+        const mine = own ? [entry(1415, "QUEUED")] : [];
+
+        const reads = [
+          ...Array.from({ length: busy }, () => [entry(1922), ...mine]),
+          end === "empty" ? mine : [entry(1922), ...mine],
+        ];
+
+        const answer = yield* queued(m, reads, role, waits ? everyMinute : undefined);
+
+        const clear = role !== "other" || (waits ? end === "empty" : busy === 0 && end === "empty");
+
+        expect(answer._tag).toBe(clear ? "Success" : "Failure");
+        expect(m.github.calls).toEqual(clear ? [{ _tag: "admin", number: 1415, oid }] : []);
+
+        if (!clear && answer._tag === "Failure") {
+          expect(String(answer.failure.reason)).toContain("pr 1922 is in the merge queue (AWAITING_CHECKS)");
+          expect(String(answer.failure.reason)).toContain("restarts its build");
+        }
+      }),
+    { arbitrary: { seed: 1122, runs: runsFor({ fast: 60, full: 200 }) } },
+  );
+
+  // Plants: mark the draft ready before the queue is empty (the ready run is thrown away when the entry restarts it); mark it
+  // ready while no run has started at its head (a ready event seconds after a push starts a second run on one commit, and the
+  // required check stays expected); read the head's run once.
+  it.effect(
+    "scenario: a draft is marked ready neither while the queue holds an entry nor before a run has started at its head",
+    () =>
+      Effect.gen(function* () {
+        const crowded = memory({ draft: true });
+        const held = yield* queued(crowded, [[entry(1922)]], "other", everyMinute);
+        expect(held._tag).toBe("Failure");
+        expect(crowded.github.calls).toEqual([]);
+
+        const later = memory({ draft: true });
+
+        const eventually = yield* queued(
+          later,
+          [[entry(1922)], []],
+          "other",
+          everyMinute,
+          ChecksTest.layer([Option.some({ id: 1, status: "completed", conclusion: "success" })], "", [
+            false,
+            false,
+            true,
+          ]),
+        );
+
+        expect(eventually._tag).toBe("Success");
+
+        expect(later.github.calls).toEqual([
+          { _tag: "ready", number: 1415 },
+          { _tag: "admin", number: 1415, oid },
+        ]);
+
+        const unstarted = memory({ draft: true });
+
+        const stuck = yield* queued(
+          unstarted,
+          [],
+          "other",
+          undefined,
+          ChecksTest.layer([Option.some({ id: 1, status: "completed", conclusion: "success" })], "", [false]),
+        );
+
+        expect(stuck._tag === "Failure" ? String(stuck.failure.reason) : "").toContain(
+          `no CI run has started at ${oid}`,
+        );
+        expect(unstarted.github.calls).toEqual([]);
+      }),
+  );
+
+  // Plant: a queue that cannot be read reads as an empty one.
+  it.effect("scenario: a queue that cannot be read refuses, with or without a wait, and nothing is merged", () =>
+    Effect.gen(function* () {
+      for (const queueWait of [undefined, everyMinute]) {
+        const m = memory();
+
+        const answer = yield* queued(
+          m,
+          [],
+          "other",
+          queueWait,
+          PullRequestsTest.layer(m.github, { queue: "gh: offline" }),
+        );
+
+        expect(answer._tag === "Failure" ? String(answer.failure.reason) : "").toContain("gh: offline");
+        expect(m.github.calls).toEqual([]);
+      }
+    }),
+  );
+
+  it.effect("scenario: without a wait the refusal says how to wait", () =>
+    Effect.gen(function* () {
+      const m = memory();
+      const answer = yield* queued(m, [[entry(1922, "LOCKED")]], "other", undefined);
+      expect(answer._tag === "Failure" ? String(answer.failure.reason) : "").toContain("--wait");
     }),
   );
 });

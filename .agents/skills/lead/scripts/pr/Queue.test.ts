@@ -97,9 +97,10 @@ const settle = (m: ReturnType<typeof memory>) => Queue.settle({ repo, pr: 900 })
 
 describe("add: a finished pull request enters GitHub's merge queue by one pinned squash (a pull request whose steps passed lands on green CI and a clean leak check alone)", () => {
   // Plants: ask the merge before a leak check; ask it on a red or unfinished head (which arms
-  // auto-merge); ask it for a draft or a closed one; pin a head other than the one that was read.
+  // auto-merge); ask it for a closed one; mark a draft ready before the leak checks or for a pull
+  // request that is refused anyway; pin a head other than the one that was read.
   it.effect.prop(
-    "property: it is asked once, pinned to the head that was read, only when the pull request is open, ready, into main, clean on all three leak checks and green on ci-required; any other world asks nothing",
+    "property: it is asked once, pinned to the head that was read, only when the pull request is open, into main, clean on all three leak checks and green on ci-required, a draft marked ready first; any other world asks nothing",
     {
       state: State,
       draft: Schema.Boolean,
@@ -118,8 +119,15 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
         });
 
         const { answer, leaks } = yield* added(m);
-        const enters = state === "OPEN" && !draft && base === "main" && leak === "clean" && required === "success";
-        expect(m.github.calls).toEqual(enters ? [{ _tag: "enqueue", number: 900, oid }] : []);
+        const open = state === "OPEN" && base === "main";
+        const enters = open && leak === "clean" && required === "success";
+        // A draft is marked ready once the leak checks pass, even when the check then keeps it out.
+        const readied = open && draft && leak === "clean";
+
+        expect(m.github.calls).toEqual([
+          ...(readied ? [{ _tag: "ready", number: 900 }] : []),
+          ...(enters ? [{ _tag: "enqueue", number: 900, oid }] : []),
+        ]);
         expect(answer._tag === "Success" && answer.success._tag === "queued").toBe(enters);
 
         if (enters) {
@@ -132,24 +140,42 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
         }
 
         // A pull request that may not enter is refused before anything is fetched or read.
-        if (state !== "OPEN" || draft || base !== "main") {
+        if (!open) {
           expect(leaks).toEqual([]);
         }
       }),
   );
 
   // vector: catchup.sh's own lines for a pull request that is not open and ready, kept word for word.
-  it.effect("vector: merged is done and says where; closed, a draft and another base each refuse with one line", () =>
+  it.effect("vector: merged is done and says where; closed and another base each refuse with one line", () =>
     Effect.gen(function* () {
       const done = yield* add(memory({ state: "MERGED", more: { mergeCommit: merged } }));
       expect(Queue.line(done)).toBe(`pr 900: already merged at ${merged}`);
       const closed = yield* Effect.flip(add(memory({ state: "CLOSED" })));
       expect(closed).toMatchObject({ _tag: "NotQueued", reason: "pr 900: closed, not merged" });
-      const draft = yield* Effect.flip(add(memory({ draft: true })));
-      expect(draft).toMatchObject({ reason: "pr 900: draft, not merged; refused until it is ready for review" });
       const stacked = yield* Effect.flip(add(memory({ more: { base: "fabrikalfa/parent" } })));
       expect(stacked).toMatchObject({ reason: "pr 900: merges into fabrikalfa/parent, not main; refused" });
     }),
+  );
+
+  // Plant: refuse a draft for being a draft, as `land.ts queue` did, so a caller waits for a merge that never comes.
+  it.effect(
+    "scenario: a draft is marked ready after its leak checks and before its ci-required is read, then queued",
+    () =>
+      Effect.gen(function* () {
+        const m = memory({ draft: true });
+        const { answer, leaks } = yield* added(m);
+        expect(answer).toMatchObject({ _tag: "Success", success: { _tag: "queued", pr: 900, oid } });
+        expect(m.github.calls).toEqual([
+          { _tag: "ready", number: 900 },
+          { _tag: "enqueue", number: 900, oid },
+        ]);
+        expect(leaks).toHaveLength(3);
+
+        const leaky = memory({ draft: true, leak: "leakText" });
+        expect(yield* Effect.flip(add(leaky))).toMatchObject({ reason: "private_word" });
+        expect(leaky.github.calls).toEqual([]);
+      }),
   );
 
   it.effect("scenario: a queued answer says queued, never merged, and names the head", () =>
@@ -210,6 +236,50 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
           "ci-required is in_progress",
         );
         expect(never.calls).toEqual([]);
+      }),
+  );
+
+  // Plants: mark a draft ready while no run has started at its head (the ready event seconds after a push starts a second run on one commit,
+  // and the required check stays expected); read the run once with a wait; drop the wait's limit.
+  it.effect(
+    "scenario: a draft is marked ready only once a CI run has started at its head; with a wait it is given time to start, without one it is refused",
+    () =>
+      Effect.gen(function* () {
+        const waited = (starts: ReadonlyArray<boolean>, wait: Queue.Wait | undefined) =>
+          Effect.gen(function* () {
+            const m = memory({ draft: true });
+            const layer = Layer.merge(m.layer, ChecksTest.layer([job("success")], "", starts));
+
+            const fiber = yield* Queue.add({ dir: ".", pr: 900, ...(wait ? { wait } : {}) }).pipe(
+              Effect.provide(layer),
+              Effect.result,
+              Effect.forkChild,
+            );
+
+            yield* TestClock.adjust("6 minutes");
+
+            return { answer: yield* Fiber.join(fiber), calls: m.github.calls };
+          });
+
+        const later = yield* waited([false, false, true], { minutes: 5, every: 60 });
+        expect(later.answer._tag).toBe("Success");
+        expect(later.calls).toEqual([
+          { _tag: "ready", number: 900 },
+          { _tag: "enqueue", number: 900, oid },
+        ]);
+
+        const never = yield* waited([false], { minutes: 5, every: 60 });
+        expect(never.answer._tag === "Failure" ? String(never.answer.failure.reason) : "").toContain(
+          `no CI run has started at ${oid}`,
+        );
+        expect(never.calls).toEqual([]);
+
+        const once = yield* waited([false, true], undefined);
+        expect(once.answer._tag).toBe("Failure");
+        expect(once.calls).toEqual([]);
+
+        const started = yield* waited([true], undefined);
+        expect(started.answer._tag).toBe("Success");
       }),
   );
 

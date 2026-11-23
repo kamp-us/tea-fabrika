@@ -97,3 +97,70 @@ describe("PullRequestsGh draft actor selection", () => {
     }).pipe(Effect.provide(layers(1))),
   );
 });
+
+describe("PullRequestsGh merge queue read", () => {
+  const queueLayers = (out: string) => {
+    const spawner = Recorder.layer(ChildProcessSpawner.ChildProcessSpawner, {
+      spawn: () => Effect.succeed(handle(0, out)),
+    });
+
+    return Layer.merge(spawner, PullRequestsGh.layer("owner/repo", ".").pipe(Layer.provide(spawner)));
+  };
+
+  const entries = JSON.stringify({
+    data: {
+      repository: {
+        mergeQueue: {
+          entries: {
+            nodes: [
+              { state: "AWAITING_CHECKS", pullRequest: { number: 1922 } },
+              { state: "QUEUED", pullRequest: { number: 1930 } },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+  // Plants: read another branch than main; read a repo with no queue (`mergeQueue` null) as a failure, so an admin merge could never run there.
+  it.effect("scenario: the queue for main reads as its entries, first in line first, and no queue reads as none", () =>
+    Effect.gen(function* () {
+      const prs = yield* PullRequests;
+
+      expect(yield* prs.queue).toEqual([
+        { number: 1922, state: "AWAITING_CHECKS" },
+        { number: 1930, state: "QUEUED" },
+      ]);
+
+      const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+      const command = calls[0]?.[0];
+
+      if (command === undefined || !ChildProcess.isStandardCommand(command)) {
+        return yield* Effect.die("expected one command");
+      }
+
+      expect(commandArgs(command)).toEqual([
+        "api",
+        "graphql",
+        "-f",
+        expect.stringMatching(/^query=.*mergeQueue\(branch: "main"\)/s),
+        "-F",
+        "owner=owner",
+        "-F",
+        "name=repo",
+      ]);
+    }).pipe(Effect.provide(queueLayers(entries))),
+  );
+
+  it.effect("scenario: a repo whose main has no merge queue reads as an empty one", () =>
+    Effect.gen(function* () {
+      expect(yield* (yield* PullRequests).queue).toEqual([]);
+    }).pipe(Effect.provide(queueLayers(JSON.stringify({ data: { repository: { mergeQueue: null } } })))),
+  );
+
+  it.effect("scenario: an answer in a shape we do not read fails, never reads as an empty queue", () =>
+    Effect.gen(function* () {
+      expect((yield* Effect.flip((yield* PullRequests).queue))._tag).toBe("PullRequestsError");
+    }).pipe(Effect.provide(queueLayers('{"errors":[{"message":"nope"}]}'))),
+  );
+});

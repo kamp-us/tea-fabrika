@@ -9,19 +9,22 @@
 //           with `wait` the check is given that long to appear and end (`land.ts admin`) -> the head has
 //           not moved since it was read -> for a sev fix, also origin/main's head in its history -> one
 //           pinned squash with --admin, past the queue. "Admin" skips the queue, never a green
-//           ci-required. It says why it was allowed: a sev fix at either level (the sev1's named fix,
+//           ci-required. A pull request that is no sev fix and no sev0 ready one also waits for the merge queue to
+//           empty (`queueWait`; refused, naming the entry, without one): an admin merge moves main, which restarts the
+//           build of every entry in the queue (2026-11-22, three restarts in six minutes). A draft is marked ready only once a CI run
+//           has started at its head, never in the seconds after a push. It says why it was allowed: a sev fix at either level (the sev1's named fix,
 //           or a sev0's `open --allow` or `next` branch, as a sev fix is admin-merged one at a time on
 //           current main), a ready pull request an open sev0 allows (no pull request is in a stack,
-//           and in a sev0 the lead admin-merges ready ones in order), or, for any other, that the owner asked.
+//           and in a sev0 the lead admin-merges ready ones in order), or, for any other, no reason is given.
 //
 // A bare `gh pr merge` skips the gate: on 2026-11-15 a shell line ran the grep, never read its exit
 // code, and merged past a hit (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json).
 // Read through its module: `Merge.merge(...)`.
-import { Effect, Schema } from "effect";
+import { Array as Arr, Duration, Effect, Option, Schedule, Schema } from "effect";
 import * as Arm from "./Arm.ts";
 import { Branches } from "./Branches.ts";
 import * as Leaks from "./Leaks.ts";
-import { PullRequests } from "./PullRequests.ts";
+import { PullRequests, PullRequestsError, type QueueEntry } from "./PullRequests.ts";
 import * as Queue from "./Queue.ts";
 
 /** The pull request was not merged, and nothing was asked of GitHub's merge. */
@@ -51,6 +54,11 @@ export type Ask = {
   readonly route: Route;
   /** For an admin merge: mark a draft ready, and give `ci-required` this long to appear and end. Left out, a draft is refused and the check is read once. */
   readonly wait?: Queue.Wait;
+  /**
+   * For an admin merge of a pull request that is no sev fix and no ready pull request of a sev0: how long to
+   * wait for the merge queue to empty, and the seconds between two reads. Left out, a queue with an entry refuses it.
+   */
+  readonly queueWait?: Queue.Wait;
 };
 
 /** What `merge` did: queued, admin-merged, or found it merged already. */
@@ -59,9 +67,9 @@ export const Done = Schema.TaggedUnion({
   admin: {
     pr: Schema.Number,
     oid: Schema.String,
-    /** Why it was allowed: a sev fix, a ready pull request in a sev0, or the owner asked. */
-    for: Schema.Literals(["fix", "ready", "asked"]),
-    /** The level a fix or a ready pull request landed in; `null` when the owner asked. */
+    /** Why it was allowed: a sev fix, a ready pull request in a sev0, or `other` for any other pull request (docs and tooling under the standing rule, or one the owner asked for). */
+    for: Schema.Literals(["fix", "ready", "other"]),
+    /** The level a fix or a ready pull request landed in; `null` for any other. */
     level: Schema.NullOr(Schema.Literals(["sev0", "sev1"])),
   },
   merged: { pr: Schema.Number, commit: Schema.String },
@@ -69,7 +77,7 @@ export const Done = Schema.TaggedUnion({
 
 export type Done = typeof Done.Type;
 
-/** Why the admin merge is allowed for this branch: a sev fix, a ready pull request in a sev0, or the owner asked. */
+/** Why the admin merge is allowed for this branch: a sev fix, a ready pull request in a sev0, or none of those. */
 const adminFor = (head: string, route: AdminRoute) => {
   if (route.sev1 === head) {
     return { for: "fix" as const, level: "sev1" as const };
@@ -83,16 +91,74 @@ const adminFor = (head: string, route: AdminRoute) => {
     return { for: "ready" as const, level: "sev0" as const };
   }
 
-  return { for: "asked" as const, level: null };
+  return { for: "other" as const, level: null };
 };
 
 /** How long `land.ts admin` gives `ci-required` to appear and end, and the seconds between two reads; its flags change both. */
 export const ADMIN_WAIT: Queue.Wait = { minutes: 30, every: 30 };
 
+/** The merge queue still holds an entry: a wait reads again. */
+class Occupied extends Schema.TaggedError<Occupied, { readonly brand: unique symbol }>()("Occupied", {}) {}
+
+/**
+ * The entries of main's merge queue other than pull request `pr`, as the last read left them: none when
+ * the queue is empty. With a wait, reads again each `every` seconds until it is empty or the wait is over, and a
+ * read that failed counts as not read; a queue never read fails with the last error, never reads as empty.
+ */
+const queued = Effect.fn("Merge.queued")(function* (pr: number, wait: Queue.Wait | undefined) {
+  const prs = yield* PullRequests;
+
+  const others = Effect.map(
+    prs.queue,
+    Arr.filter((entry: QueueEntry) => entry.number !== pr),
+  );
+
+  if (wait === undefined) {
+    return yield* others;
+  }
+
+  let last: ReadonlyArray<QueueEntry> | undefined;
+  let failed: PullRequestsError | undefined;
+
+  const emptied = others.pipe(
+    Effect.tapError((e) =>
+      Effect.sync(() => {
+        failed = e;
+      }),
+    ),
+    Effect.tap((entries) =>
+      Effect.sync(() => {
+        last = entries;
+      }),
+    ),
+    Effect.filterOrFail(
+      (entries) => entries.length === 0,
+      () => Occupied.make(),
+    ),
+    Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)) }),
+    Effect.catchTag("Occupied", () => Effect.succeed(last ?? [])),
+    Effect.timeoutOption(Duration.minutes(wait.minutes)),
+  );
+
+  const done = yield* emptied;
+
+  if (Option.isSome(done)) {
+    return done.value;
+  }
+
+  return last ?? (yield* Effect.fail(failed ?? PullRequestsError.make({ reason: "the merge queue was not read" })));
+});
+
 /** A `can/` branch is a person's own work and never merged by the lead. */
 const CAN = "can/";
 
-const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route: AdminRoute, wait?: Queue.Wait) {
+const admin = Effect.fn("Merge.admin")(function* (
+  dir: string,
+  pr: number,
+  route: AdminRoute,
+  wait?: Queue.Wait,
+  queueWait?: Queue.Wait,
+) {
   const prs = yield* PullRequests;
   let found = yield* prs.view(pr);
   const refuse = (reason: string) => new NotMerged({ reason: `pr ${found.number}: ${reason}` });
@@ -117,9 +183,33 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route
 
   yield* Leaks.gate(dir, found);
 
+  // A merge to main moves main under the queue and restarts the build of every entry in it: any other
+  // pull request waits for the queue to empty. A sev fix and a sev0's ready pull request keep the sev
+  // skill's one-at-a-time rule alone, so this never slows a fix.
+  if (allowed.for === "other") {
+    const waiting = yield* queued(found.number, queueWait);
+
+    if (waiting.length > 0) {
+      const first = waiting[0];
+
+      return yield* refuse(
+        `pr ${first?.number} is in the merge queue (${first?.state}); an admin merge moves main and restarts its build; not merged${
+          queueWait === undefined ? " (give `land.ts admin` --wait to wait for the queue to empty)" : ""
+        }`,
+      );
+    }
+
+    found = yield* prs.view(pr);
+  }
+
   // Marking a draft ready starts its real `ci-required`, which has not registered yet: the wait below
-  // is what keeps the merge from running ahead of it.
+  // is what keeps the merge from running ahead of it. It starts only after the push's own CI run has,
+  // so no ready event lands in the seconds after a push.
   if (marking) {
+    if (!(yield* Queue.startedAt(found.oid, wait))) {
+      return yield* refuse(Queue.notStarted(found.oid));
+    }
+
     yield* prs.ready(found.number);
     found = yield* prs.view(pr);
   }
@@ -168,7 +258,7 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route
 
 export const merge = Effect.fn("Merge.merge")(function* (a: Ask) {
   if (a.route._tag === "admin") {
-    return yield* admin(a.dir, a.pr, a.route, a.wait);
+    return yield* admin(a.dir, a.pr, a.route, a.wait, a.queueWait);
   }
 
   const added = yield* Queue.add({ dir: a.dir, pr: a.pr });
@@ -183,12 +273,12 @@ export const line = (done: Done): string =>
   Done.match(done, {
     queued: (d) => Queue.line(Queue.Added.cases.queued.make({ pr: d.pr, oid: d.oid })),
     admin: (d) =>
-      `pr ${d.pr}: admin-merged at ${d.oid}, ${
-        d.for === "asked"
-          ? "the owner asked"
+      `pr ${d.pr}: admin-merged at ${d.oid}${
+        d.for === "other"
+          ? ""
           : d.for === "fix"
-            ? `a ${d.level} fix (a sev fix is admin-merged one at a time on current main)`
-            : "a ready pull request in a sev0 (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order)"
+            ? `, a ${d.level} fix (a sev fix is admin-merged one at a time on current main)`
+            : ", a ready pull request in a sev0 (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order)"
       }; read the push run on main next`,
     merged: (d) => `pr ${d.pr}: already merged at ${d.commit}`,
   });

@@ -907,6 +907,7 @@ type Given = {
 };
 
 const exportsOf = (): Plain => ({
+  ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
   ...Object.fromEntries(
     SUBPATHS.map((name) => [`./${name}`, { types: `./dist/${name}.d.ts`, default: `./dist/${name}.js` }]),
   ),
@@ -1112,7 +1113,7 @@ const keeperRefusals = (token: string): Case[] => [
       (given) => rewrite(given, (receipt) => void delete receipt["negatives"][name]),
     ],
   ]),
-  ...["./App", "./Load", "./package.json"].map((key): Case => [
+  ...[".", "./App", "./Load", "./package.json"].map((key): Case => [
     `the export ${key} is gone`,
     ["exports", "unreadable"],
     (given) => rewrite(given, (receipt) => void delete receipt["exports"][key]),

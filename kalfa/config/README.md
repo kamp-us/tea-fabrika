@@ -74,6 +74,35 @@ For real files, supply your platform's Effect `FileSystem` and `Path` services i
 in-memory file service above. `TomlParser.layer` supplies the TOML service. Snapshots need
 `Digest`, supplied here by Web Crypto.
 
+## A setting's value is plain data
+
+A setting made with `Setting.make` from `@kalfa/config` holds plain data only: text, numbers,
+booleans, and arrays and records of those, branded or not. A `Date`, a `Duration`, a `URL`, a `Map`
+or a class does not compile. Declare a length of time or an address as text, and decode it where it
+is read:
+
+```ts
+import { Setting } from "@kalfa/config";
+import { Option, Schema } from "effect";
+
+// Checked when the app starts, so "ten" stops the start with its file and line.
+const Wait = Schema.String.check(
+  Schema.makeFilter(
+    (text: string) =>
+      Option.isSome(Schema.decodeUnknownOption(Schema.DurationFromString)(text)) || "a length of time, as 10 seconds",
+  ),
+);
+
+export const branchWait = Setting.make("delivery.branch-wait", Wait).pipe(
+  Setting.withDefault("10 seconds"),
+  Setting.withDescription("How long a landing waits for its branch."),
+);
+
+// Where it is read: const wait = Schema.decodeSync(Schema.DurationFromString)(values.branchWait)
+```
+
+A URL works the same way, with `Schema.URLFromString` where it is read.
+
 ## Public modules
 
 Import these explicit subpaths: `App`, `Setting`, `Sources`, `Toml`, `TomlParser`, `Codec`,

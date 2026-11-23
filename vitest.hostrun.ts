@@ -22,6 +22,7 @@
 // box is refused again, which is the safe side. Nothing stops a shell from setting `CI` or the
 // owner's variable itself: this guards against an accident, not against an agent that means to get
 // around it.
+import { isAbsolute, relative } from "node:path";
 import { Match } from "effect";
 import { openers } from "./oxlint-plugins/test-kind.ts";
 
@@ -88,4 +89,50 @@ export const hostFiles = (
       }),
     );
   });
+};
+
+/** What a laptop run asked for, for the check below: its filters, and `--changed`'s files when it has one. */
+type Broad = {
+  readonly filters: readonly string[];
+  /** The files `--changed` starts from, or `null` when git could not list them. `undefined` when the run has no `--changed`. */
+  readonly changed: readonly string[] | null | undefined;
+};
+
+/** Whether a filter names exactly one test file, and so cannot select more by its own words. */
+const narrow = (filter: string, cwd: string): boolean => {
+  const path = isAbsolute(filter) ? relative(cwd, filter) : filter.replace(/^\.\//, "");
+
+  return !/[*?[\]{}]/.test(path) && /(?:^|\/)[^/]+\.test\.[cm]?[jt]sx?(?::[\d-]+)?$/.test(path);
+};
+
+const INSTEAD = "Use: pnpm exec vitest run --maxWorkers=1 <test file> ... (one or more test files, each by its path)";
+
+/**
+ * The laptop's refusal of a run that may start many tests, with the one rule that fired and what to run
+ * instead; `undefined` when the run is narrow. A run is narrow when every filter is one test file, or when
+ * `--changed` starts from files that select no more than the tests they reach. `trigger` says which changed
+ * files make Vitest select every test (the config's `forceRerunTriggers`).
+ */
+export const broadRefusal = (run: Broad, cwd: string, trigger: (path: string) => boolean): string | undefined => {
+  if (run.filters.length > 0 && run.filters.every((filter) => narrow(filter, cwd))) {
+    return undefined;
+  }
+
+  if (run.changed === undefined) {
+    const wide = run.filters.filter((filter) => !narrow(filter, cwd));
+
+    return wide.length === 0
+      ? `Local broad test run refused: no test file was given, so it would run the full suite. ${INSTEAD}`
+      : `Local broad test run refused: ${wide.map((filter) => `'${filter}'`).join(", ")} is not one test file (a folder, a pattern or a name without .test.ts selects many). ${INSTEAD}`;
+  }
+
+  if (run.changed === null) {
+    return `Local broad test run refused: git could not list the files --changed starts from. ${INSTEAD}`;
+  }
+
+  const forced = run.changed.filter(trigger);
+
+  return forced.length === 0
+    ? undefined
+    : `Local broad test run refused: --changed would select every test, because ${forced.slice(0, 5).join(", ")}${forced.length > 5 ? ` and ${forced.length - 5} more` : ""} changed (a lockfile, a tsconfig, a vitest or oxlint config, layer-rules.json or oxlint-plugins/** each select all). ${INSTEAD}; CI runs the rest.`;
 };

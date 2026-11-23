@@ -56,7 +56,7 @@ export type Fields = Omit<typeof Diagnostic.Reported.Encoded, "code">;
  * export const warn = Diagnostics.report(UnknownSetting, {
  *   severity: "error",
  *   message: "The setting `service.prot` is not declared.",
- *   place: { path: ".config/settings.toml", line: 4 },
+ *   place: { _tag: "repo", path: ".config/settings.toml", line: 4 },
  *   hint: "Did you mean `service.port`?"
  * })
  * ```
@@ -74,6 +74,8 @@ export const report = Effect.fn("diagnostics.report")(function* (
   yield* Effect.annotateCurrentSpan({
     "kalfa.diagnostics.code": reported.code,
     "kalfa.diagnostics.severity": reported.severity,
+    // Only the kind of place, "repo", "home", "environment" or "flag": never a path or a name.
+    "kalfa.diagnostics.place.type": reported.place._tag,
   });
 
   const diagnostics = yield* Diagnostics;

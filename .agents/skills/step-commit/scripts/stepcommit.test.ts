@@ -1332,3 +1332,141 @@ describe("T1610 a fix round's commit (0177): one agent writes the law and the fi
     );
   });
 });
+
+describe("a step commit ends a merge of main (2026-11-22, pull request 1942), today's tooling", () => {
+  // Plants: refuse any staged index during a merge, as before; take every staged path the merge left,
+  // a hand-staged stray and an unresolved conflict too; read the merged files for owner or format.
+  /** A merge of a branch from main, stopped before its commit, as `git merge --no-commit` leaves it. */
+  const merge = (r: Repo, name: string, conflict: boolean) => {
+    const self = r.git("rev-parse", "--abbrev-ref", "HEAD").trim();
+
+    if (conflict) {
+      r.changed("src/owned.ts", `export const value = "branch-${name}";\n`);
+      r.git("commit", "-q", "-am", "branch side");
+    }
+
+    r.git("checkout", "-q", "-b", "main-side", r.base);
+    // Not formatted, and owned by no row: the merge brought them, so the step answers for neither.
+    r.changed("src/foreign.ts", `export  const value="main-${name}";\n`);
+    r.changed("src/new-main.ts", `export  const added="main-${name}";\n`);
+    r.git("rm", "-q", "src/old.ts");
+
+    if (conflict) {
+      r.changed("src/owned.ts", `export const value = "main-${name}";\n`);
+    }
+
+    r.git("add", "--all");
+    r.git("commit", "-q", "-m", "main side");
+    const tip = r.git("rev-parse", "HEAD").trim();
+    r.git("checkout", "-q", self);
+    const merged = r.call("/usr/bin/git", ["merge", "--no-commit", "--no-ff", "main-side"]);
+    expect(merged.code, merged.text).toBe(conflict ? 1 : 0);
+
+    return tip;
+  };
+
+  const merging = (r: Repo) => r.call("/usr/bin/git", ["rev-parse", "-q", "--verify", "MERGE_HEAD"]).code === 0;
+
+  it("scenario: a merge's staged files from main commit with the step's own path, as a two-parent commit", () => {
+    fc.assert(
+      fc.property(word, (name) => {
+        each([false, true], (only) =>
+          withRepo([["src/owned.ts", "tests"]], (r) => {
+            const tip = merge(r, name, false);
+            const head = r.git("rev-parse", "HEAD").trim();
+            r.changed("src/owned.ts", `export const value = "own-${name}";\n`);
+
+            const got = r.commit("tests", ["src/owned.ts"], only);
+
+            expect(got.code, got.text).toBe(0);
+            expect(r.git("rev-list", "--parents", "-n", "1", "HEAD").trim().split(" ")).toEqual([
+              r.git("rev-parse", "HEAD").trim(),
+              head,
+              tip,
+            ]);
+            expect(merging(r)).toBe(false);
+            expect(r.git("status", "--porcelain")).toBe("");
+            expect(r.git("show", "HEAD:src/owned.ts")).toBe(`export const value = "own-${name}";\n`);
+            expect(r.git("show", "HEAD:src/foreign.ts")).toBe(`export  const value="main-${name}";\n`);
+            expect(r.git("ls-tree", "--name-only", "HEAD", "src/old.ts")).toBe("");
+            expect(r.signs()).toEqual(only ? [] : [expect.anything()]);
+          }),
+        );
+      }),
+      options,
+    );
+  });
+
+  it("scenario: a resolved conflict the step names commits, and one it leaves unnamed refuses with exit 4", () => {
+    fc.assert(
+      fc.property(word, (name) => {
+        each([false, true], (only) =>
+          withRepo(
+            [
+              ["src/owned.ts", "tests"],
+              ["src/owned.tsx", "tests"],
+            ],
+            (r) => {
+              merge(r, name, true);
+              r.changed("src/owned.ts", `export const value = "resolved-${name}";\n`);
+              r.changed("src/owned.tsx", `export const value = "other-${name}";\n`);
+
+              const unnamed = r.commit("tests", ["src/owned.tsx"], only);
+
+              expect(unnamed.code, unnamed.text).toBe(4);
+              expect(merging(r)).toBe(true);
+              expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
+              expect(r.signs()).toEqual([]);
+
+              const named = r.commit("tests", ["src/owned.ts", "src/owned.tsx"], only);
+
+              expect(named.code, named.text).toBe(0);
+              expect(merging(r)).toBe(false);
+              expect(r.git("rev-list", "--parents", "-n", "1", "HEAD").trim().split(" ")).toHaveLength(3);
+              expect(r.git("show", "HEAD:src/owned.ts")).toBe(`export const value = "resolved-${name}";\n`);
+              expect(r.git("show", "HEAD:src/owned.tsx")).toBe(`export const value = "other-${name}";\n`);
+            },
+          ),
+        );
+      }),
+      options,
+    );
+  });
+
+  it("scenario: a staged path the merge did not bring, or changed after it, still refuses with exit 4", () => {
+    fc.assert(
+      fc.property(word, fc.constantFrom("a stray file", "a merged file edited again"), (name, stray) => {
+        each([false, true], (only) =>
+          withRepo(
+            [
+              ["src/owned.ts", "tests"],
+              ["src/owned.tsx", "tests"],
+            ],
+            (r) => {
+              merge(r, name, false);
+
+              if (stray === "a stray file") {
+                r.changed("src/owned.tsx", `export const value = "stray-${name}";\n`);
+                r.git("add", "--", "src/owned.tsx");
+              } else {
+                r.changed("src/foreign.ts", `export const value = "edited-${name}";\n`);
+                r.git("add", "--", "src/foreign.ts");
+              }
+
+              r.changed("src/owned.ts", `export const value = "own-${name}";\n`);
+              const index = r.git("write-tree");
+              const got = r.commit("tests", ["src/owned.ts"], only);
+
+              expect(got.code, got.text).toBe(4);
+              expect(merging(r)).toBe(true);
+              expect(r.git("write-tree")).toBe(index);
+              expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+              expect(r.signs()).toEqual([]);
+            },
+          ),
+        );
+      }),
+      options,
+    );
+  });
+});

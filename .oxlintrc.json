@@ -58,7 +58,7 @@
       {
         "object": "Data",
         "property": "TaggedError",
-        "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+        "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
       }
     ],
     "fabrika/outside-input-constructor": "error",
@@ -2182,7 +2182,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           { "property": "setBounds", "message": "Size a test window with TestWindow.size." },
           { "property": "setPosition", "message": "Size a test window with TestWindow.size." }
@@ -2230,7 +2230,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -2271,7 +2271,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -2317,7 +2317,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -2916,7 +2916,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -2970,7 +2970,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -3035,7 +3035,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -3098,7 +3098,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -3193,7 +3193,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -3260,7 +3260,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -3336,7 +3336,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -3387,7 +3387,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -3470,7 +3470,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "Reflect",
@@ -3521,7 +3521,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "Reflect",
@@ -3599,7 +3599,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
@@ -3670,7 +3670,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedError (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
