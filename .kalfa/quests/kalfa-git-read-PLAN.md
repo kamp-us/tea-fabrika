@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0047, 0048, 0049, 0063, 0076, 0079; body f555157145d2
+Approved by the lead agent, builds 0047, 0048, 0049, 0063, 0076, 0079, 0089; body 10ecca308519
 Plancheck-Version: 3
 
 # Plan: @kalfa/git, read commits and refs from a repository, in memory and with the git binary (ticket 1932)
@@ -874,4 +874,28 @@ decodes to a class, so the time limit changes. This amendment wins over the sect
 - **README** and the doubt "Is any of this a setting?" say the time limit is text, decoded by the package.
 - `committer` (ticket 1934) is not part of this pull request; its record of `name` and `email` in place of
   `Signature` is noted on issue 1934.
+
+## Amendment 2 (2026-11-22): the review's findings
+
+The review answered merge-ready with six findings. Since the real-git laws I1 to I4 do not run before a merge unless
+the lead starts a proof run, the gaps that only I1 would catch get plain laws now. This amendment wins over the
+sections above.
+
+- **P7, the arguments `/process` gives git:** the stand-in records each call's arguments; a law checks them for each
+  call the adapter makes (`rev-parse`, `rev-list` with its `--not`, `merge-base` with both ids in order, `for-each-ref`
+  with its count). Plants: swap the two ids given to `merge-base`, red; drop `--not`, red.
+- **G5 gains** `"Infinity"` and `"-Infinity"` among the refused times; plant: drop the finite check, red.
+- **P8, the stderr cap:** a stand-in git that writes more than `limits.bytes` of stderr then exits non-zero gives an
+  `Exited` whose stderr is exactly the first `limits.bytes` bytes. Plant: drop the cap, red.
+- **A git that ignores SIGTERM:** the spawn sets Effect's `forceKillAfter` so the child is killed a short, fixed time
+  after the time limit; the fixed time is a value in `Settings`'s `Limits` only if a law needs it to change, else a
+  named constant beside the spawn. P3 gains the case: a stand-in that ignores SIGTERM still ends the call within the
+  limit plus that time. Plant: no `forceKillAfter`, red.
+- **`RefNotCommit.ref`** is a `RefName`, as the sketch says. T-law: a plain string does not fit.
+- **The public test entries keep only what a caller needs:** `/test` keeps `suite`, `Subject`, `Seeded`,
+  `SuiteOptions` and `settings`; `/test/History` keeps `History`, `Node`, `textureArb` and `shapes`. Every other
+  export of `HistoryTest.ts` and `RepositoryTest.ts` moves to a `*.test-support.ts` file, and an export no other file
+  reads loses its `export`.
+- **No `Person`:** the glossary's Signature entry avoids the word. The test type is named for what it is, a
+  signature's encoded form, or uses `Commit.Signature`'s encoded type.
 
