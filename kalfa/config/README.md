@@ -283,7 +283,7 @@ does, a number up to the largest safe integer included. The quiet window of a gr
 
 ## The config command
 
-`@kalfa/config/cli` exports `config(app, groups, { version, repo })`, an `effect/cli` command named by its root name
+`@kalfa/config/Cli` exports `config(app, groups, { version, repo })`, an `effect/cli` command named by its root name
 that answers questions about every group of one app. `@kalfa/cli` mounts it as its built-in `config`, and an app can mount
 it under its own command. It takes every group, so one file shared by many packages is checked against all of them: a
 key of a group left out is refused as unknown. `repo` is the folder that holds `.<app>/`, and is handed in: the command
@@ -307,7 +307,7 @@ so a failed run prints nothing. Each run is a span `config.<subcommand>` with `k
 
 ```ts
 import { Setting, SettingGroup } from "@kalfa/config";
-import { config } from "@kalfa/config/cli";
+import { config } from "@kalfa/config/Cli";
 import { Schema } from "effect";
 
 const port = Setting.make("instance.port", Schema.Int).pipe(
@@ -325,7 +325,7 @@ its table, or one environment variable. A field two groups share is fine: each g
 ## Public modules
 
 Import these explicit subpaths: `App`, `Setting`, `Sources`, `Toml`, `TomlParser`, `Codec`,
-`Files`, `JsonSchema`, `Reference`, `Print`, `Snapshot`, `Load` and `cli`.
+`Files`, `JsonSchema`, `Reference`, `Print`, `Snapshot`, `Load` and `Cli`.
 For example, `@kalfa/config/Reference` reads rows from a loaded snapshot, and
 `@kalfa/config/Print` prints those rows. `internal/` and test files are private.
 
