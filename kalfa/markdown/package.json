@@ -25,6 +25,7 @@
   ],
   "exports": {
     "./Frontmatter": "./src/Frontmatter.ts",
+    "./Markdown": "./src/Markdown.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -33,10 +34,18 @@
         "types": "./dist/Frontmatter.d.ts",
         "default": "./dist/Frontmatter.js"
       },
+      "./Markdown": {
+        "types": "./dist/Markdown.d.ts",
+        "default": "./dist/Markdown.js"
+      },
       "./package.json": "./package.json"
     }
   },
   "dependencies": {
+    "@types/mdast": "catalog:",
+    "mdast-util-from-markdown": "catalog:",
+    "mdast-util-gfm": "catalog:",
+    "micromark-extension-gfm": "catalog:",
     "yaml": "catalog:"
   },
   "peerDependencies": {
