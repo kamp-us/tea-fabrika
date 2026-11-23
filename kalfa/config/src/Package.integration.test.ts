@@ -1,3 +1,6 @@
+// Ticket 1843 P1: the consumer calls `SettingGroup.edit(...).set` and `.remove` on a small text, checks the answers, and
+// compiles their declarations; the package's exports do not change (the manifest check below). Plant: leave
+// `internal/toml.ts` out of the build, so the consumer's edit fails.
 // T1076 P2. Plants: ship a source export, omit parser JS/declarations, or keep a workspace runtime dependency.
 // Ticket 1839 P1: the root entry `.` ships beside the twelve modules, mapped to `dist/index`. Plant: drop `.` from the
 // published exports, so the manifest check below and the consumer's import of `@kalfa/config` fail.
@@ -250,6 +253,8 @@ it.effect(
             runtime: Schema.Literal("passed"),
             imports: Schema.Literal("passed"),
             private: Schema.Literal("passed"),
+            // Ticket 1843 P1: the installed archive runs `SettingGroup.edit(...).set` and `.remove`.
+            edit: Schema.Literal("passed"),
           }),
         ),
       )(yield* command(consumer, "node", ["consumer.mjs"]));

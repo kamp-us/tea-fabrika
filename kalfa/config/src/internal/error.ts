@@ -5,14 +5,14 @@ import * as Schema from "effect/Schema";
  *
  * **Details**
  *
- * `reason` says which problem: `version` (the repo needs a newer app), `syntax` (a file is not TOML), `unknown` (no such setting), `scope` (the setting exists, in another file), `invalid` (a value its schema refuses), `missing` (a required setting no source gives) or `read` (a file could not be read). `file` is the file as a person reads it, such as `~/.demo/demo.toml`, and `line` counts from 1. A fault in the environment names the variable in its message and has no file. `cause` holds the failure underneath when there is one. A message never holds a value it refused.
+ * `reason` says which problem: `version` (the repo needs a newer app), `syntax` (a file is not TOML), `unknown` (no such setting), `scope` (the setting exists, in another file), `invalid` (a value its schema refuses), `missing` (a required setting no source gives) or `read` (a file could not be read) or `edit` (an edit cannot be made in this text as one key, or the edited text would change other data). `file` is the file as a person reads it, such as `~/.demo/demo.toml`, and `line` counts from 1. A fault in the environment names the variable in its message and has no file. `cause` holds the failure underneath when there is one. A message never holds a value it refused.
  *
  * @category errors
  */
 export class SettingsError extends Schema.TaggedError<SettingsError, { readonly brand: unique symbol }>()(
   "SettingsError",
   {
-    reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "missing", "read"]),
+    reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "missing", "read", "edit"]),
     message: Schema.String,
     file: Schema.optional(Schema.String),
     line: Schema.optional(Schema.Int),
@@ -29,17 +29,18 @@ export interface Position {
 const opening = (position: Position | undefined) =>
   position === undefined ? "" : `${position.file}${position.line === undefined ? "" : `, line ${position.line}`}: `;
 
-/** One error: where it was found, what is wrong and the closing sentence, with the failure beneath it when there is one. */
+/** One error: where it was found, what is wrong and the closing sentence, with the failure beneath it when there is one. The closing sentence is `<app> did not start.` unless the caller gives its own. */
 export const stop = (
   app: string,
   reason: SettingsError["reason"],
   text: string,
   position?: Position,
   cause?: unknown,
+  closing = `${app} did not start.`,
 ) =>
   new SettingsError({
     reason,
-    message: `${opening(position)}${text}\n  ${app} did not start.`,
+    message: `${opening(position)}${text}\n  ${closing}`,
     file: position?.file,
     line: position?.line,
     cause,

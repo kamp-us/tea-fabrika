@@ -103,6 +103,40 @@ export const branchWait = Setting.make("delivery.branch-wait", Wait).pipe(
 
 A URL works the same way, with `Schema.URLFromString` where it is read.
 
+## Change one setting in a file's text
+
+`SettingGroup.edit(group, text, file)` changes one setting in the text of a configuration file. It is pure: no
+file is read or written, and the text is the only input. `file` is `"repo"` or `"user"`, and says which file the
+text is.
+
+```ts
+import { SettingGroup } from "@kalfa/config";
+import { Effect } from "effect";
+
+const text = ['[delivery]', 'approver = "people"   # the default', ''].join("\n");
+
+const next = await Effect.runPromise(SettingGroup.edit(group, text, "repo").set(approver, "owner"));
+// '[delivery]\napprover = "owner"   # the default\n'
+```
+
+`set` replaces only the value's own text, so every comment, space and line break stays. A key the file lacks goes on
+a line of its own at the end of its table, or under a new header at the end. `remove` takes out one `key = value`
+(and its comma in an inline table). A set of the value the file already holds, or a remove of a key the file lacks,
+answers the same text.
+
+Each call answers an `Effect` of the new text that fails with one `SettingsError`, and then no text comes back:
+
+- `unknown`: the setting is not one of the group's.
+- `scope`: the file is outside the setting's file scope. A remove checks this too.
+- `invalid`: the value fails its schema, or the file cannot write it.
+- `syntax`: the text is not valid TOML. Other faults in the file, an unknown key or another setting's bad value,
+  fail with their own reason and their own line. The edited setting's old value is left out of this check, so a set
+  or a remove can fix a bad value.
+- `edit`: the setting is not one key in this text, as a record written under its own header, as dotted sub-keys or
+  as an array of tables, or the edited text would change other data.
+
+A message ends `<file> was not changed.` and never holds a value.
+
 ## Public modules
 
 Import these explicit subpaths: `App`, `Setting`, `Sources`, `Toml`, `TomlParser`, `Codec`,
