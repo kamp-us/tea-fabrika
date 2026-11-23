@@ -53,9 +53,13 @@ for the product code.
    loads`) with its file, line and what changed. When it refuses the scope as too wide, name the
    files that hold the guarding checks with `--files`. Answer each survivor in a guarding check:
    a law is missing, so list it in your report and end with `answer: send tests <the survivors>`;
-   or it guards nothing, so write `Survivor: <file>:<line> <one-line reason>` in the commit body,
-   such as a log text or a mutant that changes no behavior. Leave the `static` lines as they are:
+   or it guards nothing, so write `Survivor: <file>:<line> <reason> -- <evidence>` in the commit body
+   (`<file>:*` for a whole file), the whole line on one line: the check reads one line. The evidence is the input or plant you tried and why it cannot
+   reach the line, or one sentence on why the mutant is equivalent: "unreachable" alone answers
+   nothing. Leave the `static` lines as they are:
    code that runs as the module loads, which Stryker skips and the reviewer plants by hand.
+   The step is done when the same command with `--answered --answers <your commit body file>` exits 0:
+   every survivor is killed by a law or carried as a `Survivor:` line.
 9. **Commit, push and report** by the standing rules below.
 
 ## Outside your task
