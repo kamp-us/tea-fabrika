@@ -85,7 +85,8 @@ const [left, right] = yield* MemorySocket.pair; // Effect<readonly [Socket, Sock
 
 Two joined sockets for a test: what one end writes, the other end reads, in order. Closing the reader scope of an end
 fails a pull waiting on it, and the far end reads every frame written before, then a close of code 1000. A `CloseEvent`
-written to an end closes both with its code and reason. A write to a closed end fails with `SocketWriteError`. There is no
+written to an end closes both with its code and reason. A write to an end that closed itself fails with `SocketWriteError`. A write to an end whose far end closed is dropped and
+fails nothing, as a WebSocket drops it, and the close reaches the reader. There is no
 capacity, as a browser's `WebSocket.send` has none.
 
 ## What never shows a frame
