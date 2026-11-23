@@ -721,7 +721,8 @@ const Narrow = Schema.Array(Cell).check(Schema.isMinLength(3), Schema.isMaxLengt
 
 const WIDE_TAPE = Array.from({ length: 10 }, (_, i) => ({ pick: i, amount: (i * 37) % 251, reopen: i % 2 === 0 }));
 
-const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } };
+// 40 full runs took 14.3 to 17.4 s of CI's 60 s limit for the two Q12 laws, so 20.
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }) } };
 
 const accepted = { _tag: "ok", result: { _tag: "accepted" } };
 
@@ -861,8 +862,7 @@ describe("P34c live wiring, both object stores", () => {
     "Q12 every entry a live call commits is charged to the account of its cause, and each step to its name's own store",
     { tape: Narrow },
     ({ tape }) => charged(tape),
-    // 40 runs took 17.4 s of CI's 60 s limit for this law alone, so 15.
-    { arbitrary: { ...options.arbitrary, runs: runsFor({ fast: 3, full: 15 }) } },
+    options,
   );
 
   it.effect("pinned: Q12 charges a tape of 10 cells", () => charged(WIDE_TAPE));

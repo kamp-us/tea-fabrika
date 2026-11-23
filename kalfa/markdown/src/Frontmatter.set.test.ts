@@ -266,11 +266,12 @@ it.effect.prop(
 
       deepStrictEqual(Support.unreached(seen, ["t"]), [], "classes never checked in this run");
     }),
-  runs(200),
+  runs(90),
 );
 
 const hasLoneLineFeed = (text: string): boolean => /(?<!\r)\n/u.test(text);
 
+// E6 took 10.9 to 17.8 s of CI's 60 s limit at 200 runs, so E5 and E6 take 90.
 // E6. Plant: write `\n` in new lines whatever the file uses, (o) red.
 it.effect.prop(
   "E6 line breaks: a CRLF file gets only CRLF, and an LF file's frontmatter gets no \\r",
@@ -300,7 +301,7 @@ it.effect.prop(
 
       deepStrictEqual(Support.unreached(seen, ["o"]), [], "classes never checked in this run");
     }),
-  runs(200),
+  runs(90),
 );
 
 // E7. Plants: encode after the edit, so a refused value still gives text, (w) red; merge onto the file's raw data without decoding it, so a file S2
