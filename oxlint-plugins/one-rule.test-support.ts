@@ -6,7 +6,6 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Array as Arr, Record as Rec, Schema } from "effect";
-import { parseSync } from "oxc-parser";
 
 const Config = Schema.Struct({
   rules: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
@@ -21,33 +20,43 @@ const Config = Schema.Struct({
   ),
 });
 
-const decode = Schema.decodeUnknownSync(Config);
+const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Config));
 
-type Node = Readonly<{
-  type: string;
-  value?: unknown;
-  properties?: ReadonlyArray<Node & { key: Node & { name?: string }; value: Node }>;
-  elements?: ReadonlyArray<Node>;
-}>;
+/** The text without its line and block comments: a comment mark inside a string is part of the string. */
+const withoutComments = (text: string): string => {
+  let out = "";
+  let at = 0;
 
-/** The value of a JSON-with-comments text, read as the object literal it is: oxc's parser takes the comments. */
-const read = (text: string): unknown => {
-  const parsed = parseSync("oxlintrc.ts", `export default ${text}`);
-  const value = (node: Node): unknown =>
-    node.type === "ObjectExpression"
-      ? Object.fromEntries(
-          (node.properties ?? []).map((property) => [property.key.value ?? property.key.name, value(property.value)]),
-        )
-      : node.type === "ArrayExpression"
-        ? (node.elements ?? []).map(value)
-        : node.value;
+  while (at < text.length) {
+    const here = text[at];
+    const next = text[at + 1];
 
-  return value((parsed.program.body[0] as unknown as { declaration: Node }).declaration);
+    if (here === '"') {
+      let end = at + 1;
+
+      while (text[end] !== '"') {
+        end += text[end] === "\\" ? 2 : 1;
+      }
+
+      out += text.slice(at, end + 1);
+      at = end + 1;
+    } else if (here === "/" && next === "/") {
+      at = text.indexOf("\n", at);
+      at = at === -1 ? text.length : at;
+    } else if (here === "/" && next === "*") {
+      at = text.indexOf("*/", at) + 2;
+    } else {
+      out += here;
+      at += 1;
+    }
+  }
+
+  return out;
 };
 
 /** One rule's blocks out of the config text (comments allowed): its base entry, if any, and each override that names it. */
 export const ruleBlocks = (text: string, rule: string) => {
-  const { rules = {}, overrides = [] } = decode(read(text));
+  const { rules = {}, overrides = [] } = decode(withoutComments(text));
 
   return {
     rules: Rec.has(rules, rule) ? { [rule]: rules[rule] } : {},

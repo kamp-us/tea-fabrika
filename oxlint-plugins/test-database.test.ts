@@ -11,7 +11,7 @@ import { dirname, join, relative } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
-import { oneRuleConfig } from "./one-rule.ts";
+import { oneRuleConfig } from "./one-rule.test-support.ts";
 import { testDatabase } from "./test-database.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -180,7 +180,7 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s tests, suites
 it("scenario: next/'s tree is at zero, so the rule blocks from the start (a lint rule blocks wherever its code is clean)", () => {
   // The real tree is the input: 62 calls in 53 files fired on `86a7668d6`, and ticket 1029 moved
   // each one to `TestDatabase.make` or `TestDatabase.open`.
-  // The rule alone, over the whole tree, from the repo's own config (one-rule.ts): the other rules' work over 800 files was most of this law's 16 s.
+  // The rule alone, over the whole tree, from the repo's own config (one-rule.test-support.ts): the other rules' work over 800 files was most of this law's 16 s.
   const config = oneRuleConfig(root, "fabrika/test-database");
 
   try {

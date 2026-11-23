@@ -20,7 +20,7 @@ import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
 import { integrationTestName } from "./integration-test-name.ts";
-import { oneRuleConfig } from "./one-rule.ts";
+import { oneRuleConfig } from "./one-rule.test-support.ts";
 import { DRIVES, type Tag } from "./starters.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -371,7 +371,7 @@ it("scenario: next/'s and kalfa/'s trees are at zero, so the rule blocks from th
   // The real tree is the input. Measured on main before the renames (oxlint-plugins/README.md): 4
   // plain files fired, all 4 start git or write a temp folder, and each was renamed or given a
   // stand-in: 0 false alarms.
-  // The rule alone, over the whole tree, from the repo's own config (one-rule.ts): the other rules' work over 950 files was most of this law's 16 s.
+  // The rule alone, over the whole tree, from the repo's own config (one-rule.test-support.ts): the other rules' work over 950 files was most of this law's 16 s.
   const config = oneRuleConfig(root, "fabrika/integration-test-name");
 
   try {

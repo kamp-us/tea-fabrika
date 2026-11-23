@@ -10,7 +10,7 @@ import { Schema } from "effect";
 import type { Reporter } from "vitest/node";
 
 /** The share of a test's limit it may use, when `FABRIKA_SLOW_TEST_SHARE` is unset. */
-export const DEFAULT_SHARE = 0.4;
+export const DEFAULT_SHARE = 0.5;
 
 const Share = Schema.FiniteFromString.check(Schema.isBetween({ minimum: 0, maximum: 1, exclusiveMinimum: true }));
 
@@ -27,7 +27,7 @@ const Mode = Schema.Literals(["fail", "report"]);
 type Mode = typeof Mode.Type;
 
 /** The mode a value of `FABRIKA_SLOW_TEST_MODE` names: unset is `fail`, and any other word fails the run. */
-export const decodeMode = (value: string | undefined): Mode => Schema.decodeUnknownSync(Mode)(value ?? "report");
+export const decodeMode = (value: string | undefined): Mode => Schema.decodeUnknownSync(Mode)(value ?? "fail");
 
 /** One finished test, with the limit its project gave it. */
 export interface Timed {

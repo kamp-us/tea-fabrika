@@ -20,7 +20,7 @@ import { Array as Arr, pipe, Match, Predicate, Record as Rec } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
-import { oneRuleConfig } from "./one-rule.ts";
+import { oneRuleConfig } from "./one-rule.test-support.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -939,7 +939,7 @@ describe("Reflect ban L4 each tracked code file of next/ ends with the setting t
         writeFileSync(join(at, file), SAMPLE);
       }
 
-      // The rule alone, from the copied config (one-rule.ts): the other rules' work over the planted tree was most of this law's time.
+      // The rule alone, from the copied config (one-rule.test-support.ts): the other rules' work over the planted tree was most of this law's time.
       const only = oneRuleConfig(at, "eslint/no-restricted-properties", false);
 
       const ran = spawnSync(
