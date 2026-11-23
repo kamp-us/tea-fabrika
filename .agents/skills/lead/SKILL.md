@@ -352,6 +352,7 @@ Read the header before you run one; this table only says what each is for.
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
+| `land.ts wait <pr>` | wait until `ci-required` has ended at the pull request's current head, as `queue --wait` and `admin --wait` do; exits 0 only on success, names a cancelled run; `--wait-minutes`, `--every-seconds` |
 | `land.ts check <pr>` | the body checks `queue` runs, alone: run it after the body is written and before `queue`; it changes nothing and exits 1 on any missing name, leak, or `fabrika close ticket` line whose number is no open tracker ticket (an open GitHub issue is closed with `Closes #N`) |
 | `sizecap.ts` | a diff's or a plan's size, as advice only; run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
@@ -652,6 +653,10 @@ Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in th
   still follows `next/`'s rules and
   no new shell or Python script enters the repo,
   which `oxlint-plugins/tracked-scripts.ts` holds. Product code keeps its steps.
+- **`land.ts wait <pr>` is the one wait for CI.** It reads `ci-required`, the check `land.ts` itself reads, at the
+  head the pull request holds on each read, and exits 0 only on a success; a cancelled run is named.
+  `queue --wait` and `admin --wait` make the same wait, so a hand-written loop over `gh run list` or a
+  workflow run picked by head SHA has no place (a ready event starts a second run at one head, and such a loop read the first).
 - **No agent approves a pull request, and no agent answers a question the machine put to a
   person.**
 - **A step is a program,** and a prompt you would have typed is its first source. A v0 has no

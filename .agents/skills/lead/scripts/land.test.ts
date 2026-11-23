@@ -324,9 +324,12 @@ describe("land.ts, today's tooling", () => {
       "gh pr view 77 -R owner/repo --json number,headRefName,headRefOid,state,isDraft,baseRefName,title,body,mergeCommit,mergeable",
       // The names check (a new helper names the tools it searched, and a new name cites the industry's word) reads the diff after the leak grep and before `ci-required`.
       "gh api --paginate repos/owner/repo/pulls/77/files --jq .[] | {path: .filename, patch: (.patch // null)}",
+      // The quest's wait reads the head, the check at it, and the head again once the check has ended.
+      "gh pr view 77 -R owner/repo --json number,headRefName,headRefOid,state,isDraft,baseRefName,title,body,mergeCommit,mergeable",
       expect.stringMatching(
         /^gh api -i repos\/owner\/repo\/commits\/[0-9a-f]{40}\/check-runs .*check_name=ci-required/,
       ),
+      "gh pr view 77 -R owner/repo --json number,headRefName,headRefOid,state,isDraft,baseRefName,title,body,mergeCommit,mergeable",
       `gh pr merge 77 -R owner/repo --squash --match-head-commit ${got.head}`,
     ]);
     expect(got.state).toContain("quest agent: ready to land");
@@ -440,6 +443,18 @@ describe("land.ts, today's tooling", () => {
     expect(got.err).toContain("land: refused at the queue check: pr 77: it conflicts with main");
     expect(got.err).toContain("gh pr update-branch 77");
     expect(got.calls.filter((c) => /^gh pr (ready|merge)/.test(c))).toEqual([]);
+  }, 120_000);
+
+  // Plant: let `wait` exit 0 on a check that ended red, so a caller's `&&` goes on to queue.
+  it("scenario: `land.ts wait` exits 0 only on a ci-required success, and names the check run of one that failed", () => {
+    const green = land({ ...fine, command: ["wait", "77"] });
+    expect(green.code, green.err).toBe(0);
+    expect(green.out).toContain("pr 77: ci-required succeeded at ");
+    const red = land({ ...fine, red: true, command: ["wait", "77"] });
+    expect(red.code).toBe(1);
+    expect(red.err).toContain("land: refused at the wait check: pr 77: ci-required is failure at ");
+    expect(red.err).toContain("https://github.com/owner/repo/runs/1");
+    expect(red.calls.filter((c) => /^gh pr (ready|merge)/.test(c))).toEqual([]);
   }, 120_000);
 
   // Plants: run `check` on a part of the checks `queue` runs, or let it ask GitHub to change something.
