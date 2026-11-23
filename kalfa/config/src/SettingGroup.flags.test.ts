@@ -37,7 +37,6 @@ import {
 } from "effect";
 import * as Command from "effect/cli/Command";
 import * as CommandSpec from "effect/cli/CommandSpec";
-import type * as Flag from "effect/cli/Flag";
 import { ChildProcessSpawner } from "effect/process";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
@@ -251,7 +250,7 @@ const startFromArguments = (group: Group, scene: Scene, args: ReadonlyArray<stri
   Effect.gen(function* () {
     const out = yield* Ref.make<Option.Option<Exit.Exit<Loaded, unknown>>>(Option.none());
 
-    const command = Command.make("demo", { settings: flagConfig(group) }, ({ settings }) =>
+    const command = Command.make("demo", { settings: SettingGroup.flags(group) }, ({ settings }) =>
       read(group).pipe(
         Effect.provide(SettingGroup.layer(group, { version: scene.version ?? VERSION, repo: ROOT, flags: settings })),
         Effect.exit,
@@ -349,26 +348,9 @@ const FlagGroup = Schema.Struct({
   only: Schema.Tuple([Schema.Boolean, Schema.Boolean, Schema.Boolean, Schema.Boolean]),
 });
 
-/**
- * The group's flags as a command's config. A group made from generated names has no literal names, so its `Flags` is an
- * index signature whose values may be undefined, which `Command.make` does not take: the flags are copied as they are.
- * F1 holds the real shape of a group with literal names, with no copy.
- */
-const flagConfig = (group: Group) => {
-  const config: Record<string, Flag.Flag<Option.Option<string>>> = {};
-
-  for (const [name, flag] of Object.entries(SettingGroup.flags(group))) {
-    if (flag !== undefined) {
-      config[name] = flag;
-    }
-  }
-
-  return config;
-};
-
 /** What a command made with the group's flags lists, from Effect's own read of it. */
 const listed = (group: Group) => {
-  const command = Command.make("demo", { settings: flagConfig(group) });
+  const command = Command.make("demo", { settings: SettingGroup.flags(group) });
   const spec = Option.getOrThrow(CommandSpec.resolve(command, ["demo"], { builtIns: [] }));
 
   return spec.flags.map((flag) => ({

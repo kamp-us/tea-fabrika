@@ -57,6 +57,22 @@ const shared = Command.make("demo").pipe(Command.withSharedFlags({ settings: Set
 // A record written by hand, as a program with no command line writes it.
 const written: SettingGroup.FlagValues<Settings> = { "instance.port": Option.none<string>() };
 
+// A group whose names are not literal types, as a program that reads them at run time makes it: its flags are a plain
+// record, and fit `Command.make` with no cast.
+const wide: SettingGroup.SettingGroup<string, ReadonlyArray<Setting.Any>> = SettingGroup.make(
+  "demo",
+  ...group.settings,
+);
+
+const wideFlags = SettingGroup.flags(wide);
+
+const wideCommand = Command.make(
+  "demo",
+  { settings: SettingGroup.flags(wide) },
+  ({ settings }: { readonly settings: SettingGroup.FlagValues<ReadonlyArray<Setting.Any>> }) =>
+    Effect.provide(Effect.void, SettingGroup.layer(wide, { version: "1.2.3", flags: settings })),
+);
+
 // A group made without flags, as 1839's laws write it.
 const bare = SettingGroup.layer(group, { version: "1.2.3" });
 
@@ -92,6 +108,10 @@ it("F1 type: the flags fit a command's config and shared flags with no cast, the
   expectTypeOf(command).toExtend<Command.Command.Any>();
   expectTypeOf(shared).toExtend<Command.Command.Any>();
   expectTypeOf(written).toEqualTypeOf<SettingGroup.FlagValues<Settings>>();
+
+  // A group of any settings has a plain record of flags, and its command takes them as they are.
+  expectTypeOf(wideFlags).toEqualTypeOf<Readonly<Record<string, Flag.Flag<Option.Option<string>>>>>();
+  expectTypeOf(wideCommand).toExtend<Command.Command.Any>();
 
   // The layer's type does not move when flags are given or left out.
   expectTypeOf(bare).toEqualTypeOf<ReturnType<typeof SettingGroup.layer<"demo", Settings>>>();
