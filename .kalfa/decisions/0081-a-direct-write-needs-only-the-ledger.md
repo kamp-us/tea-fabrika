@@ -42,3 +42,12 @@ How each path uses it:
 - While the app is down a person can still change a host setting by hand, and adopt or reconcile it once the app is back.
 - A device on an old checkout may know an old list of severities, and a direct `declare` then carries it. The entry's sender says it was direct, so a reader can see where it came from.
 - A package that gains a write command says in its design whether its entries need only the Ledger.
+
+## Addition, 2026-11-23: eight commands take `--direct`
+
+Two more commands take `--direct`, so eight do. Both were decided on the design ticket's thread: https://github.com/kamp-us/tea-fabrika/issues/1875#issuecomment-7110389958.
+
+- The command that sets a paging rule takes it. Its entries need only the Ledger, the device's settings and the message, so it passes the test above; the list of six was written before that command existed.
+- `kalfa program kill <name>` takes it, so a stuck control program cannot block stopping a process, for example an agent stuck in a loop and spending money. The stop is written straight into the app's log, and the log checks that the person may stop that process (Program's admission check).
+
+The text above is unchanged, so read "six" there as eight.
