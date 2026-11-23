@@ -235,11 +235,26 @@ export interface Settings {
   readonly auth?: "none";
 }
 
-/** How a route's answer is read: the `body` its options say, and `"json"` when they say none. */
-export type BodyKind<O extends Settings> = O extends { readonly body: infer B extends "json" | "text" } ? B : "json";
+// What the options say for a key: every value it may hold, and the default when it may be left out.
+type Said<O extends Settings, K extends keyof Settings> = K extends keyof O ? Exclude<O[K], undefined> : never;
 
-/** Who a route's request is sent as: the `auth` its options say, and `"login"` when they say none. */
-export type AuthKind<O extends Settings> = O extends { readonly auth: infer A extends "none" } ? A : "login";
+type MayBeLeftOut<O extends Settings, K extends keyof Settings> = K extends keyof O
+  ? Partial<Pick<O, K>> extends Pick<O, K>
+    ? true
+    : false
+  : true;
+
+/**
+ * How a route's answer is read: every `body` its options may say, and `"json"` when they may say none. The type is a union
+ * that holds the value, however the options were built.
+ */
+export type BodyKind<O extends Settings> = Said<O, "body"> | (MayBeLeftOut<O, "body"> extends true ? "json" : never);
+
+/**
+ * Who a route's request is sent as: every `auth` its options may say, and `"login"` when they may say none. The type is a
+ * union that holds the value, however the options were built.
+ */
+export type AuthKind<O extends Settings> = Said<O, "auth"> | (MayBeLeftOut<O, "auth"> extends true ? "login" : never);
 
 /** What a caller may pass to `route` after the route text, each part by the description's rules. */
 type Declaration<

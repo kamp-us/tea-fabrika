@@ -125,7 +125,9 @@ export const route = <
   Success extends Schema.Constraint = never,
   Query extends Schema.Struct.Fields = Record<never, never>,
   Payload extends Schema.Constraint = never,
-  const Settings extends Check.Settings = Record<never, never>,
+  // The index signature keeps the constraint from being a weak type, so options that name neither `body` nor `auth` still
+  // infer their own object and not the bare constraint.
+  const Settings extends Check.Settings & Record<string, unknown> = Record<never, never>,
 >(
   route: R,
   ...options: Check.Options<R, Success, Query, Payload, Settings>
@@ -144,9 +146,8 @@ export const route = <
     ...(query === undefined ? {} : { query: Schema.Struct(query) }),
     ...(payload === undefined ? {} : { payload }),
     ...(bodiless === undefined ? {} : { bodiless }),
-    // SAFETY: `body` and `auth` are typed from the options object alone (`BodyKind` and `AuthKind`), and a route that says
-    // neither has the defaults they give, "json" and "login"; no type argument can say another, since the options must be
-    // the settings' own object.
+    // SAFETY: `BodyKind` and `AuthKind` are the union of every value the options may say and the default, "json" or "login",
+    // when they may say none; `given.body` and `given.auth` are one of those, and so is the default.
     body: (given?.body ?? "json") as Check.BodyKind<Settings>,
     // SAFETY: as for `body` above.
     auth: (given?.auth ?? "login") as Check.AuthKind<Settings>,
@@ -399,7 +400,7 @@ export type Services<Op extends AnyRoute> =
  */
 export type CallOptions<Op extends AnyRoute> =
   Op extends Route<RouteName, Schema.Constraint, Schema.Constraint, Schema.Constraint, "json" | "text", infer A>
-    ? A extends "none"
+    ? "none" extends A
       ? { readonly token?: never }
       : { readonly token?: Redacted.Redacted<string> }
     : never;
