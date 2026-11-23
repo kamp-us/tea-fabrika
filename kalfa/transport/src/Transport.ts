@@ -5,7 +5,7 @@
  *
  * Each is a plain function of streams that keeps nothing from one frame to the next, so a socket sits in a chain of stages as one more stage: `encode`, `socket`, `decode`. The format is the `Format` service and the socket is Effect's own `Socket`, so any Layer of either works.
  */
-import { Effect, Option, Predicate, Schema, Stream } from "effect";
+import { Data, Effect, Option, Predicate, Schema, Stream } from "effect";
 import { Socket } from "effect/socket";
 import { Format, FormatError } from "./Format.ts";
 import type { Frame } from "./Frame.ts";
@@ -120,11 +120,16 @@ export const socket = <E, R>(
   Stream.unwrap(
     Effect.map(Socket.Socket, (connection) =>
       out.pipe(
-        Stream.pipeThroughChannel(Socket.toChannelString<E>(connection)),
+        // A failure of `out` is wrapped on the way in, so a `SocketError` that comes out is the socket's own, never one a stage raised.
+        Stream.mapError((error) => new Staged({ error })),
+        Stream.pipeThroughChannel(Socket.toChannelString<Staged<E>>(connection)),
         Stream.catchIf(isNormalClose, () => Stream.empty),
+        Stream.mapError((error) => (error instanceof Staged ? error.error : error)),
       ),
     ),
   ).pipe(Stream.withSpan("transport.socket"));
 
-const isNormalClose = (error: unknown): error is Socket.SocketError =>
+class Staged<E> extends Data.TaggedClass("@kalfa/transport/Staged")<{ readonly error: E }> {}
+
+const isNormalClose = (error: Socket.SocketError | Staged<unknown>): error is Socket.SocketError =>
   Socket.isSocketError(error) && Predicate.isTagged(error.reason, "SocketCloseError") && error.reason.code === 1000;
