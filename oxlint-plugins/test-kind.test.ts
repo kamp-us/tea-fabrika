@@ -253,11 +253,11 @@ it("K3 and K4: through the real command and code-graph, every hop kind is follow
         rmSync(root, { recursive: true, force: true });
       }
     }),
-    // 20 runs, each a real command over a planted tree, took 23.6 s of CI's 60 s limit, so 10.
-    { seed: 119120, numRuns: 10 },
+    { seed: 119120, numRuns: 20 },
   );
   // Coverage: every hop kind, a failing tree, and a passing tree that still printed advice.
   expect(Arr.filter([...seen], (k) => !k.startsWith("exit")).sort()).toEqual(["exact", "pattern", "relative"]);
   expect(seen.has("exit 0 with advice")).toBe(true);
   expect(Arr.some([...seen], (k) => k.startsWith("exit 1"))).toBe(true);
-});
+  // 20 runs, each a real test-kind command with a real code-graph over a planted tree, took 23.6 s of CI's 60 s limit; at 10 runs its own coverage check fails on some seeds.
+}, 180_000);

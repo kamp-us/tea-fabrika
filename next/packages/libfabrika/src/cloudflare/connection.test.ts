@@ -1243,48 +1243,58 @@ const BadCodes = {
 };
 
 // Plant: forward the raw value when the decode fails.
-it.effect.prop(
-  "L9: a value that is not News fails the Connection's notify with LedgerError bad_row, and nothing is sent or closed on any socket",
-  { ...EachNews, ...BadCodes, json: Schema.Json },
-  ({ close, granted, whole, patch, below, above, fraction, json }) =>
-    Effect.gen(function* () {
-      const views = [whole, patch].map((update) => News.cases.view.make({ update }));
+const PARTS = [1, 2] as const;
 
-      const made = [
-        // A News with each field removed or retyped in turn, its tag included.
-        ...[close, granted, ...views].flatMap(damaged),
-        // A view whose update has each field removed or retyped in turn. Its pid removed is the update
-        // a watcher is sent, before the Project adds one.
-        ...[whole, patch].flatMap((update) => damaged(update).map((broken) => ({ ...views[0]!, update: broken }))),
-        // A close whose code no app may send.
-        ...[below, above, fraction].map((code) => ({ ...close, code })),
-        // A value that holds what the old door read by hand.
-        { close: close.code },
-        { method: "client.granted", params: { nonce: granted.nonce } },
-      ];
+for (const part of PARTS) {
+  it.effect.prop(
+    "L9: a value that is not News fails the Connection's notify with LedgerError bad_row, and nothing is sent or closed on any socket" +
+      ` (part ${part} of ${PARTS.length})`,
+    { ...EachNews, ...BadCodes, json: Schema.Json },
+    ({ close, granted, whole, patch, below, above, fraction, json }) =>
+      Effect.gen(function* () {
+        const views = [whole, patch].map((update) => News.cases.view.make({ update }));
 
-      expect(made, "every broken field, the three codes and the two old shapes are reached").toHaveLength(
-        damages(close, granted, ...views, whole, patch) + 5,
-      );
-      // Only the freely drawn JSON is asked whether it happens to be News: every other value is no
-      // News by construction, so a loosened Schema cannot drop one.
-      const bad = Schema.is(News)(json) ? made : [json, ...made];
+        const made = [
+          // A News with each field removed or retyped in turn, its tag included.
+          ...[close, granted, ...views].flatMap(damaged),
+          // A view whose update has each field removed or retyped in turn. Its pid removed is the update
+          // a watcher is sent, before the Project adds one.
+          ...[whole, patch].flatMap((update) => damaged(update).map((broken) => ({ ...views[0]!, update: broken }))),
+          // A close whose code no app may send.
+          ...[below, above, fraction].map((code) => ({ ...close, code })),
+          // A value that holds what the old door read by hand.
+          { close: close.code },
+          { method: "client.granted", params: { nonce: granted.nonce } },
+        ];
 
-      for (const value of bad) {
-        const { w, other, exit, spans } = yield* told(value);
-        const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
-        expect(Option.getOrNull(failure), "the door refuses it as a bad row").toBeInstanceOf(LedgerError);
-        expect(Option.getOrNull(failure)).toMatchObject({ reason: "bad_row" });
-        expect([w.frames, w.closes, other.frames, other.closes], "nothing is sent or closed").toEqual([[], [], [], []]);
-        expect(
-          spans.map((row) => row.ok),
-          "the refused notify is a failed span",
-        ).toEqual([false]);
-      }
-    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-  // Each run tells every broken value of News to a fresh Connection; 50 runs took 20.9 s of CI's 60 s limit, so 20.
-  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 20 }) } },
-);
+        expect(made, "every broken field, the three codes and the two old shapes are reached").toHaveLength(
+          damages(close, granted, ...views, whole, patch) + 5,
+        );
+        // Only the freely drawn JSON is asked whether it happens to be News: every other value is no
+        // News by construction, so a loosened Schema cannot drop one.
+        const bad = Schema.is(News)(json) ? made : [json, ...made];
+
+        for (const value of bad) {
+          const { w, other, exit, spans } = yield* told(value);
+          const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+          expect(Option.getOrNull(failure), "the door refuses it as a bad row").toBeInstanceOf(LedgerError);
+          expect(Option.getOrNull(failure)).toMatchObject({ reason: "bad_row" });
+          expect([w.frames, w.closes, other.frames, other.closes], "nothing is sent or closed").toEqual([
+            [],
+            [],
+            [],
+            [],
+          ]);
+          expect(
+            spans.map((row) => row.ok),
+            "the refused notify is a failed span",
+          ).toEqual([false]);
+        }
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    // 50 runs took 20.9 s of CI's 60 s limit, so the law is two laws of 25 runs (fast 5 each).
+    { arbitrary: { seed: 119120 + part, runs: runsFor({ fast: 5, full: 25 }) } },
+  );
+}
 
 /**
  * One booted Project over in-memory SQLite, as the Process object reaches it. Only the platform's

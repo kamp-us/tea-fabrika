@@ -817,19 +817,25 @@ const expectSelector = (given: Selected) => {
   }
 };
 
-it.prop(
-  "D1 the selector, run as CI runs it, selects P1 exactly for a package or route change or a full run, never P2 by path, adds the readers for a package change off the merge line, and fails when Vitest cannot list P1",
-  {
-    event: Event,
-    changes: Schema.Array(SourceChange).check(Schema.isMaxLength(5)),
-    trigger: Schema.Boolean,
-    hidden: Schema.Literals(["none", "package", "consumer"]),
-    reach: Schema.Array(Schema.Boolean).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
-  },
-  (given) => expectSelector(given),
-  // Each run starts a process: 12 runs took 19.0 s of CI's 60 s limit, so 6, with the routes below each held once as a scenario.
-  { arbitrary: { seed: 119120, runs: 6, size: 100 } },
-);
+// D1's selector law took 19.0 s of CI's 60 s limit at 12 runs (each starts a process), so it is 2 laws of 6 runs with their own seeds, which together are its 12.
+const PARTS = [1, 2] as const;
+
+for (const part of PARTS) {
+  it.prop(
+    "D1 the selector, run as CI runs it, selects P1 exactly for a package or route change or a full run, never P2 by path, adds the readers for a package change off the merge line, and fails when Vitest cannot list P1" +
+      ` (part ${part} of ${PARTS.length})`,
+    {
+      event: Event,
+      changes: Schema.Array(SourceChange).check(Schema.isMaxLength(5)),
+      trigger: Schema.Boolean,
+      hidden: Schema.Literals(["none", "package", "consumer"]),
+      reach: Schema.Array(Schema.Boolean).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
+    },
+    (given) => expectSelector(given),
+    // Each run starts a process: a dozen runs, with the routes below each held once as a scenario.
+    { arbitrary: { seed: 119120 + part, runs: 6, size: 100 } },
+  );
+}
 
 const chosen = (kind: Change["kind"], extra: Partial<Selected> = {}): Selected => ({
   event: "push",
@@ -1246,85 +1252,90 @@ it.prop(
 // process, so a handful of runs. Plants, each run once on related.ts and restored: read `process.env.HEAD`
 // for the commit (red); read `process.env.EVENT` for the event (red); print kept=true for a leg with no
 // folder (red).
-it.prop(
-  "D2 the receipt step, run as a leg runs it, exits 0 and prints kept=true with the digest for the keeping leg, exits 0 and prints kept=false for another leg, and exits 1 printing no kept for any refusal",
-  {
-    head: sha,
-    content: Schema.String,
-    leg: Schema.Literals(["keeper", "absent", "digest", "extra", "stray", "event", "ref", "discovery"]),
-    event: Schema.Literals(KEEPING),
-    others: Schema.Array(word).check(Schema.isMaxLength(2)),
-  },
-  ({ head, content, leg, event, others }) => {
-    const given =
-      leg === "absent" || leg === "stray"
-        ? goodAbsent(event, head, others)
-        : goodDelivery(event, head, content, others);
+// D2's receipt law took 22.9 s of CI's 60 s limit at 16 runs (each starts a process) over 8 legs it drew at random, so each leg is a law of its own with 2 runs: 16 in all, and every
+// leg always checked.
+const LEGS = ["keeper", "absent", "digest", "extra", "stray", "event", "ref", "discovery"] as const;
 
-    const temp = mkdtempSync(join(tmpdir(), "related-receipt-"));
+for (const leg of LEGS) {
+  it.prop(
+    "D2 the receipt step, run as a leg runs it, exits 0 and prints kept=true with the digest for the keeping leg, exits 0 and prints kept=false for another leg, and exits 1 printing no kept for any refusal" +
+      ` (${leg})`,
+    {
+      head: sha,
+      content: Schema.String,
+      event: Schema.Literals(KEEPING),
+      others: Schema.Array(word).check(Schema.isMaxLength(2)),
+    },
+    ({ head, content, event, others }) => {
+      const given =
+        leg === "absent" || leg === "stray"
+          ? goodAbsent(event, head, others)
+          : goodDelivery(event, head, content, others);
 
-    const folder = join(temp, "kalfa-config-package");
+      const temp = mkdtempSync(join(tmpdir(), "related-receipt-"));
 
-    if (given.folder !== null || leg === "stray") {
-      mkdirSync(folder);
-    }
+      const folder = join(temp, "kalfa-config-package");
 
-    if (given.folder !== null) {
-      writeFileSync(join(folder, ARCHIVE), leg === "digest" ? text(`${content}!`) : given.archive);
-      writeFileSync(join(folder, "receipt.json"), JSON.stringify(given.receipt));
-    }
+      if (given.folder !== null || leg === "stray") {
+        mkdirSync(folder);
+      }
 
-    if (leg === "extra" || leg === "stray") {
-      writeFileSync(join(folder, "other.txt"), "x");
-    }
+      if (given.folder !== null) {
+        writeFileSync(join(folder, ARCHIVE), leg === "digest" ? text(`${content}!`) : given.archive);
+        writeFileSync(join(folder, "receipt.json"), JSON.stringify(given.receipt));
+      }
 
-    writeFileSync(join(temp, "results.json"), JSON.stringify(given.report));
+      if (leg === "extra" || leg === "stray") {
+        writeFileSync(join(folder, "other.txt"), "x");
+      }
 
-    writeFileSync(
-      join(temp, "model.json"),
-      JSON.stringify({
-        root: ROOT,
-        universe: { "next-integration": leg === "discovery" ? [INTEGRATION_READER] : [PACKAGE, INTEGRATION_READER] },
-        reach: [],
-      }),
-    );
+      writeFileSync(join(temp, "results.json"), JSON.stringify(given.report));
 
-    const out = join(temp, "out");
+      writeFileSync(
+        join(temp, "model.json"),
+        JSON.stringify({
+          root: ROOT,
+          universe: { "next-integration": leg === "discovery" ? [INTEGRATION_READER] : [PACKAGE, INTEGRATION_READER] },
+          reach: [],
+        }),
+      );
 
-    const done = spawnSync(process.execPath, [fileURLToPath(new URL("./related.ts", import.meta.url)), "--receipt"], {
-      encoding: "utf8",
-      env: {
-        PATH: `${join(home, "bin")}:${process.env["PATH"]}`,
-        HOME: temp,
-        RUNNER_TEMP: temp,
-        GITHUB_REF: leg === "ref" ? "refs/heads/other" : MAIN,
-        GITHUB_EVENT_NAME: leg === "event" ? "pull_request" : event,
-        GITHUB_SHA: head,
-        GITHUB_OUTPUT: out,
-        STAND_IN_MODEL: join(temp, "model.json"),
-        // Names a workflow could set: the step reads the runner's own and none of these.
-        EVENT: "pull_request",
-        HEAD: other(head),
-        REQUESTED: other(head),
-      },
-    });
+      const out = join(temp, "out");
 
-    const printed = existsSync(out) ? readFileSync(out, "utf8").split("\n").filter(Boolean) : [];
+      const done = spawnSync(process.execPath, [fileURLToPath(new URL("./related.ts", import.meta.url)), "--receipt"], {
+        encoding: "utf8",
+        env: {
+          PATH: `${join(home, "bin")}:${process.env["PATH"]}`,
+          HOME: temp,
+          RUNNER_TEMP: temp,
+          GITHUB_REF: leg === "ref" ? "refs/heads/other" : MAIN,
+          GITHUB_EVENT_NAME: leg === "event" ? "pull_request" : event,
+          GITHUB_SHA: head,
+          GITHUB_OUTPUT: out,
+          STAND_IN_MODEL: join(temp, "model.json"),
+          // Names a workflow could set: the step reads the runner's own and none of these.
+          EVENT: "pull_request",
+          HEAD: other(head),
+          REQUESTED: other(head),
+        },
+      });
 
-    const kept = leg === "keeper";
+      const printed = existsSync(out) ? readFileSync(out, "utf8").split("\n").filter(Boolean) : [];
 
-    const passed = kept || leg === "absent";
+      const kept = leg === "keeper";
 
-    expect(done.status, done.stderr).toBe(passed ? 0 : 1);
+      const passed = kept || leg === "absent";
 
-    // The digest is printed for a kept delivery and for no other; the output says kept or not kept, and
-    // a refusal prints none.
-    expect(done.stdout.includes(hex(given.archive))).toBe(kept);
-    expect(printed).toEqual(kept ? ["kept=true"] : leg === "absent" ? ["kept=false"] : []);
-  },
-  // 16 runs took 22.9 s of CI's 60 s limit (each runs the receipt step as a leg does), so 8.
-  { arbitrary: { seed: 119120, runs: 8, size: 100 } },
-);
+      expect(done.status, done.stderr).toBe(passed ? 0 : 1);
+
+      // The digest is printed for a kept delivery and for no other; the output says kept or not kept, and
+      // a refusal prints none.
+      expect(done.stdout.includes(hex(given.archive))).toBe(kept);
+      expect(printed).toEqual(kept ? ["kept=true"] : leg === "absent" ? ["kept=false"] : []);
+    },
+    { arbitrary: { seed: 119120, runs: 2, size: 100 } },
+  );
+}
 
 // D5. The fault decision: P1 is proven only when the faulted run fails for the export, the manifest's
 // bytes come back unchanged, and the second run passes, unskipped. CI only.

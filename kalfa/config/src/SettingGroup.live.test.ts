@@ -47,9 +47,13 @@ import { TestClock } from "effect/testing";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 
-// 100 full runs took 16 to 22 s of CI's 60 s limit for each of this file's slowest laws (a draw builds a whole file, and a run reads and edits it several times),
-// so the full count is 35: each run still draws every class, and `reach` still fails a law that misses one.
-const check = { arbitrary: { runs: runsFor({ fast: 25, full: 35 }), size: 100 } };
+const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
+
+// A slow law runs as PARTS laws of a third of the full runs each (34 of 100 full, 9 of 25 fast), so no one law is the whole cost: 100 runs took 16 to 22 s of CI's
+// 60 s limit for each of this file's slowest laws. The parts together run the full count, and each draws every class.
+const PARTS = [1, 2, 3] as const;
+
+const third = { arbitrary: { runs: runsFor({ fast: 9, full: 34 }), size: 100 } };
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
@@ -629,27 +633,30 @@ const walk = (
 // (d) keep the held text when a file is removed: the value never falls back; (m) set the reference on every update:
 // `changes` gives a value twice; (p) compare with `===`: a table value is given again on a comment change.
 describe("V1 a live setting follows its files", () => {
-  it.effect.prop(
-    "each live field's `changes` gives the start value and then exactly the consecutive distinct values a fresh start gives on the files, and yielding it gives the last",
-    { shape: Shape, walked: Walk },
-    ({ shape, walked }) =>
-      Effect.gen(function* () {
-        const specs = specsFrom(shape);
-        const reachedKinds = new Set<Kind>();
+  for (const part of PARTS) {
+    it.effect.prop(
+      "each live field's `changes` gives the start value and then exactly the consecutive distinct values a fresh start gives on the files, and yielding it gives the last" +
+        ` (part ${part} of ${PARTS.length})`,
+      { shape: Shape, walked: Walk },
+      ({ shape, walked }) =>
+        Effect.gen(function* () {
+          const specs = specsFrom(shape);
+          const reachedKinds = new Set<Kind>();
 
-        yield* walk(groupFrom(shape.app, specs), specs, walked, { texts: { repo: render(specs, walked.first, 0) } });
+          yield* walk(groupFrom(shape.app, specs), specs, walked, { texts: { repo: render(specs, walked.first, 0) } });
 
-        // A number, a table and an array are each compared by what they hold, so each kind is walked alone in every run.
-        for (const kind of ["number", "table", "array"] as const) {
-          const only = specs.map((spec) => ({ ...spec, kind }));
-          reachedKinds.add(kind);
-          yield* walk(groupFrom(shape.app, only), only, walked);
-        }
+          // A number, a table and an array are each compared by what they hold, so each kind is walked alone in every run.
+          for (const kind of ["number", "table", "array"] as const) {
+            const only = specs.map((spec) => ({ ...spec, kind }));
+            reachedKinds.add(kind);
+            yield* walk(groupFrom(shape.app, only), only, walked);
+          }
 
-        expect([...reachedKinds].sort()).toEqual(["array", "number", "table"]);
-      }),
-    check,
-  );
+          expect([...reachedKinds].sort()).toEqual(["array", "number", "table"]);
+        }),
+      third,
+    );
+  }
 });
 
 // Plant (n): keep the held values in a plain object and read `held[s.name]`: the first update reads Object's `constructor`.
@@ -838,45 +845,49 @@ const Digging = Schema.Struct({
 // file made again in a new folder is missed; (f) when the folder is there again after the window, stay on the watch of the
 // folder that was removed: a folder removed and made again inside one window, and then a later write, is missed.
 describe("V2 a folder that comes and goes", () => {
-  it.effect.prop(
-    "with a file's folder missing at the start and made later, or removed while watched and made again, the live value follows the file each time, and the start does not wait for the folder",
-    { shape: Shape, digging: Digging },
-    ({ shape, digging }) =>
-      Effect.gen(function* () {
-        const specs = specsFrom(shape);
-        const group = groupFrom(shape.app, specs);
+  for (const part of PARTS) {
+    it.effect.prop(
+      "with a file's folder missing at the start and made later, or removed while watched and made again, the live value follows the file each time, and the start does not wait for the folder" +
+        ` (part ${part} of ${PARTS.length})`,
+      { shape: Shape, digging: Digging },
+      ({ shape, digging }) =>
+        Effect.gen(function* () {
+          const specs = specsFrom(shape);
+          const group = groupFrom(shape.app, specs);
 
-        const steps = [
-          ...digging.script,
-          ...FILES.flatMap((file) =>
-            (["drop", "make", "drop", "make"] as const).map((move) => ({ file, move, choices: digging.first })),
-          ),
-          // A folder removed and made again inside one window, then a later write, which must still be followed. The user
-          // file is tried with no repo folder, so the repo file does not hide what the user file gives.
-          { file: "repo" as const, move: "bounce" as const, choices: [1, 1, 1] },
-          { file: "repo" as const, move: "make" as const, choices: [2, 2, 2] },
-          { file: "repo" as const, move: "drop" as const, choices: [1, 1, 1] },
-          { file: "user" as const, move: "bounce" as const, choices: [1, 1, 1] },
-          { file: "user" as const, move: "make" as const, choices: [2, 2, 2] },
-        ];
+          const steps = [
+            ...digging.script,
+            ...FILES.flatMap((file) =>
+              (["drop", "make", "drop", "make"] as const).map((move) => ({ file, move, choices: digging.first })),
+            ),
+            // A folder removed and made again inside one window, then a later write, which must still be followed. The user
+            // file is tried with no repo folder, so the repo file does not hide what the user file gives.
+            { file: "repo" as const, move: "bounce" as const, choices: [1, 1, 1] },
+            { file: "repo" as const, move: "make" as const, choices: [2, 2, 2] },
+            { file: "repo" as const, move: "drop" as const, choices: [1, 1, 1] },
+            { file: "user" as const, move: "bounce" as const, choices: [1, 1, 1] },
+            { file: "user" as const, move: "make" as const, choices: [2, 2, 2] },
+          ];
 
-        // Each run starts with both folders missing, with both there, and as generated.
-        for (const start of [{ repo: false, user: false }, { repo: true, user: true }, digging.start]) {
-          const texts = {
-            ...(start.repo ? { repo: render(specs, digging.second, 0) } : {}),
-            ...(start.user ? { user: render(specs, digging.second, 0) } : {}),
-          };
+          // Each run starts with both folders missing, with both there, and as generated.
+          for (const start of [{ repo: false, user: false }, { repo: true, user: true }, digging.start]) {
+            const texts = {
+              ...(start.repo ? { repo: render(specs, digging.second, 0) } : {}),
+              ...(start.user ? { user: render(specs, digging.second, 0) } : {}),
+            };
 
-          yield* walkWith(group, steps, (rig, model, step) => dig(rig, specs, model, step), { texts, folders: start }, [
-            "drop",
-            "make",
-            "bounce",
-            "same",
-          ]);
-        }
-      }),
-    check,
-  );
+            yield* walkWith(
+              group,
+              steps,
+              (rig, model, step) => dig(rig, specs, model, step),
+              { texts, folders: start },
+              ["drop", "make", "bounce", "same"],
+            );
+          }
+        }),
+      third,
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------------------------

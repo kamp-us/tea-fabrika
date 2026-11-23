@@ -55,106 +55,111 @@ export type Open = (recipe: StartsTest.Recipe, secret: string) => Effect.Effect<
 const pick = <A>(items: ReadonlyArray<A>, choice: number) =>
   Option.getOrThrow(Option.fromUndefinedOr(items[choice % items.length]));
 
-/** `runs` is the case count of each path's L16 walk, which its caller sets from `runsFor`. */
-export const suite = (runs: number, open: Open) =>
+/**
+ * `runs` is the case count of each path's L16 walk law and `parts` how many laws each path runs as, each with `runs` cases, which its caller sets
+ * from `runsFor`: a walk of up to 40 moves is slow, so no one law holds all of its runs.
+ */
+export const suite = (runs: number, parts: number, open: Open) =>
   describe("L10 L16 entry flows, next/", () => {
     for (const path of paths) {
-      StartsTest.law(
-        `L16 ${path} counts cold, concurrent, warm and reopened entries`,
-        fc.tuple(StartsTest.recipe, StartsTest.sentinel, fc.array(fc.nat(), { minLength: 12, maxLength: 40 })),
-        ([recipe, secret, choices]) =>
-          Effect.gen(function* () {
-            const driver = yield* open(recipe, secret);
-            let entry = yield* driver.open(path);
-            let ready = false;
-            let placed = false;
+      for (let part = 1; part <= parts; part++) {
+        StartsTest.law(
+          `L16 ${path} counts cold, concurrent, warm and reopened entries${parts > 1 ? `, part ${part} of ${parts}` : ""}`,
+          fc.tuple(StartsTest.recipe, StartsTest.sentinel, fc.array(fc.nat(), { minLength: 12, maxLength: 40 })),
+          ([recipe, secret, choices]) =>
+            Effect.gen(function* () {
+              const driver = yield* open(recipe, secret);
+              let entry = yield* driver.open(path);
+              let ready = false;
+              let placed = false;
 
-            for (const [index, choice] of choices.entries()) {
-              const moves = ready ? ["warm", "concurrent", "reopen", "deploy"] : ["cold", "concurrent", "failure"];
-              const move = pick(moves, choice);
+              for (const [index, choice] of choices.entries()) {
+                const moves = ready ? ["warm", "concurrent", "reopen", "deploy"] : ["cold", "concurrent", "failure"];
+                const move = pick(moves, choice);
 
-              if (move === "reopen" || move === "deploy") {
-                yield* entry.close;
+                if (move === "reopen" || move === "deploy") {
+                  yield* entry.close;
 
-                if (move === "deploy") {
-                  yield* driver.deploy({ ...recipe, start: `${recipe.start}-${index}`, port: (choice % 65535) + 1 });
-                  placed = false;
+                  if (move === "deploy") {
+                    yield* driver.deploy({ ...recipe, start: `${recipe.start}-${index}`, port: (choice % 65535) + 1 });
+                    placed = false;
+                  }
+
+                  entry = yield* driver.open(path);
+                  ready = false;
+                  continue;
                 }
 
-                entry = yield* driver.open(path);
-                ready = false;
-                continue;
+                const failure = move === "failure";
+                // Project's gate is local SQL. All other paths cross the trusted Project RPC.
+                driver.fault(
+                  failure
+                    ? path === "Project"
+                      ? "storage"
+                      : pick(
+                          ["storage", "refused", "unreachable", "malformed"] as const,
+                          Math.floor(choice / moves.length),
+                        )
+                    : "none",
+                );
+                const before = driver.counts();
+                const total = move === "concurrent" ? 2 + (choice % 5) : 1;
+
+                const exits = yield* Effect.forEach(
+                  Array.from({ length: total }),
+                  (_, n) => Effect.exit(entry.enter(choice + n)),
+                  { concurrency: "unbounded" },
+                );
+
+                if (failure) {
+                  expect(exits.every(Exit.isFailure)).toBe(true);
+                  expect(driver.counts().consumers).toBe(before.consumers);
+                  // The very next entry reuses this owner, which must not retain a failed build.
+                  driver.fault("none");
+                  const retry = driver.counts();
+                  expect(Exit.isSuccess(yield* Effect.exit(entry.enter(choice)))).toBe(true);
+                  const afterRetry = driver.counts();
+                  expect(afterRetry.calls - retry.calls).toBe(path === "Project" ? 0 : 1);
+                  expect(afterRetry.reads - retry.reads).toBe(placed ? 1 : 2);
+                  expect(afterRetry.appends - retry.appends).toBe(placed ? 0 : 1);
+                  ready = true;
+                  placed = true;
+                } else {
+                  expect(exits.every(Exit.isSuccess)).toBe(true);
+                  const after = driver.counts();
+                  // A plain Worker shares only a finished read across requests, so each early request calls (0184).
+                  const cold = path === "HTTP" ? total : 1;
+                  expect(after.calls - before.calls).toBe(ready || path === "Project" ? 0 : cold);
+                  // Each call looks the start up once. The one that finds none appends it, then reads it back.
+                  expect(after.reads - before.reads).toBe(ready ? 0 : placed ? cold : cold + 1);
+                  expect(after.appends - before.appends).toBe(placed ? 0 : 1);
+                  ready = true;
+                  placed = true;
+                }
+
+                const warm = driver.counts();
+
+                // Visit every method. The generated walk supplies repeated warm deliveries.
+                const methods = path === "Project" ? 3 : path === "Connection" || path === "Process" ? 2 : 4;
+
+                for (let n = 0; n < methods; n++) {
+                  yield* entry.enter(n);
+                }
+
+                const afterWarm = driver.counts();
+                expect(afterWarm.calls).toBe(warm.calls);
+                expect(afterWarm.reads).toBe(warm.reads);
+                expect(afterWarm.appends).toBe(warm.appends);
+                const outputs = yield* driver.outputs;
+
+                for (const channel of channels) {
+                  StartsTest.exclude(outputs[channel], secret);
+                }
               }
-
-              const failure = move === "failure";
-              // Project's gate is local SQL. All other paths cross the trusted Project RPC.
-              driver.fault(
-                failure
-                  ? path === "Project"
-                    ? "storage"
-                    : pick(
-                        ["storage", "refused", "unreachable", "malformed"] as const,
-                        Math.floor(choice / moves.length),
-                      )
-                  : "none",
-              );
-              const before = driver.counts();
-              const total = move === "concurrent" ? 2 + (choice % 5) : 1;
-
-              const exits = yield* Effect.forEach(
-                Array.from({ length: total }),
-                (_, n) => Effect.exit(entry.enter(choice + n)),
-                { concurrency: "unbounded" },
-              );
-
-              if (failure) {
-                expect(exits.every(Exit.isFailure)).toBe(true);
-                expect(driver.counts().consumers).toBe(before.consumers);
-                // The very next entry reuses this owner, which must not retain a failed build.
-                driver.fault("none");
-                const retry = driver.counts();
-                expect(Exit.isSuccess(yield* Effect.exit(entry.enter(choice)))).toBe(true);
-                const afterRetry = driver.counts();
-                expect(afterRetry.calls - retry.calls).toBe(path === "Project" ? 0 : 1);
-                expect(afterRetry.reads - retry.reads).toBe(placed ? 1 : 2);
-                expect(afterRetry.appends - retry.appends).toBe(placed ? 0 : 1);
-                ready = true;
-                placed = true;
-              } else {
-                expect(exits.every(Exit.isSuccess)).toBe(true);
-                const after = driver.counts();
-                // A plain Worker shares only a finished read across requests, so each early request calls (0184).
-                const cold = path === "HTTP" ? total : 1;
-                expect(after.calls - before.calls).toBe(ready || path === "Project" ? 0 : cold);
-                // Each call looks the start up once. The one that finds none appends it, then reads it back.
-                expect(after.reads - before.reads).toBe(ready ? 0 : placed ? cold : cold + 1);
-                expect(after.appends - before.appends).toBe(placed ? 0 : 1);
-                ready = true;
-                placed = true;
-              }
-
-              const warm = driver.counts();
-
-              // Visit every method. The generated walk supplies repeated warm deliveries.
-              const methods = path === "Project" ? 3 : path === "Connection" || path === "Process" ? 2 : 4;
-
-              for (let n = 0; n < methods; n++) {
-                yield* entry.enter(n);
-              }
-
-              const afterWarm = driver.counts();
-              expect(afterWarm.calls).toBe(warm.calls);
-              expect(afterWarm.reads).toBe(warm.reads);
-              expect(afterWarm.appends).toBe(warm.appends);
-              const outputs = yield* driver.outputs;
-
-              for (const channel of channels) {
-                StartsTest.exclude(outputs[channel], secret);
-              }
-            }
-          }),
-        { runs },
-      );
+            }),
+          { runs },
+        );
+      }
     }
 
     StartsTest.law(

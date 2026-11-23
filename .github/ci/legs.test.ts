@@ -774,18 +774,23 @@ const expectOrdinary = (files: Ordinary, mask: readonly boolean[], filter: strin
 
 // Each run starts a process, about a second, so the property is a dozen runs: a hundred would pass the
 // 60 s test limit. The routes it may miss are each pinned below as a scenario.
-it.prop(
-  "property: the size step lists the whole ordinary project, Kalfa's laws included, full or changed, and narrows to the readers only for the exact reader filter",
-  {
-    files: OrdinaryFiles,
-    mask: Schema.Array(Schema.Boolean).check(Schema.isMinLength(16), Schema.isMaxLength(16)),
-    filter: RunFilter,
-    readable: Schema.Boolean,
-  },
-  ({ files, mask, filter, readable }) => expectOrdinary(files, mask, filter, readable),
-  // 12 runs took 14.5 s of CI's 60 s limit, so 6.
-  { arbitrary: { seed: 119120, runs: 6, size: 100 } },
-);
+// 12 runs, each a process, took 14.5 s of CI's 60 s limit, so the law is 2 laws of 6 runs with their own seeds, which together are its 12.
+const PARTS = [1, 2] as const;
+
+for (const part of PARTS) {
+  it.prop(
+    "property: the size step lists the whole ordinary project, Kalfa's laws included, full or changed, and narrows to the readers only for the exact reader filter" +
+      ` (part ${part} of ${PARTS.length})`,
+    {
+      files: OrdinaryFiles,
+      mask: Schema.Array(Schema.Boolean).check(Schema.isMinLength(16), Schema.isMaxLength(16)),
+      filter: RunFilter,
+      readable: Schema.Boolean,
+    },
+    ({ files, mask, filter, readable }) => expectOrdinary(files, mask, filter, readable),
+    { arbitrary: { seed: 119120 + part, runs: 6, size: 100 } },
+  );
+}
 
 const pinned: Ordinary = {
   kalfa: ["a"],

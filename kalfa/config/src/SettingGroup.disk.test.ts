@@ -68,9 +68,13 @@ import {
   valuesFor,
 } from "./SettingGroup.edit.test-support.ts";
 
-// 100 full runs took 16 to 22 s of CI's 60 s limit for each of this file's slowest laws (a draw builds a whole file, and a run reads and edits it several times),
-// so the full count is 35: each run still draws every class, and `reach` still fails a law that misses one.
-const check = { arbitrary: { runs: runsFor({ fast: 25, full: 35 }), size: 100 } };
+const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
+
+// A slow law runs as PARTS laws of a third of the full runs each (34 of 100 full, 9 of 25 fast), so no one law is the whole cost: 100 runs took 16 to 22 s of CI's
+// 60 s limit for each of this file's slowest laws. The parts together run the full count, and each draws every class.
+const PARTS = [1, 2, 3] as const;
+
+const third = { arbitrary: { runs: runsFor({ fast: 9, full: 34 }), size: 100 } };
 
 // ---------------------------------------------------------------------------------------------
 // The harness: one disk call on a disk in memory, watched.
@@ -201,50 +205,54 @@ const USER_PLACES = ["u:demo-home", "u:home"] as const;
 // Plant, run once and never kept: find the user file from `HOME` before `$DEMO_HOME` (in internal/disk.ts, or in
 // internal/place.ts where it picks the user's path): a user file at `$DEMO_HOME` is not found, so the set writes a
 // second file under `HOME` and the file at `$DEMO_HOME` is as it was, red.
-it.effect.prop(
-  "D1 on disk is the edit and one write: a set and a remove leave the file holding what the in-memory edit answers, for the repo file and the user file in both homes",
-  DiskDraw.fields,
-  (draw) =>
-    Effect.gen(function* () {
-      const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:file"]);
+for (const part of PARTS) {
+  it.effect.prop(
+    "D1 on disk is the edit and one write: a set and a remove leave the file holding what the in-memory edit answers, for the repo file and the user file in both homes" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    (draw) =>
+      Effect.gen(function* () {
+        const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:file"]);
 
-      for (const [n, { p, value }] of cases(draw).entries()) {
-        const at = place(draw, p, p.file, n);
-        const group = groupFor(p);
-        const setting = targetSetting(p);
-        const wanted = mustText(yield* doSet(group, p.located.text, p.file, setting, value));
-        const seed = seedFor(at, "file", held(draw, p.located.text));
-        const found = yield* run({ group, setting, place: at, seed, op: { kind: "set", value } });
+        for (const [n, { p, value }] of cases(draw).entries()) {
+          const at = place(draw, p, p.file, n);
+          const group = groupFor(p);
+          const setting = targetSetting(p);
+          const wanted = mustText(yield* doSet(group, p.located.text, p.file, setting, value));
+          const seed = seedFor(at, "file", held(draw, p.located.text));
+          const found = yield* run({ group, setting, place: at, seed, op: { kind: "set", value } });
 
-        expect(found.answer, label(p, at)).toEqual(done);
-        expect(found.after.files, `${label(p, at)}: only the file is there, holding the edit's text`).toEqual({
-          [at.path ?? ""]: wanted,
-        });
-        expect(found.after.folders, `${label(p, at)}: no folder is made`).toEqual(found.before.folders);
-        reach.mark(`u:${at.site}`, "v:file");
-      }
-
-      for (const [n, p] of positions(draw).entries()) {
-        const at = place(draw, p, p.file, n + 1);
-        const group = groupFor(p);
-        const setting = targetSetting(p);
-        const wanted = mustText(yield* doRemove(group, p.located.text, p.file, setting));
-        const seed = seedFor(at, "file", held(draw, p.located.text));
-        const found = yield* run({ group, setting, place: at, seed, op: { kind: "remove" } });
-
-        expect(found.answer, label(p, at, "remove")).toEqual(done);
-        expect(found.after.files, `${label(p, at, "remove")}: only the file is there, holding the edit's text`).toEqual(
-          {
+          expect(found.answer, label(p, at)).toEqual(done);
+          expect(found.after.files, `${label(p, at)}: only the file is there, holding the edit's text`).toEqual({
             [at.path ?? ""]: wanted,
-          },
-        );
-        reach.mark(`u:${at.site}`);
-      }
+          });
+          expect(found.after.folders, `${label(p, at)}: no folder is made`).toEqual(found.before.folders);
+          reach.mark(`u:${at.site}`, "v:file");
+        }
 
-      reach.done();
-    }),
-  check,
-);
+        for (const [n, p] of positions(draw).entries()) {
+          const at = place(draw, p, p.file, n + 1);
+          const group = groupFor(p);
+          const setting = targetSetting(p);
+          const wanted = mustText(yield* doRemove(group, p.located.text, p.file, setting));
+          const seed = seedFor(at, "file", held(draw, p.located.text));
+          const found = yield* run({ group, setting, place: at, seed, op: { kind: "remove" } });
+
+          expect(found.answer, label(p, at, "remove")).toEqual(done);
+          expect(
+            found.after.files,
+            `${label(p, at, "remove")}: only the file is there, holding the edit's text`,
+          ).toEqual({
+            [at.path ?? ""]: wanted,
+          });
+          reach.mark(`u:${at.site}`);
+        }
+
+        reach.done();
+      }),
+    third,
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // D2, a refused edit writes nothing
@@ -255,83 +263,94 @@ it.effect.prop(
 // before the edit is checked and leave it when the edit refuses: a set into a repo with no `.<app>/` folder leaves one
 // behind, red. Check a remove's scope only after the lock is made: a remove of a user-only key from a file whose folder
 // is missing succeeds, red.
-it.effect.prop(
-  "D2 a refused edit writes nothing: each refusal of the in-memory edit fails the same way on disk, the file is as it was, no rename is recorded, no lock is left, and a folder the call made is gone while one that was there stays",
-  DiskDraw.fields,
-  (draw) =>
-    Effect.gen(function* () {
-      const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:file", "v:no-file", "v:no-folder", "v:no-parent"]);
-      const port = draw.values.port;
+for (const part of PARTS) {
+  it.effect.prop(
+    "D2 a refused edit writes nothing: each refusal of the in-memory edit fails the same way on disk, the file is as it was, no rename is recorded, no lock is left, and a folder the call made is gone while one that was there stays" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    (draw) =>
+      Effect.gen(function* () {
+        const reach = new Reach<string>([
+          "u:repo",
+          ...USER_PLACES,
+          "v:file",
+          "v:no-file",
+          "v:no-folder",
+          "v:no-parent",
+        ]);
 
-      // A refusal that needs no text (a file scope, a value) is also tried with no file, no folder and no parent.
-      const scenes = [
-        ...scoped(draw).map((s) => ({ ...s, value: port, removes: true, bare: true })),
-        ...refused(draw).map((s) => ({ ...s, removes: false, bare: true })),
-        ...faulty(draw).map((s) => ({ ...s, value: port, removes: true, bare: false })),
-        ...flat(draw).map((s) => ({ ...s, removes: true, bare: false })),
-        ...broken(draw).map((s) => ({ ...s, value: port, removes: true, bare: false })),
-      ];
+        const port = draw.values.port;
 
-      for (const [n, s] of scenes.entries()) {
-        const at = placeFor(s.app, siteFor(draw, s.file, n), draw.disk.moved);
+        // A refusal that needs no text (a file scope, a value) is also tried with no file, no folder and no parent.
+        const scenes = [
+          ...scoped(draw).map((s) => ({ ...s, value: port, removes: true, bare: true })),
+          ...refused(draw).map((s) => ({ ...s, removes: false, bare: true })),
+          ...faulty(draw).map((s) => ({ ...s, value: port, removes: true, bare: false })),
+          ...flat(draw).map((s) => ({ ...s, removes: true, bare: false })),
+          ...broken(draw).map((s) => ({ ...s, value: port, removes: true, bare: false })),
+        ];
 
-        for (const state of s.bare ? (["file", "no-file", "no-folder", "no-parent"] as const) : (["file"] as const)) {
-          const seed = seedFor(at, state, held(draw, s.text));
-          const text = state === "file" ? s.text : "";
-          const named = `${s.target.name} in ${at.site} ${state}`;
+        for (const [n, s] of scenes.entries()) {
+          const at = placeFor(s.app, siteFor(draw, s.file, n), draw.disk.moved);
 
-          const set = yield* run({
-            group: s.group,
-            setting: s.target,
-            place: at,
-            seed,
-            op: { kind: "set", value: s.value },
-          });
+          for (const state of s.bare ? (["file", "no-file", "no-folder", "no-parent"] as const) : (["file"] as const)) {
+            const seed = seedFor(at, state, held(draw, s.text));
+            const text = state === "file" ? s.text : "";
+            const named = `${s.target.name} in ${at.site} ${state}`;
 
-          const pure = yield* doSet(s.group, text, s.file, s.target, s.value);
+            const set = yield* run({
+              group: s.group,
+              setting: s.target,
+              place: at,
+              seed,
+              op: { kind: "set", value: s.value },
+            });
 
-          expect(pure._tag, `${named}: the in-memory edit refuses`).toBe("error");
-          expect(set.answer._tag, `${named}: the disk call refuses`).toBe("failed");
+            const pure = yield* doSet(s.group, text, s.file, s.target, s.value);
 
-          // With the folder's parent missing the call may fail on the folder first: it fails, and writes nothing.
-          if (pure._tag === "error" && set.answer._tag === "failed" && state !== "no-parent") {
-            expect(names(set.answer, at.name), `${named}: it names the file`).toBe(true);
+            expect(pure._tag, `${named}: the in-memory edit refuses`).toBe("error");
+            expect(set.answer._tag, `${named}: the disk call refuses`).toBe("failed");
 
-            // A `$DEMO_HOME` that is not there is refused as a place, before the edit.
-            if (!(state === "no-folder" && at.site === "demo-home")) {
-              expect(set.answer.reason, `${named}: the edit's reason`).toBe(pure.reason);
-              expect(set.answer.line, `${named}: the edit's line`).toBe(pure.line);
-            }
-          }
+            // With the folder's parent missing the call may fail on the folder first: it fails, and writes nothing.
+            if (pure._tag === "error" && set.answer._tag === "failed" && state !== "no-parent") {
+              expect(names(set.answer, at.name), `${named}: it names the file`).toBe(true);
 
-          // The files, the folders and the links are as they were: a folder this call made is gone.
-          asWas(set, named);
-
-          if (s.removes) {
-            const remove = yield* run({ group: s.group, setting: s.target, place: at, seed, op: { kind: "remove" } });
-            const pureRemove = yield* doRemove(s.group, text, s.file, s.target);
-
-            expect(pureRemove._tag, `${named}: the in-memory remove refuses`).toBe("error");
-            expect(remove.answer._tag, `${named}: the disk remove refuses, whatever the disk holds`).toBe("failed");
-
-            if (pureRemove._tag === "error" && remove.answer._tag === "failed") {
-              expect(remove.answer.reason, `${named}: the remove's reason`).toBe(pureRemove.reason);
-              expect(remove.answer.line, `${named}: the remove's line`).toBe(pureRemove.line);
+              // A `$DEMO_HOME` that is not there is refused as a place, before the edit.
+              if (!(state === "no-folder" && at.site === "demo-home")) {
+                expect(set.answer.reason, `${named}: the edit's reason`).toBe(pure.reason);
+                expect(set.answer.line, `${named}: the edit's line`).toBe(pure.line);
+              }
             }
 
-            asWas(remove, `${named} remove`);
+            // The files, the folders and the links are as they were: a folder this call made is gone.
+            asWas(set, named);
+
+            if (s.removes) {
+              const remove = yield* run({ group: s.group, setting: s.target, place: at, seed, op: { kind: "remove" } });
+              const pureRemove = yield* doRemove(s.group, text, s.file, s.target);
+
+              expect(pureRemove._tag, `${named}: the in-memory remove refuses`).toBe("error");
+              expect(remove.answer._tag, `${named}: the disk remove refuses, whatever the disk holds`).toBe("failed");
+
+              if (pureRemove._tag === "error" && remove.answer._tag === "failed") {
+                expect(remove.answer.reason, `${named}: the remove's reason`).toBe(pureRemove.reason);
+                expect(remove.answer.line, `${named}: the remove's line`).toBe(pureRemove.line);
+              }
+
+              asWas(remove, `${named} remove`);
+            }
+
+            reach.mark(`v:${state}`);
           }
 
-          reach.mark(`v:${state}`);
+          reach.mark(`u:${at.site}`);
         }
 
-        reach.mark(`u:${at.site}`);
-      }
-
-      reach.done();
-    }),
-  check,
-);
+        reach.done();
+      }),
+    third,
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // D3, the lock
@@ -468,26 +487,35 @@ const refusedAtLock = (id: "w:lock-write" | "w:rename") => (draw: DiskDraw) =>
     reach.done();
   });
 
-it.effect.prop(
-  "D4 the file sees one rename: on success no write touches the file's own path and one rename comes from its lock",
-  DiskDraw.fields,
-  renamedOnce,
-  check,
-);
+for (const part of PARTS) {
+  it.effect.prop(
+    "D4 the file sees one rename: on success no write touches the file's own path and one rename comes from its lock" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    renamedOnce,
+    third,
+  );
+}
 
-it.effect.prop(
-  "D4 the file sees one rename: with the lock's write refused the call fails `write`, the file is as it was and no lock is left",
-  DiskDraw.fields,
-  refusedAtLock("w:lock-write"),
-  check,
-);
+for (const part of PARTS) {
+  it.effect.prop(
+    "D4 the file sees one rename: with the lock's write refused the call fails `write`, the file is as it was and no lock is left" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    refusedAtLock("w:lock-write"),
+    third,
+  );
+}
 
-it.effect.prop(
-  "D4 the file sees one rename: with the rename refused the call fails `write`, the file is as it was and no lock is left",
-  DiskDraw.fields,
-  refusedAtLock("w:rename"),
-  check,
-);
+for (const part of PARTS) {
+  it.effect.prop(
+    "D4 the file sees one rename: with the rename refused the call fails `write`, the file is as it was and no lock is left" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    refusedAtLock("w:rename"),
+    third,
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // D5, a missing folder or file
@@ -496,92 +524,95 @@ it.effect.prop(
 // Plants: skip making the folder (in internal/disk.ts, drop the `makeDirectory` call): a set into a repo with no
 // `.<app>/` folder fails, red; make a `$<APP>_HOME` that is not there when its parent is: the set succeeds where it must
 // fail `write`, red; leave a folder this call made when a later step fails: a folder is left, red.
-it.effect.prop(
-  "D5 a missing folder or file: a set makes the file and the app's own folder and no more, a missing parent of that folder fails `write`, and a remove of a missing file or folder succeeds and writes nothing",
-  DiskDraw.fields,
-  (draw) =>
-    Effect.gen(function* () {
-      const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:no-file", "v:no-folder", "v:no-parent"]);
+for (const part of PARTS) {
+  it.effect.prop(
+    "D5 a missing folder or file: a set makes the file and the app's own folder and no more, a missing parent of that folder fails `write`, and a remove of a missing file or folder succeeds and writes nothing" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    (draw) =>
+      Effect.gen(function* () {
+        const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:no-file", "v:no-folder", "v:no-parent"]);
 
-      for (const [n, p] of valued(draw).entries()) {
-        const group = groupFor(p);
-        const setting = targetSetting(p);
-        const value = valuesFor(draw, p)[0];
-        const wanted = mustText(yield* doSet(group, "", p.file, setting, value));
+        for (const [n, p] of valued(draw).entries()) {
+          const group = groupFor(p);
+          const setting = targetSetting(p);
+          const value = valuesFor(draw, p)[0];
+          const wanted = mustText(yield* doSet(group, "", p.file, setting, value));
 
-        const at = place(draw, p, p.file, n);
-        const path = at.path ?? "";
-        const dir = at.dir ?? "";
-        const lock = `${path}.lock`;
+          const at = place(draw, p, p.file, n);
+          const path = at.path ?? "";
+          const dir = at.dir ?? "";
+          const lock = `${path}.lock`;
 
-        for (const state of ["no-file", "no-folder", "no-parent"] as const) {
-          const seed = seedFor(at, state, held(draw, ""));
-          const named = label(p, at, state);
+          for (const state of ["no-file", "no-folder", "no-parent"] as const) {
+            const seed = seedFor(at, state, held(draw, ""));
+            const named = label(p, at, state);
 
-          // A `.<app>/` folder is made. A `$<APP>_HOME` that is not there is not, with its parent there or not, and nor is
-          // a folder whose parent is not there: the call fails `write` and makes nothing.
-          const made = state === "no-file" || (state === "no-folder" && at.site !== "demo-home");
+            // A `.<app>/` folder is made. A `$<APP>_HOME` that is not there is not, with its parent there or not, and nor is
+            // a folder whose parent is not there: the call fails `write` and makes nothing.
+            const made = state === "no-file" || (state === "no-folder" && at.site !== "demo-home");
 
-          const set = yield* run({ group, setting, place: at, seed, op: { kind: "set", value } });
+            const set = yield* run({ group, setting, place: at, seed, op: { kind: "set", value } });
 
-          if (made) {
-            expect(set.answer, named).toEqual(done);
-            expect(set.after.files, `${named}: the file is made with the edit's text and no lock is left`).toEqual({
-              [path]: wanted,
-            });
-            // The one folder is made, and nothing above it.
-            expect(set.after.folders, `${named}: the app's own folder is made, and no other`).toEqual(
-              [...new Set([...set.before.folders, dir])].sort(),
-            );
-          } else {
-            expect(set.answer._tag, `${named}: a missing home or parent fails`).toBe("failed");
-
-            if (set.answer._tag === "failed") {
-              expect(set.answer.reason, `${named}: it is a write error`).toBe("write");
-              expect(names(set.answer, at.name), `${named}: it names the file`).toBe(true);
-            }
-
-            asWas(set, named);
-          }
-
-          // A folder this call made is gone when the call then fails: at the lock's create, its write and the rename.
-          if (state === "no-folder" && made) {
-            for (const fault of [
-              createRefused(lock, draw.disk.create),
-              writeRefused(lock, draw.disk.write),
-              renameRefused(lock, draw.disk.rename),
-            ]) {
-              const failed = yield* run({
-                group,
-                setting,
-                place: at,
-                seed: seedFor(at, state, held(draw, ""), [fault]),
-                op: { kind: "set", value },
+            if (made) {
+              expect(set.answer, named).toEqual(done);
+              expect(set.after.files, `${named}: the file is made with the edit's text and no lock is left`).toEqual({
+                [path]: wanted,
               });
-
-              expect(failed.answer._tag, `${named}: a refused write fails`).toBe("failed");
-              const after = `${named} with a refused write`;
-
-              expect(failed.after.folders, `${after}: the folder this call made is gone`).toEqual(
-                failed.before.folders,
+              // The one folder is made, and nothing above it.
+              expect(set.after.folders, `${named}: the app's own folder is made, and no other`).toEqual(
+                [...new Set([...set.before.folders, dir])].sort(),
               );
-              expect(failed.after.files, `${after}: no file or lock is left`).toEqual(failed.before.files);
+            } else {
+              expect(set.answer._tag, `${named}: a missing home or parent fails`).toBe("failed");
+
+              if (set.answer._tag === "failed") {
+                expect(set.answer.reason, `${named}: it is a write error`).toBe("write");
+                expect(names(set.answer, at.name), `${named}: it names the file`).toBe(true);
+              }
+
+              asWas(set, named);
             }
+
+            // A folder this call made is gone when the call then fails: at the lock's create, its write and the rename.
+            if (state === "no-folder" && made) {
+              for (const fault of [
+                createRefused(lock, draw.disk.create),
+                writeRefused(lock, draw.disk.write),
+                renameRefused(lock, draw.disk.rename),
+              ]) {
+                const failed = yield* run({
+                  group,
+                  setting,
+                  place: at,
+                  seed: seedFor(at, state, held(draw, ""), [fault]),
+                  op: { kind: "set", value },
+                });
+
+                expect(failed.answer._tag, `${named}: a refused write fails`).toBe("failed");
+                const after = `${named} with a refused write`;
+
+                expect(failed.after.folders, `${after}: the folder this call made is gone`).toEqual(
+                  failed.before.folders,
+                );
+                expect(failed.after.files, `${after}: no file or lock is left`).toEqual(failed.before.files);
+              }
+            }
+
+            const remove = yield* run({ group, setting, place: at, seed, op: { kind: "remove" } });
+
+            expect(remove.answer, `${named} remove`).toEqual(done);
+            asWas(remove, `${named} remove`);
+            expect(remove.after.files, `${named} remove: no file is made`).toEqual({});
+            reach.mark(`v:${state}`, `u:${at.site}`);
           }
-
-          const remove = yield* run({ group, setting, place: at, seed, op: { kind: "remove" } });
-
-          expect(remove.answer, `${named} remove`).toEqual(done);
-          asWas(remove, `${named} remove`);
-          expect(remove.after.files, `${named} remove: no file is made`).toEqual({});
-          reach.mark(`v:${state}`, `u:${at.site}`);
         }
-      }
 
-      reach.done();
-    }),
-  check,
-);
+        reach.done();
+      }),
+    third,
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // D6, no change writes nothing
@@ -641,72 +672,75 @@ it.effect.prop(
 
 // Plant: lock and rename at the link's own path (in internal/disk.ts, skip the `realPath` call and use the file's path):
 // the link becomes a plain file, red.
-it.effect.prop(
-  "D7 a link stays a link: when the file's path is a link the new text lands at its target, the link is never written or renamed over, and the lock sits beside the target",
-  DiskDraw.fields,
-  (draw) =>
-    Effect.gen(function* () {
-      const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:link"]);
+for (const part of PARTS) {
+  it.effect.prop(
+    "D7 a link stays a link: when the file's path is a link the new text lands at its target, the link is never written or renamed over, and the lock sits beside the target" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    (draw) =>
+      Effect.gen(function* () {
+        const reach = new Reach<string>(["u:repo", ...USER_PLACES, "v:link"]);
 
-      const sets = changing(draw).map(({ p, value }) => ({ p, op: { kind: "set", value } as const }));
-      const removes = positions(draw).map((p) => ({ p, op: { kind: "remove" } as const }));
+        const sets = changing(draw).map(({ p, value }) => ({ p, op: { kind: "set", value } as const }));
+        const removes = positions(draw).map((p) => ({ p, op: { kind: "remove" } as const }));
 
-      for (const [n, { p, op }] of [...sets, ...removes].entries()) {
-        const at = place(draw, p, p.file, n);
-        const path = at.path ?? "";
-        const target = dotfile(at, draw.disk.dots);
-        const group = groupFor(p);
-        const setting = targetSetting(p);
-        const named = label(p, at, op.kind);
+        for (const [n, { p, op }] of [...sets, ...removes].entries()) {
+          const at = place(draw, p, p.file, n);
+          const path = at.path ?? "";
+          const target = dotfile(at, draw.disk.dots);
+          const group = groupFor(p);
+          const setting = targetSetting(p);
+          const named = label(p, at, op.kind);
 
-        const pure = yield* op.kind === "set"
-          ? doSet(group, p.located.text, p.file, setting, op.value)
-          : doRemove(group, p.located.text, p.file, setting);
+          const pure = yield* op.kind === "set"
+            ? doSet(group, p.located.text, p.file, setting, op.value)
+            : doRemove(group, p.located.text, p.file, setting);
 
-        const wanted = mustText(pure);
+          const wanted = mustText(pure);
 
-        const found = yield* run({
-          group,
-          setting,
-          place: at,
-          seed: seedFor(at, "link", held(draw, p.located.text)),
-          op,
-        });
+          const found = yield* run({
+            group,
+            setting,
+            place: at,
+            seed: seedFor(at, "link", held(draw, p.located.text)),
+            op,
+          });
 
-        expect(found.answer, named).toEqual(done);
-        expect(found.after.links, `${named}: the link still points to its target`).toEqual({ [path]: target });
-        expect(found.after.files, `${named}: the target holds the edit's text, and no lock is left`).toEqual({
-          [target]: wanted,
-        });
+          expect(found.answer, named).toEqual(done);
+          expect(found.after.links, `${named}: the link still points to its target`).toEqual({ [path]: target });
+          expect(found.after.files, `${named}: the target holds the edit's text, and no lock is left`).toEqual({
+            [target]: wanted,
+          });
 
-        // The link's own path and the lock beside it are never touched; the lock sits beside the target.
-        expect(writes(found.calls, path), `${named}: the link is not written`).toEqual([]);
-        expect(writes(found.calls, `${path}.lock`), `${named}: no lock beside the link`).toEqual([]);
+          // The link's own path and the lock beside it are never touched; the lock sits beside the target.
+          expect(writes(found.calls, path), `${named}: the link is not written`).toEqual([]);
+          expect(writes(found.calls, `${path}.lock`), `${named}: no lock beside the link`).toEqual([]);
 
-        expect(
-          renames(found.calls)
-            .flat()
-            .filter((to) => to === path || to === `${path}.lock`),
-          `${named}: the link is not renamed over`,
-        ).toEqual([]);
-
-        if (wanted !== p.located.text) {
-          expect(renames(found.calls), `${named}: the lock beside the target goes over the target`).toEqual([
-            [`${target}.lock`, target],
-          ]);
           expect(
-            writes(found.calls, `${target}.lock`).length,
-            `${named}: the lock beside the target is written`,
-          ).toBeGreaterThan(0);
+            renames(found.calls)
+              .flat()
+              .filter((to) => to === path || to === `${path}.lock`),
+            `${named}: the link is not renamed over`,
+          ).toEqual([]);
+
+          if (wanted !== p.located.text) {
+            expect(renames(found.calls), `${named}: the lock beside the target goes over the target`).toEqual([
+              [`${target}.lock`, target],
+            ]);
+            expect(
+              writes(found.calls, `${target}.lock`).length,
+              `${named}: the lock beside the target is written`,
+            ).toBeGreaterThan(0);
+          }
+
+          reach.mark(`u:${at.site}`, "v:link");
         }
 
-        reach.mark(`u:${at.site}`, "v:link");
-      }
-
-      reach.done();
-    }),
-  check,
-);
+        reach.done();
+      }),
+    third,
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // D8, the span
@@ -858,19 +892,25 @@ const faulted = (only: "w:read" | "w:lock-create") => (draw: DiskDraw) =>
     reach.done();
   });
 
-it.effect.prop(
-  "D9 a refused read fails `read`, naming the file and never its text, and nothing is written",
-  DiskDraw.fields,
-  faulted("w:read"),
-  check,
-);
+for (const part of PARTS) {
+  it.effect.prop(
+    "D9 a refused read fails `read`, naming the file and never its text, and nothing is written" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    faulted("w:read"),
+    third,
+  );
+}
 
-it.effect.prop(
-  "D9 a refused lock create fails `write`, naming the file and never its text, and nothing is written",
-  DiskDraw.fields,
-  faulted("w:lock-create"),
-  check,
-);
+for (const part of PARTS) {
+  it.effect.prop(
+    "D9 a refused lock create fails `write`, naming the file and never its text, and nothing is written" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    faulted("w:lock-create"),
+    third,
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // D10, no home
@@ -950,81 +990,84 @@ const closes = (found: Seen, subject: string, named: string) => {
 // Plant: end a disk failure with the start's closing sentence, `<app> did not start.` (in internal/place.ts, where `stop`
 // takes its default closing, or in internal/disk.ts where `fail` builds a message): the closing sentence is the start's,
 // red.
-it.effect.prop(
-  "D11 every disk failure ends by naming the file and saying it was not changed: a refused edit, a held lock, a refused read, a refused lock, a missing parent, an environment that cannot be read and no home",
-  DiskDraw.fields,
-  (draw) =>
-    Effect.gen(function* () {
-      const reach = new Reach<string>([
-        "u:repo",
-        ...USER_PLACES,
-        "u:no-home",
-        "v:lock",
-        "v:no-parent",
-        "w:read",
-        "w:lock-create",
-        "w:environment",
-      ]);
+for (const part of PARTS) {
+  it.effect.prop(
+    "D11 every disk failure ends by naming the file and saying it was not changed: a refused edit, a held lock, a refused read, a refused lock, a missing parent, an environment that cannot be read and no home" +
+      ` (part ${part} of ${PARTS.length})`,
+    DiskDraw.fields,
+    (draw) =>
+      Effect.gen(function* () {
+        const reach = new Reach<string>([
+          "u:repo",
+          ...USER_PLACES,
+          "u:no-home",
+          "v:lock",
+          "v:no-parent",
+          "w:read",
+          "w:lock-create",
+          "w:environment",
+        ]);
 
-      for (const [n, s] of scoped(draw).entries()) {
-        const at = placeFor(s.app, siteFor(draw, s.file, n), draw.disk.moved);
-        const seed = seedFor(at, "file", held(draw, s.text));
+        for (const [n, s] of scoped(draw).entries()) {
+          const at = placeFor(s.app, siteFor(draw, s.file, n), draw.disk.moved);
+          const seed = seedFor(at, "file", held(draw, s.text));
 
-        for (const op of [{ kind: "set", value: draw.values.port }, { kind: "remove" }] as const) {
+          for (const op of [{ kind: "set", value: draw.values.port }, { kind: "remove" }] as const) {
+            closes(
+              yield* run({ group: s.group, setting: s.target, place: at, seed, op }),
+              at.name,
+              `${s.target.name} in ${at.site} ${op.kind}`,
+            );
+          }
+
+          reach.mark(`u:${at.site}`);
+        }
+
+        for (const [n, p] of positions(draw).entries()) {
+          const at = place(draw, p, p.file, n);
+          const path = at.path ?? "";
+          const group = groupFor(p);
+          const setting = targetSetting(p);
+          const op = { kind: "set", value: valuesFor(draw, p)[0] } as const;
+          const base = held(draw, p.located.text);
+
+          const failures = [
+            ["a held lock", seedFor(at, "lock", base), "v:lock"],
+            ["a refused read", seedFor(at, "file", base, [readRefused(path, draw.disk.read)]), "w:read"],
+            [
+              "a refused lock",
+              seedFor(at, "file", base, [createRefused(`${path}.lock`, draw.disk.create)]),
+              "w:lock-create",
+            ],
+            ["a missing parent", seedFor(at, "no-parent", base), "v:no-parent"],
+          ] as const;
+
+          for (const [cause, seed, id] of failures) {
+            closes(yield* run({ group, setting, place: at, seed, op }), at.name, `${label(p, at)} ${cause}`);
+            reach.mark(id);
+          }
+
           closes(
-            yield* run({ group: s.group, setting: s.target, place: at, seed, op }),
-            at.name,
-            `${s.target.name} in ${at.site} ${op.kind}`,
+            yield* run({ group, setting, place: at, seed: seedFor(at, "file", base), unreadable: true, op }),
+            // The file may be `$<APP>_HOME/<app>.toml` or `~/.<app>/<app>.toml`: no path is known to name.
+            at.file === "repo" ? "The repo configuration" : "The user configuration",
+            `${label(p, at)} an environment that cannot be read`,
           );
+
+          reach.mark("w:environment");
+
+          if (p.file === "user") {
+            const none = placeFor(p.app, "no-home", draw.disk.moved);
+
+            closes(yield* run({ group, setting, place: none, seed: {}, op }), none.name, `${label(p, none)} no home`);
+            reach.mark("u:no-home");
+          }
+
+          reach.mark(`u:${at.site}`);
         }
 
-        reach.mark(`u:${at.site}`);
-      }
-
-      for (const [n, p] of positions(draw).entries()) {
-        const at = place(draw, p, p.file, n);
-        const path = at.path ?? "";
-        const group = groupFor(p);
-        const setting = targetSetting(p);
-        const op = { kind: "set", value: valuesFor(draw, p)[0] } as const;
-        const base = held(draw, p.located.text);
-
-        const failures = [
-          ["a held lock", seedFor(at, "lock", base), "v:lock"],
-          ["a refused read", seedFor(at, "file", base, [readRefused(path, draw.disk.read)]), "w:read"],
-          [
-            "a refused lock",
-            seedFor(at, "file", base, [createRefused(`${path}.lock`, draw.disk.create)]),
-            "w:lock-create",
-          ],
-          ["a missing parent", seedFor(at, "no-parent", base), "v:no-parent"],
-        ] as const;
-
-        for (const [cause, seed, id] of failures) {
-          closes(yield* run({ group, setting, place: at, seed, op }), at.name, `${label(p, at)} ${cause}`);
-          reach.mark(id);
-        }
-
-        closes(
-          yield* run({ group, setting, place: at, seed: seedFor(at, "file", base), unreadable: true, op }),
-          // The file may be `$<APP>_HOME/<app>.toml` or `~/.<app>/<app>.toml`: no path is known to name.
-          at.file === "repo" ? "The repo configuration" : "The user configuration",
-          `${label(p, at)} an environment that cannot be read`,
-        );
-
-        reach.mark("w:environment");
-
-        if (p.file === "user") {
-          const none = placeFor(p.app, "no-home", draw.disk.moved);
-
-          closes(yield* run({ group, setting, place: none, seed: {}, op }), none.name, `${label(p, none)} no home`);
-          reach.mark("u:no-home");
-        }
-
-        reach.mark(`u:${at.site}`);
-      }
-
-      reach.done();
-    }),
-  check,
-);
+        reach.done();
+      }),
+    third,
+  );
+}

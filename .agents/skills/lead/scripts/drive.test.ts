@@ -1714,39 +1714,41 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
   });
 });
 
-it("property: the full-access flag reaches every step only on codex-exec before a quest starts", () => {
-  const dir = mkdtempSync(join(tmpdir(), "drive-sandbox-"));
-  const brief = join(dir, "brief.md");
-  writeFileSync(brief, "brief");
+// 5 runs took 17.8 s of CI's 60 s limit (each starts three real drive processes), so each run is a law of its own, with its own seed: 5 in all.
+for (const run of [0, 1, 2, 3, 4]) {
+  it(`property: the full-access flag reaches every step only on codex-exec before a quest starts, run ${run + 1}`, () => {
+    const dir = mkdtempSync(join(tmpdir(), "drive-sandbox-"));
+    const brief = join(dir, "brief.md");
+    writeFileSync(brief, "brief");
 
-  try {
-    fc.assert(
-      fc.property(fc.constantFrom(...STEPS), fc.constantFrom("codex", "claude"), (step, other) => {
-        for (const [agent, sandbox, accepted] of [
-          ["codex-exec", "danger-full-access", true],
-          [other, "danger-full-access", false],
-          ["codex-exec", "workspace-write", false],
-        ] as const) {
-          const result = spawnSync(
-            process.execPath,
-            [join(import.meta.dirname, "drive.ts"), "!", step, brief, "--agent", agent, "--sandbox", sandbox],
-            { encoding: "utf8", env: { ...process.env, BOXES: join(dir, "boxes") } },
-          );
+    try {
+      fc.assert(
+        fc.property(fc.constantFrom(...STEPS), fc.constantFrom("codex", "claude"), (step, other) => {
+          for (const [agent, sandbox, accepted] of [
+            ["codex-exec", "danger-full-access", true],
+            [other, "danger-full-access", false],
+            ["codex-exec", "workspace-write", false],
+          ] as const) {
+            const result = spawnSync(
+              process.execPath,
+              [join(import.meta.dirname, "drive.ts"), "!", step, brief, "--agent", agent, "--sandbox", sandbox],
+              { encoding: "utf8", env: { ...process.env, BOXES: join(dir, "boxes") } },
+            );
 
-          expect(result.status).toBe(2);
-          expect(result.stderr).toContain(
-            accepted ? "a quest name and a brief file are required" : "usage: node drive.ts",
-          );
-          expect(existsSync(join(dir, "boxes", "state", "!.lock"))).toBe(false);
-        }
-      }),
-      // 5 runs took 17.8 s of CI's 60 s limit, each starting real drive processes, so 3.
-      { seed: 119120, numRuns: 3 },
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
+            expect(result.status).toBe(2);
+            expect(result.stderr).toContain(
+              accepted ? "a quest name and a brief file are required" : "usage: node drive.ts",
+            );
+            expect(existsSync(join(dir, "boxes", "state", "!.lock"))).toBe(false);
+          }
+        }),
+        { seed: 119120 + run, numRuns: 1 },
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
 
 describe("one live process drives a quest, today's tooling", () => {
   // Plants: never read the lock's owner; keep a dead owner's lock; free a lock another holds.

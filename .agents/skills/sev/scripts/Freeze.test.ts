@@ -80,11 +80,14 @@ const Status4xx = Schema.Union([
 
 const Status5xx = Schema.Int.check(Schema.isBetween({ minimum: 500, maximum: 599 }));
 
+/** How many cases a loop property runs: each one runs a real loop on the test clock. */
+const LOOP_RUNS = { arbitrary: { runs: runsFor({ fast: 3, full: 20 }) } };
+
 /**
- * How many cases a loop property runs: each one runs a real loop on the test clock. 40 full cases took 14.6 to 17.8 s of CI's 60 s
- * limit for each of the file's slowest laws, so 16.
+ * A loop law runs as PARTS laws of LOOP_RUNS cases each, which together are the 40 full cases it had: 40 cases took 12.4 to 17.8 s of CI's 60 s limit for
+ * each of the four.
  */
-const LOOP_RUNS = { arbitrary: { runs: runsFor({ fast: 6, full: 16 }) } };
+const PARTS = [1, 2] as const;
 
 /** A fresh folder for the log, removed when the law ends. */
 const home = Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectoryScoped({ prefix: "sev-" }));
@@ -379,182 +382,196 @@ describe("the cancel loop", () => {
     ),
   );
 
-  it.effect.prop(
-    "property: a cancel GitHub answers with a 4xx is asked once in a sev0, however many beats pass and however often the loop starts again",
-    {
-      statuses: Schema.Array(Status4xx).check(Schema.isMaxLength(3)),
-      beats: Schema.Literals([1, 2, 4]),
-      restart: Schema.Boolean,
-    },
-    ({ statuses, beats, restart }) => {
-      // Tonight's 409 is in every case: the twelve stuck runs that spent the limit.
-      const refusals = [STUCK, ...Arr.map(statuses, answered)];
-      const runs = runsFrom(100, refusals.length);
+  for (const part of PARTS) {
+    it.effect.prop(
+      "property: a cancel GitHub answers with a 4xx is asked once in a sev0, however many beats pass and however often the loop starts again" +
+        ` (part ${part} of ${PARTS.length})`,
+      {
+        statuses: Schema.Array(Status4xx).check(Schema.isMaxLength(3)),
+        beats: Schema.Literals([1, 2, 4]),
+        restart: Schema.Boolean,
+      },
+      ({ statuses, beats, restart }) => {
+        // Tonight's 409 is in every case: the twelve stuck runs that spent the limit.
+        const refusals = [STUCK, ...Arr.map(statuses, answered)];
+        const runs = runsFrom(100, refusals.length);
 
-      const github = WorkflowRunsTest.world(
-        runs,
-        Arr.map(refusals, (e, i) => [100 + i, e] as const),
-      );
+        const github = WorkflowRunsTest.world(
+          runs,
+          Arr.map(refusals, (e, i) => [100 + i, e] as const),
+        );
 
-      return law(
-        Effect.gen(function* () {
-          const dir = yield* home;
-          const first = yield* started(dir, [], BEAT);
-          yield* pass(beats * 2);
-
-          const loop = restart ? yield* Effect.andThen(Fiber.interrupt(first), forked(dir, BEAT)) : first;
-          yield* pass(beats * 2);
-
-          // GitHub still lists every one, beat after beat.
-          expect(yield* lists).toBeGreaterThan(beats);
-
-          for (const run of runs) {
-            expect(yield* asked(run.id)).toBe(1);
-          }
-
-          expect(Arr.filter(yield* tags(dir), (tag) => tag === "refused")).toHaveLength(runs.length);
-
-          yield* ending(dir, Duration.seconds(6));
-          yield* finished(loop);
-        }),
-        github,
-      );
-    },
-    LOOP_RUNS,
-  );
-
-  it.effect.prop(
-    "property: a cancel GitHub answers with a 5xx or not at all is asked again each beat, and canceled once GitHub takes it",
-    {
-      statuses: Schema.Array(Schema.NullOr(Status5xx)).check(Schema.isMaxLength(3)),
-      beats: Schema.Literals([1, 2, 4]),
-    },
-    ({ statuses, beats }) => {
-      // Tonight's 502, and a cancel no answer came back for, are in every case.
-      const refusals = [BAD_GATEWAY, OFFLINE, ...Arr.map(statuses, answered)];
-      const runs = runsFrom(200, refusals.length);
-
-      const github = WorkflowRunsTest.world(
-        runs,
-        Arr.map(refusals, (e, i) => [200 + i, e] as const),
-      );
-
-      return law(
-        Effect.gen(function* () {
-          const dir = yield* home;
-          const loop = yield* started(dir, [], BEAT);
-          yield* pass(beats * 2);
-
-          // Each beat lists the runs once and asks again about every one.
-          const even = Effect.gen(function* () {
-            const listed = yield* lists;
-            const counts = yield* Effect.forEach(runs, (run) => asked(run.id), { concurrency: 1 });
-
-            return listed > beats && Arr.every(counts, (n) => n === listed);
-          });
-
-          yield* until(even);
-          expect(Arr.filter(yield* tags(dir), (tag) => tag === "refused")).toEqual([]);
-
-          // GitHub answers again, and the next beat cancels them all.
-          github.refusing.clear();
-          yield* until(Effect.map(tags(dir), (t) => Arr.filter(t, (tag) => tag === "canceled").length === runs.length));
-
-          yield* ending(dir, Duration.seconds(6));
-          yield* finished(loop);
-        }),
-        github,
-      );
-    },
-    LOOP_RUNS,
-  );
-
-  it.effect.prop(
-    "property: a run GitHub refused in one sev0 is asked once more in the next",
-    { statuses: Schema.Array(Status4xx).check(Schema.isMaxLength(3)) },
-    ({ statuses }) => {
-      const refusals = [STUCK, ...Arr.map(statuses, answered)];
-      const runs = runsFrom(300, refusals.length);
-
-      const github = WorkflowRunsTest.world(
-        runs,
-        Arr.map(refusals, (e, i) => [300 + i, e] as const),
-      );
-
-      return law(
-        Effect.gen(function* () {
-          const dir = yield* home;
-          const first = yield* started(dir, [], BEAT);
-          yield* until(Effect.map(cancels, (ids) => ids.length === runs.length));
-          yield* ending(dir, Duration.seconds(6));
-          yield* finished(first);
-
-          const second = yield* started(dir, [], BEAT);
-          yield* until(Effect.map(cancels, (ids) => ids.length === 2 * runs.length));
-          yield* pass(4);
-
-          for (const run of runs) {
-            expect(yield* asked(run.id)).toBe(2);
-          }
-
-          yield* ending(dir, Duration.seconds(6));
-          yield* finished(second);
-        }),
-        github,
-      );
-    },
-    LOOP_RUNS,
-  );
-
-  it.effect.prop(
-    "property: a rate limit ends the beat at once, and no loop asks GitHub anything more until the limit resets",
-    {
-      count: Schema.Literals([1, 2, 3]),
-      left: Schema.Literals([0, 1, 2, 3]),
-      wait: Schema.Int.check(Schema.isBetween({ minimum: 3, maximum: 12 })),
-      restart: Schema.Boolean,
-    },
-    ({ count, left, wait, restart }) =>
-      Effect.gen(function* () {
-        const runs = runsFrom(400, count);
-        // The limit is spent within the first beat: after the list and `answered - 1` cancels.
-        const answers = Math.min(left, count);
-        const reset = DateTime.add(yield* DateTime.now, { seconds: wait });
-
-        return yield* law(
+        return law(
           Effect.gen(function* () {
             const dir = yield* home;
             const first = yield* started(dir, [], BEAT);
-            yield* until(Effect.map(tags(dir), (t) => t.includes("limited")));
+            yield* pass(beats * 2);
 
-            // The calls GitHub answered, then the one it refused; nothing after it in that beat.
-            const spent = yield* calls;
-            expect(spent).toHaveLength(answers + 1);
-            expect(spent.at(-1)).toEqual(
-              answers === 0 ? { method: "unfinished", args: [] } : { method: "cancel", args: [400 + answers - 1] },
-            );
-            expect((yield* Level.log(dir)).at(-1)).toMatchObject({ _tag: "limited", until: reset });
-
-            // A loop started again inside the limit waits it out too.
             const loop = restart ? yield* Effect.andThen(Fiber.interrupt(first), forked(dir, BEAT)) : first;
-            yield* pass(wait - 1);
-            expect(yield* calls).toEqual(spent);
+            yield* pass(beats * 2);
 
-            // From the reset on, the loop lists and cancels again: a rate limit refuses no run for good.
-            yield* until(Effect.map(tags(dir), (t) => Arr.filter(t, (tag) => tag === "canceled").length === count));
-            expect(DateTime.isGreaterThanOrEqualTo(yield* DateTime.now, reset)).toBe(true);
-            expect(Arr.filter(yield* tags(dir), (tag) => tag === "limited")).toHaveLength(1);
-            expect(Arr.filter(yield* tags(dir), (tag) => tag === "failed" || tag === "refused")).toEqual([]);
+            // GitHub still lists every one, beat after beat.
+            expect(yield* lists).toBeGreaterThan(beats);
+
+            for (const run of runs) {
+              expect(yield* asked(run.id)).toBe(1);
+            }
+
+            expect(Arr.filter(yield* tags(dir), (tag) => tag === "refused")).toHaveLength(runs.length);
 
             yield* ending(dir, Duration.seconds(6));
             yield* finished(loop);
           }),
-          WorkflowRunsTest.world(runs),
-          { limit: { left: answers, reset } },
+          github,
         );
-      }),
-    LOOP_RUNS,
-  );
+      },
+      LOOP_RUNS,
+    );
+  }
+
+  for (const part of PARTS) {
+    it.effect.prop(
+      "property: a cancel GitHub answers with a 5xx or not at all is asked again each beat, and canceled once GitHub takes it" +
+        ` (part ${part} of ${PARTS.length})`,
+      {
+        statuses: Schema.Array(Schema.NullOr(Status5xx)).check(Schema.isMaxLength(3)),
+        beats: Schema.Literals([1, 2, 4]),
+      },
+      ({ statuses, beats }) => {
+        // Tonight's 502, and a cancel no answer came back for, are in every case.
+        const refusals = [BAD_GATEWAY, OFFLINE, ...Arr.map(statuses, answered)];
+        const runs = runsFrom(200, refusals.length);
+
+        const github = WorkflowRunsTest.world(
+          runs,
+          Arr.map(refusals, (e, i) => [200 + i, e] as const),
+        );
+
+        return law(
+          Effect.gen(function* () {
+            const dir = yield* home;
+            const loop = yield* started(dir, [], BEAT);
+            yield* pass(beats * 2);
+
+            // Each beat lists the runs once and asks again about every one.
+            const even = Effect.gen(function* () {
+              const listed = yield* lists;
+              const counts = yield* Effect.forEach(runs, (run) => asked(run.id), { concurrency: 1 });
+
+              return listed > beats && Arr.every(counts, (n) => n === listed);
+            });
+
+            yield* until(even);
+            expect(Arr.filter(yield* tags(dir), (tag) => tag === "refused")).toEqual([]);
+
+            // GitHub answers again, and the next beat cancels them all.
+            github.refusing.clear();
+            yield* until(
+              Effect.map(tags(dir), (t) => Arr.filter(t, (tag) => tag === "canceled").length === runs.length),
+            );
+
+            yield* ending(dir, Duration.seconds(6));
+            yield* finished(loop);
+          }),
+          github,
+        );
+      },
+      LOOP_RUNS,
+    );
+  }
+
+  for (const part of PARTS) {
+    it.effect.prop(
+      "property: a run GitHub refused in one sev0 is asked once more in the next" +
+        ` (part ${part} of ${PARTS.length})`,
+      { statuses: Schema.Array(Status4xx).check(Schema.isMaxLength(3)) },
+      ({ statuses }) => {
+        const refusals = [STUCK, ...Arr.map(statuses, answered)];
+        const runs = runsFrom(300, refusals.length);
+
+        const github = WorkflowRunsTest.world(
+          runs,
+          Arr.map(refusals, (e, i) => [300 + i, e] as const),
+        );
+
+        return law(
+          Effect.gen(function* () {
+            const dir = yield* home;
+            const first = yield* started(dir, [], BEAT);
+            yield* until(Effect.map(cancels, (ids) => ids.length === runs.length));
+            yield* ending(dir, Duration.seconds(6));
+            yield* finished(first);
+
+            const second = yield* started(dir, [], BEAT);
+            yield* until(Effect.map(cancels, (ids) => ids.length === 2 * runs.length));
+            yield* pass(4);
+
+            for (const run of runs) {
+              expect(yield* asked(run.id)).toBe(2);
+            }
+
+            yield* ending(dir, Duration.seconds(6));
+            yield* finished(second);
+          }),
+          github,
+        );
+      },
+      LOOP_RUNS,
+    );
+  }
+
+  for (const part of PARTS) {
+    it.effect.prop(
+      "property: a rate limit ends the beat at once, and no loop asks GitHub anything more until the limit resets" +
+        ` (part ${part} of ${PARTS.length})`,
+      {
+        count: Schema.Literals([1, 2, 3]),
+        left: Schema.Literals([0, 1, 2, 3]),
+        wait: Schema.Int.check(Schema.isBetween({ minimum: 3, maximum: 12 })),
+        restart: Schema.Boolean,
+      },
+      ({ count, left, wait, restart }) =>
+        Effect.gen(function* () {
+          const runs = runsFrom(400, count);
+          // The limit is spent within the first beat: after the list and `answered - 1` cancels.
+          const answers = Math.min(left, count);
+          const reset = DateTime.add(yield* DateTime.now, { seconds: wait });
+
+          return yield* law(
+            Effect.gen(function* () {
+              const dir = yield* home;
+              const first = yield* started(dir, [], BEAT);
+              yield* until(Effect.map(tags(dir), (t) => t.includes("limited")));
+
+              // The calls GitHub answered, then the one it refused; nothing after it in that beat.
+              const spent = yield* calls;
+              expect(spent).toHaveLength(answers + 1);
+              expect(spent.at(-1)).toEqual(
+                answers === 0 ? { method: "unfinished", args: [] } : { method: "cancel", args: [400 + answers - 1] },
+              );
+              expect((yield* Level.log(dir)).at(-1)).toMatchObject({ _tag: "limited", until: reset });
+
+              // A loop started again inside the limit waits it out too.
+              const loop = restart ? yield* Effect.andThen(Fiber.interrupt(first), forked(dir, BEAT)) : first;
+              yield* pass(wait - 1);
+              expect(yield* calls).toEqual(spent);
+
+              // From the reset on, the loop lists and cancels again: a rate limit refuses no run for good.
+              yield* until(Effect.map(tags(dir), (t) => Arr.filter(t, (tag) => tag === "canceled").length === count));
+              expect(DateTime.isGreaterThanOrEqualTo(yield* DateTime.now, reset)).toBe(true);
+              expect(Arr.filter(yield* tags(dir), (tag) => tag === "limited")).toHaveLength(1);
+              expect(Arr.filter(yield* tags(dir), (tag) => tag === "failed" || tag === "refused")).toEqual([]);
+
+              yield* ending(dir, Duration.seconds(6));
+              yield* finished(loop);
+            }),
+            WorkflowRunsTest.world(runs),
+            { limit: { left: answers, reset } },
+          );
+        }),
+      LOOP_RUNS,
+    );
+  }
 });
 
 describe("delay", () => {

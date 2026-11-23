@@ -208,8 +208,7 @@ describe("T325 K9 machine caps, today's tooling", () => {
         {
           ...options,
           seed: 119120,
-          // 5 runs and 2 pinned cases, each 6 child Vitest starts, took 18.5 s of CI's 60 s limit, so 2 runs.
-          numRuns: 2,
+          numRuns: 5,
           endOnFailure: true,
           examples: [[[26, 13, 1]], [[26, 0, 0]]],
         },
@@ -217,7 +216,8 @@ describe("T325 K9 machine caps, today's tooling", () => {
     } finally {
       rmSync(cache, { recursive: true, force: true });
     }
-  });
+    // Each run starts real child Vitest processes: 15.2 to 18.5 s of CI's 60 s limit at this count.
+  }, 180_000);
 
   // R4 finding 4. With no lock named, every shell gets the same system file, whatever its TMPDIR.
   // The program runs here, in the test process, on its test layers: TMPDIR is set both in this
@@ -461,10 +461,10 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
           }
         },
       ),
-      // 2 runs, each many child Vitest starts, took 16.4 s of CI's 60 s limit, so 1.
-      { ...options, numRuns: 1 },
+      { ...options, numRuns: 2 },
     );
-  });
+    // Each run starts real child Vitest processes: 15.2 to 18.5 s of CI's 60 s limit at this count.
+  }, 180_000);
 
   // R4 finding 6. Plants: trust any positional filter, omit untracked or staged files,
   // compare two endpoints, or use a matcher which skips hidden path segments.
@@ -612,10 +612,10 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
           expect(probe(root, ["run", "scripts/caps.test.ts"], { FABRIKA_MAX_WORKERS: setting }).status).not.toBe(0);
         }
       }),
-      // 4 runs of 8 child Vitest starts each took 15.2 s of CI's 60 s limit, so 2.
-      { ...options, numRuns: 2 },
+      options,
     );
-  });
+    // Each run starts real child Vitest processes: 15.2 to 18.5 s of CI's 60 s limit at this count.
+  }, 180_000);
 
   // Plant: allow a force trigger to turn local --changed into a full run. This loads the real
   // config only. It never starts a broad Vitest process, even if the guard is broken.

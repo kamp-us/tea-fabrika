@@ -74,8 +74,8 @@ const settingsExec =
   };
 
 // The suite owns the moves and assertions; this caller owns SQLite and the platform handles.
-// 100 runs of a walk of up to 40 moves took 24.5 s of CI's 60 s limit for one path; each run still draws every move, so 40.
-SettingsTest.suite(runsFor({ fast: 25, full: 40 }), (recipe, secret) =>
+// A path's L16 walk took 24.5 s of CI's 60 s limit at 100 runs: it runs as 3 laws of 34 runs (9 fast).
+SettingsTest.suite(runsFor({ fast: 9, full: 34 }), 3, (recipe, secret) =>
   Effect.gen(function* () {
     const Starts = yield* Effect.promise(() => import("../settings/Starts.ts"));
     const SettingsStartsLedger = yield* Effect.promise(() => import("./SettingsStartsLedger.ts"));

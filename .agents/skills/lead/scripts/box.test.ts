@@ -1829,7 +1829,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
   });
 
   // Plants: drop failed/missing-usage runs, leave a pid behind, or append a row on every fetch.
-  // One law ran 3 draws and 2 pinned cases, a fixture and a real run each: 17.8 s of CI's 60 s limit. It is two laws by the signal, each with its pinned case and 1 draw.
+  // One law ran 3 draws and 2 pinned cases, a fixture and a real run each: 17.8 s of CI's 60 s limit. It is two laws by the signal, each with its pinned case and 2 draws.
   for (const signal of [false, true]) {
     it(`K3 every exit saves one run with bounds, status and nullable usage; collection is idempotent, ${signal ? "interrupted" : "exited"}`, () => {
       fc.assert(
@@ -1866,7 +1866,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
         ),
         {
           ...options,
-          numRuns: 1,
+          numRuns: 2,
           // pinned: the dropped-row plants: no row for a failed run with no usage, or for an
           // interrupted run that exited 0.
           examples: signal ? [[{ exit: 0, signal: true, usage: true }]] : [[{ exit: 7, signal: false, usage: false }]],

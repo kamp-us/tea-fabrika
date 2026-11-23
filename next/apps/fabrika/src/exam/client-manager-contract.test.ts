@@ -45,18 +45,23 @@ const inspect = Effect.fnUntraced(function* (names: readonly string[] | null) {
 // The direct entry takes no input, so one bundle of it serves every case.
 let direct = false;
 
-it.effect.prop(
-  "the browser contract excludes the ledger implementation for every export selection",
-  { names: Schema.Array(Schema.Literals(["Founder", "Written"])) },
-  ({ names }) =>
-    Effect.gen(function* () {
-      if (!direct) {
-        yield* inspect(null);
-        direct = true;
-      }
+// 100 runs took 15.5 s of CI's 60 s limit, so the law is 3 laws of 34 runs (4 fast each) with their own seeds.
+const PARTS = [1, 2, 3] as const;
 
-      yield* inspect(["ClientManager", ...new Set(names)]);
-    }).pipe(Effect.scoped),
-  // 100 runs took 15.5 s of CI's 60 s limit, so 40.
-  { timeout: 60_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 40 }) } },
-);
+for (const part of PARTS) {
+  it.effect.prop(
+    "the browser contract excludes the ledger implementation for every export selection" +
+      ` (part ${part} of ${PARTS.length})`,
+    { names: Schema.Array(Schema.Literals(["Founder", "Written"])) },
+    ({ names }) =>
+      Effect.gen(function* () {
+        if (!direct) {
+          yield* inspect(null);
+          direct = true;
+        }
+
+        yield* inspect(["ClientManager", ...new Set(names)]);
+      }).pipe(Effect.scoped),
+    { timeout: 60_000, arbitrary: { seed: 119120 + part, runs: runsFor({ fast: 4, full: 34 }) } },
+  );
+}

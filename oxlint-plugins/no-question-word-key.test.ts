@@ -24,8 +24,9 @@ const PATH = "next/packages/libfabrika/src/keys.ts";
 
 const WORDS = ["where", "why", "what", "who", "how"];
 
-// 12 runs took 19.0 s of CI's 60 s limit for the slowest law (each run plants a file with every word and form), so 6.
-const runs = { seed: 119120, numRuns: 6 };
+// Each run plants files and starts a real oxlint: the two slowest laws took 19.0 and 13.1 s of CI's 60 s limit at 12 runs, so they carry a limit of 180 s. Splitting them into laws
+// with other seeds is not safe: seed 119122 fails the first law (counterexample key "\u{20000}", other "key", near "Where", ticket 1290).
+const runs = { seed: 119120, numRuns: 12 };
 
 const isIdentifier = (name: string) => /^[$_\p{ID_Start}][$_‌‍\p{ID_Continue}]*$/u.test(name);
 
@@ -123,106 +124,117 @@ const bindings = (name: string, i: number) => [
   `function z${i}(target: {${name}: number}) {target.${name} = 1;}`,
 ];
 
-it("refuses all five words in every declaration and binding form, each by exactly one rule", () =>
-  fc.assert(
-    fc.asyncProperty(
-      fc.oneof(fc.constantFrom(...WORDS), unicodeKey),
-      identifier,
-      neighbor,
-      async (key, other, near) => {
-        // Every run holds all five words, so the positive branch never depends on random text.
-        const names = [...WORDS, key, other, near, "whyNot", "Who", "reason", "location"];
-        const lines: string[] = [];
-        const native: number[] = [];
-        const custom: number[] = [];
+it(
+  "refuses all five words in every declaration and binding form, each by exactly one rule",
+  () =>
+    fc.assert(
+      fc.asyncProperty(
+        fc.oneof(fc.constantFrom(...WORDS), unicodeKey),
+        identifier,
+        neighbor,
+        async (key, other, near) => {
+          // Every run holds all five words, so the positive branch never depends on random text.
+          const names = [...WORDS, key, other, near, "whyNot", "Who", "reason", "location"];
+          const lines: string[] = [];
+          const native: number[] = [];
+          const custom: number[] = [];
 
-        const add = (source: string, by: number[] | null) => {
-          lines.push(source);
-          by?.push(lines.length);
-        };
+          const add = (source: string, by: number[] | null) => {
+            lines.push(source);
+            by?.push(lines.length);
+          };
 
-        for (const [i, name] of names.entries()) {
-          const refused = WORDS.includes(name);
+          for (const [i, name] of names.entries()) {
+            const refused = WORDS.includes(name);
 
-          const literal = [
-            JSON.stringify(name),
-            escaped(name),
-            `[${JSON.stringify(name)}]`,
-            `[\`${escaped(name).slice(1, -1)}\`]`,
-          ];
+            const literal = [
+              JSON.stringify(name),
+              escaped(name),
+              `[${JSON.stringify(name)}]`,
+              `[\`${escaped(name).slice(1, -1)}\`]`,
+            ];
 
-          for (const [j, spelling] of literal.entries()) {
-            for (const source of declarations(spelling, i * 10 + j)) {
-              add(source, refused ? custom : null);
+            for (const [j, spelling] of literal.entries()) {
+              for (const source of declarations(spelling, i * 10 + j)) {
+                add(source, refused ? custom : null);
+              }
             }
-          }
 
-          if (isIdentifier(name)) {
-            for (const [j, spelling] of [name, escaped(name).slice(1, -1)].entries()) {
-              for (const source of [...declarations(spelling, i * 10 + 5 + j), ...bindings(spelling, i * 10 + 5 + j)]) {
-                add(source, refused ? native : null);
+            if (isIdentifier(name)) {
+              for (const [j, spelling] of [name, escaped(name).slice(1, -1)].entries()) {
+                for (const source of [
+                  ...declarations(spelling, i * 10 + 5 + j),
+                  ...bindings(spelling, i * 10 + 5 + j),
+                ]) {
+                  add(source, refused ? native : null);
+                }
               }
             }
           }
-        }
 
-        const result = await plant({ [PATH]: Arr.join(lines, "\n") });
-        expect([...new Set(result(NATIVE, PATH))]).toEqual(native);
-        expect([...new Set(result(CUSTOM, PATH))]).toEqual(custom);
-      },
-    ),
-    runs,
-  ));
-
-it("real config holds generated next/, exam, test and skill paths, and leaves today's paths off", () =>
-  fc.assert(
-    fc.asyncProperty(
-      fc.tuple(
-        identifier,
-        fc.constantFrom("ts", "tsx"),
-        fc.constantFrom(...WORDS),
-        fc.constantFrom("lead", "tests", "plan", "step-commit"),
+          const result = await plant({ [PATH]: Arr.join(lines, "\n") });
+          expect([...new Set(result(NATIVE, PATH))]).toEqual(native);
+          expect([...new Set(result(CUSTOM, PATH))]).toEqual(custom);
+        },
       ),
-      async ([name, extension, word, skill]) => {
-        const source = (spelling: string) => Arr.join(declarations(spelling, 0), "\n");
-
-        const held = [
-          `next/${name}.${extension}`,
-          `next/${name}.test.${extension}`,
-          `next/apps/fabrika/src/exam/${name}.${extension}`,
-          `next/packages/libfabrika/src/${name}.test-support.ts`,
-          `.agents/skills/${skill}/scripts/${name}.ts`,
-          `.agents/skills/lead/scripts/${name}.test.ts`,
-        ];
-
-        const today = [
-          `packages/fabrika/src/${name}.${extension}`,
-          `apps/fabrika/src/${name}.test.${extension}`,
-          `programs/tracker/src/${name}.${extension}`,
-        ];
-
-        const files: Record<string, string> = {};
-
-        for (const path of [...held, ...today]) {
-          files[path] = source(word);
-          files[path.replace(/(\.[a-z-]+)?\.tsx?$/, (end) => `-quoted${end}`)] = source(JSON.stringify(word));
-        }
-
-        const result = await plant(files);
-        const every = Arr.map(declarations(word, 0), (_, n) => n + 1);
-
-        for (const path of [...held, ...today]) {
-          const quoted = path.replace(/(\.[a-z-]+)?\.tsx?$/, (end) => `-quoted${end}`);
-          const expected = held.includes(path) ? every : [];
-          expect([...new Set(result(NATIVE, path))]).toEqual(expected);
-          expect([...new Set(result(CUSTOM, quoted))]).toEqual(expected);
-          expect(result(CUSTOM, path)).toEqual([]);
-          expect(result(NATIVE, quoted)).toEqual([]);
-        }
-      },
+      runs,
     ),
-    runs,
-  ));
+  180_000,
+);
+
+it(
+  "real config holds generated next/, exam, test and skill paths, and leaves today's paths off",
+  () =>
+    fc.assert(
+      fc.asyncProperty(
+        fc.tuple(
+          identifier,
+          fc.constantFrom("ts", "tsx"),
+          fc.constantFrom(...WORDS),
+          fc.constantFrom("lead", "tests", "plan", "step-commit"),
+        ),
+        async ([name, extension, word, skill]) => {
+          const source = (spelling: string) => Arr.join(declarations(spelling, 0), "\n");
+
+          const held = [
+            `next/${name}.${extension}`,
+            `next/${name}.test.${extension}`,
+            `next/apps/fabrika/src/exam/${name}.${extension}`,
+            `next/packages/libfabrika/src/${name}.test-support.ts`,
+            `.agents/skills/${skill}/scripts/${name}.ts`,
+            `.agents/skills/lead/scripts/${name}.test.ts`,
+          ];
+
+          const today = [
+            `packages/fabrika/src/${name}.${extension}`,
+            `apps/fabrika/src/${name}.test.${extension}`,
+            `programs/tracker/src/${name}.${extension}`,
+          ];
+
+          const files: Record<string, string> = {};
+
+          for (const path of [...held, ...today]) {
+            files[path] = source(word);
+            files[path.replace(/(\.[a-z-]+)?\.tsx?$/, (end) => `-quoted${end}`)] = source(JSON.stringify(word));
+          }
+
+          const result = await plant(files);
+          const every = Arr.map(declarations(word, 0), (_, n) => n + 1);
+
+          for (const path of [...held, ...today]) {
+            const quoted = path.replace(/(\.[a-z-]+)?\.tsx?$/, (end) => `-quoted${end}`);
+            const expected = held.includes(path) ? every : [];
+            expect([...new Set(result(NATIVE, path))]).toEqual(expected);
+            expect([...new Set(result(CUSTOM, quoted))]).toEqual(expected);
+            expect(result(CUSTOM, path)).toEqual([]);
+            expect(result(NATIVE, quoted)).toEqual([]);
+          }
+        },
+      ),
+      runs,
+    ),
+  180_000,
+);
 
 it("generated values, dynamic keys, external reads, comments, SQL and neighboring names pass", () =>
   fc.assert(

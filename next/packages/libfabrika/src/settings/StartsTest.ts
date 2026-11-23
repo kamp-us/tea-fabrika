@@ -354,154 +354,159 @@ export interface Driver {
   readonly counts: () => { readonly reads: number; readonly appends: number; readonly consumers: number };
 }
 
-/** `runs` is the case count of the suite's walk, which its caller sets from `runsFor`. */
-export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>, runs = 100) =>
+/**
+ * `runs` is the case count of the suite's walk law and `parts` how many laws it runs as, each with `runs` cases, which its caller sets
+ * from `runsFor`: a walk of up to 50 moves is slow, so no one law holds all of its runs.
+ */
+export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>, runs = 100, parts = 1) =>
   describe("L5 L6 instance starts, next/", () => {
-    law(
-      "reachable deployments and lost replies retain immutable starts and original metadata",
-      fc.tuple(
-        recipe,
-        fc.record({
-          by: fc.uuid(),
-          for: fc.uuid(),
-          sentAt: fc
-            .integer({ min: 0, max: 2_000_000_000_000 })
-            .map((ms) => DateTime.formatIso(DateTime.makeUnsafe(ms))),
-          seen: fc.nat(),
-          parent: fc.option(
-            fc.integer({ min: 1, max: 1_000_000 }).map((id) => `in-process_${Str.repeat(26)("0")}-${id}`),
-            { nil: null },
-          ),
-          traceId: fc.uuid().map((id) => Str.replaceAll("-", "")(id)),
-        }),
-        fc.array(fc.nat(), { minLength: 12, maxLength: 50 }),
-      ),
-      ([first, origin, choices]) =>
-        Effect.gen(function* () {
-          const driver = yield* open;
-          const inputs: Input[] = [{ ...(yield* input(first)), origin: { ...origin, seen: 0 } }];
-          const saved = new Map<string, Saved>();
+    for (let part = 1; part <= parts; part++) {
+      law(
+        `reachable deployments and lost replies retain immutable starts and original metadata${parts > 1 ? `, part ${part} of ${parts}` : ""}`,
+        fc.tuple(
+          recipe,
+          fc.record({
+            by: fc.uuid(),
+            for: fc.uuid(),
+            sentAt: fc
+              .integer({ min: 0, max: 2_000_000_000_000 })
+              .map((ms) => DateTime.formatIso(DateTime.makeUnsafe(ms))),
+            seen: fc.nat(),
+            parent: fc.option(
+              fc.integer({ min: 1, max: 1_000_000 }).map((id) => `in-process_${Str.repeat(26)("0")}-${id}`),
+              { nil: null },
+            ),
+            traceId: fc.uuid().map((id) => Str.replaceAll("-", "")(id)),
+          }),
+          fc.array(fc.nat(), { minLength: 12, maxLength: 50 }),
+        ),
+        ([first, origin, choices]) =>
+          Effect.gen(function* () {
+            const driver = yield* open;
+            const inputs: Input[] = [{ ...(yield* input(first)), origin: { ...origin, seen: 0 } }];
+            const saved = new Map<string, Saved>();
 
-          for (const [index, choice] of choices.entries()) {
-            const moves =
-              saved.size === 0
-                ? ["record", "lost", "fresh"]
-                : ["record", "lost", "fresh", "repeat", "concurrent", "conflict", "read"];
+            for (const [index, choice] of choices.entries()) {
+              const moves =
+                saved.size === 0
+                  ? ["record", "lost", "fresh"]
+                  : ["record", "lost", "fresh", "repeat", "concurrent", "conflict", "read"];
 
-            const move = moves[choice % moves.length];
+              const move = moves[choice % moves.length];
 
-            if (move === "fresh") {
-              inputs.push({
-                ...(yield* input({
-                  ...first,
-                  start: `${first.start}-${index}`,
-                  port: choice % 2 === 0 ? first.port : (choice % 65535) + 1,
-                })),
-                origin: {
-                  ...origin,
-                  seen: Math.min(origin.seen, saved.size),
-                  sentAt: DateTime.formatIso(DateTime.makeUnsafe(Date.parse(origin.sentAt) + index + 1)),
-                },
-              });
-              continue;
-            }
-
-            const selected =
-              move === "repeat" || move === "read" || move === "conflict"
-                ? inputs.filter((value) => saved.has(value.start))
-                : inputs;
-
-            const current = Option.getOrThrow(Option.fromUndefinedOr(selected[choice % selected.length]));
-            const before = driver.counts();
-            const absent = !saved.has(current.start);
-
-            if (move === "conflict") {
-              const different = yield* input({ ...first, start: current.start, build: `${current.build}-different` });
-              expect(Exit.isFailure(yield* Effect.exit(driver.record(different)))).toBe(true);
-              expect(yield* driver.read(current.start)).toEqual(saved.get(current.start));
-
-              // A retry cannot replace the original writer clock, parent, trace or reader position.
-              for (const key of ["by", "for", "sentAt", "seen", "parent", "traceId"] as const) {
-                const original = Option.getOrThrow(Option.fromUndefinedOr(current.origin));
-
-                const changed = {
-                  ...current,
+              if (move === "fresh") {
+                inputs.push({
+                  ...(yield* input({
+                    ...first,
+                    start: `${first.start}-${index}`,
+                    port: choice % 2 === 0 ? first.port : (choice % 65535) + 1,
+                  })),
                   origin: {
-                    ...original,
-                    [key]: Match.value(key).pipe(
-                      Match.when("seen", () => original.seen + 1),
-                      Match.when("parent", () =>
-                        original.parent === null ? `in-process_${Str.repeat(26)("0")}-1` : null,
-                      ),
-                      Match.when(
-                        "traceId",
-                        () => `${original.traceId[0] === "0" ? "1" : "0"}${Str.slice(1)(original.traceId)}`,
-                      ),
-                      Match.when("sentAt", () =>
-                        DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1)),
-                      ),
-                      Match.orElse(() => `${original[key]}-different`),
-                    ),
+                    ...origin,
+                    seen: Math.min(origin.seen, saved.size),
+                    sentAt: DateTime.formatIso(DateTime.makeUnsafe(Date.parse(origin.sentAt) + index + 1)),
                   },
-                };
-
-                expect(Exit.isFailure(yield* Effect.exit(driver.record(changed)))).toBe(true);
-                expect(yield* driver.read(current.start)).toEqual(saved.get(current.start));
-              }
-            } else {
-              if (move === "lost") {
-                expect(Exit.isFailure(yield* Effect.exit(driver.loseReply(driver.record(current))))).toBe(true);
-              }
-
-              const receipts =
-                move === "concurrent"
-                  ? yield* Effect.forEach([current, current, current], driver.record, { concurrency: "unbounded" })
-                  : [yield* move === "read" ? driver.read(current.start) : driver.record(current)];
-
-              for (const receipt of receipts) {
-                expect(receipt).toMatchObject({
-                  start: current.start,
-                  build: current.build,
-                  repo: current.repo,
-                  settings: current.settings,
-                  entry: { ...current.origin, id: current.start, stream: `settings/instance/${current.start}` },
                 });
-
-                if (saved.has(current.start)) {
-                  expect(receipt).toEqual(saved.get(current.start));
-                } else {
-                  saved.set(current.start, receipt);
-                }
+                continue;
               }
 
-              const after = driver.counts();
+              const selected =
+                move === "repeat" || move === "read" || move === "conflict"
+                  ? inputs.filter((value) => saved.has(value.start))
+                  : inputs;
 
-              const deliveries = Match.value(move).pipe(
-                Match.when("concurrent", () => 3),
-                Match.when("lost", () => 2),
-                Match.orElse(() => 1),
-              );
+              const current = Option.getOrThrow(Option.fromUndefinedOr(selected[choice % selected.length]));
+              const before = driver.counts();
+              const absent = !saved.has(current.start);
 
-              expect(after.reads - before.reads).toBe(deliveries + (absent ? 1 : 0));
-              expect(after.appends - before.appends).toBe(absent ? 1 : 0);
+              if (move === "conflict") {
+                const different = yield* input({ ...first, start: current.start, build: `${current.build}-different` });
+                expect(Exit.isFailure(yield* Effect.exit(driver.record(different)))).toBe(true);
+                expect(yield* driver.read(current.start)).toEqual(saved.get(current.start));
+
+                // A retry cannot replace the original writer clock, parent, trace or reader position.
+                for (const key of ["by", "for", "sentAt", "seen", "parent", "traceId"] as const) {
+                  const original = Option.getOrThrow(Option.fromUndefinedOr(current.origin));
+
+                  const changed = {
+                    ...current,
+                    origin: {
+                      ...original,
+                      [key]: Match.value(key).pipe(
+                        Match.when("seen", () => original.seen + 1),
+                        Match.when("parent", () =>
+                          original.parent === null ? `in-process_${Str.repeat(26)("0")}-1` : null,
+                        ),
+                        Match.when(
+                          "traceId",
+                          () => `${original.traceId[0] === "0" ? "1" : "0"}${Str.slice(1)(original.traceId)}`,
+                        ),
+                        Match.when("sentAt", () =>
+                          DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1)),
+                        ),
+                        Match.orElse(() => `${original[key]}-different`),
+                      ),
+                    },
+                  };
+
+                  expect(Exit.isFailure(yield* Effect.exit(driver.record(changed)))).toBe(true);
+                  expect(yield* driver.read(current.start)).toEqual(saved.get(current.start));
+                }
+              } else {
+                if (move === "lost") {
+                  expect(Exit.isFailure(yield* Effect.exit(driver.loseReply(driver.record(current))))).toBe(true);
+                }
+
+                const receipts =
+                  move === "concurrent"
+                    ? yield* Effect.forEach([current, current, current], driver.record, { concurrency: "unbounded" })
+                    : [yield* move === "read" ? driver.read(current.start) : driver.record(current)];
+
+                for (const receipt of receipts) {
+                  expect(receipt).toMatchObject({
+                    start: current.start,
+                    build: current.build,
+                    repo: current.repo,
+                    settings: current.settings,
+                    entry: { ...current.origin, id: current.start, stream: `settings/instance/${current.start}` },
+                  });
+
+                  if (saved.has(current.start)) {
+                    expect(receipt).toEqual(saved.get(current.start));
+                  } else {
+                    saved.set(current.start, receipt);
+                  }
+                }
+
+                const after = driver.counts();
+
+                const deliveries = Match.value(move).pipe(
+                  Match.when("concurrent", () => 3),
+                  Match.when("lost", () => 2),
+                  Match.orElse(() => 1),
+                );
+
+                expect(after.reads - before.reads).toBe(deliveries + (absent ? 1 : 0));
+                expect(after.appends - before.appends).toBe(absent ? 1 : 0);
+              }
+
+              const entries = yield* driver.entries;
+              expect(entries).toHaveLength(saved.size);
+              expect(new Set(entries.map((entry) => entry.entry.stream)).size).toBe(saved.size);
+              expect(new Set(entries.map((entry) => entry.entry.id)).size).toBe(saved.size);
+              expect(driver.counts().consumers).toBe(0);
+
+              for (const entry of entries) {
+                expect(entry).toEqual(saved.get(entry.start));
+                expect(Schema.is(Snapshot.Snapshot)(entry.settings)).toBe(true);
+                expect(entry.entry.rev).toBeGreaterThan(0);
+                expect(entry.entry.pos).toBe(1);
+                expect(entry.entry.sentAt).not.toBe("");
+                expect(entry.entry.traceId).not.toBe("");
+              }
             }
-
-            const entries = yield* driver.entries;
-            expect(entries).toHaveLength(saved.size);
-            expect(new Set(entries.map((entry) => entry.entry.stream)).size).toBe(saved.size);
-            expect(new Set(entries.map((entry) => entry.entry.id)).size).toBe(saved.size);
-            expect(driver.counts().consumers).toBe(0);
-
-            for (const entry of entries) {
-              expect(entry).toEqual(saved.get(entry.start));
-              expect(Schema.is(Snapshot.Snapshot)(entry.settings)).toBe(true);
-              expect(entry.entry.rev).toBeGreaterThan(0);
-              expect(entry.entry.pos).toBe(1);
-              expect(entry.entry.sentAt).not.toBe("");
-              expect(entry.entry.traceId).not.toBe("");
-            }
-          }
-        }),
-      { runs },
-    );
+          }),
+        { runs },
+      );
+    }
   });

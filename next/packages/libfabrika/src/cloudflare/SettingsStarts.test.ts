@@ -73,8 +73,8 @@ const open = Effect.gen(function* () {
   } satisfies StartsTest.Driver;
 }).pipe(Effect.provide(Digest.layerWebCrypto));
 
-// 100 runs of a walk of up to 50 moves took 17.3 s of CI's 60 s limit; each run still draws every move, so 40.
-StartsTest.suite(open, runsFor({ fast: 25, full: 40 }));
+// The walk law took 17.3 s of CI's 60 s limit at 100 runs: it runs as 3 laws of 34 runs (9 fast).
+StartsTest.suite(open, runsFor({ fast: 9, full: 34 }), 3);
 
 for (const kind of StartsTest.originKinds) {
   StartsTest.law(
