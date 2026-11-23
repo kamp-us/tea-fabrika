@@ -104,6 +104,13 @@ type IsRunTimeOnly<R extends RouteName> = [SuccessStatus<R>] extends [never]
 /** The routes whose answer is checked at run time only: no 2xx status, a 2xx that is not JSON, or an open JSON object. */
 export type RunTimeOnly = { [R in RouteName]: IsRunTimeOnly<R> extends true ? R : never }[RouteName];
 
+// A route GitHub answers only in text: it has a 2xx with a body, and none of them is JSON (`GET /zen`).
+type IsTextOnly<R extends RouteName> = [OtherStatus<R>] extends [never]
+  ? false
+  : [Answer<R>] extends [never]
+    ? true
+    : false;
+
 type Fields = Schema.Struct.Fields;
 
 /** Why a check refused, written so the compiler's message reads as a sentence at the caller's field. */
@@ -198,12 +205,21 @@ type PayloadPart<R extends RouteName, P extends Schema.Constraint> = [Body<R>] e
     ? { readonly payload: P & FitsPayload<R, P> }
     : { readonly payload?: P & FitsPayload<R, P> };
 
-type SuccessPart<R extends RouteName, S extends Schema.Constraint> =
-  IsRunTimeOnly<R> extends true
+type FitsText<S extends Schema.Constraint> = [S["Encoded"]] extends [string]
+  ? unknown
+  : Refused<"a text answer is read from text, so its Schema must start at a string">;
+
+type SuccessPart<R extends RouteName, S extends Schema.Constraint, B extends "json" | "text"> = [B] extends ["text"]
+  ? { readonly success?: S & FitsText<S> }
+  : IsRunTimeOnly<R> extends true
     ? { readonly success?: S }
     : [Answer<R>] extends [never]
       ? { readonly success?: never }
       : { readonly success?: S & FitsAnswer<R, S> };
+
+// A route GitHub answers only in text must say `body: "text"`; any other may say how its answer is read.
+type BodyPart<R extends RouteName, B extends "json" | "text"> =
+  IsTextOnly<R> extends true ? { readonly body: B & "text" } : { readonly body?: B };
 
 // A route with a body-less 2xx beside a 2xx with a body must say which statuses have none: the types know it, and a run
 // does not, so the declaration carries it as a value that the compiler holds to the types.
@@ -219,22 +235,36 @@ type Declaration<
   S extends Schema.Constraint,
   Q extends Fields,
   P extends Schema.Constraint,
-> = QueryPart<R, Q> & PayloadPart<R, P> & SuccessPart<R, S> & BodilessPart<R>;
+  B extends "json" | "text",
+  A extends "login" | "none",
+> = QueryPart<R, Q> &
+  PayloadPart<R, P> &
+  SuccessPart<R, S, B> &
+  BodilessPart<R> &
+  BodyPart<R, B> & { readonly auth?: A; readonly accept?: string };
 
 type Needs<R extends RouteName> =
-  HasRequired<QueryParams<R>> extends true
+  IsTextOnly<R> extends true
     ? true
-    : BodyRequired<R> extends true
+    : HasRequired<QueryParams<R>> extends true
       ? true
-      : [Bodiless<R>] extends [never]
-        ? false
-        : [Exclude<SuccessStatus<R>, Bodiless<R>>] extends [never]
+      : BodyRequired<R> extends true
+        ? true
+        : [Bodiless<R>] extends [never]
           ? false
-          : true;
+          : [Exclude<SuccessStatus<R>, Bodiless<R>>] extends [never]
+            ? false
+            : true;
 
 /** The arguments of `route` after the route text: present exactly when the description requires a part. */
-export type Options<R extends RouteName, S extends Schema.Constraint, Q extends Fields, P extends Schema.Constraint> =
-  Needs<R> extends true ? [options: Declaration<R, S, Q, P>] : [options?: Declaration<R, S, Q, P>];
+export type Options<
+  R extends RouteName,
+  S extends Schema.Constraint,
+  Q extends Fields,
+  P extends Schema.Constraint,
+  B extends "json" | "text",
+  A extends "login" | "none",
+> = Needs<R> extends true ? [options: Declaration<R, S, Q, P, B, A>] : [options?: Declaration<R, S, Q, P, B, A>];
 
 type Absent<K extends string> = { readonly [P in K]?: never };
 
@@ -286,7 +316,8 @@ type Fakeable<R extends RouteName> = IsRunTimeOnly<R> extends true ? Schema.Json
  * What a test's fake may answer for a route with the 2xx status `S`: `undefined` exactly when that status has no body, and
  * otherwise part of the description's answer (any JSON for a route checked at run time only).
  */
-export type Faked<R extends RouteName, S extends number> = S extends Bodiless<R> ? undefined : Fakeable<R>;
+export type Faked<R extends RouteName, S extends number, B extends "json" | "text"> =
+  S extends Bodiless<R> ? undefined : B extends "text" ? string : Fakeable<R>;
 
 /** `unknown` when the fake's answer `A` names no key the description's answer lacks, at any depth, or a readable refusal. */
 export type ExactFake<R extends RouteName, A> =

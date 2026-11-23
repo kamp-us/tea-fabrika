@@ -1,7 +1,6 @@
 // The parts of a call that need no Schema: filling the path, leaving out what a caller left out, and reading GitHub's
 // error body. Each is pure and gives a `Result` or an `Option`, and `call` lifts it into an Effect.
-import type { Option } from "effect";
-import { Predicate, Result, Schema } from "effect";
+import { Option, Predicate, Result, Schema } from "effect";
 
 const NAME = /\{([^{}]+)\}/g;
 
@@ -144,12 +143,58 @@ export const prune = (tree: Tree): Result.Result<Schema.Json, string> =>
 export const pruneObject = (record: { readonly [key: string]: Tree }): Result.Result<Schema.JsonObject, string> =>
   pruneRecord(record, "the value");
 
-const ErrorBody = Schema.Struct({
-  message: Schema.optionalKey(Schema.String),
-  documentation_url: Schema.optionalKey(Schema.String),
-  errors: Schema.optionalKey(Schema.Array(Schema.Json)),
-});
+/** The query as a URL carries it: each value a text, a number, a boolean, or a list of them. */
+export type QueryRecord = Readonly<
+  Record<string, string | number | boolean | ReadonlyArray<string | number | boolean>>
+>;
 
-/** What GitHub's error body says, or nothing when the body is not that object. */
-export const errorBody = (body: string): Option.Option<typeof ErrorBody.Type> =>
-  Schema.decodeUnknownOption(Schema.fromJsonString(ErrorBody))(body);
+const isCarried = (value: Schema.Json): value is string | number | boolean =>
+  Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value);
+
+/**
+ * Reads an encoded query as what a URL can carry, or says which key cannot be carried: a `null`, an object, or a list that
+ * holds either. The message names the key and holds no value.
+ */
+export const queryValues = (query: Schema.JsonObject): Result.Result<QueryRecord, string> =>
+  Result.all(
+    Object.entries(query).map(([key, value]) =>
+      isCarried(value) || (Array.isArray(value) && value.every(isCarried))
+        ? Result.succeed([key, value] as const)
+        : Result.fail(`the query value of ${key} is not a text, a number, a boolean or a list of them`),
+    ),
+  ).pipe(Result.map((entries) => Object.fromEntries(entries)));
+
+/** Whether a request that got no answer, or a 5xx, may have been carried out: a write that left may have been. */
+export const mayHaveApplied = (method: string, left: boolean): boolean => left && method !== "GET";
+
+/** What GitHub's error body says, each field on its own: `undefined` for a field it did not send, or sent as another kind. */
+export interface ErrorFields {
+  readonly message: string | undefined;
+  readonly documentation_url: string | undefined;
+  readonly errors: string | ReadonlyArray<Schema.Json> | undefined;
+}
+
+const Fields = Schema.Record(Schema.String, Schema.Json);
+
+/**
+ * Reads GitHub's error body field by field, so one field of another kind never hides the others. A body that is not a JSON
+ * object says nothing.
+ */
+export const errorBody = (body: string): ErrorFields => {
+  const object = Schema.decodeUnknownOption(Schema.fromJsonString(Fields))(body);
+
+  if (Option.isNone(object)) {
+    return { message: undefined, documentation_url: undefined, errors: undefined };
+  }
+
+  const field = <A>(name: string, schema: Schema.Decoder<A>): A | undefined =>
+    Object.hasOwn(object.value, name)
+      ? Option.getOrUndefined(Schema.decodeUnknownOption(schema)(object.value[name]))
+      : undefined;
+
+  return {
+    message: field("message", Schema.String),
+    documentation_url: field("documentation_url", Schema.String),
+    errors: field("errors", Schema.Union([Schema.String, Schema.Array(Schema.Json)])),
+  };
+};

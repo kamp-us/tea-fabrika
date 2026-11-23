@@ -9,8 +9,8 @@
  * compile. `call` sends a declared operation through the `GitHub` service and reads GitHub's answer. The package never
  * logs and imports no Node module.
  */
-import type { Duration, Result } from "effect";
-import { Context, Data, Effect, Option, Schema } from "effect";
+import type { Duration, Redacted } from "effect";
+import { Context, Data, Effect, Option, Result, Schema } from "effect";
 import type * as Check from "./internal/Check.ts";
 import * as wire from "./internal/wire.ts";
 
@@ -42,7 +42,14 @@ export const apiVersion: Check.ApiVersion = "2022-11-28";
 const TypeId: unique symbol = Symbol.for("@kalfa/github/Route");
 
 // Not exported: the class is the shape, and `Route` below is the only name a caller gets.
-class Declared<R extends RouteName, Success, Query, Payload> extends Data.TaggedClass("Route")<{
+class Declared<
+  R extends RouteName,
+  Success,
+  Query,
+  Payload,
+  Body extends "json" | "text",
+  Auth extends "login" | "none",
+> extends Data.TaggedClass("Route")<{
   readonly route: R;
   readonly method: Method;
   readonly path: string;
@@ -50,6 +57,9 @@ class Declared<R extends RouteName, Success, Query, Payload> extends Data.Tagged
   readonly query?: Query;
   readonly payload?: Payload;
   readonly bodiless?: ReadonlyArray<number>;
+  readonly body: Body;
+  readonly auth: Auth;
+  readonly accept?: string;
 }> {
   readonly [TypeId]: typeof TypeId = TypeId;
 }
@@ -62,11 +72,19 @@ class Declared<R extends RouteName, Success, Query, Payload> extends Data.Tagged
  * It holds the route text, split into its method and its path template (each `{name}` still in it), and the Schemas the
  * caller gave: `success` for the answer, `query` as a Struct of the declared fields, `payload` for the body, and
  * `bodiless` for the 2xx statuses that carry no body. Each Schema was checked against the description when the route
- * was declared.
+ * was declared. `body` says how the answer is read (`"json"` unless declared, or `"text"`), `auth` who the request is sent
+ * as (`"login"` unless declared `"none"`), and `accept` is the media type asked for, there only when declared.
  *
  * @category models
  */
-export type Route<R extends RouteName, Success, Query, Payload> = Declared<R, Success, Query, Payload>;
+export type Route<
+  R extends RouteName,
+  Success,
+  Query,
+  Payload,
+  Body extends "json" | "text" = "json",
+  Auth extends "login" | "none" = "login",
+> = Declared<R, Success, Query, Payload, Body, Auth>;
 
 const split = (text: string): { readonly method: Method; readonly path: string } => {
   const space = text.indexOf(" ");
@@ -107,15 +125,18 @@ export const route = <
   Success extends Schema.Constraint = never,
   Query extends Schema.Struct.Fields = Record<never, never>,
   Payload extends Schema.Constraint = never,
+  const Body extends "json" | "text" = "json",
+  const Auth extends "login" | "none" = "login",
 >(
   route: R,
-  ...options: Check.Options<R, Success, Query, Payload>
-): Route<R, Success, Schema.Struct<Query>, Payload> => {
+  ...options: Check.Options<R, Success, Query, Payload, Body, Auth>
+): Route<R, Success, Schema.Struct<Query>, Payload, Body, Auth> => {
   const [given] = options;
   const success: Success | undefined = given?.success;
   const query: Query | undefined = given?.query;
   const payload: Payload | undefined = given?.payload;
   const bodiless: ReadonlyArray<number> | undefined = given?.bodiless;
+  const accept: string | undefined = given?.accept;
 
   return new Declared({
     route,
@@ -124,8 +145,41 @@ export const route = <
     ...(query === undefined ? {} : { query: Schema.Struct(query) }),
     ...(payload === undefined ? {} : { payload }),
     ...(bodiless === undefined ? {} : { bodiless }),
+    // SAFETY: a route that left `body` out has the default its type parameter has, "json".
+    body: given?.body ?? ("json" as Body),
+    // SAFETY: a route that left `auth` out has the default its type parameter has, "login".
+    auth: given?.auth ?? ("login" as Auth),
+    ...(accept === undefined ? {} : { accept }),
   });
 };
+
+/**
+ * Who a request is sent as, decided by `call`: the service's own login, nobody, or the token one call brought.
+ *
+ * @category models
+ */
+export type Auth = Data.TaggedEnum<{
+  /** The service's login. */
+  Login: Record<never, never>;
+  /** Nobody: a route declared `auth: "none"` sends no token. */
+  None: Record<never, never>;
+  /** The token one call was given. */
+  Token: { readonly token: Redacted.Redacted<string> };
+}>;
+
+/**
+ * The constructors of `Auth`.
+ *
+ * @category constructors
+ */
+export const Auth = Data.taggedEnum<Auth>();
+
+/**
+ * What a URL's query can carry: a text, a number, a boolean, or a list of them. `call` refuses anything else.
+ *
+ * @category models
+ */
+export type QueryValue = string | number | boolean | ReadonlyArray<string | number | boolean>;
 
 /**
  * What `call` hands the `GitHub` service: the route as declared, with the path filled and the query and body encoded.
@@ -133,6 +187,7 @@ export const route = <
  * **Details**
  *
  * No key of the query or the body has `undefined` as its value, at any depth, and no query holds a key the caller left out.
+ * `auth` says who the request is sent as, and `accept` is the media type the route asked for, there exactly when it did.
  *
  * @category models
  */
@@ -144,8 +199,10 @@ export interface Request {
   readonly path: string;
   /** The values that filled the path, as sent. */
   readonly params: Readonly<Record<string, string>>;
-  readonly query: Readonly<Record<string, Schema.Json>>;
+  readonly query: Readonly<Record<string, QueryValue>>;
   readonly body?: Schema.Json;
+  readonly auth: Auth;
+  readonly accept?: string;
 }
 
 /**
@@ -164,7 +221,8 @@ export interface Reply {
  *
  * **Details**
  *
- * Each optional field is there exactly when GitHub's body had it. `errors` stays as GitHub said it: objects or texts.
+ * Each optional field is there exactly when GitHub's body had it. `errors` stays as GitHub said it: a list of objects or texts,
+ * or one text.
  *
  * @category errors
  */
@@ -172,7 +230,7 @@ export class ClientError extends Schema.TaggedError<ClientError, { readonly bran
   status: Schema.Int,
   message: Schema.optionalKey(Schema.String),
   documentationUrl: Schema.optionalKey(Schema.String),
-  errors: Schema.optionalKey(Schema.Array(Schema.Json)),
+  errors: Schema.optionalKey(Schema.Union([Schema.String, Schema.Array(Schema.Json)])),
 }) {}
 
 /**
@@ -192,6 +250,35 @@ export class Undecodable extends Schema.TaggedError<Undecodable, { readonly bran
 }) {}
 
 /**
+ * GitHub answered 5xx.
+ *
+ * **Details**
+ *
+ * `mayHaveApplied` is `true` for a write, which GitHub may have carried out before it failed, and `false` for a read.
+ *
+ * @category errors
+ */
+export class ServerError extends Schema.TaggedError<ServerError, { readonly brand: unique symbol }>()("ServerError", {
+  status: Schema.Int,
+  mayHaveApplied: Schema.Boolean,
+}) {}
+
+/**
+ * The request got no answer: the connection failed, or the body could not be read.
+ *
+ * **Details**
+ *
+ * `mayHaveApplied` is `true` for a write that left, and `false` for a read, and for a request that never left. `cause` is the
+ * failure under the HTTP client's error, never that error itself, which holds the request.
+ *
+ * @category errors
+ */
+export class Unavailable extends Schema.TaggedError<Unavailable, { readonly brand: unique symbol }>()("Unavailable", {
+  mayHaveApplied: Schema.Boolean,
+  cause: Schema.Defect(),
+}) {}
+
+/**
  * Why a call failed, named by the route text.
  *
  * **Details**
@@ -203,7 +290,7 @@ export class Undecodable extends Schema.TaggedError<Undecodable, { readonly bran
  */
 export class GitHubError extends Schema.TaggedError<GitHubError, { readonly brand: unique symbol }>()("GitHubError", {
   operation: Schema.String,
-  reason: Schema.Union([ClientError, Undecodable]),
+  reason: Schema.Union([ClientError, ServerError, Unavailable, Undecodable]),
 }) {}
 
 /**
@@ -241,7 +328,14 @@ export class GitHub extends Context.Service<
  *
  * @category models
  */
-export type AnyRoute = Route<RouteName, Schema.Constraint, Schema.Constraint, Schema.Constraint>;
+export type AnyRoute = Route<
+  RouteName,
+  Schema.Constraint,
+  Schema.Constraint,
+  Schema.Constraint,
+  "json" | "text",
+  "login" | "none"
+>;
 
 /**
  * What a caller hands `call` for a declared operation: its path names, its query and its payload, each there exactly when the
@@ -250,7 +344,14 @@ export type AnyRoute = Route<RouteName, Schema.Constraint, Schema.Constraint, Sc
  * @category models
  */
 export type Input<Op extends AnyRoute> =
-  Op extends Route<infer R, Schema.Constraint, infer Q extends Schema.Constraint, infer P extends Schema.Constraint>
+  Op extends Route<
+    infer R,
+    Schema.Constraint,
+    infer Q extends Schema.Constraint,
+    infer P extends Schema.Constraint,
+    "json" | "text",
+    "login" | "none"
+  >
     ? Check.Input<R, Q, P>
     : never;
 
@@ -261,7 +362,14 @@ export type Input<Op extends AnyRoute> =
  * @category models
  */
 export type Success<Op extends AnyRoute> =
-  Op extends Route<infer R, infer S extends Schema.Constraint, Schema.Constraint, Schema.Constraint>
+  Op extends Route<
+    infer R,
+    infer S extends Schema.Constraint,
+    Schema.Constraint,
+    Schema.Constraint,
+    "json" | "text",
+    "login" | "none"
+  >
     ? Check.Returned<R, S>
     : never;
 
@@ -275,9 +383,24 @@ export type Services<Op extends AnyRoute> =
     RouteName,
     infer S extends Schema.Constraint,
     infer Q extends Schema.Constraint,
-    infer P extends Schema.Constraint
+    infer P extends Schema.Constraint,
+    "json" | "text",
+    "login" | "none"
   >
     ? Check.Needed<Q, P, S>
+    : never;
+
+/**
+ * What a call may bring beside its input: the token it is sent with, in place of the service's login. A route declared
+ * `auth: "none"` sends no token, so it takes none.
+ *
+ * @category models
+ */
+export type CallOptions<Op extends AnyRoute> =
+  Op extends Route<RouteName, Schema.Constraint, Schema.Constraint, Schema.Constraint, "json" | "text", infer A>
+    ? A extends "none"
+      ? { readonly token?: never }
+      : { readonly token?: Redacted.Redacted<string> }
     : never;
 
 // What `call` reads of its input when it knows nothing of the route's types: the three parts, each as it was given.
@@ -290,7 +413,11 @@ interface CallInput {
 // A key the Schema lacks is refused when encoding, and dropped when decoding: the caller reads only some fields of GitHub's.
 const ENCODING = { onExcessProperty: "error" } as const;
 
-const run = Effect.fn("github.call")(function* (op: AnyRoute, given: CallInput) {
+const run = Effect.fn("github.call")(function* (
+  op: AnyRoute,
+  given: CallInput,
+  options?: { readonly token?: Redacted.Redacted<string> },
+) {
   yield* Effect.annotateCurrentSpan({ "http.request.method": op.method, "kalfa.github.operation": op.route });
 
   const refuse = (side: "input" | "answer", message: string, cause?: unknown) =>
@@ -325,7 +452,11 @@ const run = Effect.fn("github.call")(function* (op: AnyRoute, given: CallInput) 
     );
 
   const query =
-    op.query === undefined ? {} : yield* encoded(op.query, given.query ?? {}, wire.TreeRecord, wire.pruneObject);
+    op.query === undefined
+      ? {}
+      : yield* encoded(op.query, given.query ?? {}, wire.TreeRecord, (tree) =>
+          Result.flatMap(wire.pruneObject(tree), wire.queryValues),
+        );
 
   const body =
     op.payload === undefined || given.payload === undefined
@@ -341,6 +472,13 @@ const run = Effect.fn("github.call")(function* (op: AnyRoute, given: CallInput) 
     params: filled.values,
     query,
     ...(body === undefined ? {} : { body }),
+    auth:
+      op.auth === "none"
+        ? Auth.None()
+        : options?.token === undefined
+          ? Auth.Login()
+          : Auth.Token({ token: options.token }),
+    ...(op.accept === undefined ? {} : { accept: op.accept }),
   });
 
   yield* Effect.annotateCurrentSpan({ "http.response.status_code": reply.status });
@@ -354,24 +492,32 @@ const run = Effect.fn("github.call")(function* (op: AnyRoute, given: CallInput) 
       return Option.none();
     }
 
-    const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(op.success))(reply.body).pipe(
-      Effect.mapError(refused("answer")),
-    );
+    // A text answer is read as the text it is, with no JSON step: a text that is also JSON stays a text.
+    const decoded = yield* Schema.decodeUnknownEffect(
+      op.body === "text" ? op.success : Schema.fromJsonString(op.success),
+    )(reply.body).pipe(Effect.mapError(refused("answer")));
 
     return op.bodiless === undefined ? decoded : Option.some(decoded);
   }
 
   if (reply.status >= 400 && reply.status < 500) {
-    const said = Option.getOrUndefined(wire.errorBody(reply.body));
+    const said = wire.errorBody(reply.body);
 
     return yield* new GitHubError({
       operation: op.route,
       reason: new ClientError({
         status: reply.status,
-        ...(said?.message === undefined ? {} : { message: said.message }),
-        ...(said?.documentation_url === undefined ? {} : { documentationUrl: said.documentation_url }),
-        ...(said?.errors === undefined ? {} : { errors: said.errors }),
+        ...(said.message === undefined ? {} : { message: said.message }),
+        ...(said.documentation_url === undefined ? {} : { documentationUrl: said.documentation_url }),
+        ...(said.errors === undefined ? {} : { errors: said.errors }),
       }),
+    });
+  }
+
+  if (reply.status >= 500 && reply.status < 600) {
+    return yield* new GitHubError({
+      operation: op.route,
+      reason: new ServerError({ status: reply.status, mayHaveApplied: wire.mayHaveApplied(op.method, true) }),
     });
   }
 
@@ -401,4 +547,5 @@ const run = Effect.fn("github.call")(function* (op: AnyRoute, given: CallInput) 
 export const call = run as <Op extends AnyRoute>(
   op: Op,
   input: Input<Op>,
+  options?: CallOptions<Op>,
 ) => Effect.Effect<Success<Op>, GitHubError | RateLimited, GitHub | Services<Op>>;
