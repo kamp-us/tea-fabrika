@@ -1674,14 +1674,14 @@ describe("a commit that names a .ts file runs its package's typecheck, as CI doe
     ] satisfies Array<[string, string, number]>) {
       withRepo(
         [
-          ["src/owned.ts", "tests"],
-          ["src/notes.md", "tests"],
+          ["src/owned.ts", "build"],
+          ["src/notes.md", "build"],
         ],
         (r) => {
           put(join(r.repo, "src/package.json"), '{"scripts":{"typecheck":"tsc --noEmit -p ."}}\n');
           r.changed(path, path.endsWith(".md") ? "notes\n" : 'export const value: string = "a";\n');
           r.env.T_TYPECHECK = verdict;
-          const got = r.commit("tests", [path], true);
+          const got = r.commit("build", [path], true);
           expect(got.code, got.text).toBe(code);
           const calls = join(r.dir, "calls");
           const ran = existsSync(calls) && readFileSync(calls, "utf8").includes("typecheck");
@@ -1694,6 +1694,23 @@ describe("a commit that names a .ts file runs its package's typecheck, as CI doe
           }
         },
       );
+    }
+  });
+
+  // Plant: run the gate for the tests step too.
+  it("scenario: a tests commit in a package that does not typecheck goes through; a build or lead commit in the same state is refused", () => {
+    for (const [step, code] of [
+      ["tests", 0],
+      ["build", 8],
+      ["lead", 8],
+    ] satisfies Array<[Step, number]>) {
+      withRepo([["src/owned.ts", step]], (r) => {
+        put(join(r.repo, "src/package.json"), '{"scripts":{"typecheck":"tsc --noEmit -p ."}}\n');
+        r.changed("src/owned.ts", 'export const value: string = "a";\n');
+        r.env.T_TYPECHECK = "fail";
+        const got = r.commit(step, ["src/owned.ts"], true);
+        expect(got.code, got.text).toBe(code);
+      });
     }
   });
 });
