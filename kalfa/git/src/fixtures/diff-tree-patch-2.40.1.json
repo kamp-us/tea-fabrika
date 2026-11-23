@@ -1,6 +1,6 @@
 {
   "git": "git version 2.40.1",
-  "command": "git diff-tree -r -z --no-renames <from> <to> for `raw` and git diff-tree -r -p -U0 --no-renames --no-ext-diff --no-textconv --full-index <from> <to> for `output`, on two commits made with hash-object, update-index and commit-tree in a bare repository",
+  "command": "git diff-tree -r -z --no-renames <from> <to> for `raw` and git diff-tree -r -p -U0 --no-renames --no-ext-diff --no-textconv --full-index <from> <to> for `output`, on two commits made with hash-object, update-index and commit-tree in a bare repository. The last three rows are the one-line row cut or bent by hand, each of which git never prints",
   "rows": [
     {
       "note": "nothing changed: no entry and no section",
@@ -544,7 +544,7 @@
       "output": "ZGlmZiAtLWdpdCAiYS9cMzAzXDI1MSB4IiAiYi9cMzAzXDI1MSB4IgppbmRleCA3ODk4MTkyMjYxM2IyYWZiNjAyNTA0MmZmNmJkODc4YWMxOTk0ZTg1Li5hYjE0NWVkZjhmMTQ4ZjVhOGQ3MmVlYTM1ZWNhZTcyMjk3OThhMjMwIDEwMDY0NAotLS0gImEvXDMwM1wyNTEgeCIJCisrKyAiYi9cMzAzXDI1MSB4IgkKQEAgLTEgKzEgQEAKLWEKK+kK",
       "expect": {
         "failure": "NotUtf8",
-        "path": "é x"
+        "path": "\u00e9 x"
       }
     },
     {
@@ -556,6 +556,30 @@
           "_tag": "Binary"
         }
       ]
+    },
+    {
+      "note": "derived from the one-line row: a patch with a partial row after its last section has no final newline, and that row is not dropped",
+      "raw": "OjEwMDY0NCAxMDA2NDQgZGU5ODA0NDFjM2FiMDNhOGMwN2RkYTFhZDI3YjhhMTFmMzlkZWIxZSA3YmU3M2NlM2MxYjFjZGFlYTg2ZTgxNjhkZmVlODU3NTE3NTk1M2JmIE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IGRlOTgwNDQxYzNhYjAzYThjMDdkZGExYWQyN2I4YTExZjM5ZGViMWUuLjdiZTczY2UzYzFiMWNkYWVhODZlODE2OGRmZWU4NTc1MTc1OTUzYmYgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMiArMiBAQCBhCi1iCitCCng=",
+      "expect": {
+        "failure": "Unreadable"
+      }
+    },
+    {
+      "note": "derived from the one-line row: a `\\ No newline` marker with no line before it, after a hunk side of zero lines",
+      "raw": "OjEwMDY0NCAxMDA2NDQgZGU5ODA0NDFjM2FiMDNhOGMwN2RkYTFhZDI3YjhhMTFmMzlkZWIxZSA3YmU3M2NlM2MxYjFjZGFlYTg2ZTgxNjhkZmVlODU3NTE3NTk1M2JmIE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IGRlOTgwNDQxYzNhYjAzYThjMDdkZGExYWQyN2I4YTExZjM5ZGViMWUuLjdiZTczY2UzYzFiMWNkYWVhODZlODE2OGRmZWU4NTc1MTc1OTUzYmYgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMCwwICsyIEBAIGEKXCBObyBuZXdsaW5lIGF0IGVuZCBvZiBmaWxlCitCCg==",
+      "expect": {
+        "failure": "Unreadable"
+      }
+    },
+    {
+      "note": "derived from the one-line row: a section that does not start with `diff --git`, its header lines replaced by one line of text",
+      "raw": "OjEwMDY0NCAxMDA2NDQgZGU5ODA0NDFjM2FiMDNhOGMwN2RkYTFhZDI3YjhhMTFmMzlkZWIxZSA3YmU3M2NlM2MxYjFjZGFlYTg2ZTgxNjhkZmVlODU3NTE3NTk1M2JmIE0AYQA=",
+      "output": "Z2FyYmFnZQpAQCAtMiArMiBAQCBhCi1iCitCCg==",
+      "expect": {
+        "failure": "Unreadable"
+      }
     }
   ]
 }

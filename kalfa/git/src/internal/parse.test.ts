@@ -236,6 +236,7 @@ const DiffTreePatch = Schema.Struct({
       expect: Schema.Union([
         Schema.Array(ModelDiff.Content),
         Schema.Struct({ failure: Schema.Literal("NotUtf8"), path: Schema.String }),
+        Schema.Struct({ failure: Schema.Literal("Unreadable") }),
       ]),
     }),
   ),
@@ -257,6 +258,8 @@ const unreadable = (result: Result.Result<unknown, Repository.GitUnavailable | R
 // fewer entries than the patch has sections still reads; stop a hunk at a line that looks like a header; name the last file in the
 // raw list and not the failing one; strip the line end of every line; number every line from 1, or a removed line in the new file;
 // decode a line with replacement, so the latin-1 rows read; read a binary file's bytes as lines; read a type change as one section.
+// A cut patch, a marker with no line before it and a section with no header are each unreadable: drop the final-newline check, the
+// no-line-before-the-marker check, or the section-header check.
 it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output recorded from git to the value its note gives, one section for each raw entry and two for a type change", () => {
   const recorded = Schema.decodeUnknownSync(DiffTreePatch)(diffTreePatch);
   expect(recorded.git).toContain("git version");
@@ -284,7 +287,7 @@ it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output 
   ).toBe(true);
 
   expect(
-    recorded.rows.filter((row) => "failure" in row.expect).length,
+    recorded.rows.filter((row) => "path" in row.expect).length,
     "the rows hold lines that are not UTF-8",
   ).toBeGreaterThanOrEqual(3);
 
@@ -301,7 +304,9 @@ it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output 
     if ("failure" in row.expect) {
       expect(Result.isFailure(result), `${row.note}: fails`).toBe(true);
 
-      if (Result.isFailure(result)) {
+      if (row.expect.failure === "Unreadable") {
+        expect(unreadable(result), `${row.note}: is unreadable`).toBe(true);
+      } else if (Result.isFailure(result)) {
         expectFailure(result.failure, Repository.NotUtf8, { path: row.expect.path }, row.note);
       }
 
