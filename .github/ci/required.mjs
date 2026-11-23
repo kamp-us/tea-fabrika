@@ -18,6 +18,9 @@
 // 7. A gated job, or changes, absent from `needs`: fails.
 // 8. `needs` that is not an object, or JSON that does not parse: fails.
 // 9. A matrix job (next) is one `needs` entry; GitHub folds its shards into one result.
+// 10. A `cancelled` job's line says why it may read so, since `stop the run` (check.yaml, ticket 990) cancels
+//     the run from a red job and GitHub then ends that red job `cancelled` too, not `failure`: the line
+//     sends the reader to the job's failed step. Run 45218308081 showed three cancelled jobs and no failed one.
 import { fileURLToPath } from "node:url";
 
 /** The jobs that may skip, each a key of `gates`. */
@@ -73,7 +76,16 @@ export const judge = (needs) => {
     const meant = empty || (flags.length > 0 && flags.every((flag) => field(outputs, flag) === "false"));
     const ok = result === "success" || (result === "skipped" && meant);
     const shown = typeof result === "string" && result !== "" ? result : "no result";
-    const note = result !== "skipped" ? "" : meant ? ", as changes said" : ", but it should have run";
+
+    const note =
+      result === "cancelled"
+        ? " (a newer push, or the red job's own stop step: open its failed step)"
+        : result !== "skipped"
+          ? ""
+          : meant
+            ? ", as changes said"
+            : ", but it should have run";
+
     lines.push(`${name}: ${shown}${note}, ${ok ? "pass" : "fail"}`);
     pass &&= ok;
   }

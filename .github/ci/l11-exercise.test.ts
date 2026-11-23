@@ -16,6 +16,11 @@ import L11Reporter, { Attribution, Metadata, causal } from "./l11-reporter.ts";
 
 const options = { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } };
 
+// Two laws took 16.6 and 17.8 s of CI's 60 s limit at 100 runs, so each runs as PARTS laws of 34 runs, which together are its full count.
+const PARTS = [1, 2, 3] as const;
+
+const third = { arbitrary: { runs: runsFor({ fast: 34, full: 34 }), size: 30, concurrency: 1 } };
+
 const integer = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 
 const Text = Schema.String.check(Schema.isPattern(/^[\x20-\x7e]*$/));
@@ -357,59 +362,62 @@ const trace = (secret: string): Exercise.Trace[] => {
 const stdout = (events: readonly Exercise.Trace[]) =>
   events.map((event) => Cases.tracePrefix + JSON.stringify(event)).join("\n");
 
-it.prop(
-  "private input equality compares complete ordered values and every changed point",
-  { secret: Text.check(Schema.isMaxLength(30)), mutation: integer(0, 5) },
-  ({ secret, mutation }) => {
-    // Plant: compare trace lengths only. This synthetic generator tests the comparator, never the real workload.
+for (const part of PARTS) {
+  it.prop(
+    "private input equality compares complete ordered values and every changed point" +
+      ` (part ${part} of ${PARTS.length})`,
+    { secret: Text.check(Schema.isMaxLength(30)), mutation: integer(0, 5) },
+    ({ secret, mutation }) => {
+      // Plant: compare trace lengths only. This synthetic generator tests the comparator, never the real workload.
 
-    const before = trace(secret);
-    const after = structuredClone(before);
-    const input = stdout(before);
-    expect(Result.isSuccess(Exercise.equality(input, stdout(after)))).toBe(true);
-    // Plant: accept identical text before validation. Equal inputs may both be invalid or incomplete.
+      const before = trace(secret);
+      const after = structuredClone(before);
+      const input = stdout(before);
+      expect(Result.isSuccess(Exercise.equality(input, stdout(after)))).toBe(true);
+      // Plant: accept identical text before validation. Equal inputs may both be invalid or incomplete.
 
-    for (const invalid of [
-      Cases.tracePrefix + JSON.stringify({ ...before[0], extra: secret }),
-      Cases.tracePrefix + JSON.stringify(secret),
-      stdout(before.slice(0, 1)),
-    ]) {
-      expect(Exercise.equality(invalid, invalid)).toEqual(Result.fail("trace_incomplete"));
-    }
+      for (const invalid of [
+        Cases.tracePrefix + JSON.stringify({ ...before[0], extra: secret }),
+        Cases.tracePrefix + JSON.stringify(secret),
+        stdout(before.slice(0, 1)),
+      ]) {
+        expect(Exercise.equality(invalid, invalid)).toEqual(Result.fail("trace_incomplete"));
+      }
 
-    const at = after.findIndex((event) => event._tag === "pick");
-    const pick = after[at];
+      const at = after.findIndex((event) => event._tag === "pick");
+      const pick = after[at];
 
-    if (pick?._tag !== "pick") {
-      throw new Error("no generated pick");
-    }
+      if (pick?._tag !== "pick") {
+        throw new Error("no generated pick");
+      }
 
-    switch (mutation) {
-      case 0:
-        after[at] = { ...pick, pick: { ...pick.pick, point: pick.pick.point + Cases.storagePaths.length } };
-        break;
-      case 1:
-        after[at] = { ...pick, pick: { ...pick.pick, encoding: 2 }, marker: encodeURIComponent(secret) };
-        break;
-      case 2:
-        after[at] = { ...pick, cut: { ...pick.cut, operation: pick.cut.operation + 1 } };
-        break;
-      case 3:
-        after[at] = { ...pick, marker: `${pick.marker}x` };
-        break;
-      case 4:
-        after[at] = { ...pick, repeat: !pick.repeat };
-        break;
-      default:
-        after.pop();
-        break;
-    }
+      switch (mutation) {
+        case 0:
+          after[at] = { ...pick, pick: { ...pick.pick, point: pick.pick.point + Cases.storagePaths.length } };
+          break;
+        case 1:
+          after[at] = { ...pick, pick: { ...pick.pick, encoding: 2 }, marker: encodeURIComponent(secret) };
+          break;
+        case 2:
+          after[at] = { ...pick, cut: { ...pick.cut, operation: pick.cut.operation + 1 } };
+          break;
+        case 3:
+          after[at] = { ...pick, marker: `${pick.marker}x` };
+          break;
+        case 4:
+          after[at] = { ...pick, repeat: !pick.repeat };
+          break;
+        default:
+          after.pop();
+          break;
+      }
 
-    expect(Result.isFailure(Exercise.equality(input, stdout(after)))).toBe(true);
-    expect(Result.isFailure(Exercise.equality(input, ""))).toBe(true);
-  },
-  options,
-);
+      expect(Result.isFailure(Exercise.equality(input, stdout(after)))).toBe(true);
+      expect(Result.isFailure(Exercise.equality(input, ""))).toBe(true);
+    },
+    third,
+  );
+}
 
 it.prop(
   "ten declared slots retain the first failure and reject replacement attempts",
@@ -1234,57 +1242,60 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
   );
 });
 
-it.effect.prop(
-  "fixed observer bytes parse and round-trip both exact source variants before any execution",
-  { variant: Cases.Variant, extra: Text.check(Schema.isMinLength(1), Schema.isMaxLength(30)) },
-  ({ variant, extra }) =>
-    Effect.gen(function* () {
-      // Plant: remove an observer edit or accept a changed original source digest.
-      // Repository bytes are read only. Neither the source law nor a child process is started.
-      const uncached = originalSource("uncached");
-      const cached = originalSource("cached");
+for (const part of PARTS) {
+  it.effect.prop(
+    "fixed observer bytes parse and round-trip both exact source variants before any execution" +
+      ` (part ${part} of ${PARTS.length})`,
+    { variant: Cases.Variant, extra: Text.check(Schema.isMinLength(1), Schema.isMaxLength(30)) },
+    ({ variant, extra }) =>
+      Effect.gen(function* () {
+        // Plant: remove an observer edit or accept a changed original source digest.
+        // Repository bytes are read only. Neither the source law nor a child process is started.
+        const uncached = originalSource("uncached");
+        const cached = originalSource("cached");
 
-      const source = variant === "cached" ? cached : uncached;
-      const original = new Map([[Cases.file, source]]);
-      const request = Cases.Request.make({ case: "l11-inputs", sha: Cases.cached });
+        const source = variant === "cached" ? cached : uncached;
+        const original = new Map([[Cases.file, source]]);
+        const request = Cases.Request.make({ case: "l11-inputs", sha: Cases.cached });
 
-      const result = yield* Effect.gen(function* () {
-        const digest = yield* Digest.Digest;
-        expect(yield* digest.digestHex(Digest.sha256, source)).toBe(Cases.sources[variant].law);
-        const prepared = yield* Cases.prepare(request, variant, original);
-        expect(Result.isSuccess(prepared)).toBe(true);
+        const result = yield* Effect.gen(function* () {
+          const digest = yield* Digest.Digest;
+          expect(yield* digest.digestHex(Digest.sha256, source)).toBe(Cases.sources[variant].law);
+          const prepared = yield* Cases.prepare(request, variant, original);
+          expect(Result.isSuccess(prepared)).toBe(true);
 
-        if (Result.isFailure(prepared)) {
-          return yield* Effect.die("observer refused original bytes");
-        }
+          if (Result.isFailure(prepared)) {
+            return yield* Effect.die("observer refused original bytes");
+          }
 
-        const changed = prepared.success.get(Cases.file)!;
-        expect(parseSync("observer.ts", new TextDecoder().decode(changed)).errors).toEqual([]);
+          const changed = prepared.success.get(Cases.file)!;
+          expect(parseSync("observer.ts", new TextDecoder().decode(changed)).errors).toEqual([]);
 
-        const reversed = Cases.derive(
-          new Map([[Cases.file, changed]]),
-          Cases.observer(variant)
-            .toReversed()
-            .map((edit) => ({ ...edit, before: edit.after, after: edit.before })),
-        );
+          const reversed = Cases.derive(
+            new Map([[Cases.file, changed]]),
+            Cases.observer(variant)
+              .toReversed()
+              .map((edit) => ({ ...edit, before: edit.after, after: edit.before })),
+          );
 
-        expect(Result.isSuccess(reversed)).toBe(true);
+          expect(Result.isSuccess(reversed)).toBe(true);
 
-        if (Result.isSuccess(reversed)) {
-          expect(reversed.success.get(Cases.file)).toEqual(source);
-        }
+          if (Result.isSuccess(reversed)) {
+            expect(reversed.success.get(Cases.file)).toEqual(source);
+          }
 
-        return yield* Cases.prepare(
-          request,
-          variant,
-          new Map([[Cases.file, new Uint8Array([...source, ...bytes(extra)])]]),
-        );
-      }).pipe(Effect.provide(Digest.layerWebCrypto));
+          return yield* Cases.prepare(
+            request,
+            variant,
+            new Map([[Cases.file, new Uint8Array([...source, ...bytes(extra)])]]),
+          );
+        }).pipe(Effect.provide(Digest.layerWebCrypto));
 
-      expect(Result.isFailure(result)).toBe(true);
-    }),
-  options,
-);
+        expect(Result.isFailure(result)).toBe(true);
+      }),
+    third,
+  );
+}
 
 it.prop(
   "causal metadata recognizes real wrapped final assertions and refuses unrelated failures",

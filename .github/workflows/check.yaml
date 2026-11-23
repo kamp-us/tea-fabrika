@@ -252,8 +252,10 @@ jobs:
       # group 1199 (run 43633120187) waited about 10 minutes behind a lint that failed at 43 s.
       # `failure()` is true once an earlier step of this job failed (a `continue-on-error` step does
       # not count). A normal cancel, never `force-cancel`, so ci-required's `always()` keeps it
-      # running, and it reports failure: the red job's own result is `failure`, the others end
-      # `cancelled` or skip without their flag, and required.mjs passes none of those. A push to main
+      # running, and it reports failure: every job still running ends `cancelled`, the red job too
+      # (GitHub ends the job that asks for the cancel `cancelled` as well, with its failed step still
+      # `failure`, run 45218308081), or skips without its flag, and required.mjs passes none of those and
+      # tells a cancelled job's reader to open its failed step. A push to main
       # runs to the end, one whole answer per commit. Every other job ends with this same step, the
       # anchor below; workflow-lint.ts holds it there, last, in every job but ci-required.
       - &stop

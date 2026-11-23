@@ -53,10 +53,17 @@ const listed = spawnSync("git", ["ls-files", "-z", "--", "kalfa"], {
   maxBuffer: 2 ** 30,
 });
 
+if (listed.error !== undefined || listed.status !== 0 || typeof listed.stdout !== "string") {
+  const why = listed.error?.message ?? listed.stderr;
+
+  console.error(`law-ids: git could not list the files in ${root}.\n${why}`);
+  process.exit(2);
+}
+
 const tracked = listed.stdout.split("\0").filter((file) => file !== "");
 
-if (listed.status !== 0 || tracked.length === 0) {
-  console.error(`law-ids: git found no files to check.\n${listed.stderr}`);
+if (tracked.length === 0) {
+  console.error(`law-ids: git found no files to check in ${root}.\n${listed.stderr}`);
   process.exit(2);
 }
 
