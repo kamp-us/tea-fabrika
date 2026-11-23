@@ -50,7 +50,8 @@ this skill for the law. The reviewer reads that law on its recheck.
    - A test's kind follows what it uses, never its name. A law that starts or
      reaches a real thing (a real instance, workerd, Electron or a browser, a child process, a real
      signal, a port, the network) or writes to local disk (a SQLite file, a temp folder) is a
-     `*.integration.test.ts` file and runs only in the full run. A law that reads the repository's
+     `*.integration.test.ts` file and runs in the full run, and in a proof run the lead starts
+     that reaches or names it, never on a pull request. A law that reads the repository's
      files or runs on in-memory stand-ins is plain, in next/ and in tooling alike, and runs on every
      pull request its change reaches. `fabrika/integration-test-name` holds the name. Open a real SQLite file only through
      `TestDatabase` in `@kampus/vitest`. A law that can run on a stand-in runs on every pull

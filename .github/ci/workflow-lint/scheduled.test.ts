@@ -318,7 +318,7 @@ const remap = (w: Workflow, change: (main: Record<string, string>, proof: Record
 
 // SC18's message, which a scenario on the next limit expects beside SC13's.
 const CHANGED_RULE =
-  "SC18: changed runs only when select said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (integration laws run only in main's full run), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
+  "SC18: changed runs only when select said changed with a leg, each leg its own list over proof.ts's projects, both integration projects among them, at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
 
 it("pinned: the real scheduled.yaml passes, against the real check.yaml", () => {
   expect(lintScheduled(read("scheduled.yaml"), check)).toEqual([]);
@@ -1293,6 +1293,15 @@ const plants: [string, (w: Workflow) => void][] = [
   // seven: the literal, the two bare names, the two swapped and the github.event.inputs read).
   ["SC17: select's step has no SCOPE", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "SCOPE")],
   ["SC17: select's step has no LAW", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "LAW")],
+  [
+    "SC17: select's step has no INTEGRATION",
+    (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "INTEGRATION"),
+  ],
+  [
+    "SC17: INTEGRATION is the bare text inputs.integration",
+    (w) => (step(w, "select", "set").env!["INTEGRATION"] = "inputs.integration"),
+  ],
+  ["SC17: INTEGRATION reads the law", (w) => (step(w, "select", "set").env!["INTEGRATION"] = `\${{ inputs.law }}`)],
   ["SC17: SCOPE is the literal full", (w) => (step(w, "select", "set").env!["SCOPE"] = "full")],
   // A bare name is text, not a read: the step would get the words `inputs.scope`, not the input.
   ["SC17: SCOPE is the bare text inputs.scope", (w) => (step(w, "select", "set").env!["SCOPE"] = "inputs.scope")],
@@ -1308,7 +1317,7 @@ const plants: [string, (w: Workflow) => void][] = [
       [env["SCOPE"], env["LAW"]] = [env["LAW"], env["SCOPE"]];
     },
   ],
-  ["SC17: select's step gets a seventh env key", (w) => (step(w, "select", "set").env!["EXTRA"] = "x")],
+  ["SC17: select's step gets an eighth env key", (w) => (step(w, "select", "set").env!["EXTRA"] = "x")],
   // SC21, ticket 1161: the hand start's two inputs. Plants, each run once on scheduled.ts and restored:
   // SC21's input check dropped (red on each of these).
   ["SC21: the scope default is full", (w) => (hand(w)["scope"]!["default"] = "full")],
@@ -1319,7 +1328,17 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC21: the scope is not required", (w) => (hand(w)["scope"]!["required"] = false)],
   ["SC21: the scope has no description", (w) => Reflect.deleteProperty(hand(w)["scope"]!, "description")],
   ["SC21: the law has no description", (w) => Reflect.deleteProperty(hand(w)["law"]!, "description")],
-  ["SC21: a third input", (w) => (hand(w)["extra"] = { type: "string", required: false, default: "" })],
+  ["SC21: a fourth input", (w) => (hand(w)["extra"] = { type: "string", required: false, default: "" })],
+  // The named integration files (the owner decided on 2026-11-22): text, empty by default, so a hand
+  // start names none unless the lead does.
+  ["SC21: the integration input is missing", (w) => Reflect.deleteProperty(hand(w), "integration")],
+  ["SC21: the integration is required", (w) => (hand(w)["integration"]!["required"] = true)],
+  [
+    "SC21: the integration has a default of a path",
+    (w) => (hand(w)["integration"]!["default"] = "kalfa/git/src/ProcessRepository.integration.test.ts"),
+  ],
+  ["SC21: the integration has no description", (w) => Reflect.deleteProperty(hand(w)["integration"]!, "description")],
+  ["SC21: the integration is a choice", (w) => (hand(w)["integration"]!["type"] = "choice")],
   ["SC21: the law input is missing", (w) => Reflect.deleteProperty(hand(w), "law")],
   ["SC21: the law is required", (w) => (hand(w)["law"]!["required"] = true)],
   ["SC21: the law has a default of a path", (w) => (hand(w)["law"]!["default"] = ".github/ci/proof.test.ts")],
@@ -1429,14 +1448,23 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC18: the changed legs start on a set of zero files",
     (w) => (w.jobs["changed"]!["if"] = "needs.gate.outputs.start == 'true' && needs.select.outputs.scope == 'changed'"),
   ],
-  // Integration laws run only in main's full run: a changed leg runs no real-resource law, so it names no next-integration project.
+  // The owner decided on 2026-11-22 that a proof run the lead starts runs the integration laws its
+  // changed set reaches, or the ones it names: a changed leg runs both integration projects.
   // proof.test.ts holds the same list against proof.ts's PROJECTS.
   [
-    "SC18: a changed leg runs the real-resource laws, which only main's full run runs",
+    "SC18: a changed leg drops next-integration, so the real-resource laws its change reaches never run",
     (w) =>
       (step(w, "changed", "vitest")["run"] = String(step(w, "changed", "vitest")["run"]).replace(
-        "--project next ",
-        "--project next --project next-integration ",
+        "--project next-integration ",
+        "",
+      )),
+  ],
+  [
+    "SC18: a changed leg drops tooling-integration, so the tooling laws that start a process never run",
+    (w) =>
+      (step(w, "changed", "vitest")["run"] = String(step(w, "changed", "vitest")["run"]).replace(
+        "--project tooling-integration ",
+        "",
       )),
   ],
   [
@@ -1808,14 +1836,15 @@ effectIt.prop(
   { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } },
 );
 
-it("S12 scenario: on the real scheduled.yaml the only reads of the inputs are select's SCOPE and LAW, and a read added to tests's if is named by SC15 and SC21", () => {
+it("S12 scenario: on the real scheduled.yaml the only reads of the inputs are select's SCOPE, LAW and INTEGRATION, and a read added to tests's if is named by SC15 and SC21", () => {
   // Plant, run once on scheduled.ts and restored: SC21's read check dropped (red: the plant gives
   // SC15's error alone).
   const w = real();
   expect(lint(w)).toEqual([]);
-  expect(JSON.stringify(w.jobs).match(/\binputs\b/g)).toHaveLength(2);
+  expect(JSON.stringify(w.jobs).match(/\binputs\b/g)).toHaveLength(3);
   expect(step(w, "select", "set").env!["SCOPE"]).toContain("inputs.scope");
   expect(step(w, "select", "set").env!["LAW"]).toContain("inputs.law");
+  expect(step(w, "select", "set").env!["INTEGRATION"]).toContain("inputs.integration");
 
   w.jobs["tests"]!["if"] = `${String(w.jobs["tests"]!["if"]).replace(/ \}\}$/, "")} && inputs.scope != 'changed' }}`;
   const errors = lint(w);
