@@ -6,7 +6,8 @@ an answer field.
 
 This package has no area of GitHub in it (no pull requests, no check runs). It holds two things: declaring an operation with
 `GitHub.route`, and calling it with `GitHub.call`. A caller declares the operations it needs, with only the fields it reads.
-There is no live Layer yet: `call` sends through the `GitHub` service, and a program provides one; the fake below is one.
+`call` sends through the `GitHub` service, and a program provides one: the live Layer below reaches the real GitHub, and the fake
+further down answers a test.
 
 ## Declare an operation
 
@@ -109,6 +110,49 @@ reaches a trace.
 Each call runs in one span, `github.call`, with `http.request.method`, `kalfa.github.operation` (the route text) and, once a
 reply came, `http.response.status_code`. No path, query, header or value is put in it. The package never logs and never
 prints.
+
+## Call the real GitHub
+
+`@kalfa/github/live` gives `GitHubLive.layer({ login, settings })`, a `Layer<GitHub, never, HttpClient>`. The app provides the HTTP
+client, such as `FetchHttpClient.layer`.
+
+```ts
+import * as GitHub from "@kalfa/github";
+import * as GitHubLive from "@kalfa/github/live";
+import * as GitHubSettings from "@kalfa/github/Settings";
+import { SettingGroup } from "@kalfa/config";
+import { FetchHttpClient } from "effect/http";
+import { Effect, Layer, Redacted } from "effect";
+
+// The app joins GitHub's settings into its own group: github.api-url, github.poll-interval and github.redirects.
+const group = SettingGroup.make("demo", ...GitHubSettings.all);
+
+const live = Layer.unwrap(
+  Effect.map(group, (settings) =>
+    GitHubLive.layer({ login: new GitHub.Login.Token({ token: Redacted.make(handedIn) }), settings }),
+  ),
+).pipe(Layer.provide(FetchHttpClient.layer));
+```
+
+- **The settings** are checked when the app starts, so a wrong value stops it with its file and line. `github.api-url` is an
+  https address with no user, password, query or fragment (default `https://api.github.com`, or `https://<host>/api/v3` for
+  GitHub Enterprise Server). `github.poll-interval` is a length of time (default `30 seconds`). `github.redirects` is how many
+  redirects one call follows, 0 to 20 (default 20). The Layer takes only a value that passed, so a plain text does not compile.
+- **The login** is `GitHub.Login.Token`, a plain token held as a `Redacted`. Nothing is checked or sent when the Layer is built.
+- **Each request** goes with `accept` (the route's, else `application/vnd.github+json`), `X-GitHub-Api-Version`
+  (`GitHub.apiVersion`), `User-Agent: kalfa-github`, `Authorization: Bearer <token>` unless the route sends nobody, and a JSON
+  body with its content type when it has one. A query list is sent as its key repeated.
+- **A token a header cannot carry** (not RFC 6750's `token68`) fails the call as `Undecodable` input, naming no part of it, before
+  anything is sent: Node's `fetch` would put the token in its own error message.
+- **A redirect** is followed by the client, never by `fetch`. Once a hop leaves the address's origin (another host, scheme or
+  port), no later request carries `authorization`, `proxy-authorization` or `cookie`, even one back on GitHub's origin. A chain
+  longer than `github.redirects` ends as `Undecodable` answer naming the 3xx.
+- **What never shows the token:** no URL, no span, no log line, no error and no property of one. No client span is made, so no
+  span holds a path or a query, and no trace header goes to GitHub. A request that got no answer fails as `Unavailable`, whose
+  cause is what `fetch` raised and never the HTTP client's error, which holds the request's headers.
+
+The real GitHub is read once per run by `GitHubLive.integration.test.ts`, anonymously: an anonymous read of a repo, `/zen` and
+a missing repo. It skips, with its reason, when GitHub's limit of 60 an hour for the address is used up.
 
 ## Test a caller
 
