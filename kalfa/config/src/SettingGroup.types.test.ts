@@ -10,7 +10,10 @@
 // - T2: make `SettingGroup.Read` give `A` for a live setting, or make `Live<A>` an intersection with `A`.
 // - T3: make the group a `Config` that reads the current provider, so its requirements are `never`.
 // - T4: type `Setting.files` as `(files: ReadonlyArray<string>)`.
-// - T5: add `"person"` to `Setting.File`.
+// - T5: add `"person"` to `Setting.File`; ticket 1843 slice 2 (the reasons are eight, `edit` added): leave `"edit"` out
+//   of `SettingsError`'s literals.
+// - T7 (ticket 1843, slice 2): type `SettingGroup.edit`'s `set` as taking `setting: Setting.Any`, so the
+//   `@ts-expect-error` for another group's setting is unused.
 // - T6, one at a time, each on `Declaration.ts`: (a) type `make`'s schema as `C` again; (b) drop the brand line of
 //   `NotPlain`; (c) drop its "met before" check; (d) compare with "assignable one way" in place of `Same`; (e) answer
 //   `T` whole at the record line.
@@ -188,11 +191,11 @@ it("T4 type: a default of the wrong type, an empty or misnamed file list, a seco
   expectTypeOf<typeof Setting.files>().parameter(0).toEqualTypeOf<Setting.Files>();
 });
 
-it("T5 type: the layer's only error is SettingsError with its seven reasons, and a file is the repo's or the user's", () => {
+it("T5 type: the layer's only error is SettingsError with its eight reasons, and a file is the repo's or the user's", () => {
   expectTypeOf<Layer.Error<typeof demoLayer>>().toEqualTypeOf<SettingGroup.SettingsError>();
   expectTypeOf<Layer.Services<typeof demoLayer>>().toEqualTypeOf<FileSystem.FileSystem | Path.Path>();
   expectTypeOf<SettingGroup.SettingsError["reason"]>().toEqualTypeOf<
-    "version" | "syntax" | "unknown" | "scope" | "invalid" | "missing" | "read"
+    "version" | "syntax" | "unknown" | "scope" | "invalid" | "missing" | "read" | "edit"
   >();
   expectTypeOf<Setting.File>().toEqualTypeOf<"repo" | "user">();
 });
@@ -288,4 +291,48 @@ it("T6 type: a setting's value is plain data, and the part that is not is named"
     Setting.NotPlain<{ readonly commits: number; readonly time: Duration.Duration }>
   >().toEqualTypeOf<Duration.Duration>();
   expectTypeOf<Setting.NotPlain<{ readonly a: number; readonly b: ReadonlyArray<string> }>>().toEqualTypeOf<never>();
+});
+
+// T7: the edit in memory. `SettingGroup.edit(group, text, file)` answers a `set` and a `remove`, each an Effect of the
+// new text that fails only with `SettingsError` and needs nothing (Amendment 1: an Effect, as Markdown's set is, in place
+// of a `Result`). A setting of another group, a value of the wrong type and a file that is not the repo's or the user's
+// are lines that must not compile; this function is never called, and it hands every expression back.
+const editing = SettingGroup.edit(group, "", "repo");
+
+const elsewhere = Setting.make("elsewhere.port", Port).pipe(
+  Setting.withDefault(1),
+  Setting.withDescription("A port of another group."),
+);
+
+const edits = () => [
+  // @ts-expect-error T7: a setting of another group is not set through this group's edit
+  editing.set(elsewhere, 1),
+
+  // @ts-expect-error T7: a setting of another group is not removed through this group's edit
+  editing.remove(elsewhere),
+
+  // @ts-expect-error T7: a port is a number, not text
+  editing.set(port, "eighteen"),
+
+  // @ts-expect-error T7: a live setting of the group takes its own value type
+  editing.set(carry, "owner"),
+
+  // @ts-expect-error T7: a file is the repo's or the user's, never a person's
+  SettingGroup.edit(group, "", "person"),
+];
+
+it("T7 type: a set and a remove each answer an Effect of the text, failing only with SettingsError and needing nothing, and the wrong setting, value or file does not compile", () => {
+  expectTypeOf(edits).toBeFunction();
+  expectTypeOf<ReturnType<typeof editing.set<typeof port>>>().toEqualTypeOf<
+    Effect.Effect<string, SettingGroup.SettingsError>
+  >();
+  expectTypeOf<ReturnType<typeof editing.set<typeof carry>>>().toEqualTypeOf<
+    Effect.Effect<string, SettingGroup.SettingsError>
+  >();
+  expectTypeOf<ReturnType<typeof editing.remove>>().toEqualTypeOf<Effect.Effect<string, SettingGroup.SettingsError>>();
+  expectTypeOf<Effect.Services<ReturnType<typeof editing.set<typeof port>>>>().toEqualTypeOf<never>();
+  expectTypeOf<Effect.Services<ReturnType<typeof editing.remove>>>().toEqualTypeOf<never>();
+  expectTypeOf<ReturnType<typeof SettingGroup.edit<"demo", typeof group.settings>>>().toEqualTypeOf<
+    SettingGroup.Edit<typeof group.settings>
+  >();
 });
