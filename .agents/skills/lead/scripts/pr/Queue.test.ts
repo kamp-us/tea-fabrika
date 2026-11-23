@@ -318,6 +318,104 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
   );
 });
 
+describe("body: a `fabrika close ticket <N>` line must name an open tracker ticket, so the merge closes it (a merge closes only the tickets its pull request names with our own phrase)", () => {
+  /** What `body` answers for a description, with these open tracker tickets and open GitHub issues. */
+  const checked = (
+    text: string,
+    w: { open?: ReadonlyArray<number>; issues?: ReadonlyArray<number>; failing?: World["failing"] } = {},
+  ) => {
+    const m = memory({ open: w.open ?? [], more: { body: text }, ...(w.failing ? { failing: w.failing } : {}) });
+
+    for (const n of w.issues ?? []) {
+      m.github.issues.add(n);
+    }
+
+    return Queue.body(".", { number: 900, title: "T1: a title", body: text }).pipe(
+      Effect.provide(m.layer),
+      Effect.result,
+    );
+  };
+
+  // Plants: let a line pass whose number is no open tracker ticket (the 2009 and 2004 mistake: 1843 and 1841 were GitHub issues), or name `Closes #N` in the refusal only when the issue is open.
+  it.effect.prop(
+    "property: each named number is accepted only when it is an open tracker ticket; any other is refused by name, and says `Closes #N` when it is an open GitHub issue",
+    {
+      tracker: Schema.Boolean,
+      issue: Schema.Boolean,
+    },
+    ({ tracker, issue }) =>
+      Effect.gen(function* () {
+        const got = yield* checked("What it does.\n\nfabrika close ticket 1843\n", {
+          open: tracker ? [1843] : [5],
+          issues: issue ? [1843] : [],
+        });
+
+        if (tracker) {
+          expect(got).toMatchObject({ _tag: "Success", success: null });
+
+          return;
+        }
+
+        const said = got._tag === "Success" ? String(got.success) : "";
+        expect(said).toContain("fabrika close ticket 1843: 1843 is ");
+        expect(said.includes("an open GitHub issue, not a tracker ticket; close it with a line `Closes #1843`")).toBe(
+          issue,
+        );
+        expect(said.includes("is not an open tracker ticket (closed, or no such ticket)")).toBe(!issue);
+      }),
+  );
+
+  it.effect(
+    "scenario: a body with no close line never reads the tracker or the issues; each bad line is named once",
+    () =>
+      Effect.gen(function* () {
+        const m = memory({ open: [7] });
+
+        const plain = yield* Queue.body(".", {
+          number: 900,
+          title: "t",
+          body: "Closes #1843\nfabrika close ticket 5x",
+        }).pipe(Effect.provide(m.layer));
+
+        expect(plain).toBeNull();
+        expect(m.tracker.posts).toEqual([]);
+
+        const two = yield* checked("fabrika close ticket 7\nfabrika close ticket 1843\nfabrika close ticket 99\n", {
+          open: [7],
+          issues: [1843],
+        });
+
+        const said = two._tag === "Success" ? String(two.success) : "";
+        expect(said).toContain("fabrika close ticket 1843: 1843 is an open GitHub issue");
+        expect(said).toContain("fabrika close ticket 99: 99 is not an open tracker ticket");
+        expect(said).not.toContain("fabrika close ticket 7:");
+      }),
+  );
+
+  // Plant: pass the body when the tracker cannot be read, or when the issue list cannot.
+  it.effect("scenario: an unreadable tracker refuses the body, and an unreadable issue list fails the check", () =>
+    Effect.gen(function* () {
+      const text = "fabrika close ticket 5\n";
+      const dark = yield* checked(text, { failing: { tickets: { open: "tracker offline" } } });
+      expect(dark._tag === "Success" ? String(dark.success) : "").toContain("cannot read the tracker");
+      const noIssues = yield* checked(text, { open: [], failing: { prs: { openIssues: "gh: offline" } } });
+      expect(noIssues._tag).toBe("Failure");
+    }),
+  );
+
+  // Plant: check the body in `add` only, so `land.ts check` passes a body that `queue` refuses.
+  it.effect("scenario: add refuses such a body with the same words, and asks no merge", () =>
+    Effect.gen(function* () {
+      const m = memory({ more: { body: "What it does.\n\nfabrika close ticket 1843\n" } });
+      m.github.issues.add(1843);
+      const refused = yield* Effect.flip(add(m));
+      expect(refused).toMatchObject({ _tag: "NotQueued" });
+      expect(refused._tag === "NotQueued" ? refused.reason : "").toContain("close it with a line `Closes #1843`");
+      expect(m.github.calls).toEqual([]);
+    }),
+  );
+});
+
 describe("settle: a merged pull request closes the tickets it names (a merge closes only the tickets its pull request names with our own phrase, T410)", () => {
   const phrase = /^[ \t]*fabrika close ticket [0-9]+[ \t]*$/;
   const note = `Closed by the merge of https://github.com/${repo}/pull/900, merge commit ${merged}.\n`;

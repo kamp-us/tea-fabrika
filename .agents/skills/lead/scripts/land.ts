@@ -43,7 +43,7 @@
 //
 //   land.ts check <pr>
 //     the lead session, after it writes a pull request's body and before `queue`: runs exactly the body checks `queue`
-//     runs (Queue.body: the leak grep on the title and description, and each new exported name named under `## New names`),
+//     runs (Queue.body: the leak grep on the title and description, each new exported name named under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket),
 //     one function shared with `queue`. Changes nothing. Prints each missing name with the file it comes from and exits 1
 //     on any refusal; else prints one line and exits 0.
 //
@@ -729,8 +729,8 @@ const queueCommand = Command.make(
   }),
 );
 
-// The body checks `queue` runs, alone: the leak grep on the title and description, and each new exported name named
-// under `## New names`. A lead runs it after writing a body and before `queue`; it asks GitHub for reads only and changes nothing.
+// The body checks `queue` runs, alone: the leak grep on the title and description, each new exported name named
+// under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket. A lead runs it after writing a body and before `queue`; it asks GitHub for reads only and changes nothing.
 const checkCommand = Command.make(
   "check",
   { pr: PrNumber },
@@ -742,7 +742,13 @@ const checkCommand = Command.make(
 
       return { found, refusal: yield* Queue.body(env.MAIN, found) };
     }).pipe(
-      Effect.provide(Layer.merge(PullRequestsGh.layer(env.GH_REPO, env.MAIN), PushesProcess.layer(HERE))),
+      Effect.provide(
+        Layer.mergeAll(
+          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+          PushesProcess.layer(HERE),
+          TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
+        ),
+      ),
       Effect.mapError(
         (e) => new Refused({ check: e instanceof LeakGrepRefused ? "leak" : "body", reason: e.reason, output: "" }),
       ),
@@ -752,7 +758,9 @@ const checkCommand = Command.make(
       return yield* new Refused({ check: "body", reason: `pr ${pr}: ${checked.refusal}`, output: "" });
     }
 
-    yield* Console.log(`pr ${pr}: the body checks pass (leak grep on the title and description, ## New names)`);
+    yield* Console.log(
+      `pr ${pr}: the body checks pass (leak grep on the title and description, ## New names, fabrika close ticket lines)`,
+    );
   }),
 );
 

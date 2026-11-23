@@ -6,7 +6,9 @@
 //                               run in the checkout; one line on stdout, exit 0 pushed, 1 refused
 //
 // A new draft takes `--title` and the text of `--body-file` when they are given, else the first commit's
-// subject and a placeholder; a pull request already open keeps its own words. pr/Publish.ts says what it does. GH_REPO (owner/name) names the repo, else the checkout's origin.
+// subject and a placeholder. A pull request already open keeps its own words unless `--title` or `--body-file`
+// is given: then it takes that title and that body, and a part not given stays as it is. Its draft state never
+// changes. The given words are leak-grepped first. pr/Publish.ts says what it does. GH_REPO (owner/name) names the repo, else the checkout's origin.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Layer } from "effect";
 import { run } from "./pr/command.ts";
@@ -48,7 +50,12 @@ const main = Effect.fn("publish.main")(function* (asked: Publish.Words) {
 
   const text = Publish.draftText(title, asked, body);
 
-  const published = yield* Publish.publish({ dir, branch, head, text }).pipe(
+  const given = {
+    ...(asked.title === null ? {} : { title: asked.title }),
+    ...(body === null ? {} : { body }),
+  };
+
+  const published = yield* Publish.publish({ dir, branch, head, text, given }).pipe(
     Effect.provide(services),
     Effect.map((p) => ({ ok: true, line: Publish.line(branch, p) })),
     Effect.catch((e) => Effect.succeed({ ok: false, line: `refused: ${e.reason}` })),
