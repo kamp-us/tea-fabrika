@@ -80,6 +80,19 @@ const rooted: Effect.Effect<number, Root.SettingGroup.SettingsError, FileSystem.
   },
 ).pipe(Effect.provide(Root.SettingGroup.layer(declaredGroup, { version: "1.2.3" })));
 
+// The edit in memory: a set and a remove each answer the file's new text, or the one error, with nothing required.
+const edited: Effect.Effect<string, Root.SettingGroup.SettingsError> = Root.SettingGroup.edit(
+  declaredGroup,
+  "[service]\nport = 4100\n",
+  "repo",
+).set(declared, 4200);
+
+const removed: Effect.Effect<string, Root.SettingGroup.SettingsError> = Root.SettingGroup.edit(
+  declaredGroup,
+  "[service]\nport = 4100\n",
+  "user",
+).remove(declared);
+
 const refusals: [typeof Private, typeof Test] | null = null;
 
-void [checked, rooted, Sources, Toml, Codec, JsonSchema, refusals];
+void [checked, rooted, edited, removed, Sources, Toml, Codec, JsonSchema, refusals];

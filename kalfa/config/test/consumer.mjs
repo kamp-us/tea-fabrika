@@ -112,6 +112,14 @@ const rooted = Effect.gen(function* () {
   ),
 );
 
+// The edit in memory, from the installed archive: one value's text changes, and the comment after it stays.
+const edited = Root.SettingGroup.edit(declaredGroup, "[service]\nport = 4100   # the port\n", "repo");
+
+// edge: this fixture is the installed Node ESM client, outside the Effect test runner.
+assert.equal(await Effect.runPromise(edited.set(declared, 4200)), "[service]\nport = 4200   # the port\n");
+
+assert.equal(await Effect.runPromise(edited.remove(declared)), "[service]\n   # the port\n");
+
 // edge: this fixture is the installed Node ESM client, outside the Effect test runner.
 await Effect.runPromise(runtime);
 
@@ -122,4 +130,4 @@ for (const name of ["internal/edit", "internal/start", "internal/document", "App
   await assert.rejects(import(`@kalfa/config/${name}`), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
 }
 
-console.log(JSON.stringify({ runtime: "passed", imports: "passed", private: "passed" }));
+console.log(JSON.stringify({ runtime: "passed", imports: "passed", private: "passed", edit: "passed" }));
