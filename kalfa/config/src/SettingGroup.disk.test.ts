@@ -887,14 +887,18 @@ it.effect.prop(
 // D11, every failure says the file was not changed
 // ---------------------------------------------------------------------------------------------
 
-/** A failure's message ends with the closing sentence of an edit: the file as a person reads it, and that it was not changed. */
-const closes = (found: Seen, name: string, named: string) => {
+/**
+ * A failure's message ends with the closing sentence of an edit: the file as a person reads it, and that it was not changed.
+ * `subject` is what the sentence names: the file's name where the file is known. A failure that comes before the file is
+ * known, as an environment that cannot be read (it may move the user file), names the configuration instead.
+ */
+const closes = (found: Seen, subject: string, named: string) => {
   expect(found.answer._tag, `${named}: the call fails`).toBe("failed");
 
   if (found.answer._tag === "failed") {
     const last = found.answer.message.trimEnd().split("\n").at(-1)?.trim();
 
-    expect(last, `${named}: the closing sentence`).toBe(`${name} was not changed.`);
+    expect(last, `${named}: the closing sentence`).toBe(`${subject} was not changed.`);
   }
 };
 
@@ -958,7 +962,8 @@ it.effect.prop(
 
         closes(
           yield* run({ group, setting, place: at, seed: seedFor(at, "file", base), unreadable: true, op }),
-          at.name,
+          // The file may be `$<APP>_HOME/<app>.toml` or `~/.<app>/<app>.toml`: no path is known to name.
+          at.file === "repo" ? "The repo configuration" : "The user configuration",
           `${label(p, at)} an environment that cannot be read`,
         );
 
