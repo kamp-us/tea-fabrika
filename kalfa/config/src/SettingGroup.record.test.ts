@@ -839,6 +839,23 @@ const leaving = (draw: Draw): ReadonlyArray<{ readonly scene: Scene; readonly st
         others: ["after"],
       }),
     },
+    // (y) a file that holds only the record, and ends with a line break, loses all of it: the answer is empty text.
+    ...(["a", "b", "c", "e", "f", "g"] as const).flatMap((form, n) =>
+      [LF, CRLF].map((eol) => ({
+        start: false,
+        scene: buildScene(draw, {
+          form,
+          ids: ["y"],
+          label: `y a remove in form ${form} leaves an empty file (${JSON.stringify(eol)})`,
+          style: n,
+          eol,
+          final: true,
+          remove: true,
+          alone: true,
+          inside: false,
+        }),
+      })),
+    ),
     ...(["a", "b", "c", "d", "e", "f", "g"] as const).map((form, n) => ({
       start: form === "a" || form === "c" || form === "e",
       scene: buildScene(draw, {

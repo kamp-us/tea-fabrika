@@ -497,6 +497,8 @@ export interface Scene {
   readonly keeps: ReadonlyArray<string>;
   /** Lines the answer may add anywhere, once each: where a value that changed its kind is written again. */
   readonly free: ReadonlyArray<Slot>;
+  /** The record is the whole file and the call removes it: nothing is left to keep, so the answer is empty text. */
+  readonly alone: boolean;
 }
 
 export type Id =
@@ -761,6 +763,8 @@ export interface Spec {
   readonly free?: ReadonlyArray<RegExp>;
   /** The file mixes the two kinds of line break, one after another. */
   readonly mixed?: boolean;
+  /** The file holds only the record and the call removes it. */
+  readonly alone?: boolean;
   /** The first item is written as one inline table, in a record of dotted keys at the root. */
   readonly inlineFirst?: boolean;
   /** The first item is written as dotted keys at the root, before the headers of the others. */
@@ -859,6 +863,7 @@ export const buildScene = (given: Draw, spec: Spec): Scene => {
     arrival,
     others: OTHER_KEYS.filter((which) => lines.some((line) => line.head?.join(".") === which)),
     keeps: spec.keeps ?? [],
+    alone: spec.alone === true,
     free: (spec.free ?? []).map((pattern): Slot => ({ label: String(pattern), test: (line) => pattern.test(line) })),
   };
 };
@@ -1022,6 +1027,13 @@ const withBreaks = (text: string): ReadonlyArray<readonly [string, string]> => {
 
 /** What is wrong with an answer: each missing line, each line nobody asked for, each line break that is not the file's own. */
 export const judge = (scene: Scene, answer: string): ReadonlyArray<string> => {
+  // The record was the whole file, line breaks included: every line goes with its own break, so nothing is left, not even a lone break.
+  if (scene.alone) {
+    return answer === ""
+      ? []
+      : [`the file held only the record, so the answer is empty text, not ${JSON.stringify(answer)}`];
+  }
+
   const pairs = withBreaks(answer);
   const found = pairs.map(([line]) => line);
   const problems: Array<string> = [];
@@ -1377,6 +1389,7 @@ export const arrayScene = (draw: Draw, spec: ArraySpec): Scene => {
     others: othersIn(lines),
     keeps: [],
     free: [],
+    alone: false,
   };
 };
 
