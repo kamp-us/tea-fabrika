@@ -690,6 +690,15 @@ importers:
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
+      mdast-util-from-markdown:
+        specifier: 'catalog:'
+        version: 2.1.0(supports-color@10.2.2)
+      mdast-util-gfm:
+        specifier: 'catalog:'
+        version: 3.1.0(supports-color@10.2.2)
+      micromark-extension-gfm:
+        specifier: 'catalog:'
+        version: 3.0.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
