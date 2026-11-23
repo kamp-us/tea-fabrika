@@ -43,20 +43,46 @@ export const version = (
   );
 };
 
-/** The Struct a file is decoded with: every table and leaf optional. */
-const struct = (settings: ReadonlyArray<Setting.Any>, depth: number): Schema.Codec<unknown, unknown> =>
-  Schema.Struct(
-    Rec.fromEntries(
-      [...new Set(settings.flatMap((s) => segments(s.name)[depth] ?? []))].map((word) => {
-        const below = settings.filter((s) => segments(s.name)[depth] === word);
-        const own = below.find((s) => segments(s.name).length === depth + 1);
+/** A setting's default as its JSON codec writes it, or none for a required setting. */
+export const encodedDefault = (s: Setting.Any): Option.Option<Schema.Json> =>
+  Option.map(s.default, (value) => Schema.encodeSync(Schema.toCodecJson(s.schema))(value));
 
-        return [
-          word,
-          Schema.optionalKey(own === undefined ? struct(below, depth + 1) : Schema.toCodecJson(own.schema)),
-        ];
-      }),
+/** The fields of one level of a file: a table per word and a leaf per setting, each optional and in name order. A leaf carries the setting's description and its JSON-encoded default, which change no decode. */
+export const fields = (
+  settings: ReadonlyArray<Setting.Any>,
+  depth: number,
+): Readonly<Record<string, Schema.optionalKey<Schema.Codec<unknown, unknown>>>> =>
+  Rec.fromEntries(
+    [...new Set(settings.flatMap((s) => segments(s.name)[depth] ?? []))].sort().map((word) => {
+      const below = settings.filter((s) => segments(s.name)[depth] === word);
+      const own = below.find((s) => segments(s.name).length === depth + 1);
+
+      return [
+        word,
+        Schema.optionalKey(
+          own === undefined
+            ? Schema.Struct(fields(below, depth + 1))
+            : Schema.toCodecJson(own.schema).pipe(
+                Schema.annotateEncoded({
+                  description: own.description,
+                  ...Option.match(encodedDefault(own), { onNone: () => ({}), onSome: (value) => ({ default: value }) }),
+                }),
+              ),
+        ),
+      ];
+    }),
+  );
+
+/** The setting names within two edits of `typed`, nearest first: the "Did you mean" of the mistyped-key check. */
+const near = (names: ReadonlyArray<string>, typed: string): Option.Option<string> =>
+  Option.map(
+    Option.fromNullishOr(
+      names
+        .map((name) => ({ name, edits: distance(name, typed) }))
+        .filter(({ edits }) => edits <= 2)
+        .sort((a, b) => a.edits - b.edits)[0],
     ),
+    ({ name }) => name,
   );
 
 /** Whether `path` is the setting's own name or one of its tables. */
@@ -107,14 +133,14 @@ const explain = (
     return stopped("scope", `${other.name} may be set only in ${places(app, other, names)}.`, key);
   }
 
-  const near = own
-    .map((s) => ({ name: s.name, edits: distance(s.name, key.join(".")) }))
-    .filter(({ edits }) => edits <= 2)
-    .sort((a, b) => a.edits - b.edits)[0];
+  const guess = near(
+    own.map((s) => s.name),
+    key.join("."),
+  );
 
   return stopped(
     "unknown",
-    `there is no setting ${key.join(".")}.${near === undefined ? "" : ` Did you mean ${near.name}?`}`,
+    `there is no setting ${key.join(".")}.${Option.match(guess, { onNone: () => "", onSome: (name) => ` Did you mean ${name}?` })}`,
     key,
   );
 };
@@ -164,7 +190,7 @@ export const check = Effect.fnUntraced(function* (
   const value = options.without === undefined ? whole : drop(whole, options.without);
 
   // A file no setting may be set in refuses every key, where an empty Struct would take any object.
-  const schema = own.length === 0 ? Schema.Record(Schema.String, Schema.Never) : struct(own, 0);
+  const schema = own.length === 0 ? Schema.Record(Schema.String, Schema.Never) : Schema.Struct(fields(own, 0));
 
   yield* Schema.decodeUnknownEffect(schema)(value, { onExcessProperty: "error" }).pipe(
     Effect.mapError((error) => explain(group, file, found, names, error.issue, options.closing)),
