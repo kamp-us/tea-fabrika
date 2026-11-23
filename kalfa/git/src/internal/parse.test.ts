@@ -447,7 +447,7 @@ type Reading = ReturnType<typeof encodeContents>;
 const text = (octets: Uint8Array): string => String.fromCharCode(...octets);
 
 // A patch as its lines, each without its newline; the last item is what follows the last newline, which is nothing for a whole patch.
-const linesOf = (octets: Uint8Array): ReadonlyArray<string> => text(octets).split("\n");
+const splitPatch = (octets: Uint8Array): ReadonlyArray<string> => text(octets).split("\n");
 
 const joinLines = (lines: ReadonlyArray<string>): Uint8Array => latin1(lines.join("\n"));
 
@@ -540,7 +540,7 @@ it.prop(
     }
 
     const { note, changed, output, expect: whole } = chosen;
-    const lines = linesOf(output);
+    const lines = splitPatch(output);
     const starts = sectionStarts(lines);
     const here = (items: ReadonlyArray<number>): number => items[pick % Math.max(1, items.length)] ?? -1;
 
@@ -564,9 +564,10 @@ it.prop(
 
       if (Result.isSuccess(read)) {
         counted("cut: a shorter reading");
-        expect(isShorterReading(whole as Reading, encodeContents(read.success)), `${note}: a shorter reading`).toBe(
-          true,
-        );
+        expect(
+          isShorterReading(Schema.encodeSync(Schema.Array(ModelDiff.Content))(whole), encodeContents(read.success)),
+          `${note}: a shorter reading`,
+        ).toBe(true);
       }
 
       return;
