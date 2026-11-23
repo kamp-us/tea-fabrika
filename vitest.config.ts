@@ -1,3 +1,4 @@
+// TEMPORARY: lists every slow law of one full run (a trigger file changed, so every test runs).
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
