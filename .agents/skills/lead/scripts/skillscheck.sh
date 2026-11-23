@@ -18,6 +18,7 @@ bad = []
 leak = "leakgrep.sh checks added text; private words stay outside the repo."
 caps = "The test config and typecheck.ts hold worker, home and typecheck limits."
 outside = "Something wrong that your task does not cover is one finding row with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole."
+wait = "To wait for a process, wait on its pid or use `pgrep -x <name>`: `pgrep -f` matches the waiting shell's own command line, so that wait never ends."
 effect = "For a new property, use @effect/vitest's it.prop or it.effect.prop with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases."
 clauses = [
     ("lead", "Scripts", "K19", "box.sh run and runplan.sh strip secret settings and redact saved output."),
@@ -33,6 +34,9 @@ clauses = [
     ("tests", "Go easy on the machine", "K9", caps),
     ("build", "Go easy on the machine", "K9", caps),
     ("mutation", "Go easy on the machine", "K9", caps),
+    ("tests", "Go easy on the machine", "K22", wait),
+    ("build", "Go easy on the machine", "K22", wait),
+    ("mutation", "Go easy on the machine", "K22", wait),
     ("tests", "Steps", "K20", effect),
     # The rule that an agent that finds work outside its task writes one finding and keeps going. The lead skill is this clause's one home: it writes the one line every
     # brief carries. Each step skill keeps only its own judgment.

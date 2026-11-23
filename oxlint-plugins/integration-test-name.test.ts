@@ -1,4 +1,4 @@
-// The test-kind rule, next/. A plain test file whose own code starts a real thing fails, and the same file named
+// The test-kind rule, next/ and kalfa/. A plain test file whose own code starts a real thing fails, and the same file named
 // `.integration.` or `.visual.` passes. Each generated case runs in process through oxlint's
 // RuleTester; one oxlint run over planted files proves the repo's own .oxlintrc.json wires the rule,
 // and one over the real tree that it is at zero there. Plants, each run once on starters.ts and
@@ -191,7 +191,14 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
   },
 ];
 
-const where = fc.constantFrom("next/apps/fabrika/src", "next/packages/libfabrika/src/node", "next/programs/inbox/src");
+// next/'s three parts and two kalfa/ packages: kalfa/ is new work too, and its plain tests run on every pull request.
+const where = fc.constantFrom(
+  "next/apps/fabrika/src",
+  "next/packages/libfabrika/src/node",
+  "next/programs/inbox/src",
+  "kalfa/git/src",
+  "kalfa/config/src",
+);
 
 const stem = fc.stringMatching(/^[a-z][A-Za-z]{0,7}(?:\.laws)?$/);
 
@@ -207,7 +214,7 @@ const fileOf = ({ imports, line }: Real) => ({
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-it("K1: every starter fires in a plain next/ test file at its line, in any import spelling, naming what it drives and the integration name, and never under the integration or visual name", () => {
+it("K1: every starter fires in a plain next/ or kalfa/ test file at its line, in any import spelling, naming what it drives and the integration name, and never under the integration or visual name", () => {
   // Each starter runs on its own, so every name in starters.ts's table is reached.
   for (const real of REAL) {
     fc.assert(
@@ -218,7 +225,7 @@ it("K1: every starter fires in a plain next/ test file at its line, in any impor
           valid: [
             { code, filename: join(root, folder, `${name}.integration.test${ext}`) },
             { code, filename: join(root, folder, `${name}.visual.test${ext}`) },
-            // Only next/'s test files: product code, today's tests and support files are not this rule's.
+            // Only next/'s and kalfa/'s test files: product code, today's tests and support files are not this rule's.
             { code, filename: join(root, folder, `${name}${ext}`) },
             { code, filename: join(root, folder, `${name}.test-support.ts`) },
             { code, filename: join(root, "apps/fabrika/src", `${name}.test${ext}`) },
@@ -299,12 +306,12 @@ it("K2: a stand-in never fires: a spy, a fake spawner or fake object, SQLite on 
 });
 
 /**
- * next/'s committed source files, for a scan of the real tree. Other tooling laws plant files in
- * dot folders under next/ while this one runs, and oxlint walks those, so a scan of the folder read
- * their fires as the tree's (full run 43799861377). Git's list holds only what is committed.
+ * next/'s and kalfa/'s committed source files, for a scan of the real tree. Other tooling laws plant
+ * files in dot folders under next/ while this one runs, and oxlint walks those, so a scan of the
+ * folder read their fires as the tree's (full run 43799861377). Git's list holds only what is committed.
  */
 const committed = () =>
-  spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
+  spawnSync("git", ["ls-files", "-z", "--", "next", "kalfa"], { cwd: root, encoding: "utf8" })
     .stdout.split("\0")
     .filter((file) => /\.[cm]?[jt]sx?$/.test(file));
 
@@ -335,8 +342,8 @@ const fires = (paths: readonly string[]) => {
   return found;
 };
 
-it("scenario: the repo's .oxlintrc.json wires the rule for next/'s test files", () => {
-  const folder = mkdtempSync(join(root, "next/.p0536-names-"));
+it.each(["next", "kalfa"])("scenario: the repo's .oxlintrc.json wires the rule for %s/'s test files", (top) => {
+  const folder = mkdtempSync(join(root, `${top}/.p0536-names-`));
 
   try {
     const plain = join(folder, "src/opens.test.ts");
@@ -355,7 +362,7 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s test files", 
   }
 });
 
-it("scenario: next/'s tree is at zero, so the rule blocks from the start (a lint rule blocks wherever its code is clean)", () => {
+it("scenario: next/'s and kalfa/'s trees are at zero, so the rule blocks from the start (a lint rule blocks wherever its code is clean)", () => {
   // The real tree is the input. Measured on main before the renames (oxlint-plugins/README.md): 4
   // plain files fired, all 4 start git or write a temp folder, and each was renamed or given a
   // stand-in: 0 false alarms.

@@ -643,8 +643,8 @@ describe("each rule refuses what it is there to refuse", () => {
         "no-stage-word",
         // package-imports.test.ts plants one file per part at its next/ path with the real lint config.
         "package-imports",
-        // The real-resource rule is on for next/'s test files only: integration-test-name.test.ts plants a plain
-        // and a named file under next/ and runs oxlint over them with the real lint config.
+        // The real-resource rule is on for next/'s and kalfa/'s test files only: integration-test-name.test.ts plants a plain
+        // and a named file under each and runs oxlint over them with the real lint config.
         "integration-test-name",
         // Ticket 1029's rule reads only next/'s test files, suites and test kits: test-database.test.ts
         // plants generated lines at those paths, and at product and outside paths it must pass.

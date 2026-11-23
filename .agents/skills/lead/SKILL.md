@@ -537,7 +537,8 @@ visible, and never weaken the rules to hide this message.
    through that queue. For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
    For any other pull request, run `land.ts queue <pr>` once its checks
-   are green. Both leak-check the change, each commit and the title and description, then add it to
+   are green; it marks a draft ready itself, so give it `--wait` to
+   let the new `ci-required` appear. Both leak-check the change, each commit and the title and description, then add it to
    the queue with one squash pinned to the head; `land.ts`'s header says how. `land.ts merge <pr>`
    is the only way to merge by hand; a bare `gh pr merge` is never used, since it skips the leak
    check (it once merged past a printed hit).
@@ -713,11 +714,12 @@ These run on a laptop a person is using. A prompt can't see the load, so every a
 these caps. Each one came from a laptop that became unusable. This list is their one home, and
 [`AGENTS.md`](../../../AGENTS.md#go-easy-on-the-machine) points every agent here:
 
-- **Tests:** `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you work, then
-  `--changed origin/main` once at the end. Never the full suite locally: the test config refuses it. When a change makes `--changed` the
-  full suite (a `package.json`, the lockfile, a tsconfig), run the narrow paths of the tests you
-  touched and of the tests that read that file. A run that needs what CI lacks (Electron shots, a
-  stage with workerd) still runs here.
+- **Tests:** `nice -n 15 pnpm exec vitest run <test file> ...` while you work, each file by its path (a
+  folder or pattern is refused), then `--changed origin/main` once at the end. `--maxWorkers` defaults to
+  3. Never the full suite locally: the test config refuses it, and its message names the rule. When a change
+  makes `--changed` the full suite (the lockfile, a tsconfig, `layer-rules.json`, `oxlint-plugins/**`),
+  the laptop refuses it too: run the test files you touched and those that read the changed file. A run
+  that needs what CI lacks (Electron shots, a stage with workerd) still runs here.
 - **With two or more code agents running:** `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at
   the very end. `tsgo` takes about 8 cores, so small jobs add up.
 - **Count actual productive workers** under.

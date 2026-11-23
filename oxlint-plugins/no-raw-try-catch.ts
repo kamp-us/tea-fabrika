@@ -50,7 +50,7 @@ export const noRawTryCatch: CreateRule = {
         context.report({
           node,
           message:
-            "Raw `try/catch` is discouraged in an effect-importing file: real Effect code models failure in the `E` channel, not a native throw (#2736). Fix: use `Effect.try({ try, catch })` (sync) or `Effect.tryPromise({ try, catch })` (async), mapping the cause into a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/ui/http.ts` (or `packages/fate-effect`). Exception (e.g. a pre-runtime bootstrap guard): // oxlint-disable-next-line fabrika/no-raw-try-catch -- <reason>.",
+            "Raw `try/catch` is discouraged in an effect-importing file: real Effect code models failure in the `E` channel, not a native throw (#2736). Fix: use `Effect.try({ try, catch })` (sync) or `Effect.tryPromise({ try, catch })` (async), mapping the cause into a `Schema.TaggedError`: copy `packages/fabrika-cli/src/ui/http.ts` (or `packages/fate-effect`). Exception (e.g. a pre-runtime bootstrap guard): // oxlint-disable-next-line fabrika/no-raw-try-catch -- <reason>.",
         });
       },
     };

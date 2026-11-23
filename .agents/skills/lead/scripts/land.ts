@@ -31,9 +31,11 @@
 //
 //   land.ts queue <pr> [--wait]
 //     the lead session, for any pull request whose steps passed (pr/Queue.ts, a pull request whose steps passed lands on green CI and a clean leak check alone): refuses one
-//     that is closed, a draft or not into main; leak-greps its net change, each of its commits and
-//     its title and description, which become the squash commit's text; reads `ci-required` at its
-//     head, once, or with --wait again each minute for up to an hour, in the background; then one
+//     that is closed or not into main; leak-greps its net change, each of its commits and
+//     its title and description, which become the squash commit's text; marks a draft ready for
+//     review, as `admin` does, which starts its real `ci-required`; reads `ci-required` at its
+//     head, once, or with --wait again each minute for up to an hour, in the background (a draft just
+//     marked ready has no `ci-required` yet, so give it --wait); then one
 //     `gh pr merge --squash --match-head-commit <head>`, which adds it to GitHub's merge queue.
 //     It prints `queued`, never `merged`: GitHub tests it on newest main and merges it later. No
 //     --admin, no --auto, no other merge method.
@@ -77,6 +79,9 @@
 //   land.ts close-named <pr>...
 //     as `merged`, but only the ticket closes: no box cleanup sweep. For a pull request that merged
 //     at GitHub and was never settled, and for the after-fast-forward watcher.
+//
+// Every refusal of any command exits 1, after one line on stderr that names the check; a caller's `&&`
+// stops there.
 //
 // Every refusal before the push puts the tree's HEAD and refs/notes/fabrika back where they were,
 // so a refused run changes nothing. It never resolves a conflict and never reads a key.
@@ -703,7 +708,7 @@ const PrNumber = Argument.Int("pr");
 
 const queueCommand = Command.make(
   "queue",
-  { pr: PrNumber, wait: Flag.Boolean("wait") },
+  { pr: PrNumber, wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)) },
   Effect.fn("land.queueCommand")(function* ({ pr, wait }) {
     yield* Console.log(Queue.line(yield* queue(yield* loadEnv, pr, wait)));
   }),

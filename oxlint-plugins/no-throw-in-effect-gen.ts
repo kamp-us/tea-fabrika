@@ -7,7 +7,7 @@
 // #2736 Effect-v4 family (`no-raw-try-catch` / `no-effect-promise`) leaves: those
 // ban the try/catch and promise "cosplay as Effect" tells, but a naked `throw` in a gen
 // body slips past both. The fix keeps the failure in the type: `yield* Effect.fail(new
-// SomeError({...}))` (a `Schema.TaggedErrorClass` in `E`) for a recoverable failure, or
+// SomeError({...}))` (a `Schema.TaggedError` in `E`) for a recoverable failure, or
 // `yield* Effect.die(cause)` for a genuine, non-recoverable defect stated as one.
 //
 // Match: a `throw` anywhere inside a call whose callee is `Effect.gen` / `Effect.fn`,
@@ -39,7 +39,7 @@ export const noThrowInEffectGen: CreateRule = {
           context.report({
             node,
             message:
-              "Bare `throw` inside an `Effect.gen`/`Effect.fn` body is banned: a thrown exception escapes the `E` channel as an uncatchable defect (#2736). Fix: `yield* Effect.fail(new SomeError({...}))` (a `Schema.TaggedErrorClass` in the `E` channel) for a recoverable failure, or `yield* Effect.die(cause)` for a genuine defect. Exception: // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- <reason>.",
+              "Bare `throw` inside an `Effect.gen`/`Effect.fn` body is banned: a thrown exception escapes the `E` channel as an uncatchable defect (#2736). Fix: `yield* Effect.fail(new SomeError({...}))` (a `Schema.TaggedError` in the `E` channel) for a recoverable failure, or `yield* Effect.die(cause)` for a genuine defect. Exception: // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- <reason>.",
           });
 
           return;
