@@ -1,7 +1,7 @@
 // What the laws of this package's three modules share: generators for good and broken codes, places and
 // texts. Each law applies every break and every kind of odd good value to each value it draws, so each case a
 // law must reach is in every run, and no run can pass on less.
-import { Arbitrary, Array as Arr, Effect, Schema, Tracer } from "effect";
+import { Arbitrary, Array as Arr, Cause, Effect, Exit, Option, Predicate, Result, Schema, Tracer } from "effect";
 import * as Diagnostic from "./Diagnostic.ts";
 import * as Diagnostics from "./Diagnostics.ts";
 import * as TestDiagnostics from "./TestDiagnostics.ts";
@@ -805,4 +805,341 @@ export const observed = (code: string, fields: object, before: ReadonlyArray<Ite
     );
 
     return { exit, reported, spans };
+  });
+
+// ---- what a refusal leaves behind
+
+/**
+ * Every text a refused place may leave behind: the message of a SchemaError, its own JSON form, and the issue tree
+ * under it, which a log that walks the error carries (`JSON.stringify` of the error alone leaves the issue out).
+ */
+export const leftBehind = (error: Schema.SchemaError | undefined): ReadonlyArray<string> =>
+  error === undefined ? [] : [error.message, JSON.stringify(error), JSON.stringify(error.issue)];
+
+/** The SchemaError an exit died of, if it died of one. */
+export const schemaErrorIn = <A, E>(exit: Exit.Exit<A, E>): Schema.SchemaError | undefined =>
+  Exit.isFailure(exit)
+    ? Result.match(Cause.findDefect(exit.cause), {
+        onSuccess: (defect) => (Schema.isSchemaError(defect) ? defect : undefined),
+        onFailure: () => undefined,
+      })
+    : undefined;
+
+/** Whether an exit is a defect holding a SchemaError and no typed failure. */
+export const diedOfSchemaError = <A, E>(exit: Exit.Exit<A, E>): boolean =>
+  Exit.isFailure(exit) && !Cause.hasFails(exit.cause) && schemaErrorIn(exit) !== undefined;
+
+// ---- carried diagnostics: what `fromError` reads, and a handler that reports what it finds
+
+/**
+ * What a typed error holds beside the code. `place` is any object, so a bad place can be carried too: `carry`
+ * checks nothing.
+ */
+interface Held {
+  readonly message: string;
+  readonly place: object;
+  readonly hint: string;
+}
+
+/** What a caller's spread may bring: all of `Held` and a severity, which `carry` must never keep. */
+interface Spread extends Held {
+  readonly severity: string;
+}
+
+/**
+ * `Diagnostic.carry`, for fields of any kind: good ones and bad ones alike. A caller whose spread brings more than
+ * `carry` takes passes a variable typed wider than its parameter, as this does.
+ */
+export const carryHeld = (declared: Diagnostic.Declared, held: Held): Diagnostic.Carried =>
+  // @ts-expect-error `place` is any object, not a `Place`: this helper carries good places and bad ones alike
+  Diagnostic.carry(declared, held);
+
+// The registry key `make` puts on a Declared, so a class below can tell one from any other value.
+const DECLARED_KEY = Symbol.for("@kalfa/diagnostics/Declared");
+
+const AnObject = Schema.declare(Predicate.isObjectKeyword);
+
+const ADeclared = Schema.declare((value: unknown): value is Diagnostic.Declared =>
+  Predicate.hasProperty(value, DECLARED_KEY),
+);
+
+/**
+ * Class (a): a typed error whose class gives `diagnostic` by a getter, so the key is on the class and not on the
+ * value. The getter carries the error's own fields, its severity too, as a caller's spread would.
+ */
+export class CarryingError extends Schema.TaggedError<CarryingError, { readonly brand: unique symbol }>()(
+  "CarryingError",
+  { declared: ADeclared, message: Schema.String, place: AnObject, hint: Schema.String, severity: Schema.String },
+) {
+  get diagnostic(): Diagnostic.Carried {
+    return carryHeld(this.declared, this);
+  }
+}
+
+/** A typed error with no getter: it carries nothing. */
+class PlainError extends Schema.TaggedError<PlainError, { readonly brand: unique symbol }>()("PlainError", {
+  note: Schema.String,
+}) {}
+
+/** Class (g): a typed error whose `diagnostic` getter throws the error it holds. */
+class ThrowingError extends Schema.TaggedError<ThrowingError, { readonly brand: unique symbol }>()("ThrowingError", {
+  boom: Schema.declare(Predicate.isError),
+}) {
+  get diagnostic(): Diagnostic.Carried {
+    throw this.boom;
+  }
+}
+
+/** What may sit under a `diagnostic` key when `carry` did not make it: any text, nothing, or any object. */
+type Impostor = string | null | undefined | object;
+
+const AnImpostor = Schema.Union([Schema.String, Schema.Null, Schema.Undefined, AnObject]);
+
+/** A typed error whose `diagnostic` getter answers whatever it holds, a value `carry` did not make. */
+class ImpostorError extends Schema.TaggedError<ImpostorError, { readonly brand: unique symbol }>()("ImpostorError", {
+  held: AnImpostor,
+}) {
+  get diagnostic(): Impostor {
+    return this.held;
+  }
+}
+
+/** Anything a command may fail with: a value of any kind. */
+export type Failure = string | number | bigint | boolean | symbol | null | undefined | object;
+
+/** One value to read, the class of the plan's generators it stands for, and what it must give. */
+interface Shaped {
+  readonly id: "a" | "b" | "c" | "d" | "e" | "f" | "g";
+  readonly name: string;
+  readonly value: Failure;
+  /** Whether `fromError` must find a carried diagnostic in it. */
+  readonly carries: boolean;
+  /** For (b) and (c): the very `Carried` the value holds under `diagnostic`. */
+  readonly held?: Diagnostic.Carried;
+}
+
+/** The class ids a list of values reaches, in alphabetical order, each once. */
+export const reached = (shaped: ReadonlyArray<Shaped>): ReadonlyArray<string> =>
+  [...new Set(shaped.map(({ id }) => id))].toSorted();
+
+/**
+ * Class (a), (b) and (c): a value of each class that carries `carry(declared, spread)`. The getter of (a) builds a new
+ * `Carried` each time it is read. (b) is a plain object that is no `Error`, and (c) is a native `Error` that was
+ * given its `diagnostic` after it was made and has no `_tag`.
+ */
+export const carriers = (declared: Diagnostic.Declared, spread: Spread): ReadonlyArray<Shaped> => {
+  const carried = carryHeld(declared, spread);
+  const native = Object.assign(new Error(spread.message), { diagnostic: carried });
+
+  return [
+    {
+      id: "a",
+      name: "a TaggedError whose class gives diagnostic by a getter",
+      value: new CarryingError({ declared, ...spread }),
+      carries: true,
+    },
+    {
+      id: "b",
+      name: "a plain object with an own diagnostic key",
+      value: { diagnostic: carried },
+      carries: true,
+      held: carried,
+    },
+    { id: "c", name: "a native Error with an own diagnostic field", value: native, carries: true, held: carried },
+  ];
+};
+
+/** Class (g): a `diagnostic` getter that throws the given error. */
+export const throwing = (boom: Error): Shaped => ({
+  id: "g",
+  name: "a diagnostic getter that throws",
+  value: new ThrowingError({ boom }),
+  carries: false,
+});
+
+/** The drawn pieces the values that carry nothing are made from. */
+interface Plain {
+  readonly text: string;
+  readonly count: number;
+}
+
+// A value held under `diagnostic` three ways: on a plain object, on a native error, and by a class getter.
+const holding = (name: string, impostor: Impostor): ReadonlyArray<Shaped> => {
+  const native = Object.assign(new Error(name), { diagnostic: impostor });
+
+  return [
+    { id: "f", name: `${name}, on a plain object`, value: { diagnostic: impostor }, carries: false },
+    { id: "f", name: `${name}, on a native Error`, value: native, carries: false },
+    { id: "f", name: `${name}, by a class getter`, value: new ImpostorError({ held: impostor }), carries: false },
+  ];
+};
+
+/**
+ * Classes (d), (e) and (f): values that carry nothing. (d) is no object, (e) is an object with no `diagnostic` key,
+ * and (f) holds a `diagnostic` that `carry` did not make, such as a plain reported diagnostic with all five fields.
+ */
+export const nonCarriers = (
+  declared: Diagnostic.Declared,
+  spread: Spread,
+  { text, count }: Plain,
+): ReadonlyArray<Shaped> => {
+  const fields = { severity: "error", message: spread.message, place: spread.place, hint: spread.hint };
+
+  const notObjects: ReadonlyArray<[string, Failure]> = [
+    ["undefined", undefined],
+    ["null", null],
+    ["a drawn string", text],
+    ["a drawn number", count],
+    ["NaN", Number.NaN],
+    ["a bigint", BigInt(count)],
+    ["true", true],
+    ["false", false],
+    ["a symbol", Symbol(text)],
+    ["the symbol a carried value is keyed by", Symbol.for("@kalfa/diagnostics/Carried")],
+  ];
+
+  const noKey: ReadonlyArray<[string, Failure]> = [
+    ["a TaggedError with no getter", new PlainError({ note: text })],
+    ["a native Error", new Error(text)],
+    ["an empty object", {}],
+    ["an array", [text]],
+    ["an object with no prototype", Object.create(null)],
+    ["a function", () => text],
+  ];
+
+  const impostors: ReadonlyArray<[string, Impostor]> = [
+    ["a reported diagnostic with all five fields", { code: declared.code, ...fields }],
+    ["a look-alike with declared and fields", { declared, fields }],
+    ["a look-alike with another symbol", { [Symbol("@kalfa/diagnostics/Carried")]: true, declared, fields }],
+    ["a Declared", declared],
+    ["a drawn string", text],
+    ["null", null],
+    ["undefined", undefined],
+  ];
+
+  return [
+    ...notObjects.map(([name, value]): Shaped => ({ id: "d", name, value, carries: false })),
+    ...noKey.map(([name, value]): Shaped => ({ id: "e", name, value, carries: false })),
+    ...impostors.flatMap(([name, value]) => holding(`a diagnostic that is ${name}`, value)),
+  ];
+};
+
+/** One value of each class (a) to (f), made from a declared code, fields and the pieces the others are drawn from. */
+export const everyClass = (declared: Diagnostic.Declared, spread: Spread, plain: Plain): ReadonlyArray<Shaped> => [
+  ...carriers(declared, spread),
+  ...nonCarriers(declared, spread, plain),
+];
+
+/** The report a value that carries `spread` must make under the test Layer. */
+export const expectedReport = (declared: Diagnostic.Declared, spread: Held) => ({
+  code: declared.code,
+  severity: "error" as const,
+  message: spread.message,
+  place: spread.place,
+  hint: spread.hint,
+});
+
+/**
+ * Every bad set of fields a run tries: each kind of blank in the message and in the hint, and each bad place, each
+ * made from good fields.
+ */
+export const badHeld = ({
+  fields,
+  blanks,
+  parts,
+}: {
+  readonly fields: Held;
+  readonly blanks: string;
+  readonly parts: PlaceParts;
+}): ReadonlyArray<{ readonly name: string; readonly held: Held }> => [
+  ...blanksFrom(blanks).flatMap((each) => [
+    { name: `a blank message ${JSON.stringify(each)}`, held: { ...fields, message: each } },
+    { name: `a blank hint ${JSON.stringify(each)}`, held: { ...fields, hint: each } },
+  ]),
+  ...brokenPlaces(parts).map(({ name, value }) => ({
+    name: `a bad place, ${name}: ${JSON.stringify(value)}`,
+    held: { ...fields, place: value },
+  })),
+];
+
+/**
+ * Every set of fields `carry` is given in a run: the drawn good fields and each kind of odd good field (h), each bad
+ * set (i), and a severity smuggled in a wider object (j): `warning`, `error` and a drawn other severity. Each also
+ * carries the drawn severity, so a spread that holds one is the usual case.
+ */
+export const carriedSets = ({
+  drawn,
+  blanks,
+  other,
+}: {
+  readonly drawn: Parameters<typeof fieldVariants>[0];
+  readonly blanks: string;
+  readonly other: string;
+}): ReadonlyArray<{ readonly name: string; readonly spread: Spread }> => [
+  ...[drawn.fields, ...fieldVariants(drawn)].map((spread, index) => ({ name: `good fields, case ${index}`, spread })),
+  ...badHeld({ fields: drawn.fields, blanks, parts: drawn.parts }).map(({ name, held }) => ({
+    name,
+    spread: { ...held, severity: drawn.fields.severity },
+  })),
+  ...["warning", "error", other].map((severity) => ({
+    name: `a smuggled severity ${JSON.stringify(severity)}`,
+    spread: { ...drawn.fields, severity },
+  })),
+];
+
+// ---- a handler that reads what an error carries and reports it, watched
+
+// A tracer that keeps every span it hands out, over the one the test runs under.
+const watching = Effect.gen(function* () {
+  const delegate = yield* Tracer.Tracer;
+  const spans: Array<Tracer.Span> = [];
+
+  const tracer = Tracer.make({
+    span(options) {
+      const span = delegate.span(options);
+      spans.push(span);
+
+      return span;
+    },
+  });
+
+  return { spans, tracer };
+});
+
+/**
+ * What the one handler does with each value of a list: read it with `fromError`, and report a carried diagnostic
+ * through `Diagnostics.report(carried.declared, carried.fields)`. How the run ended, what a fresh test Layer then
+ * held, and every span it made.
+ */
+export const observedCarried = (values: ReadonlyArray<Failure>) =>
+  Effect.gen(function* () {
+    const { spans, tracer } = yield* watching;
+
+    const handled = Effect.forEach(
+      values,
+      (value) =>
+        Option.match(Diagnostic.fromError(value), {
+          onNone: () => Effect.void,
+          onSome: (carried) => Diagnostics.report(carried.declared, carried.fields),
+        }),
+      { concurrency: 1, discard: true },
+    );
+
+    const { exit, reported } = yield* handled.pipe(
+      Effect.exit,
+      Effect.flatMap((exit) => Effect.map(TestDiagnostics.reported, (reported) => ({ exit, reported }))),
+      Effect.withTracer(tracer),
+      Effect.provide(TestDiagnostics.layer),
+    );
+
+    return { exit, reported, spans };
+  });
+
+/** One read of a value with `fromError`, watched for the spans it makes. A throw is a defect, and fails the law. */
+export const readWatched = (value: Failure) =>
+  Effect.gen(function* () {
+    const { spans, tracer } = yield* watching;
+    const found = yield* Effect.sync(() => Diagnostic.fromError(value)).pipe(Effect.withTracer(tracer));
+
+    return { found, spans };
   });
