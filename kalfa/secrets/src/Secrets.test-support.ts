@@ -288,7 +288,32 @@ export const needles = (value: Value): ReadonlyArray<string> =>
 export const showsAny = (texts: ReadonlyArray<string>, found: ReadonlyArray<string>): ReadonlyArray<string> =>
   found.filter((needle) => texts.some((each) => each.includes(needle))).map((needle) => needle.slice(0, 24));
 
-/** Every text a value's own properties reach, names and symbols' descriptions included, cause chains and nested objects too. */
+/** The most objects a search reaches: a getter that makes a new object each time it is read has no end. */
+const REACH_LIMIT = 500;
+
+/** An object and every prototype above it, up to the plain ones: the places a property can be found by its name. */
+const lineage = (start: object): ReadonlyArray<object> => {
+  const found: Array<object> = [];
+  let at: object | null = start;
+
+  while (
+    at !== null &&
+    at !== Object.prototype &&
+    at !== Error.prototype &&
+    at !== Function.prototype &&
+    at !== Array.prototype
+  ) {
+    found.push(at);
+    at = Object.getPrototypeOf(at);
+  }
+
+  return found;
+};
+
+/**
+ * Every text a value's properties reach, names and symbols' descriptions included, inherited getters read, cause chains and nested objects too.
+ * A getter on a class is a property of every instance, so a leak through one is found.
+ */
 export const reachable = (root: object): ReadonlyArray<string> => {
   const seen = new Set<object>();
   const found: Array<string> = [];
@@ -297,21 +322,26 @@ export const reachable = (root: object): ReadonlyArray<string> => {
   while (pending.length > 0) {
     const next = pending.pop();
 
-    if (next === undefined || seen.has(next)) {
+    if (next === undefined || seen.has(next) || seen.size >= REACH_LIMIT) {
       continue;
     }
 
     seen.add(next);
 
-    for (const key of Reflect.ownKeys(next)) {
-      found.push(String(key));
+    for (const level of lineage(next)) {
+      for (const key of Reflect.ownKeys(level)) {
+        found.push(String(key));
 
-      const value = Object.getOwnPropertyDescriptor(next, key)?.value;
+        const described = Object.getOwnPropertyDescriptor(level, key);
 
-      if (Predicate.isString(value)) {
-        found.push(value);
-      } else if (Predicate.isObjectOrArray(value)) {
-        pending.push(value);
+        const read = described?.get;
+        const value = read === undefined ? described?.value : Result.getOrUndefined(Result.try(() => read.call(next)));
+
+        if (Predicate.isString(value)) {
+          found.push(value);
+        } else if (Predicate.isObjectOrArray(value) && !Predicate.isFunction(value)) {
+          pending.push(value);
+        }
       }
     }
   }
@@ -424,9 +454,11 @@ export const failingStore = (text: string) =>
     id: "failing",
     item: Schema.NonEmptyString,
     place: "store",
-    holds: { read: (_item: string) => Effect.fail(new Errors.StoreFailed({ cause: quoting(text) })) },
+    holds: { read: (_item: string) => Effect.fail(new Errors.StoreFailed({ cause: Redacted.make(quoting(text)) })) },
   });
 
 /** A recorder whose every write fails as `RecordFailed`, with an error that quotes `text`, a value the caller held. */
 export const failingRecorder = (text: string): Layer.Layer<Recorder.Recorder> =>
-  Layer.succeed(Recorder.Recorder, { record: () => Effect.fail(new Errors.RecordFailed({ cause: quoting(text) })) });
+  Layer.succeed(Recorder.Recorder, {
+    record: () => Effect.fail(new Errors.RecordFailed({ cause: Redacted.make(quoting(text)) })),
+  });

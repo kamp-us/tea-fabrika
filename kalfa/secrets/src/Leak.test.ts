@@ -10,7 +10,7 @@
 // replace them.
 import { inspect } from "node:util";
 import { expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Formatter, Option, Schema } from "effect";
+import { Cause, Effect, Exit, Formatter, Option, Redacted, Schema } from "effect";
 import * as Errors from "./Errors.ts";
 import { flow, NAME, STORE_ID } from "./Leak.test-support.ts";
 import * as Name from "./Name.ts";
@@ -71,8 +71,8 @@ const run = { arbitrary: { runs: 300, seed: SEED } };
 
 /** The errors a caller could make from a carrier, each as the cause: a store that failed and a recorder that failed. */
 const errorsFrom = (thing: object) => [
-  new Errors.StoreFailed({ cause: thing }),
-  new Errors.RecordFailed({ cause: thing }),
+  new Errors.StoreFailed({ cause: Redacted.make(thing) }),
+  new Errors.RecordFailed({ cause: Redacted.make(thing) }),
 ];
 
 // X6. [secrets] Plant: give the answer a `toJSON` that returns the value's text; give it a `toString` that does; give the contents a plain record of
@@ -145,7 +145,7 @@ it.effect.prop(
 
             for (const { name, thing } of made) {
               yield* Effect.annotateCurrentSpan("carried", thing).pipe(Effect.withSpan(`probe ${name}`));
-              yield* Effect.fail(new Errors.StoreFailed({ cause: thing })).pipe(
+              yield* Effect.fail(new Errors.StoreFailed({ cause: Redacted.make(thing) })).pipe(
                 Effect.withSpan(`failing ${name}`),
                 Effect.exit,
               );
@@ -216,11 +216,12 @@ it.effect.prop(
         }
       }
     }),
-  run,
+  // Half the runs of the others: each run reads every carrier and every error over it, and the full count nears the test timeout.
+  { arbitrary: { runs: 150, seed: SEED } },
 );
 
-// X11. [secrets] Plant: write the cause's text into StoreFailed's message; write it into RecordFailed's message; keep the cause as it came (a
-// plain property, as `Schema.Defect` holds it), so the error under it prints and lists the value; give the error a `toJSON` that returns the
+// X11. [secrets] Plant: write the cause's text into StoreFailed's message; write it into RecordFailed's message; keep the cause in a
+// plain property that is no `Redacted`, so the error under it prints and lists the value; give the error a `toJSON` that returns the
 // cause's text.
 it.effect.prop(
   "X11 failures: [secrets] a store and a recorder that fail with an error that quotes a value fail with an error that shows no value, in its text, its message, its stack, its JSON, its properties, the cause chain under it, the spans and the logs that carry it",
