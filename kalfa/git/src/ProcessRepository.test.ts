@@ -1,4 +1,4 @@
-// The laws of the git-binary adapter on a stand-in spawner (P2 to P16): what each exit code means, the time
+// The laws of the git-binary adapter on a stand-in spawner (P2 to P16, P19): what each exit code means, the time
 // limit, git's version, the command's environment, the arguments of each call, that sizes are read before objects,
 // how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, that no
 // call reaches a remote, what `merge-tree` printed, the version a merge needs and the commands of a patch id and of a diff. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
@@ -188,6 +188,7 @@ it.effect.prop(
                 bytes: 100_000,
                 files: 100,
                 diff: 100_000,
+                blob: 100_000,
                 time: `${seconds} seconds`,
               },
               committer: COMMITTER,
@@ -259,6 +260,7 @@ it.effect.prop(
                 bytes: 100_000,
                 files: 100,
                 diff: 100_000,
+                blob: 100_000,
                 time: `${seconds} seconds`,
               },
               committer: COMMITTER,
@@ -1315,7 +1317,7 @@ it.effect.prop(
           expectFailure(
             named.result.failure,
             Repository.NotAFile,
-            { path: gitlink.path },
+            { path: gitlink.path, holds: "submodule" },
             `${label} is named, before the size limit`,
           );
         }
@@ -1350,7 +1352,7 @@ it.effect.prop(
           expectFailure(
             both.result.failure,
             Repository.NotAFile,
-            { path: pair[0]?.path },
+            { path: pair[0]?.path, holds: "submodule" },
             "the first submodule in the list is named",
           );
         }
@@ -1969,4 +1971,267 @@ it.effect.prop(
       }
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
+);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Ticket 1935, slice 1: `readFile` on the stand-in (P19). git is asked for each folder on the path, one `ls-tree -z` each,
+// and never for the path itself.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** What a stand-in git holds for one read: trees by id, each with the entries `ls-tree -z` prints, and blobs by id. */
+interface Held {
+  readonly trees: ReadonlyMap<
+    string,
+    ReadonlyArray<{ readonly mode: string; readonly type: string; readonly id: string; readonly name: string }>
+  >;
+  readonly blobs: ReadonlyMap<string, Uint8Array>;
+  /** What `cat-file blob` prints for a blob, when it is not the blob's bytes. */
+  readonly printed: ReadonlyMap<string, Uint8Array>;
+}
+
+const treeText = (entries: Held["trees"] extends ReadonlyMap<string, infer E> ? E : never): string =>
+  entries.map((each) => `${each.mode} ${each.type} ${each.id}\t${each.name}\0`).join("");
+
+const readScript =
+  (commit: string, held: Held) =>
+  (call: Call): Reply => {
+    switch (call.verb) {
+      case "version":
+        return { code: 0, stdout: "git version 2.40.1\n" };
+      case "rev-parse":
+        return { code: 0, stdout: call.rest.includes("--is-shallow-repository") ? "false\n" : ".\n" };
+      case "ls-tree": {
+        const id = call.rest.at(-1) ?? "";
+        const entries = held.trees.get(id === commit ? (held.trees.keys().next().value ?? "") : id);
+
+        return entries === undefined
+          ? { code: 128, stderr: "fatal: not a tree" }
+          : { code: 0, stdout: treeText(entries) };
+      }
+
+      case "cat-file": {
+        if (call.rest.includes("--batch-check")) {
+          const ids = asked(call);
+
+          return {
+            code: 0,
+            stdout: [...ids]
+              .map((id) =>
+                id === commit
+                  ? `${id} commit 200\n`
+                  : held.blobs.has(id)
+                    ? `${id} blob ${held.blobs.get(id)?.length ?? 0}\n`
+                    : `${id} missing\n`,
+              )
+              .join(""),
+          };
+        }
+
+        const id = call.rest.at(-1) ?? "";
+        const printed = held.printed.get(id) ?? held.blobs.get(id);
+
+        return printed === undefined ? { code: 128, stderr: "fatal: not a blob" } : { code: 0, stdout: printed };
+      }
+
+      default:
+        return { code: 0 };
+    }
+  };
+
+const READ_KINDS = [
+  "a file",
+  "a file with no bytes",
+  "a missing last part",
+  "a missing part above",
+  "a file above the last part",
+  "a folder at the path",
+  "a link at the path",
+  "a link above the path",
+  "a submodule at the path",
+  "a submodule above the path",
+  "a file one byte over the limit",
+  "a file of exactly the limit",
+  "bytes cut short in cat-file blob",
+  "bytes past the size in cat-file blob",
+] as const;
+
+interface ReadSpec {
+  readonly commit: string;
+  readonly parts: ReadonlyArray<string>;
+  readonly sizes: ReadonlyArray<number>;
+  readonly depth: number;
+}
+
+const READ_SPEC = {
+  commit: commitIdArb,
+  parts: Arbitrary.array(partArb, { minLength: 8, maxLength: 8 }),
+  sizes: Arbitrary.array(int(2, 40), { minLength: 8, maxLength: 8 }),
+  depth: int(1, 3),
+};
+
+const hexId = (tag: string, n: number): string => `${tag}${n.toString(16)}`.padStart(40, tag);
+
+// Plant (u): trust `cat-file blob`'s bytes without the length check; give `ls-tree` the path as a pathspec, so the stand-in sees the
+// path in a command; read the blob before its size is asked; walk past a link or a submodule above the path; ask for a folder's
+// listing once for the whole path.
+it.effect.prop(
+  "P19 readFile on the stand-in: known, one ls-tree -z for each folder on the path, the size, then cat-file blob, in that order, with no path in any command; a missing part ends with no later command; a file over the limit runs no cat-file blob; bytes that do not match the size are Unreadable",
+  READ_SPEC,
+  (spec: ReadSpec) =>
+    Effect.gen(function* () {
+      const commit = commitIdFrom(spec.commit);
+      const marked = ["zq-", ":(glob)zq-", "*zq-"];
+
+      for (const [k, kind] of READ_KINDS.entries()) {
+        const depth = kind.includes("above") ? Math.max(2, spec.depth) : spec.depth;
+
+        const names = Array.from(
+          { length: depth },
+          (_, i) => `${marked[(k + i) % marked.length]}${spec.parts[i] ?? "p"}`,
+        );
+
+        const last = names[depth - 1] ?? "zq-p";
+        const size = spec.sizes[k % spec.sizes.length] ?? 1;
+        const content = Uint8Array.from({ length: size }, (_, i) => (i * 7 + k) & 255);
+        const blob = hexId("b", 1);
+        const lack = kind === "a missing last part" || kind === "a missing part above";
+
+        // The tree each level lists: its folder below, a sibling that shares the name's start and one that shares its end.
+        const level = (i: number) => {
+          const name = names[i] ?? "zq-p";
+
+          const siblings = [
+            { mode: "100644", type: "blob", id: hexId("c", 70 + i), name: `${name}x` },
+            { mode: "100644", type: "blob", id: hexId("c", 80 + i), name: `x${name}` },
+          ];
+
+          const atLast = i === depth - 1;
+          const above = i === depth - 2;
+
+          const entry = (() => {
+            if (atLast) {
+              switch (kind) {
+                case "a folder at the path":
+                  return { mode: "040000", type: "tree", id: hexId("e", 50), name };
+                case "a link at the path":
+                  return { mode: "120000", type: "blob", id: blob, name };
+                case "a submodule at the path":
+                  return { mode: "160000", type: "commit", id: hexId("c", 90), name };
+                default:
+                  return { mode: "100644", type: "blob", id: blob, name };
+              }
+            }
+
+            if (above && kind === "a file above the last part") {
+              return { mode: "100644", type: "blob", id: hexId("c", 91), name };
+            }
+
+            if (above && kind === "a link above the path") {
+              return { mode: "120000", type: "blob", id: hexId("c", 92), name };
+            }
+
+            if (above && kind === "a submodule above the path") {
+              return { mode: "160000", type: "commit", id: hexId("c", 93), name };
+            }
+
+            return { mode: "040000", type: "tree", id: hexId("e", i + 1), name };
+          })();
+
+          const missing = lack && (kind === "a missing part above" ? i === 0 : atLast);
+
+          return missing ? siblings : [...siblings, entry];
+        };
+
+        const trees = new Map(
+          Array.from({ length: depth }, (_, i) => [i === 0 ? commit : hexId("e", i), level(i)] as const),
+        );
+
+        const limits = new Map<string, number>([
+          ["a file one byte over the limit", size - 1],
+          ["a file of exactly the limit", size],
+        ]);
+
+        const limit = limits.get(kind) ?? 10_000;
+
+        const bytes = kind === "a file with no bytes" ? new Uint8Array() : content;
+
+        const wrong = new Map<string, Uint8Array>([
+          ["bytes cut short in cat-file blob", bytes.subarray(0, bytes.length - 1)],
+          ["bytes past the size in cat-file blob", Uint8Array.from([...bytes, 0x7a])],
+        ]);
+
+        const printed = new Map<string, Uint8Array>(wrong.has(kind) ? [[blob, wrong.get(kind) ?? bytes]] : []);
+
+        const held: Held = { trees, blobs: new Map([[blob, bytes]]), printed };
+        const { repo, stand } = yield* open(readScript(commit, held), { blob: limit });
+        const opened = (yield* stand.calls).length;
+        const path = Schema.decodeUnknownSync(Tree.Path)(names.join("/"));
+        const result = yield* Effect.result(repo.readFile(commit, path));
+        const seen = (yield* stand.calls).slice(opened);
+
+        // What the commands must be: the folders shown on the way down, then the size and the bytes of a file.
+        const shown =
+          new Map<string, number>([
+            ["a missing part above", 1],
+            ["a file above the last part", depth - 1],
+            ["a link above the path", depth - 1],
+            ["a submodule above the path", depth - 1],
+          ]).get(kind) ?? depth;
+
+        const reads = (kind.startsWith("a file") && kind !== "a file above the last part") || kind.startsWith("bytes");
+        const fetched = reads && kind !== "a file one byte over the limit";
+
+        const listed = Array.from({ length: shown }, (_, i) => ["ls-tree", "-z", i === 0 ? commit : hexId("e", i)]);
+
+        expect(
+          seen.map((each) => each.args.slice(START.length)),
+          `${kind}: the commands`,
+        ).toEqual([CHECK, ...listed, ...(reads ? [CHECK] : []), ...(fetched ? [["cat-file", "blob", blob]] : [])]);
+
+        expect(
+          seen.some(
+            (each) => each.piped || [...each.args, new TextDecoder().decode(each.input)].join("\0").includes("zq"),
+          ),
+          `${kind}: no command or stdin holds a part of the path`,
+        ).toBe(false);
+        expect(asked(seen[0]), `${kind}: known is asked about the commit`).toEqual(new Set([commit]));
+
+        if (reads) {
+          expect(asked(seen[1 + shown]), `${kind}: the size is asked of the file's blob`).toEqual(new Set([blob]));
+        }
+
+        if (kind === "a file" || kind === "a file with no bytes" || kind === "a file of exactly the limit") {
+          expect(Result.isSuccess(result), `${kind}: answers`).toBe(true);
+          expect(
+            Result.isSuccess(result) ? Option.getOrUndefined(result.success) : undefined,
+            `${kind}: the bytes`,
+          ).toEqual(bytes);
+        } else if (lack || kind === "a file above the last part") {
+          expect(Result.isSuccess(result) && Option.isNone(result.success), `${kind}: is none`).toBe(true);
+        } else if (kind === "a file one byte over the limit") {
+          expect(Result.isFailure(result), `${kind}: fails`).toBe(true);
+
+          if (Result.isFailure(result)) {
+            expectFailure(result.failure, Repository.FileTooLarge, { path: names.join("/"), most: limit }, kind);
+          }
+        } else if (kind.startsWith("bytes")) {
+          expect(Result.isFailure(result), `${kind}: fails`).toBe(true);
+
+          if (Result.isFailure(result)) {
+            unavailable(result.failure, Repository.Unreadable, {}, kind);
+          }
+        } else {
+          expect(Result.isFailure(result), `${kind}: fails`).toBe(true);
+
+          if (Result.isFailure(result)) {
+            const holds = kind.includes("folder") ? "folder" : kind.includes("link") ? "link" : "submodule";
+            const named = kind.includes("above") ? names.slice(0, depth - 1).join("/") : names.join("/");
+            expectFailure(result.failure, Repository.NotAFile, { path: named, holds }, kind);
+          }
+        }
+
+        expect(last, "every path ends in a marked name").toContain("zq");
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
 );

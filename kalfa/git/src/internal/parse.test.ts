@@ -1,4 +1,4 @@
-// P1, P15 and P17: what internal/parse.ts reads out of git's own output. The files under fixtures/ were recorded from
+// P1, P15, P17, P18, P20 and P21: what internal/parse.ts reads out of git's own output. The files under fixtures/ were recorded from
 // real git runs (each names the git version and the command), one row per case with the value its note gives.
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, Predicate, Result, Schema } from "effect";
@@ -8,7 +8,8 @@ import catFile from "../fixtures/cat-file-2.40.1.json" with { type: "json" };
 import diffTreePatch from "../fixtures/diff-tree-patch-2.40.1.json" with { type: "json" };
 import diffTreeRaw from "../fixtures/diff-tree-raw-2.40.1.json" with { type: "json" };
 import forEachRef from "../fixtures/for-each-ref-2.40.1.json" with { type: "json" };
-import { ModelDiff } from "../History.test-support.ts";
+import lsTree from "../fixtures/ls-tree-2.40.1.json" with { type: "json" };
+import { commitIdArb, ModelDiff } from "../History.test-support.ts";
 import * as Ref from "../Ref.ts";
 import { expectFailure } from "../Repository.test-support.ts";
 import * as Repository from "../Repository.ts";
@@ -712,3 +713,231 @@ it("pinned: P18 a patch with a partial row after its last section, a marker with
     }
   }
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Ticket 1935, slice 1: the reader of `ls-tree -z`. The build exports `Parse.listing(output)`, which answers each entry as
+// `{ mode, type, id, name, line }`: the mode and the type as printed, the id, the name as the bytes git printed, and the whole
+// entry's bytes without its closing NUL.
+// ---------------------------------------------------------------------------------------------------------------------
+
+const ListedRow = Schema.Struct({ mode: Schema.String, type: Schema.String, id: Schema.String, name: Schema.String });
+
+const LsTree = Schema.Struct({
+  git: Schema.String,
+  command: Schema.String,
+  rows: Schema.Array(Schema.Struct({ note: Schema.String, output: Schema.String, expect: Schema.Array(ListedRow) })),
+});
+
+const toBase64 = (octets: Uint8Array): string => Buffer.from(octets).toString("base64");
+
+// The entries of an output as the bytes between its NULs, split here and not by the reader.
+const entryBytes = (output: Uint8Array): ReadonlyArray<Uint8Array> => {
+  const found: Array<Uint8Array> = [];
+
+  for (let start = 0, end = output.indexOf(0); end !== -1; start = end + 1, end = output.indexOf(0, start)) {
+    found.push(output.subarray(start, end));
+  }
+
+  return found;
+};
+
+// Plant: read the mode as a number, so `040000` comes back as `40000`; split the head at the last space before the tab; read the
+// name as text, so the byte 0xff is lost; read the name up to the next space or tab; quote or unquote a name; sort the entries.
+it("P21 vector: parse.listing reads every ls-tree -z output recorded from git to the entries its note gives: each mode and type, names with a space, a tab, a line break, an accent and a byte 0xff", () => {
+  const recorded = Schema.decodeUnknownSync(LsTree)(lsTree);
+  expect(recorded.git).toContain("git version");
+  expect(recorded.rows.length).toBeGreaterThan(6);
+
+  const entries = recorded.rows.flatMap((row) => row.expect);
+  expect(new Set(entries.map((each) => each.mode)), "the rows hold every mode").toEqual(
+    new Set(["100644", "100755", "120000", "040000", "160000"]),
+  );
+  expect(new Set(entries.map((each) => each.type)), "the rows hold every type").toEqual(
+    new Set(["blob", "tree", "commit"]),
+  );
+
+  const names = entries.map((each) => fromBase64(each.name));
+  expect(
+    names.some((name) => name.includes(0xff)),
+    "the rows hold a name with the byte 0xff",
+  ).toBe(true);
+
+  for (const byte of [0x20, 0x09, 0x0a]) {
+    expect(
+      names.some((name) => name.length > 1 && name.includes(byte)),
+      `the rows hold a name with the byte ${byte}`,
+    ).toBe(true);
+  }
+
+  for (const row of recorded.rows) {
+    const output = fromBase64(row.output);
+    const result = Parse.listing(output);
+    expect(Result.isSuccess(result), `${row.note}: reads`).toBe(true);
+
+    if (Result.isSuccess(result)) {
+      expect(
+        result.success.map((each) => ({ mode: each.mode, type: each.type, id: each.id, name: toBase64(each.name) })),
+        row.note,
+      ).toEqual(row.expect);
+      expect(
+        result.success.map((each) => toBase64(each.line)),
+        `${row.note}: each raw line`,
+      ).toEqual(entryBytes(output).map(toBase64));
+    }
+  }
+});
+
+const MODES = [
+  ["100644", "blob"],
+  ["100755", "blob"],
+  ["120000", "blob"],
+  ["040000", "tree"],
+  ["160000", "commit"],
+] as const;
+
+// What a name is made of: letters, a space, a tab, a line break, a backslash, a quote, a dash, a dot, an accent, a byte that is not
+// UTF-8, a UTF-8 sequence cut short and a character outside the Basic Multilingual Plane. Never a NUL or a slash.
+const ATOMS: ReadonlyArray<ReadonlyArray<number>> = [
+  [0x61],
+  [0x62],
+  [0x20],
+  [0x09],
+  [0x0a],
+  [0x5c],
+  [0x22],
+  [0x2d],
+  [0x2e],
+  [0xc3, 0xa9],
+  [0xff],
+  [0xe2, 0x82],
+  [0xf0, 0x9f, 0x98, 0x80],
+];
+
+const nameArb: Arbitrary.Arbitrary<ReadonlyArray<number>> = Arbitrary.array(int(0, ATOMS.length - 1), {
+  minLength: 1,
+  maxLength: 6,
+}).pipe(Arbitrary.map((picks) => picks.flatMap((pick) => ATOMS[pick] ?? [])));
+
+interface Drawn {
+  readonly mode: string;
+  readonly type: string;
+  readonly id: string;
+  readonly name: ReadonlyArray<number>;
+}
+
+const drawnArb: Arbitrary.Arbitrary<Drawn> = Arbitrary.all({
+  mode: int(0, MODES.length - 1),
+  id: commitIdArb,
+  name: nameArb,
+}).pipe(
+  Arbitrary.map(({ mode, id, name }) => ({
+    mode: MODES[mode]?.[0] ?? "100644",
+    type: MODES[mode]?.[1] ?? "blob",
+    id,
+    name,
+  })),
+);
+
+// One entry as git prints it, with its closing NUL or not.
+const printedEntry = (each: Drawn, closed = true): Uint8Array =>
+  Uint8Array.from([...latin1(`${each.mode} ${each.type} ${each.id}\t`), ...each.name, ...(closed ? [0] : [])]);
+
+const joinedBytes = (parts: ReadonlyArray<Uint8Array>): Uint8Array =>
+  Uint8Array.from(parts.flatMap((part) => [...part]));
+
+// Plant: split a line at its last space before the tab, so a name with a space is cut, (v) red; read a name as text, so the byte
+// 0xff is lost, (v) red; take the name up to the next tab; drop the check that an entry ends with its NUL, so a cut listing reads;
+// drop the check on the id's length, so a short id reads.
+it.prop(
+  "P20 parse.listing: any drawn folder's ls-tree -z bytes read back to the same entries, each with its raw line; a listing cut at any byte or bent is unreadable or a shorter reading, and never throws",
+  {
+    rows: Arbitrary.array(drawnArb, { minLength: 0, maxLength: 8 }),
+    pick: int(0, 1_000_000),
+    second: int(0, 1_000_000),
+  },
+  ({ rows, pick, second }) => {
+    const printed = rows.map((each) => printedEntry(each));
+    const whole = joinedBytes(printed);
+    const read = Parse.listing(whole);
+    expect(Result.isSuccess(read), "the whole listing reads").toBe(true);
+
+    if (Result.isSuccess(read)) {
+      expect(
+        read.success.map((each) => ({
+          mode: each.mode,
+          type: each.type,
+          id: each.id,
+          name: [...each.name],
+          line: [...each.line],
+        })),
+        "the same entries, each with its raw line",
+      ).toEqual(
+        rows.map((each, i) => ({
+          ...each,
+          name: [...each.name],
+          line: [...(printed[i] ?? new Uint8Array()).subarray(0, -1)],
+        })),
+      );
+    }
+
+    // A cut at any byte: at the end of an entry it is a shorter listing; anywhere else the last entry has no NUL and is unreadable.
+    const cut = pick % (whole.length + 1);
+    const ends = [0];
+
+    for (const entry of printed) {
+      ends.push((ends.at(-1) ?? 0) + entry.length);
+    }
+
+    const result = Parse.listing(whole.subarray(0, cut));
+
+    if (ends.includes(cut)) {
+      const kept = ends.indexOf(cut);
+      expect(Result.isSuccess(result), `a cut after ${kept} entries reads`).toBe(true);
+
+      if (Result.isSuccess(result)) {
+        expect(
+          result.success.map((each) => [...each.name]),
+          "the first entries",
+        ).toEqual(rows.slice(0, kept).map((each) => [...each.name]));
+      }
+    } else {
+      expect(unreadable(result), `a cut inside an entry (byte ${cut}) is unreadable`).toBe(true);
+    }
+
+    // A bend in one entry, drawn by the second number: a short id and a lost tab are unreadable, a lost NUL joins two entries.
+    const at = rows.length === 0 ? -1 : second % rows.length;
+    const target = rows[at];
+
+    if (target !== undefined) {
+      const around = (entry: Uint8Array) => joinedBytes(printed.map((each, i) => (i === at ? entry : each)));
+
+      const shortId = joinedBytes([
+        latin1(`${target.mode} ${target.type} ${target.id.slice(1)}\t`),
+        Uint8Array.from([...target.name, 0]),
+      ]);
+
+      expect(unreadable(Parse.listing(around(shortId))), "an id one digit short is unreadable").toBe(true);
+
+      const noTab = joinedBytes([
+        latin1(`${target.mode} ${target.type} ${target.id} `),
+        Uint8Array.from([...target.name, 0]),
+      ]);
+
+      expect(unreadable(Parse.listing(around(noTab))), "a tab replaced by a space is unreadable").toBe(true);
+
+      const next = printed[at + 1];
+
+      if (next !== undefined) {
+        const joined = joinedBytes(printed.flatMap((each, i) => (i === at ? [each.subarray(0, -1)] : [each])));
+
+        const lost = Parse.listing(joined);
+        expect(Result.isSuccess(lost), "a lost NUL reads, as one entry whose name holds the next").toBe(true);
+
+        if (Result.isSuccess(lost)) {
+          expect(lost.success.length, "one entry fewer").toBe(rows.length - 1);
+        }
+      }
+    }
+  },
+  { arbitrary: { runs: 300, seed: 119120 } },
+);

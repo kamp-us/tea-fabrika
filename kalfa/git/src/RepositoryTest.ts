@@ -35,6 +35,14 @@ import {
   editCarrier,
   LIMIT_CLASSES,
   limitCarrier,
+  blobId,
+  READ_CLASSES,
+  readCarrier,
+  reachedReadClasses,
+  textModel,
+  type ReadCarrier,
+  type ReadCase,
+  type ReadModel,
   reachedEditClasses,
   withCanary,
   CARRIER_CLASSES,
@@ -135,6 +143,7 @@ export const settings = (
     readonly bytes?: number;
     readonly files?: number;
     readonly diff?: number;
+    readonly blob?: number;
   } = {},
   committer: Committer = COMMITTER,
 ): Settings.Settings =>
@@ -145,6 +154,7 @@ export const settings = (
       bytes: 1_000_000,
       files: 1000,
       diff: 10_000_000,
+      blob: 10_000_000,
       time: "10 seconds",
       ...limits,
     },
@@ -350,6 +360,105 @@ const everyEditClass = (carrier: EditCarrier): EditCarrier => {
 };
 
 // ---------------------------------------------------------------------------------------------------------
+// The checks the read laws share (ticket 1935, slice 1)
+// ---------------------------------------------------------------------------------------------------------
+
+const pathFrom = (text: string): Tree.Path => Schema.decodeUnknownSync(Tree.Path)(text);
+
+/** What a read at one path comes to under a size limit: the model's answer, or a file too large to read. */
+type ReadOutcome = ReadModel | { readonly kind: "too-large"; readonly path: string; readonly most: number };
+
+const readOutcome = (model: ReadModel, path: string, limit: number): ReadOutcome =>
+  model.kind === "file" && model.bytes.length > limit ? { kind: "too-large", path, most: limit } : model;
+
+/** The answer of `readFile` or `readText` is the outcome: its bytes or text, none, or the failure and the fields it holds. */
+const expectRead = <A, B>(
+  place: string,
+  result: Result.Result<Option.Option<A>, unknown>,
+  outcome: ReadOutcome,
+  unwrap: (found: A) => B,
+  want: B | undefined,
+): void => {
+  if (outcome.kind === "not-a-file" || outcome.kind === "too-large") {
+    expect(Result.isFailure(result), `${place}: fails`).toBe(true);
+
+    if (Result.isFailure(result)) {
+      if (outcome.kind === "not-a-file") {
+        expectFailure(result.failure, Repository.NotAFile, { path: outcome.path, holds: outcome.holds }, place);
+      } else {
+        expectFailure(result.failure, Repository.FileTooLarge, { path: outcome.path, most: outcome.most }, place);
+      }
+    }
+
+    return;
+  }
+
+  expect(Result.isSuccess(result), `${place}: answers`).toBe(true);
+
+  if (Result.isSuccess(result)) {
+    if (outcome.kind === "none") {
+      expect(Option.isNone(result.success), `${place}: is none`).toBe(true);
+    } else {
+      expect(Option.isSome(result.success), `${place}: is a file`).toBe(true);
+      expect(Option.map(result.success, unwrap), `${place}: the file as it is`).toEqual(Option.some(want));
+    }
+  }
+};
+
+/** Every read of a carrier on a seeded store, `readFile` and `readText` both, against the model under a limit on a file's size. */
+const readAll = (
+  seeded: Seeded,
+  carrier: ReadCarrier,
+  label: string,
+  limit: number,
+  kinds: { readonly raw?: boolean; readonly text?: boolean; readonly only?: (each: ReadCase) => boolean } = {},
+): Effect.Effect<number> =>
+  Effect.gen(function* () {
+    let reads = 0;
+
+    for (const each of carrier.cases.filter(kinds.only ?? (() => true))) {
+      reads += 1;
+      const commit = idAt(seeded.ids, each.commit);
+      const place = `${label}: ${each.label}`;
+      const outcome = readOutcome(each.expected, each.path, limit);
+
+      if (kinds.raw !== false) {
+        const raw = yield* Effect.result(seeded.repository.readFile(commit, pathFrom(each.path)));
+        const bytes = each.expected.kind === "file" ? each.expected.bytes : undefined;
+        expectRead(`${place}, readFile`, raw, outcome, (found) => found, bytes);
+      }
+
+      if (kinds.text === false) {
+        continue;
+      }
+
+      const text = yield* Effect.result(seeded.repository.readText(commit, pathFrom(each.path)));
+      const decoded = each.expected.kind === "file" ? textModel(each.expected.bytes) : undefined;
+
+      if (outcome.kind === "file" && decoded === undefined) {
+        expect(Result.isFailure(text), `${place}, readText: bytes that are not UTF-8 fail`).toBe(true);
+
+        if (Result.isFailure(text)) {
+          expectFailure(text.failure, Repository.NotUtf8, { path: each.path }, `${place}, readText`);
+        }
+      } else {
+        expectRead(`${place}, readText`, text, outcome, (found) => found, decoded);
+      }
+    }
+
+    return reads;
+  });
+
+const everyReadClass = (carrier: ReadCarrier, prefixes: ReadonlyArray<string>): ReadCarrier => {
+  expect(
+    reachedReadClasses(carrier).filter((label) => prefixes.some((prefix) => label.startsWith(prefix))),
+    "the generator reaches every read class",
+  ).toEqual(READ_CLASSES.filter((label) => prefixes.some((prefix) => label.startsWith(prefix))));
+
+  return carrier;
+};
+
+// ---------------------------------------------------------------------------------------------------------
 // The checks the write laws share
 // ---------------------------------------------------------------------------------------------------------
 
@@ -448,6 +557,48 @@ const expectSpan = (
 // ---------------------------------------------------------------------------------------------------------
 // The laws
 // ---------------------------------------------------------------------------------------------------------
+
+/** A path of the history's files, drawn by `k`, or one no history holds. */
+const readPath = (history: History, k: number): string => {
+  const paths = history.nodes.flatMap((node) => node.files.map((each) => each.path));
+
+  return paths.length === 0 ? "x" : (paths[k % paths.length] ?? "x");
+};
+
+/** The spans of `readFile` and `readText`: found or not, and the size only for a file. The path and the bytes are never an attribute. */
+const reading = (seeded: Seeded, history: History, tip: CommitId.CommitId) => {
+  const last = history.nodes.length - 1;
+  const file = history.nodes[last]?.files[0];
+  const size = file?.content.length ?? 0;
+  const there = pathFrom(file?.path ?? "none");
+  const gone = pathFrom(`${CANARY}-gone`);
+
+  const calls: ReadonlyArray<{
+    readonly call: string;
+    readonly run: (path: Tree.Path) => Effect.Effect<Option.Option<unknown>, unknown>;
+  }> = [
+    { call: "readFile", run: (path) => seeded.repository.readFile(tip, path) },
+    { call: "readText", run: (path) => seeded.repository.readText(tip, path) },
+  ];
+
+  return calls.flatMap(({ call, run }) => [
+    {
+      call,
+      note: "a file",
+      run: Effect.map(run(there), (): Extra => ({
+        present: { "kalfa.git.found": true, "kalfa.git.bytes": size },
+        absent: [],
+      })),
+      expected: { "vcs.ref.head.revision": tip },
+    },
+    {
+      call,
+      note: "no file",
+      run: Effect.map(run(gone), (): Extra => ({ present: { "kalfa.git.found": false }, absent: ["kalfa.git.bytes"] })),
+      expected: { "vcs.ref.head.revision": tip },
+    },
+  ]);
+};
 
 export const suite = (name: string, subject: Subject, options: SuiteOptions): void => {
   const run = { arbitrary: { runs: options.runs, seed: 119120 }, timeout: options.timeout };
@@ -907,6 +1058,8 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // leave `kalfa.git.from` out of `moveRef`, or put it in when `from` is none. Slice 2: annotate a diffed path, or a line's text,
     // (k) red; let `rangePatchId` call the wrapped calls, three spans: red; give `kalfa.git.files` the count of lines, or
     // `kalfa.git.lines` the count of files, red; put `kalfa.git.base` on a range that has no one merge base: red.
+    // Ticket 1935, slice 1: annotate the path a read asked for, or the bytes, (a) red; let `readText` call the wrapped `readFile`, two spans:
+    // red; set `kalfa.git.bytes` on a read that found no file: red; leave `kalfa.git.found` out: red.
     it.effect.prop(
       "S9 spans: each call, the write and merge calls too, ends one span named git.<call> with the attributes the plan gives, and leaks nothing",
       { texture: textureArb },
@@ -1015,6 +1168,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                   ),
                   expected: { "vcs.ref.base.revision": a, "vcs.ref.head.revision": b },
                 },
+                ...reading(seeded, shape.history, b),
               ];
 
               const secrets = [CANARY, ...seeded.hidden];
@@ -1205,9 +1359,10 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
 
     // Plant: add a `head` key to the service; let `readRefs` pack refs, so the object count changes; let `writeCommit`
     // point `refs/heads/main` at the commit it wrote; leave `diff` or `rangePatchId` out of the service, or let `rangePatchId` be a
-    // call an adapter writes, so it is in `Raw` too.
+    // call an adapter writes, so it is in `Raw` too. Ticket 1935, slice 1: leave `readFile` out of the service, or
+    // let `readText` be a call an adapter writes, so it is in `Raw` too; let a read write an object, so the fingerprint moves: red.
     it.effect.prop(
-      "S10 no working copy: the service has the eight read calls and the three write calls, no list of reads changes the store, and no list of writes or merges moves a ref",
+      "S10 no working copy: the service has the ten read calls and the three write calls, no list of reads changes the store, and no list of writes or merges moves a ref",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), DEFAULT, (seeded, shape) =>
@@ -1221,7 +1376,9 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
               "patchId",
               "rangePatchId",
               "readCommit",
+              "readFile",
               "readRefs",
+              "readText",
               "walk",
               "writeCommit",
             ]);
@@ -1246,6 +1403,8 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 seeded.repository.patchId(x, y),
                 seeded.repository.diff(x, y),
                 seeded.repository.rangePatchId({ upstream: x, commit: y }),
+                seeded.repository.readFile(x, pathFrom(readPath(shape.history, k))),
+                seeded.repository.readText(y, pathFrom(readPath(shape.history, k + 1))),
               ];
 
               yield* Effect.exit(calls[(texture.nums[k + 48] ?? 0) % calls.length] ?? Effect.void);
@@ -2483,6 +2642,225 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 { concurrency: 1 },
               ),
           );
+        }),
+      run,
+    );
+
+    // Slice 1 of ticket 1935: reading a file. The model is `readModel` and `readCarrier` in History.test-support.ts.
+
+    // Plant: answer none for an empty file, (a) red; pass the bytes through a UTF-8 decode and encode, (a) red; match a listed
+    // name by its start, (b) red; answer the file above for a path below a file, (b) red.
+    it.effect.prop(
+      "S25 read a file: every path of every commit's tree reads back as its bytes, exactly; each path of the no-file classes is none, never no bytes and never an error; an empty file is Some of no bytes",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyReadClass(readCarrier(texture), ["(a)", "(b)"]);
+          const plain = (each: ReadCase) => each.expected.kind === "file" || each.expected.kind === "none";
+
+          const reads = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+
+              return yield* readAll(seeded, carrier, "reads", DEFAULT.limits.blob, { text: false, only: plain });
+            }),
+          );
+
+          const files = carrier.cases.filter((each) => each.expected.kind === "file");
+          expect(files.length, "the generator reaches files").toBeGreaterThan(20);
+          expect(reads - files.length, "the generator reaches paths that hold nothing").toBeGreaterThan(20);
+          expect(
+            files.some((each) => each.expected.kind === "file" && each.expected.bytes.length === 0),
+            "the generator reaches an empty file",
+          ).toBe(true);
+        }),
+      run,
+    );
+
+    // Plant: delete the folder check, so a folder answers none, (c) red; read a link's target as its content, (d) red; answer none
+    // below a link, (d) red.
+    it.effect.prop(
+      "S26 not a file: a folder fails NotAFile with holds folder naming the path, a link fails with holds link, and a path below a link fails naming the link",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyReadClass(readCarrier(texture), ["(c)", "(d)"]);
+          const refusing = (each: ReadCase) => each.expected.kind === "not-a-file";
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+              yield* readAll(seeded, carrier, "refusals", DEFAULT.limits.blob, { only: refusing });
+            }),
+          );
+
+          const held = carrier.cases.flatMap((each) =>
+            each.expected.kind === "not-a-file"
+              ? [`${each.expected.holds} ${each.expected.path === each.path ? "at" : "above"}`]
+              : [],
+          );
+
+          expect([...new Set(held)].sort(), "the generator reaches a folder, a link, and a path below a link").toEqual([
+            "folder at",
+            "link above",
+            "link at",
+          ]);
+        }),
+      run,
+    );
+
+    // Plant: delete the read's size check, (e) red; count `>=` for `>`, (e) red. The folder and link checks come first: a limit of
+    // one byte leaves every refusal and every none as it was.
+    it.effect.prop(
+      "S27 the blob limit never cuts: a file of exactly limits.blob bytes reads, one byte more fails FileTooLarge naming it, from readFile and readText, and a refusal or none comes first",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = readCarrier(texture);
+          const sizes = carrier.history.nodes.flatMap((node) => node.files.map((each) => each.content.length));
+          const most = Math.max(...sizes);
+          expect(most, "the generator reaches a file past 1000 bytes").toBeGreaterThan(1000);
+
+          const large = (limit: number) =>
+            carrier.cases.filter((each) => each.expected.kind === "file" && each.expected.bytes.length > limit).length;
+
+          expect(large(most), "no file is over the largest").toBe(0);
+          expect(large(most - 1), "the largest is one byte over").toBeGreaterThan(0);
+          expect(large(1), "most files are over one byte").toBeGreaterThan(10);
+
+          for (const limit of [1, most, most - 1]) {
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const seeded = yield* subject.seed(carrier.history, settings({ blob: limit }));
+                yield* readAll(seeded, carrier, `a limit of ${limit} bytes`, limit);
+              }),
+            );
+          }
+        }),
+      run,
+    );
+
+    // Plant: answer none for an unknown commit, (f) red; check for a shallow store first, (h) red.
+    it.effect.prop(
+      "S28 unknown commits and shallow stores: an id the store lacks, or a tree's or blob's id, fails NoSuchCommit naming it, never none; a shallow store answers every read",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = readCarrier(texture);
+          const shallow = cutShallow(carrier.history);
+          expect(shallow, "the carrier has a commit with parents").toBeDefined();
+          const first = carrier.cases[0];
+          const blob = carrier.history.nodes.flatMap((node) => node.files).find((each) => each.content.length > 0);
+
+          const stores = [
+            { label: "whole", history: carrier.history },
+            ...(shallow === undefined ? [] : [{ label: "shallow", history: shallow }]),
+          ];
+
+          for (const store of stores) {
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const seeded = yield* subject.seed(store.history, DEFAULT);
+                yield* readAll(seeded, carrier, store.label, DEFAULT.limits.blob);
+
+                const lacking = [
+                  commitIdFrom(missingId(texture, 0, seeded.ids)),
+                  commitIdFrom(TREE_ID),
+                  ...(blob === undefined ? [] : [commitIdFrom(blobId(blob.content))]),
+                  ...seeded.trees
+                    .filter((id) => id !== TREE_ID)
+                    .slice(0, 1)
+                    .map(commitIdFrom),
+                ];
+
+                for (const absent of lacking) {
+                  const calls: ReadonlyArray<readonly [string, Effect.Effect<unknown, unknown>]> = [
+                    ["readFile", seeded.repository.readFile(absent, pathFrom(first?.path ?? "x"))],
+                    ["readText", seeded.repository.readText(absent, pathFrom(first?.path ?? "x"))],
+                  ];
+
+                  for (const [call, effect] of calls) {
+                    const error = yield* refused(effect, `${store.label}: ${call} of ${absent}`);
+                    expect(isMissing(error), `${store.label}: ${call} of ${absent} fails with NoSuchCommit`).toBe(true);
+
+                    if (isMissing(error)) {
+                      expect(error.id, `${store.label}: ${call} names the id it was asked for`).toBe(absent);
+                    }
+                  }
+                }
+              }),
+            );
+          }
+        }),
+      run,
+    );
+
+    // Plant: decode with replacement, (g) red; drop a leading BOM, (g) red; read none as an empty text: red.
+    it.effect.prop(
+      "S29 text: readText is readFile decoded as UTF-8 exactly, a BOM, a CR and a NUL kept; bytes that are not UTF-8 fail NotUtf8 naming the path; none stays none",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyReadClass(readCarrier(texture), ["(g)"]);
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+              yield* readAll(seeded, carrier, "text", DEFAULT.limits.blob, { raw: false });
+            }),
+          );
+
+          const failing = carrier.cases.filter(
+            (each) => each.expected.kind === "file" && textModel(each.expected.bytes) === undefined,
+          );
+
+          expect(failing.length, "the generator reaches bytes that are not UTF-8").toBeGreaterThan(1);
+          expect(
+            carrier.cases.some(
+              (each) => each.expected.kind === "file" && (textModel(each.expected.bytes) ?? "").startsWith("\uFEFF"),
+            ),
+            "the generator reaches a BOM",
+          ).toBe(true);
+        }),
+      run,
+    );
+
+    // Plant: answer the store's own array, (j) red.
+    it.effect.prop(
+      "S30 the caller's bytes: changing the bytes an answer gave changes nothing read later, and each answer is its own array",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = readCarrier(texture);
+          let changed = 0;
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+
+              const files = carrier.cases.filter(
+                (each) => each.expected.kind === "file" && each.expected.bytes.length > 0,
+              );
+
+              for (const each of files) {
+                const commit = idAt(seeded.ids, each.commit);
+                const first = yield* seeded.repository.readFile(commit, pathFrom(each.path));
+
+                if (Option.isSome(first)) {
+                  changed += 1;
+                  first.value.fill(((first.value[0] ?? 0) ^ 0x5a) & 0xff);
+                  const again = yield* seeded.repository.readFile(commit, pathFrom(each.path));
+                  const want = each.expected.kind === "file" ? each.expected.bytes : undefined;
+                  expect(Option.getOrUndefined(again), `${each.label}: read again`).toEqual(want);
+                  expect(Option.getOrUndefined(again), `${each.label}: not the array given before`).not.toBe(
+                    first.value,
+                  );
+                }
+              }
+            }),
+          );
+
+          expect(changed, "the generator reaches files with bytes").toBeGreaterThan(20);
         }),
       run,
     );

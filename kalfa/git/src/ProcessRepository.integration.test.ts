@@ -1,10 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-// The git-binary adapter on the real git binary (I1 to I9). Real git runs in temp folders, so this file runs
+// The git-binary adapter on the real git binary (I1 to I11). Real git runs in temp folders, so this file runs
 // only in CI's full run and in a cloud box, never on the laptop (the host's test config refuses it by name).
 // A stand-in cannot do this job: these laws are the proof that `/process` answers what `/memory` answers and
 // that the parser reads what real git writes.
 import { expect, it } from "@effect/vitest";
-import { Effect, Option, Predicate, Result, Schema, Tracer } from "effect";
+import { Effect, Match, Option, Predicate, Result, Schema, Tracer } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as FileSystem from "effect/FileSystem";
 import * as Commit from "./Commit.ts";
@@ -13,6 +13,7 @@ import * as Diff from "./Diff.ts";
 import {
   TREE_CARRIER_CLASSES,
   editCarrier,
+  readCarrier,
   shapes,
   textureArb,
   treeCarrier,
@@ -20,8 +21,16 @@ import {
   type History,
 } from "./History.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
+import { memorySubject } from "./MemorySeed.test-support.ts";
 import * as MergeCommitTest from "./MergeCommit.test-support.ts";
-import { bareRepository, fastImport, git, openRepository, processSubject } from "./ProcessSeed.test-support.ts";
+import {
+  bareRepository,
+  fastImport,
+  git,
+  openRepository,
+  processSubject,
+  setConfigTable,
+} from "./ProcessSeed.test-support.ts";
 import * as Ref from "./Ref.ts";
 import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
@@ -415,7 +424,12 @@ it.effect(
 
       for (const [label, from, to] of diffs) {
         const named = yield* Effect.flip(repo.diff(from, to));
-        expectFailure(named, Repository.NotAFile, { path: label === "a file made a submodule" ? "a" : "sub" }, label);
+        expectFailure(
+          named,
+          Repository.NotAFile,
+          { path: label === "a file made a submodule" ? "a" : "sub", holds: "submodule" },
+          label,
+        );
       }
 
       expect(yield* repo.diff(id1, id3), "a commit with the same files is no change, whatever the submodule").toEqual(
@@ -622,4 +636,156 @@ it.effect(
         expect(deep.paths[0]?.startsWith("a/b~"), "the file moved to a name of its own").toBe(true);
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+type ReadError =
+  | Repository.NoSuchCommit
+  | Repository.NotAFile
+  | Repository.FileTooLarge
+  | Repository.NotUtf8
+  | Repository.GitUnavailable
+  | Repository.TimedOut;
+
+/** What a read came to, as text a law compares: the bytes, none, or the failure's tag and the fields it holds. */
+const readOutcome = (read: Effect.Effect<Option.Option<Uint8Array | string>, ReadError>): Effect.Effect<string> =>
+  Effect.map(Effect.result(read), (result) => {
+    if (Result.isSuccess(result)) {
+      const found = result.success;
+
+      if (Option.isNone(found)) {
+        return "none";
+      }
+
+      return Predicate.isString(found.value)
+        ? `text:${found.value}`
+        : `file:${Buffer.from(found.value).toString("base64")}`;
+    }
+
+    return Match.value(result.failure).pipe(
+      Match.tag("NotAFile", (error) => `NotAFile ${error.path} ${error.holds}`),
+      Match.tag("FileTooLarge", (error) => `FileTooLarge ${error.path} ${error.most}`),
+      Match.tag("NotUtf8", (error) => `NotUtf8 ${error.path}`),
+      Match.tag("NoSuchCommit", (error) => `NoSuchCommit ${error.id}`),
+      Match.orElse((error) => error._tag),
+    );
+  });
+
+// Plant (I10): run `cat-file --filters --path=<path>` for a file's bytes, which `core.autocrlf` and the attributes file turn into
+// other bytes, (w) red; give `ls-tree` the path as an argument, so `core.ignoreCase` and `core.precomposeUnicode` act, (w) red. The
+// answers of every read of the generator, asked of one bare repository, are the same before and after its config gets every key of
+// the table, and the same as `/memory` gives for the same history.
+it.effect.prop(
+  "I10 scenario: a repository's own config steers no read: core.quotePath, core.precomposeUnicode, core.ignoreCase, core.autocrlf, core.eol, core.safecrlf, a filter, core.attributesFile, info/attributes and core.bigFileThreshold change no answer of readFile or readText, and the answers are /memory's",
+  { texture: textureArb },
+  ({ texture }) =>
+    Effect.gen(function* () {
+      const carrier = readCarrier(texture);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const real = yield* processSubject.seed(carrier.history, settings);
+          const model = yield* memorySubject.seed(carrier.history, settings);
+          const [dir] = real.hidden;
+
+          if (dir === undefined) {
+            return yield* Effect.die("the seeder gave no repository folder");
+          }
+
+          const answers = (seeded: RepositoryTest.Seeded) =>
+            Effect.forEach(
+              carrier.cases,
+              (each) => {
+                const commit = idAt(seeded.ids, each.commit);
+                const path = Schema.decodeUnknownSync(Tree.Path)(each.path);
+
+                return Effect.all(
+                  [
+                    readOutcome(seeded.repository.readFile(commit, path)),
+                    readOutcome(seeded.repository.readText(commit, path)),
+                  ],
+                  { concurrency: 1 },
+                );
+              },
+              { concurrency: 1 },
+            );
+
+          const without = yield* answers(real);
+          expect(without, "git answers what /memory answers").toEqual(yield* answers(model));
+          yield* setConfigTable(dir);
+          expect(yield* answers(real), "the same answers with every key of the config table set").toEqual(without);
+          expect(without.filter(([raw]) => raw?.startsWith("file:")).length, "the reads have files").toBeGreaterThan(
+            20,
+          );
+          expect(
+            without.filter(([, text]) => text?.startsWith("text:")).length,
+            "the reads have text, which the filter would change",
+          ).toBeGreaterThan(20);
+        }),
+      );
+    }).pipe(Effect.provide(NodeServices.layer)),
+  { arbitrary: { runs: 5, seed: 119120 } },
+);
+
+// Plant (I11): read a gitlink as nothing at the path, (i) red; read a path below a gitlink as none, (i) red. A submodule holds a
+// commit and no file: a read at it, or below it, fails `NotAFile` naming the submodule, and the files beside it read as they are.
+it.effect(
+  "I11 scenario: with a gitlink made by fast-import, readFile and readText at it and below it fail NotAFile with holds submodule naming it, the files beside it read, and the folder that holds it is a folder",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bareRepository;
+
+      const [first] = yield* fastImport(
+        dir,
+        bytes(
+          `commit refs/heads/main\nmark :1\nauthor ${ADA}\ncommitter ${ADA}\ndata 2\nc1\n`,
+          "M 100644 inline a\ndata 2\nx\n\n",
+          "M 100644 inline dir/f\ndata 2\ny\n\n",
+          `M 160000 ${GITLINK_A} sub\n`,
+          `M 160000 ${GITLINK_B} dir/inner\n\n`,
+        ),
+      );
+
+      const repo = yield* openRepository(dir, settings);
+      const commit = commitIdFrom(first ?? "");
+      const path = (text: string) => Schema.decodeUnknownSync(Tree.Path)(text);
+
+      for (const [label, asked, named] of [
+        ["a submodule at the top", "sub", "sub"],
+        ["a path below a submodule", "sub/x/y", "sub"],
+        ["a submodule in a folder", "dir/inner", "dir/inner"],
+        ["a path below a submodule in a folder", "dir/inner/z", "dir/inner"],
+      ] as const) {
+        const reads: ReadonlyArray<readonly [string, Effect.Effect<Option.Option<unknown>, unknown>]> = [
+          ["readFile", repo.readFile(commit, path(asked))],
+          ["readText", repo.readText(commit, path(asked))],
+        ];
+
+        for (const [call, read] of reads) {
+          expectFailure(
+            yield* Effect.flip(read),
+            Repository.NotAFile,
+            { path: named, holds: "submodule" },
+            `${label}, ${call}`,
+          );
+        }
+      }
+
+      expect(Option.getOrUndefined(yield* repo.readText(commit, path("a"))), "a file beside a submodule reads").toBe(
+        "x\n",
+      );
+      expect(
+        Option.getOrUndefined(yield* repo.readText(commit, path("dir/f"))),
+        "a file in the folder of a submodule reads",
+      ).toBe("y\n");
+      expectFailure(
+        yield* Effect.flip(repo.readFile(commit, path("dir"))),
+        Repository.NotAFile,
+        { path: "dir", holds: "folder" },
+        "the folder",
+      );
+      expect(
+        Option.isNone(yield* repo.readFile(commit, path("sub-not"))),
+        "a name that only starts like the submodule's is none",
+      ).toBe(true);
+    }).pipe(Effect.provide(NodeServices.layer)),
 );

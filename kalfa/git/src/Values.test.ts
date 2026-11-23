@@ -312,7 +312,7 @@ it.prop(
 
 const decoded = Schema.decodeUnknownResult(Settings.Settings);
 
-const KEYS = ["commits", "refs", "bytes", "files", "diff", "time"] as const;
+const KEYS = ["commits", "refs", "bytes", "files", "diff", "blob", "time"] as const;
 
 const NOT_A_TIME = [
   ["zero seconds", "0 seconds"],
@@ -329,7 +329,7 @@ const NOT_A_TIME = [
 
 // Plant: give `commits` a default; drop the text check on `time`, so `"ten"` is accepted; drop the finite check on `time`,
 // so `"Infinity"` is accepted; give `diff` a default; accept `files: 0` (a `files` that is any whole number); leave `files`
-// out of the limits.
+// out of the limits. Ticket 1935: give `blob` a default; accept `blob: 0`; leave `blob` out of the limits.
 it.prop(
   "G5 settings: Settings accepts every positive count and duration text, refuses the rest, and has no default",
   { limits: limitsArb },
@@ -340,6 +340,7 @@ it.prop(
       bytes: limits.bytes,
       files: limits.files,
       diff: limits.diff,
+      blob: limits.blob,
       time: limits.time,
     };
 
