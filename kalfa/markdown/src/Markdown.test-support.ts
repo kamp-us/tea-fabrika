@@ -225,6 +225,13 @@ export const endings = (text: string): number => locate(text, text.length).line 
 
 const pointText = (point: Point): string => `${point.line}:${point.column}:${point.offset ?? "none"}`;
 
+// Whether the part's last line is an underline of `=` or `-` marks, as a setext heading's is (a block quote or a list item may lead it).
+const isSetext = (text: string, position: Root["position"]): boolean => {
+  const lines = text.slice(position?.start.offset ?? 0, position?.end.offset ?? 0).split(/\r\n|\n|\r/u);
+
+  return /^[ \t>]*(?:=+|-+)[ \t]*$/u.test(lines.at(-1) ?? "");
+};
+
 /**
  * What is wrong with a document read from `body`, one line each: the root's fields and its range, a part with no position (only a `link` or
  * a `text` may lack one), a child outside its parent, and siblings out of order or overlapping.
@@ -278,6 +285,8 @@ export const problems = (document: Root, body: string): ReadonlyArray<string> =>
     if (isParent(node)) {
       let before = -1;
       let previous: string | undefined;
+      // Where the run of definitions right above the child starts.
+      let runStart = -1;
 
       for (const child of node.children) {
         const at = child.position?.start.offset;
@@ -286,11 +295,20 @@ export const problems = (document: Root, body: string): ReadonlyArray<string> =>
           continue;
         }
 
-        // A setext heading right under a link definition starts at the definition's first line (mdast gives it the lines of the
-        // paragraph the definition was cut from), so the two overlap. That is mdast's own answer, kept as it is; see the report.
-        const cutFromHeading = child.type === "heading" && previous === "definition";
+        if (child.type === "definition" && previous !== "definition") {
+          runStart = at;
+        }
 
-        if (at < before && !cutFromHeading) {
+        // mdast starts a setext heading at the first definition of the run right above it, so those siblings overlap (README, "Two parts
+        // that sit side by side can overlap"). Only that: a setext heading that starts where the run starts and ends below the part before it.
+        const cutFromRun =
+          child.type === "heading" &&
+          previous === "definition" &&
+          at === runStart &&
+          (child.position?.end.offset ?? 0) > before &&
+          isSetext(text, child.position);
+
+        if (at < before && !cutFromRun) {
           found.push(
             `a ${child.type} at ${pointText(child.position?.start ?? { line: 0, column: 0 })} overlaps the part before it`,
           );
@@ -393,6 +411,19 @@ const literalBodies = (run: Run): ReadonlyArray<AnyBody> => [
   { cls: "c", name: "all link literals", body: [...LINKED, ...UNPOSITIONED].join("\n\n"), holds: true },
 ];
 
+const DEFINITION_HEADINGS: ReadonlyArray<readonly [string, string]> = [
+  ["setext on the next line", '[ref]: http://x.y "t"\nSetext title\n=====\n'],
+  ["setext dash on the next line", "[a]: b\nT\n---\n"],
+  ["setext under two definitions", "[a]: b\n[c]: d\nT\n===\n"],
+  ["setext of two lines", "[a]: b\nT1\nT2\n===\n"],
+  ["setext after a blank line", "[a]: b\n\nT\n===\n"],
+  ["setext in a block quote", "> [a]: b\n> T\n> ===\n"],
+  ["setext in a list item", "- [a]: b\n  T\n  ===\n"],
+  ["ATX on the next line", "[a]: b\n# T\n"],
+  ["ATX after a blank line", "[a]: b\n\n# T\n"],
+  ["ATX under two definitions", "[a]: b\n[c]: d\n## T ##\n"],
+];
+
 const blockBodies = (run: Run): ReadonlyArray<AnyBody> => [
   { cls: "d", name: "every block", body: FULL_BODY, holds: true, types: FULL_TYPES },
   { cls: "d", name: "drawn blocks", body: drawnBlocks(run), holds: true },
@@ -402,6 +433,13 @@ const blockBodies = (run: Run): ReadonlyArray<AnyBody> => [
     body: drawnBlocks({ ...run, picks: [0, ...run.picks.slice(1)] }),
     holds: true,
   },
+  // A link definition above a heading: mdast's one overlap (a setext heading cut from the run of definitions) and the headings that must not get it.
+  ...DEFINITION_HEADINGS.map(([name, body]): AnyBody => ({
+    cls: "d",
+    name: `definition, ${name}`,
+    body,
+    holds: body.startsWith("[") || body.startsWith(">") || body.startsWith("-"),
+  })),
   ...BLOCKS.map((block): AnyBody => ({
     cls: "d",
     name: `block ${block.name}`,
@@ -579,7 +617,7 @@ const SNIPPETS: NonEmpty<ReadonlyArray<string>> = [
 ];
 
 // What a block's first line and the lines after it start with, inside nothing, a list item and a block quote.
-const MARKS_OF: Readonly<Record<"none" | "list" | "quote", readonly [string, string]>> = {
+const CONTAINER_LEADS: Readonly<Record<"none" | "list" | "quote", readonly [string, string]>> = {
   none: ["", ""],
   list: ["- ", "  "],
   quote: ["> ", "> "],
@@ -600,7 +638,7 @@ const fencedBodies = (run: Run): ReadonlyArray<CodeBody> => {
         const lines = pick(SNIPPETS, offset + n);
         const closing = fence.startsWith("`") ? "```" : "~~~";
         const all = open ? [fence, ...lines] : [fence, ...lines, closing];
-        const [firstMark, restMark] = MARKS_OF[container];
+        const [firstMark, restMark] = CONTAINER_LEADS[container];
         const block = all.map((line, i) => `${i === 0 ? firstMark : restMark}${line}`).join("\n");
         const lead = (run.picks[2] ?? 0) % 2 === 0 ? "between\n\n" : "";
 
@@ -815,7 +853,7 @@ export const PLACED_REQUIRED: ReadonlyArray<string> = ["d", "n", "o", "p"];
 
 const BAR_LF = "---\n";
 
-// A start from class (n): what stands before the body. `kind` says how `Frontmatter.split` must cut it.
+// A start from class (n): what stands before the body. `cut` says how `Frontmatter.split` must cut it.
 const starts = (run: Run): ReadonlyArray<{ readonly name: string; readonly text: string; readonly cut: boolean }> => {
   const written = Result.getOrThrow(Frontmatter.write({ data: { a: 1, b: drawnWord(run, 5) }, body: "" }, Base.S1));
 
