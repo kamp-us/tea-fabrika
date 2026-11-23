@@ -102,6 +102,8 @@ type World = {
   readonly command?: ReadonlyArray<string>;
   /** The ready record names the quest `lane`, as one written before the rule that a lane is called a quest does. */
   readonly laneKey?: boolean;
+  /** The branch holds one more commit with no note, as a plain `git commit --allow-empty` makes. */
+  readonly unsignedCommit?: boolean;
 };
 
 const land = (world: World) => {
@@ -236,6 +238,10 @@ const land = (world: World) => {
 
     if (world.dirty) {
       writeFileSync(join(quest, "quest.txt"), "an edit nobody committed\n");
+    }
+
+    if (world.unsignedCommit) {
+      git(quest, "commit", "-q", "--allow-empty", "-m", "open the slice");
     }
 
     const before = [git(quest, "rev-parse", "HEAD"), git(quest, "rev-parse", "refs/notes/fabrika")];
@@ -508,6 +514,18 @@ describe("land.ts, today's tooling", () => {
 
     const ticket = land({ ...fine, body: text, tickets: "1843 5", command: ["check", "77"] });
     expect(ticket.code, ticket.err).toBe(0);
+  }, 120_000);
+
+  // Plants: skip the signature read in `check`, count only the branch's tip, or name no commit.
+  it("scenario: `land.ts check` refuses a commit since main with no signature, names it, and passes when every commit has a note", () => {
+    const unsigned = land({ ...fine, unsignedCommit: true, command: ["check", "77"] });
+    expect(unsigned.code, unsigned.err).toBe(1);
+    expect(unsigned.err).toContain("1 commit(s) since main are not signed:");
+    expect(unsigned.err).toContain(`${unsigned.head.slice(0, 8)} open the slice`);
+    expect(unsigned.err).not.toContain("the quest's step");
+    const signed = land({ ...fine, command: ["check", "77"] });
+    expect(signed.code, signed.err).toBe(0);
+    expect(signed.out).toContain("every commit since main signed");
   }, 120_000);
 
   // Plant: let a wait for a good admin merge end in a refusal, as the command did after the merge.
