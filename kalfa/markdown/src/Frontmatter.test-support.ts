@@ -54,11 +54,17 @@ const around = (piece: string, seed: Seed): string => {
 export interface TextGroup {
   /** The plan's letter for the group. */
   readonly id: string;
-  /** Every fixed piece, then one random piece per seed. */
-  readonly pool: (drawn: ReadonlyArray<Seed>) => ReadonlyArray<string>;
+  /**
+   * Every fixed piece, then one random piece per seed. Not `wide`, the fixed pieces over `SHORT` characters are left out: every run draws them alike,
+   * so a law that takes the pool in each of its runs takes them once, in a run of its own.
+   */
+  readonly pool: (drawn: ReadonlyArray<Seed>, wide?: boolean) => ReadonlyArray<string>;
   /** What the pool must hold, or the generator lost the group. */
   readonly reached: (pool: ReadonlyArray<string>) => boolean;
 }
+
+/** The longest fixed piece a run that is not `wide` takes. */
+const SHORT = 200;
 
 const group = (
   id: string,
@@ -67,7 +73,10 @@ const group = (
   reached: (text: string) => boolean,
 ): TextGroup => ({
   id,
-  pool: (drawn) => [...fixed, ...drawn.map(make)],
+  pool: (drawn, wide = true) => [
+    ...(wide ? fixed : fixed.filter((piece) => piece.length <= SHORT)),
+    ...drawn.map(make),
+  ],
   reached: (pool) => pool.some(reached),
 });
 
@@ -480,19 +489,19 @@ export const TEXT_REQUIRED: ReadonlyArray<string> = REQUIRED.filter(
 );
 
 /** The variants that change the data: the random mix, each text group, each key group, and plain keys. */
-export const dataVariants = (drawn: ReadonlyArray<Seed>): ReadonlyArray<Variant> => {
+export const dataVariants = (drawn: ReadonlyArray<Seed>, wide = true): ReadonlyArray<Variant> => {
   const texts = mixedTexts(drawn);
   const mixed = { texts, keys: mixedKeys(drawn) };
   const list: Array<Variant> = [{ group: "drawn", pools: mixed, body: texts.join("") }];
 
   for (const g of TEXT_GROUPS) {
-    const pool = g.pool(drawn);
+    const pool = g.pool(drawn, wide);
 
     list.push({ group: g.id, pools: { texts: pool, keys: pool }, body: pool.join("") });
   }
 
   for (const g of KEY_GROUPS) {
-    list.push({ group: g.id, pools: { texts, keys: g.pool(drawn) }, body: texts.join("") });
+    list.push({ group: g.id, pools: { texts, keys: g.pool(drawn, wide) }, body: texts.join("") });
   }
 
   list.push({ group: "structure", pools: { texts, keys: PLAIN_KEYS }, body: texts.join("") });

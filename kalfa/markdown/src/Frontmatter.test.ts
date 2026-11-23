@@ -4,7 +4,7 @@
 // every run. A law keeps the group ids it checked and fails when `REQUIRED` is not all there.
 import { expect, it, vi } from "@effect/vitest";
 import { deepStrictEqual, strictEqual } from "@effect/vitest/utils";
-import { Effect, Option, Predicate, Result, Schema, Tracer } from "effect";
+import { Arbitrary, Effect, Option, Predicate, Result, Schema, Tracer } from "effect";
 import { isAlias, isCollection, isScalar, parseDocument, visit } from "yaml";
 import * as Support from "./Frontmatter.test-support.ts";
 import * as Frontmatter from "./Frontmatter.ts";
@@ -66,6 +66,41 @@ const roundTrip = Effect.fnUntraced(function* <S extends Schema.Codec<unknown, u
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+// F1's round trips over one run's variants. A run that is not `wide` leaves out the long fixed pieces of the pools, which every run draws alike.
+const checkRoundTrips = (run: Support.Run, wide: boolean) =>
+  Effect.gen(function* () {
+    const checked: Array<string> = [];
+
+    for (const [index, variant] of Support.dataVariants(run.seeds, wide).entries()) {
+      strictEqual(Support.reachedBy(variant), true, `group ${variant.group} is not in its pool`);
+
+      const json = Support.jsonData(run.json, variant.pools);
+      const label = (shape: string) => `${shape} ${variant.group}`;
+
+      checked.push(variant.group, ...Support.jsonReached(json));
+
+      yield* roundTrip(label("S1"), Support.S1, json, variant.body);
+
+      // S2 to S5 hold the same texts as S1, in the fields of a Struct: a run that is not `wide` takes them for every fourth variant, from
+      // where its pick says, so 300 runs take each group in each shape many times over; the pinned run takes them all.
+      if (wide || (index + (run.picks[0] ?? 0)) % 4 === 0) {
+        yield* roundTrip(label("S2"), Support.S2, Support.s2Data(run, variant.pools), variant.body);
+        yield* roundTrip(label("S3"), Support.S3, Support.s3Data(run, variant.pools), variant.body);
+        yield* roundTrip(label("S3 date"), Support.S3Date, Support.s3DateData(run, variant.pools), variant.body);
+        yield* roundTrip(label("S4"), Support.S4, Support.s4Data(run, variant.pools), variant.body);
+        yield* roundTrip(label("S5"), Support.S5, Support.s5Data(run, variant.pools), variant.body);
+      }
+    }
+
+    for (const variant of Support.bodyVariants(run.seeds)) {
+      checked.push(variant.group);
+
+      yield* roundTrip(`body ${variant.group}`, Support.S1, Support.jsonData(run.json, variant.pools), variant.body);
+    }
+
+    deepStrictEqual(missing(checked, GROUPS), [], "groups never checked in this run");
+  });
+
 // F1. Plants, each one wrong rule in Frontmatter.ts (run once, never kept):
 //  read under yaml-1.1: `yes` reads back true, (h) red; write under failsafe: 87 comes back as text, S2 red;
 //  rebuild the body from lines split on a lone \r too, (c) and (u) red; take the last fence, not the next, (t) red;
@@ -73,36 +108,18 @@ const roundTrip = Effect.fnUntraced(function* <S extends Schema.Codec<unknown, u
 it.effect.prop(
   "F1 write then read gives the same data and body, for every shape and every group of input",
   { run: Support.run },
-  ({ run }) =>
-    Effect.gen(function* () {
-      const checked: Array<string> = [];
+  ({ run }) => checkRoundTrips(run, false),
+  runs(300),
+);
 
-      for (const variant of Support.dataVariants(run.seeds)) {
-        strictEqual(Support.reachedBy(variant), true, `group ${variant.group} is not in its pool`);
+// F1 on the wide variants: the same checks over the long fixed pieces of the pools (up to 5,000 characters). Plant (run once, restored): `write` drops
+// the data when a text is exactly 5,000 characters: the fixed piece goes red here, and the property, whose pieces are 4,999 at most, does not.
+it.effect("pinned: F1 write then read over the long fixed pieces of every group", () =>
+  Effect.gen(function* () {
+    const [run] = yield* Arbitrary.sampleEffect(Support.run, { count: 1, seed: 119120 });
 
-        const json = Support.jsonData(run.json, variant.pools);
-        const label = (shape: string) => `${shape} ${variant.group}`;
-
-        checked.push(variant.group, ...Support.jsonReached(json));
-
-        yield* roundTrip(label("S1"), Support.S1, json, variant.body);
-        yield* roundTrip(label("S2"), Support.S2, Support.s2Data(run, variant.pools), variant.body);
-        yield* roundTrip(label("S3"), Support.S3, Support.s3Data(run, variant.pools), variant.body);
-        yield* roundTrip(label("S3 date"), Support.S3Date, Support.s3DateData(run, variant.pools), variant.body);
-        yield* roundTrip(label("S4"), Support.S4, Support.s4Data(run, variant.pools), variant.body);
-        yield* roundTrip(label("S5"), Support.S5, Support.s5Data(run, variant.pools), variant.body);
-      }
-
-      for (const variant of Support.bodyVariants(run.seeds)) {
-        checked.push(variant.group);
-
-        yield* roundTrip(`body ${variant.group}`, Support.S1, Support.jsonData(run.json, variant.pools), variant.body);
-      }
-
-      deepStrictEqual(missing(checked, GROUPS), [], "groups never checked in this run");
-    }),
-  // 120 runs, not 300: F1 writes and reads every shape in each run, and at 300 runs it took 40 s of CI's 60 s limit.
-  runs(120),
+    yield* checkRoundTrips(run ?? expect.unreachable("no run"), true);
+  }),
 );
 
 const FENCES = new Set(["---", "---\r", "..."]);
