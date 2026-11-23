@@ -1,13 +1,16 @@
 import { it as effect } from "@effect/vitest";
-import { Array as Arr, Effect, FileSystem, Layer, Path, PlatformError, Result, Schema } from "effect";
+import { Array as Arr, Effect, FileSystem, Layer, Option, Path, PlatformError, Result, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { answer, File, memory, Row } from "./gate.test-support.ts";
+import * as Saved from "./gatecache.ts";
 import {
   answersIn,
   changed,
   coverage,
   exitCode,
   isAnswered,
+  judge,
   lawFolder,
   leftOut,
   mutable,
@@ -543,6 +546,108 @@ describe("survivors, the exit code and the answers file", () => {
 
         expect(refused._tag).toBe("Refused");
         expect(refused.detail).toContain(file);
+      }),
+    { arbitrary: { seed: options.seed, runs: options.numRuns } },
+  );
+});
+
+describe("survivors, a saved run", () => {
+  const key = (files: ReadonlyArray<string>) =>
+    Saved.key({ base: "b0", tree: "t0", files, version: "v0", seconds: 300 });
+
+  const made =
+    (box: () => void) => (): Effect.Effect<{ summary: ReturnType<typeof answer>; reused: false; savedAt: null }> =>
+      Effect.sync(() => {
+        box();
+
+        return { summary: answer("done", [], 1), reused: false as const, savedAt: null };
+      });
+
+  // Plants: skip the look at the saved runs (a hit starts a box); leave the files out of the key (a
+  // changed file hits); never save the box's answer (a second call starts a box).
+  effect.effect.prop(
+    "a call with a key already saved starts no box, and a call with a changed file starts one",
+    {
+      calls: Schema.Array(Schema.Array(File).check(Schema.isMaxLength(3))).check(
+        Schema.isMinLength(1),
+        Schema.isMaxLength(8),
+      ),
+    },
+    ({ calls }) =>
+      Effect.gen(function* () {
+        const disk = memory();
+        let started = 0;
+
+        for (const files of calls) {
+          const before = started;
+
+          const got = yield* judge({
+            dir: "/gate",
+            key: key(files),
+            answers: Effect.succeed([]),
+            box: made(() => void (started += 1)),
+          }).pipe(Effect.provide(disk.layer));
+
+          const seen = calls.slice(0, calls.indexOf(files)).some((earlier) => key(earlier) === key(files));
+          expect(started - before, "a box starts for a key not seen before, and for no other").toBe(seen ? 0 : 1);
+          expect(got.reused).toBe(seen);
+        }
+
+        expect(started).toBe(new Set(calls.map(key)).size);
+      }),
+    { arbitrary: { seed: options.seed, runs: options.numRuns } },
+  );
+
+  const body = (rows: ReadonlyArray<typeof Row.Type>) =>
+    Arr.join(
+      Arr.map(rows, (row) => `Survivor: ${row.file}:${row.line} a log line -- no input changes what runs here`),
+      "\n",
+    );
+
+  // Plants: on a hit, read no answers (every survivor is open again); on a hit, use the answers of the
+  // run that made the saved result; read the answers before the lookup and not after it.
+  effect.effect.prop(
+    "on a saved run the Survivor: lines are read again from the commit bodies as they are now",
+    {
+      rows: Schema.Array(Row).check(Schema.isMinLength(1), Schema.isMaxLength(6)),
+      mask: Schema.Array(Schema.Boolean),
+    },
+    ({ rows, mask }) =>
+      Effect.gen(function* () {
+        const disk = memory();
+        let started = 0;
+        let read = 0;
+        const saved = answer("done", rows, 1);
+
+        const call = (bodies: ReadonlyArray<typeof Row.Type>) =>
+          judge({
+            dir: "/gate",
+            key: "k1",
+            answers: Effect.sync(() => {
+              read += 1;
+
+              return answersIn(body(bodies));
+            }),
+            box: () =>
+              Effect.sync(() => {
+                started += 1;
+
+                return { summary: saved, reused: false as const, savedAt: null };
+              }),
+          }).pipe(Effect.provide(disk.layer));
+
+        const first = yield* call([]);
+        expect(first.open, "no line answers anything").toEqual(rows);
+
+        const written = rows.filter((_, i) => mask[i] === true);
+        const second = yield* call(written);
+        const answered = new Set(written.map((row) => `${row.file}:${row.line}`));
+
+        expect(second.reused).toBe(true);
+        expect(started, "the second call started no box").toBe(1);
+        expect(read, "the lines were read on each call").toBe(2);
+        expect(second.open).toEqual(rows.filter((row) => !answered.has(`${row.file}:${row.line}`)));
+        expect(Option.isSome(yield* Saved.find("/gate", "k1").pipe(Effect.provide(disk.layer)))).toBe(true);
       }),
     { arbitrary: { seed: options.seed, runs: options.numRuns } },
   );

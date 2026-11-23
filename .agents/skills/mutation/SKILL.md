@@ -126,6 +126,8 @@ holds the flags, the settings `MUTATE_SECONDS` (default 300) and `MUTATE_FILES` 
 exits, and what it cannot see. It prints one line per survivor: `lived` (a law ran it and
 passed), `no law ran`, or `no law loads` for a file no law reaches, then `static` lines Stryker
 skipped, then the counts and seconds. A scope past `MUTATE_FILES` is refused before Docker starts.
+A call whose base, tree, files and scripts match a saved run reads it and starts no box, and a call that
+needs the box waits its turn in line (`MUTATE_WAIT_SECONDS`, default 7200); the header says how.
 
 ## The hourly run, in CI
 

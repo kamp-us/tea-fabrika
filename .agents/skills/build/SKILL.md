@@ -59,7 +59,9 @@ for the product code.
    nothing. Leave the `static` lines as they are:
    code that runs as the module loads, which Stryker skips and the reviewer plants by hand.
    The step is done when the same command with `--answered --answers <your commit body file>` exits 0:
-   every survivor is killed by a law or carried as a `Survivor:` line.
+   every survivor is killed by a law or carried as a `Survivor:` line. A second call on the same
+   commit and files is instant: it reads the saved run and starts no box, so run it again after each
+   `Survivor:` line.
 9. **Commit, push and report** by the standing rules below.
 
 ## Outside your task

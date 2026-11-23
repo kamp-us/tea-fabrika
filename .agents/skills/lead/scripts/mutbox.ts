@@ -755,14 +755,15 @@ const docker = (args: ReadonlyArray<string>, seconds: number = DOCKER_SECONDS.ca
 
 const tail = (s: string) => pipe(Arr.join(pipe(s, Str.trim, Str.split("\n")).slice(-3), " | "), Str.slice(-400));
 
-const alive = (pid: number) =>
+/** Whether a process with this pid is running. */
+export const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
     Effect.as(true),
     Effect.orElseSucceed(() => false),
   );
 
-/** Whether a live process holds the lock; a lock whose owner is dead is removed. */
-const heldBy = Effect.fnUntraced(function* (lock: string) {
+/** The pid of the live process that holds the lock, or `null`; a lock whose owner is dead is removed. */
+export const heldBy = Effect.fnUntraced(function* (lock: string) {
   const fs = yield* FileSystem.FileSystem;
   const owner = Number(yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => "")));
 

@@ -85,7 +85,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      commit body or a law sent back to tests. Read those lines with `git log --format=%B`, then run
      it yourself on the branch:
      `node .agents/skills/mutation/scripts/survivors.ts --out <your scratch folder>/survivors --head HEAD`,
-     with `--files` naming the guarding files when it refuses the scope as too wide. Add `--answered`: it lists only the mutants no
+     with `--files` naming the guarding files when it refuses the scope as too wide. On the builder's commit and files it is instant: it reads the builder's saved run and starts no box. Add `--answered`: it lists only the mutants no
      `Survivor:` line answers, and each `lived`, `no law ran` or `no law loads` line it prints in a
      guarding check that no `Plant:` line explains is a finding. A `Survivor:` line whose evidence an
      input of yours refutes is a finding too. Plant each `static` line that guards by hand: Stryker skips code that
