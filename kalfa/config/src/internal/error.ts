@@ -5,14 +5,14 @@ import * as Schema from "effect/Schema";
  *
  * **Details**
  *
- * `reason` says which problem: `version` (the repo needs a newer app), `syntax` (a file is not TOML), `unknown` (no such setting), `scope` (the setting exists, in another file), `invalid` (a value its schema refuses), `missing` (a required setting no source gives) or `read` (a file could not be read) or `edit` (an edit cannot be made in this text as one key, or the edited text would change other data). `file` is the file as a person reads it, such as `~/.demo/demo.toml`, and `line` counts from 1. A fault in the environment names the variable in its message and has no file. `cause` holds the failure underneath when there is one. A message never holds a value it refused.
+ * `reason` says which problem: `version` (the repo needs a newer app), `syntax` (a file is not TOML), `unknown` (no such setting), `scope` (the setting exists, in another file), `invalid` (a value its schema refuses), `missing` (a required setting no source gives), `read` (a file could not be read), `edit` (an edit cannot be made in this text as one key, or the edited text would change other data) or `write` (a file could not be written, or another change holds its lock file). `file` is the file as a person reads it, such as `~/.demo/demo.toml`, and `line` counts from 1. A fault in the environment names the variable in its message and has no file. `cause` holds the failure underneath when there is one. A message never holds a value it refused.
  *
  * @category errors
  */
 export class SettingsError extends Schema.TaggedError<SettingsError, { readonly brand: unique symbol }>()(
   "SettingsError",
   {
-    reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "missing", "read", "edit"]),
+    reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "missing", "read", "edit", "write"]),
     message: Schema.String,
     file: Schema.optional(Schema.String),
     line: Schema.optional(Schema.Int),
