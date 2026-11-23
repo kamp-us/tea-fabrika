@@ -112,7 +112,7 @@ on:
         type: string
         required: false
         default: ""
-      # One leg on one slot that runs only these files (proof.ts's `integrationOf`), for an
+      # One leg on one slot that runs only these files (proof.ts's `decodeIntegration`), for an
       # adapter's real-resource laws before merge. Each a `.integration.test.ts` file the branch has.
       integration:
         description: With scope changed, the .integration.test.ts files to run alone on one leg, split by spaces

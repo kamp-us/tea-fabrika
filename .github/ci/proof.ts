@@ -43,7 +43,7 @@
 // `full`) and, for `full`, the `law`: the test file that needs the full set. This script holds both
 // to the rules in `inputsOf` and has no default of its own, so the workflow's input is the one place a
 // default is declared (a choice that makes sense as a setting is a setting, declared once). `scope: changed` does not override a rerun trigger: the proof-run rule stands.
-// The third input, `integration`, names `.integration.test.ts` files to run alone (`integrationOf`):
+// The third input, `integration`, names `.integration.test.ts` files to run alone (`decodeIntegration`):
 // one or more paths, split on whitespace, each one Vitest lists in an integration project at this
 // head. It is the narrow way to run a real-resource law before merge, so it wins over a trigger.
 //
@@ -222,7 +222,7 @@ export const inProjects =
     lister([...flags(FULL_PROJECTS), path]).includes(path);
 
 /** The files `vitest list` over the integration projects gives back for `paths`, by `lister`. */
-export const inIntegration =
+export const listIntegration =
   (lister: (args: readonly string[]) => readonly string[]) =>
   (paths: readonly string[]): readonly string[] =>
     lister([...flags(INTEGRATION_PROJECTS), ...paths]);
@@ -234,7 +234,7 @@ export const inIntegration =
  * file the branch lacks is refused), and only with `scope: changed`: a named start runs those files
  * and nothing else. A name or a repeat is refused before any list, so no path reads as a flag.
  */
-export const integrationOf = (
+export const decodeIntegration = (
   inputs: Inputs,
   given: string | undefined,
   listed: (paths: readonly string[]) => readonly string[],
@@ -496,10 +496,10 @@ if (import.meta.main) {
 
   const lister = (args: readonly string[]) => list(root, args);
 
-  const inputs = integrationOf(
+  const inputs = decodeIntegration(
     inputsOf(env.scope, env.law, inProjects(lister)),
     env.integration,
-    inIntegration(lister),
+    listIntegration(lister),
   );
 
   const files =

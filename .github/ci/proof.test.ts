@@ -10,9 +10,9 @@ import { E2E_SETUP, room } from "./legs.ts";
 import {
   choose,
   FULL_PROJECTS,
-  inIntegration,
+  listIntegration,
   inProjects,
-  integrationOf,
+  decodeIntegration,
   type Inputs,
   inputsOf,
   isTrigger,
@@ -814,7 +814,7 @@ reachesAll(reachedI1, [
 // passes); the list check dropped (red: `Gone.integration.test.ts` passes); a full start keeps the
 // input (red: full with files decodes).
 it.prop(
-  "property: integrationOf keeps the inputs for an empty input, names the files for a real list of integration files, and refuses a bad name, an unlisted file, a repeat or a full start",
+  "property: decodeIntegration keeps the inputs for an empty input, names the files for a real list of integration files, and refuses a bad name, an unlisted file, a repeat or a full start",
   {
     paths: Schema.Array(Given).check(Schema.isMaxLength(4)),
     gaps: Schema.Literals([" ", "\n", "  ", " \t"]),
@@ -852,7 +852,7 @@ it.prop(
 
     // A refusal's own words begin `proof: INTEGRATION `, so every refusal reads as one word here.
     const outcome = Result.match(
-      Result.try(() => integrationOf(inputs, given, inIntegration(lister))),
+      Result.try(() => decodeIntegration(inputs, given, listIntegration(lister))),
       {
         onSuccess: (decoded): unknown => decoded,
         onFailure: (error) => (/^Error: proof: INTEGRATION /.test(String(error)) ? "refused" : String(error)),
