@@ -1271,7 +1271,8 @@ it.effect.prop(
 );
 
 // ---------------------------------------------------------------------------------------------
-// B10, a file-only setting skips the environment
+// B10, a file-only setting skips the environment (ticket 1842: a variable that names it stops the start, so FO1 holds
+// that case; here its variable is unset)
 // ---------------------------------------------------------------------------------------------
 
 const FileOnlyCase = Schema.Struct({
@@ -1295,8 +1296,8 @@ it.effect.prop(
 
       const { exit } = yield* start(group, {
         disk: { files: { [repoFile(app).path]: repo.text, [userFile(app).path]: user.text } },
-        // Both variables are set to good values.
-        env: environment({ [variable(app, locked)]: String(locked.seed), [variable(app, open)]: String(open.seed) }),
+        // Only the open setting's variable is set: a variable that names a file-only setting stops the start (FO1).
+        env: environment({ [variable(app, open)]: String(open.seed) }),
       });
 
       const loaded = mustStart(exit);

@@ -88,6 +88,8 @@ interface Spec {
   readonly key: string;
   readonly kind: Kind;
   readonly live: boolean;
+  /** Whether it is file-only, and whether `fileOnly` comes before `live` in its pipe or after it (ticket 1842). */
+  readonly fileOnly?: "before live" | "after live";
 }
 
 const Slot = Schema.Struct({ table: Table, key: Key, kind: Kind, live: Schema.Boolean });
@@ -122,24 +124,31 @@ const specsFrom = (shape: typeof Shape.Type): ReadonlyArray<Spec> => [{ ...shape
 
 const Pairing = Schema.Struct({ a: Schema.optionalKey(Schema.Int), b: Schema.optionalKey(Schema.Int) });
 
+/** The marks of a spec on a setting: live, file-only, or both in the order the spec says. */
+const marked = (spec: Spec, made: Setting.Setting<string, any>): Setting.Any => {
+  if (spec.fileOnly === undefined) {
+    return spec.live ? Setting.live(made) : made;
+  }
+
+  if (!spec.live) {
+    return Setting.fileOnly(made);
+  }
+
+  return spec.fileOnly === "before live" ? Setting.live(Setting.fileOnly(made)) : Setting.fileOnly(Setting.live(made));
+};
+
 const declare = (spec: Spec): Setting.Any => {
   const described = Setting.withDescription("A generated setting.");
 
   if (spec.kind === "number") {
-    const made = Setting.make(named(spec), Port).pipe(described, Setting.withDefault(DEFAULT));
-
-    return spec.live ? Setting.live(made) : made;
+    return marked(spec, Setting.make(named(spec), Port).pipe(described, Setting.withDefault(DEFAULT)));
   }
 
   if (spec.kind === "table") {
-    const made = Setting.make(named(spec), Pairing).pipe(described, Setting.withDefault({ a: 90 }));
-
-    return spec.live ? Setting.live(made) : made;
+    return marked(spec, Setting.make(named(spec), Pairing).pipe(described, Setting.withDefault({ a: 90 })));
   }
 
-  const made = Setting.make(named(spec), Schema.Array(Schema.Int)).pipe(described, Setting.withDefault([70]));
-
-  return spec.live ? Setting.live(made) : made;
+  return marked(spec, Setting.make(named(spec), Schema.Array(Schema.Int)).pipe(described, Setting.withDefault([70])));
 };
 
 const makeGroup = (app: string, settings: ReadonlyArray<Setting.Any>) => SettingGroup.make(app, ...settings);
@@ -656,6 +665,107 @@ describe("V8 own keys only", () => {
         expect(apart(specs)).toBe(true);
 
         yield* walk(groupFrom(shape.app, specs), specs, walked);
+      }),
+    check,
+  );
+});
+
+// ---------------------------------------------------------------------------------------------
+// FO5 (ticket 1842), a live setting that is file-only
+// ---------------------------------------------------------------------------------------------
+
+/** A group of at most three settings: a live file-only one, a live one that is not, and up to one restart setting. */
+const LockedShape = Schema.Struct({
+  app: Word,
+  first: Slot,
+  second: Slot,
+  rest: Schema.Array(Slot).check(Schema.isMaxLength(1)),
+}).check(Schema.makeFilter((shape) => apart([shape.first, shape.second, ...shape.rest])));
+
+// Plant (n): check the file-only mark only on restart settings, so the live file-only setting takes its variable.
+describe("FO5 a live file-only setting", () => {
+  it.effect.prop(
+    "a setting marked live and file-only, in either pipe order, beside a live setting that is not file-only, follows its files as a fresh start does and is never read from the environment, and a variable that names it stops the start",
+    { shape: LockedShape, walked: Walk },
+    ({ shape, walked }) =>
+      Effect.gen(function* () {
+        const reached = new Set<string>();
+
+        for (const order of ["before live", "after live"] as const) {
+          const specs: ReadonlyArray<Spec> = [
+            { ...shape.first, live: true, fileOnly: order },
+            { ...shape.second, kind: "number" as const, live: true },
+            ...shape.rest.map((slot) => ({ ...slot, live: false })),
+          ];
+
+          const [locked, open] = specs;
+
+          if (locked === undefined || open === undefined) {
+            return;
+          }
+
+          const group = groupFrom(shape.app, specs);
+
+          // The setting beside it reads its variable all the way, and the file-only one follows its files with the origin a
+          // fresh start gives on the same files, never the environment.
+          const scene: Scene = {
+            env: { [variable(shape.app, open)]: "4099" },
+            texts: { repo: render(specs, walked.first, 0) },
+          };
+
+          yield* walk(group, specs, walked, scene, (step) =>
+            originsNow(step.rig).pipe(
+              Effect.tap((origins) =>
+                Effect.sync(() => {
+                  expect(origins[named(locked)], `${named(locked)} after ${step.done}`).not.toMatchObject({
+                    _tag: "env",
+                  });
+                  expect(origins[named(open)], `${named(open)} after ${step.done}`).toEqual({
+                    _tag: "env",
+                    name: variable(shape.app, open),
+                  });
+                }),
+              ),
+              Effect.asVoid,
+            ),
+          );
+
+          reached.add(`walked ${order}`);
+
+          // With a variable that names it, in any state of the files, the start stops with the one error of FO1.
+          for (const held of [false, true]) {
+            const exit = yield* boot(group, {
+              env: { [variable(shape.app, locked)]: "4098" },
+              texts: held ? { repo: render(specs, walked.first, 0) } : {},
+              collect: false,
+            }).pipe(Effect.exit);
+
+            const failure = Exit.isFailure(exit)
+              ? exit.cause.reasons.flatMap((r) => (r._tag === "Fail" ? [r.error] : []))
+              : [];
+
+            const error = failure[0];
+
+            expect(failure, `${order}: the start with its variable fails once`).toHaveLength(1);
+            expect(Schema.is(SettingGroup.SettingsError)(error), `${order}: with a SettingsError`).toBe(true);
+
+            if (Schema.is(SettingGroup.SettingsError)(error)) {
+              expect(error.reason, error.message).toBe("scope");
+              expect(
+                error.message.startsWith(`${variable(shape.app, locked)}: ${named(locked)} may be set only in `),
+                error.message,
+              ).toBe(true);
+            }
+
+            reached.add(`stopped ${order} ${held ? "held" : "empty"}`);
+          }
+        }
+
+        for (const order of ["before live", "after live"]) {
+          expect(reached.has(`walked ${order}`), `a run walks ${order}`).toBe(true);
+          expect(reached.has(`stopped ${order} held`), `a run stops ${order} with a file`).toBe(true);
+          expect(reached.has(`stopped ${order} empty`), `a run stops ${order} with no file`).toBe(true);
+        }
       }),
     check,
   );
