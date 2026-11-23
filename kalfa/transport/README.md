@@ -40,7 +40,8 @@ Each of the five functions keeps nothing from one frame to the next. A schema's 
 
 A close with code 1000 (RFC 6455's normal close) ends the stream cleanly, after every frame read before it. Any other
 close fails the stream with Effect's own `SocketError` holding `SocketCloseError` with that code and reason. A failure of
-the stream you gave to `socket` stays that failure and is never wrapped. When your stream ends nothing is closed, since
+the stream you gave to `socket` stays that failure and is never wrapped, even when it is a `SocketError` of close 1000: only
+the close the socket itself reported ends the stream cleanly. When your stream ends nothing is closed, since
 the far end may still send. The socket closes, with code 1000, when the scope of the chain ends.
 
 ## The format
