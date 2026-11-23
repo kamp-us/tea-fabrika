@@ -128,6 +128,18 @@ const treeId = (folder: Folder): Effect.Effect<Tree.TreeId, never, Digest.Digest
     return Schema.decodeSync(Tree.TreeId)(yield* digest.digestHex(Digest.sha1, hashed("tree", treeBytes(lines))));
   });
 
+// A tree's id from the entries it holds, with each folder hashed first. The one place the folders of a tree are built.
+const entriesTree = (entries: ReadonlyMap<Tree.Path, Tree.Entry>): Effect.Effect<Tree.TreeId, never, Digest.Digest> => {
+  const root: Folder = { files: new Map(), folders: new Map() };
+
+  for (const [path, entry] of entries) {
+    const names = path.split("/");
+    folderAt(root, names.slice(0, -1)).files.set(names.at(-1) ?? path, entry);
+  }
+
+  return treeId(root);
+};
+
 /**
  * Puts files and their blobs in a store and gives the id of the tree they make, as git computes it.
  *
@@ -147,21 +159,17 @@ export const tree = (
     }
 
     const digest = yield* Digest.Digest;
-    const root: Folder = { files: new Map(), folders: new Map() };
     const entries = new Map<Tree.Path, Tree.Entry>();
     const blobs = new Map(store.blobs);
 
     for (const [path, file] of files) {
-      const names = path.split("/");
       const id = Schema.decodeSync(Tree.BlobId)(yield* digest.digestHex(Digest.sha1, hashed("blob", file.content)));
-      const entry = new Tree.Entry({ mode: file.mode, blob: id });
 
-      folderAt(root, names.slice(0, -1)).files.set(names.at(-1) ?? path, entry);
-      entries.set(path, entry);
+      entries.set(path, new Tree.Entry({ mode: file.mode, blob: id }));
       blobs.set(id, file.content.slice());
     }
 
-    const id = yield* treeId(root);
+    const id = yield* entriesTree(entries);
 
     return { store: { ...store, trees: new Map(store.trees).set(id, entries), blobs }, id };
   });
@@ -412,12 +420,88 @@ const withRef = (
   return [Result.succeed(undefined), { ...store, refs: new Map(store.refs).set(move.ref, move.to) }];
 };
 
+// The files of a commit, by path.
+const commitFiles = (
+  store: Store,
+  id: CommitId,
+): Result.Result<ReadonlyMap<Tree.Path, Tree.Entry>, Repository.NoSuchCommit> =>
+  Result.flatMap(found(store, id), (held) => {
+    const files = store.trees.get(held.tree);
+
+    // A commit whose files the store lacks is no commit a merge can read.
+    return files === undefined ? Result.fail(new Repository.NoSuchCommit({ id })) : Result.succeed(files);
+  });
+
+const isSame = (a: Tree.Entry | undefined, b: Tree.Entry | undefined): boolean =>
+  a === undefined || b === undefined ? a === b : a.mode === b.mode && a.blob === b.blob;
+
+// What a path holds after a merge, by whole file: if ours and theirs are the same, that is the answer; if theirs is the
+// merge base's, ours is; if ours is the merge base's, theirs is; else the path conflicts.
+const settle = (
+  base: Tree.Entry | undefined,
+  ours: Tree.Entry | undefined,
+  theirs: Tree.Entry | undefined,
+): Tree.Entry | undefined | "conflict" => {
+  if (isSame(ours, theirs) || isSame(theirs, base)) {
+    return ours;
+  }
+
+  return isSame(ours, base) ? theirs : "conflict";
+};
+
+// The files of the merge of two commits over their merge base, or each path that cannot be combined. A merged path that
+// is a folder of another merged path, a file `a` beside a file `a/b`, conflicts on both.
+const merged = (
+  store: Store,
+  merge: { readonly mergeBase: CommitId; readonly ours: CommitId; readonly theirs: CommitId },
+): Result.Result<ReadonlyMap<Tree.Path, Tree.Entry>, Repository.NoSuchCommit | Repository.Conflict> =>
+  Result.gen(function* () {
+    const base = yield* commitFiles(store, merge.mergeBase);
+    const ours = yield* commitFiles(store, merge.ours);
+    const theirs = yield* commitFiles(store, merge.theirs);
+    const kept = new Map<Tree.Path, Tree.Entry>();
+    const conflicts = new Set<Tree.Path>();
+
+    for (const path of new Set([...base.keys(), ...ours.keys(), ...theirs.keys()])) {
+      const settled = settle(base.get(path), ours.get(path), theirs.get(path));
+
+      if (settled === "conflict") {
+        conflicts.add(path);
+      } else if (settled !== undefined) {
+        kept.set(path, settled);
+      }
+    }
+
+    const keptByName = new Map<string, Tree.Path>();
+
+    for (const path of kept.keys()) {
+      keptByName.set(path, path);
+    }
+
+    for (const path of kept.keys()) {
+      const names = path.split("/");
+
+      for (let depth = 1; depth < names.length; depth++) {
+        const folder = keptByName.get(names.slice(0, depth).join("/"));
+
+        if (folder !== undefined) {
+          conflicts.add(folder);
+          conflicts.add(path);
+        }
+      }
+    }
+
+    const [first, ...rest] = [...conflicts].sort(byBytes);
+
+    return first === undefined ? kept : yield* Result.fail(new Repository.Conflict({ paths: [first, ...rest] }));
+  });
+
 /**
  * Layer that provides `Repository` over a store held in memory, and `MemoryStore` to read it and move it.
  *
  * **Details**
  *
- * Each call reads the store as it is then. The calls answer as git does and fail as the shared laws say. A write is one step on the store, so two writes never interleave. It needs a `Digest`, which gives a written commit its id.
+ * Each call reads the store as it is then. The calls answer as git does and fail as the shared laws say. A write is one step on the store, so two writes never interleave. A merge works file by file: a path changed on both sides to different things is a conflict, even where git would merge the lines. It needs a `Digest`, which gives a written commit its id.
  *
  * @category layers
  */
@@ -452,6 +536,18 @@ export const layer = (
                 Effect.flatMap((made) => write((held) => withCommit(held, made))),
               ),
             moveRef: (move) => write((held) => withRef(held, move)),
+            mergeTrees: Effect.fnUntraced(function* (merge) {
+              const held = yield* Cell.get(cell);
+              const files = yield* Effect.fromResult(merged(held, merge));
+              const id = yield* entriesTree(files).pipe(Effect.provideService(Digest.Digest, digest));
+
+              // The merged tree joins the store as it is now, so a write that came between is kept.
+              yield* Cell.update(cell, (now) =>
+                now.trees.has(id) ? now : { ...now, trees: new Map(now.trees).set(id, files) },
+              );
+
+              return id;
+            }),
           },
           settings,
         ),

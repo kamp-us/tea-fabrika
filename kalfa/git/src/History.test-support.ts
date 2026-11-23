@@ -1473,3 +1473,366 @@ export const moveCarrier = (
     },
   };
 };
+
+// ---------------------------------------------------------------------------------------------------------
+// Merging three commits' trees
+// ---------------------------------------------------------------------------------------------------------
+
+/** Whether two files are the same entry of a tree: the same mode and the same bytes, or both absent. */
+const sameFile = (a: FileSpec | undefined, b: FileSpec | undefined): boolean =>
+  a === undefined || b === undefined
+    ? a === b
+    : a.mode === b.mode &&
+      a.content.length === b.content.length &&
+      a.content.every((octet, i) => octet === b.content[i]);
+
+/** What a path holds after a merge, by what the merge base, ours and theirs hold there: one of the two sides, or neither. */
+const settle = (
+  base: FileSpec | undefined,
+  ours: FileSpec | undefined,
+  theirs: FileSpec | undefined,
+): FileSpec | undefined | "conflict" => {
+  if (sameFile(ours, theirs) || sameFile(theirs, base)) {
+    return ours;
+  }
+
+  return sameFile(ours, base) ? theirs : "conflict";
+};
+
+/** What a merge of three trees answers: the files of the merged tree, or the paths that could not be combined. */
+export type MergeAnswer =
+  | { readonly kind: "clean"; readonly files: ReadonlyArray<FileSpec> }
+  | { readonly kind: "conflict"; readonly paths: ReadonlyArray<string> };
+
+/**
+ * The model of a merge, whole file by whole file: for each path, the entries (mode and bytes) of the merge base, ours and
+ * theirs. If ours and theirs are the same, that is the answer; if ours is the base's, theirs is; if theirs is the base's,
+ * ours is; else the path conflicts. A merged tree where one path is a folder of another conflicts on both paths.
+ */
+export const mergeModel = (
+  base: ReadonlyArray<FileSpec>,
+  ours: ReadonlyArray<FileSpec>,
+  theirs: ReadonlyArray<FileSpec>,
+): MergeAnswer => {
+  const held = (files: ReadonlyArray<FileSpec>): ReadonlyMap<string, FileSpec> =>
+    new Map(files.map((each) => [each.path, each]));
+
+  const [b, o, t] = [held(base), held(ours), held(theirs)];
+  const merged = new Map<string, FileSpec>();
+  const conflicts = new Set<string>();
+
+  for (const path of new Set([...b.keys(), ...o.keys(), ...t.keys()])) {
+    const kept = settle(b.get(path), o.get(path), t.get(path));
+
+    if (kept === "conflict") {
+      conflicts.add(path);
+    } else if (kept !== undefined) {
+      merged.set(path, kept);
+    }
+  }
+
+  for (const path of merged.keys()) {
+    const names = path.split("/");
+
+    for (let depth = 1; depth < names.length; depth++) {
+      const folder = names.slice(0, depth).join("/");
+
+      if (merged.has(folder)) {
+        conflicts.add(folder);
+        conflicts.add(path);
+      }
+    }
+  }
+
+  return conflicts.size > 0
+    ? { kind: "conflict", paths: [...conflicts].sort(byBytes) }
+    : { kind: "clean", files: [...merged.values()] };
+};
+
+/** The merges that git and `/memory` both answer alike, then the conflicts they both see. Each class is reached in every run. */
+export const MERGE_CLASSES = [
+  "only ours changes a path",
+  "only theirs changes a path",
+  "both make the same change",
+  "ours deletes a path theirs leaves",
+  "theirs deletes a path ours leaves",
+  "theirs adds a file two folders deep",
+  "both delete one path",
+  "ours is the merge base",
+  "every file deleted",
+  "binary content changed on one side",
+  "a mode made executable on one side",
+  "a link's target changed on one side",
+  "names on the object prototype",
+  "both change a one-line file to different lines",
+  "ours deletes what theirs changes",
+  "theirs deletes what ours changes",
+  "both add one path with different one-line contents",
+  "conflicts at names with a space, a line break, a leading quote and characters past U+024F",
+] as const;
+
+/** The classes of `MERGE_CLASSES` whose answer is a conflict: the last five. */
+export const CONFLICT_MERGE_CLASSES: ReadonlyArray<string> = MERGE_CLASSES.slice(13);
+
+/** The merges only `/memory` answers, since git renames a file that stands where a folder is wanted. */
+export const FOLDER_MERGE_CLASSES = [
+  "ours adds a file, theirs adds a file in a folder of its name",
+  "ours adds a file in a folder, theirs adds a file of the folder's name",
+  "a file against a file two folders below it",
+  "a file in a folder against a file below it",
+] as const;
+
+/** One merge in a history: three commits by index, and what the merge of their trees must answer. */
+export interface MergeCase {
+  readonly label: string;
+  readonly base: number;
+  readonly ours: number;
+  readonly theirs: number;
+  /** The commit whose tree the merge must give, when it is clean. */
+  readonly tree: number | undefined;
+  readonly expected: MergeAnswer;
+}
+
+/** A history that holds many merges at once, each between commits of its own, and the other facts the merge laws read. */
+export interface MergeCarrier {
+  readonly history: History;
+  readonly cases: ReadonlyArray<MergeCase>;
+  /** `theirs` is a commit `ours` already reaches: the merge makes a commit all the same, with the tree of `ours`. */
+  readonly inside: { readonly ours: number; readonly theirs: number };
+  /** Two commits that share no history. */
+  readonly unrelated: { readonly ours: number; readonly theirs: number };
+  /** Two commits with two best common ancestors, `bases` by index. */
+  readonly criss: { readonly ours: number; readonly theirs: number; readonly bases: readonly [number, number] };
+}
+
+interface Sides {
+  readonly base: ReadonlyArray<FileSpec>;
+  readonly ours: ReadonlyArray<FileSpec>;
+  readonly theirs: ReadonlyArray<FileSpec>;
+}
+
+const bump = (content: Uint8Array, by: number): Uint8Array => Uint8Array.from([...content, by]);
+
+const join = (a: Sides, b: Sides): Sides => ({
+  base: [...a.base, ...b.base],
+  ours: [...a.ours, ...b.ours],
+  theirs: [...a.theirs, ...b.theirs],
+});
+
+/**
+ * The files of one class of merge, as the three sides' files. No side both deletes a path and adds another (so git finds
+ * no rename), no path changes its mode on one side and its content on the other, and no path is a folder of another.
+ * Every conflict is a one-line text file, so git cannot merge it by line.
+ */
+const focus = (label: (typeof MERGE_CLASSES)[number], draw: Draw, tag: string): Sides => {
+  const path = (letter: string): string => `${tag}${letter}${draw.part()}`;
+  const [v0, other] = [draw.blob(), draw.blob()];
+  const [v1, v2] = [bump(v0, 1), bump(v0, 2)];
+  const word = draw.word();
+  const line = (side: string): Uint8Array => utf8(`${side}:${word}\n`);
+  const [x, y] = [path("x"), path("y")];
+
+  switch (label) {
+    case "only ours changes a path":
+      return { base: [file(x, v0)], ours: [file(x, v1)], theirs: [file(x, v0)] };
+    case "only theirs changes a path":
+      return { base: [file(x, v0)], ours: [file(x, v0)], theirs: [file(x, v2)] };
+    case "both make the same change":
+      return {
+        base: [file(x, v0), file(y, other)],
+        ours: [file(x, v1), file(`${y}-new`, v2), file(y, other, "100755")],
+        theirs: [file(x, v1), file(`${y}-new`, v2), file(y, other, "100755")],
+      };
+    case "ours deletes a path theirs leaves":
+      return { base: [file(x, v0)], ours: [], theirs: [file(x, v0)] };
+    case "theirs deletes a path ours leaves":
+      return { base: [file(x, v0)], ours: [file(x, v0)], theirs: [] };
+    case "theirs adds a file two folders deep":
+      return {
+        base: [file(x, v0)],
+        ours: [file(x, v0)],
+        theirs: [file(x, v0), file(`g${draw.part()}/h${draw.part()}/${y}`, v1)],
+      };
+    case "both delete one path":
+      return { base: [file(x, v0), file(y, other)], ours: [file(y, other)], theirs: [file(y, other)] };
+    case "ours is the merge base":
+      return { base: [file(x, v0)], ours: [file(x, v0)], theirs: [file(x, v1), file(y, other)] };
+    case "every file deleted": {
+      const inside = file(`f${draw.part()}/${y}`, other);
+
+      return { base: [file(x, v0), inside], ours: [], theirs: [file(x, v0), inside] };
+    }
+
+    case "binary content changed on one side": {
+      const binary = Uint8Array.of(0x00, 0xff, 0xfe, 0x00, ...v0);
+
+      return { base: [file(x, binary)], ours: [file(x, bump(binary, 0))], theirs: [file(x, binary)] };
+    }
+
+    case "a mode made executable on one side":
+      return { base: [file(x, v0)], ours: [file(x, v0, "100755")], theirs: [file(x, v0)] };
+    case "a link's target changed on one side":
+      return {
+        base: [file(x, utf8(`t${word}`), "120000")],
+        ours: [file(x, utf8(`u${word}`), "120000")],
+        theirs: [file(x, utf8(`t${word}`), "120000")],
+      };
+    case "names on the object prototype": {
+      const content = (i: number): Uint8Array => bump(v0, i + 3);
+      const at = (i: number, bytes: Uint8Array): FileSpec => file(PROTOTYPE_NAMES[i] ?? x, bytes);
+
+      return {
+        base: PROTOTYPE_NAMES.map((_, i) => at(i, content(i))),
+        ours: PROTOTYPE_NAMES.map((_, i) => at(i, i === 0 ? bump(content(i), 1) : content(i))),
+        theirs: PROTOTYPE_NAMES.map((_, i) => at(i, i === 1 ? bump(content(i), 2) : content(i))),
+      };
+    }
+
+    case "both change a one-line file to different lines":
+      return { base: [file(x, line("b"))], ours: [file(x, line("o"))], theirs: [file(x, line("t"))] };
+    case "ours deletes what theirs changes":
+      return { base: [file(x, line("b"))], ours: [], theirs: [file(x, line("t"))] };
+    case "theirs deletes what ours changes":
+      return { base: [file(x, line("b"))], ours: [file(x, line("o"))], theirs: [] };
+    case "both add one path with different one-line contents":
+      return { base: [], ours: [file(x, line("o"))], theirs: [file(x, line("t"))] };
+    case "conflicts at names with a space, a line break, a leading quote and characters past U+024F": {
+      const names = ["a b", "l\nb", '"q', "ｚ", "\u{1F600}", "设", "-d"].map((name) => `${name}${draw.part()}`);
+
+      return {
+        base: names.map((name) => file(name, line("b"))),
+        ours: names.map((name) => file(name, line("o"))),
+        theirs: names.map((name) => file(name, line("t"))),
+      };
+    }
+  }
+};
+
+/** Three paths beside the one in focus: one nobody changes, one only ours changes and one only theirs changes. */
+const beside = (draw: Draw, tag: string): Sides => {
+  const [kept, byOurs, byTheirs] = [draw.blob(), draw.blob(), draw.blob()];
+  const [first, second, folder, third] = [draw.part(), draw.part(), draw.part(), draw.part()];
+  const [k, o, t] = [`${tag}k${first}`, `${tag}o${second}`, `d${tag}${folder}/${tag}t${third}`];
+
+  return {
+    base: [file(k, kept), file(o, byOurs), file(t, byTheirs)],
+    ours: [file(k, kept), file(o, bump(byOurs, 1)), file(t, byTheirs)],
+    theirs: [file(k, kept), file(o, byOurs), file(t, bump(byTheirs, 2))],
+  };
+};
+
+const folderSides = (label: (typeof FOLDER_MERGE_CLASSES)[number], draw: Draw): Sides => {
+  const [a, b, c] = [draw.part(), draw.part(), draw.part()];
+  const [v0, v1] = [draw.blob(), draw.blob()];
+  const name = `a${a}`;
+
+  switch (label) {
+    case "ours adds a file, theirs adds a file in a folder of its name":
+      return { base: [], ours: [file(name, v0)], theirs: [file(`${name}/${b}`, v1)] };
+    case "ours adds a file in a folder, theirs adds a file of the folder's name":
+      return { base: [], ours: [file(`${name}/${b}`, v1)], theirs: [file(name, v0)] };
+    case "a file against a file two folders below it":
+      return { base: [], ours: [file(name, v0)], theirs: [file(`${name}/${b}/${c}`, v1)] };
+    case "a file in a folder against a file below it":
+      return { base: [], ours: [file(`${name}/${b}`, v0)], theirs: [file(`${name}/${b}/${c}`, v1)] };
+  }
+};
+
+/** A history being built one commit at a time, each with drawn authorship and message. */
+const commits = (draw: Draw) => {
+  const nodes: Array<Node> = [];
+
+  const commit = (parents: ReadonlyArray<number>, files: ReadonlyArray<FileSpec>): number => {
+    nodes.push({
+      parents,
+      author: draw.signature(draw.int(4_000_000_000)),
+      committer: draw.signature(BASE_SECONDS + nodes.length * 60),
+      message: draw.word(),
+      files,
+    });
+
+    return nodes.length - 1;
+  };
+
+  return { nodes, commit };
+};
+
+/**
+ * One history that holds a merge for each class of `MERGE_CLASSES`, each between commits of its own (a base, ours and
+ * theirs, with a commit beside them for the files a clean merge must give), and the commits the helper's laws read: one
+ * whose second side is already in the first, two unrelated roots and a criss-cross. `tag` goes in front of every
+ * path's first part, so a law can make each path carry a canary. Without `answers` no commit holds the files a clean
+ * merge must give, so the store holds no tree that a merge could find and not make.
+ */
+export const mergeCarrier = (texture: Texture, tag = "", answers = true): MergeCarrier => {
+  const draw = new Draw(texture);
+  const { nodes, commit } = commits(draw);
+
+  const made = MERGE_CLASSES.map((label) => {
+    // Nothing is beside the files of a merge that deletes every one of them: its answer is git's empty tree.
+    const sides =
+      label === "every file deleted" ? focus(label, draw, tag) : join(focus(label, draw, tag), beside(draw, tag));
+
+    const base = commit([], sides.base);
+
+    // Ours is the merge base itself: its commit is the base's, so the files it holds are the base's too.
+    const isBase = label === "ours is the merge base";
+    const oursFiles = isBase ? sides.base : sides.ours;
+    const ours = isBase ? base : commit([base], oursFiles);
+    const theirs = commit([base], sides.theirs);
+
+    return { label, base, ours, theirs, answer: mergeModel(sides.base, oursFiles, sides.theirs) };
+  });
+
+  // A commit for the files each clean merge must give, so a law compares tree ids and never lists files.
+  const cases = made.map(({ label, base, ours, theirs, answer }): MergeCase => ({
+    label,
+    base,
+    ours,
+    theirs,
+    tree: answer.kind === "clean" && answers ? commit([], answer.files) : undefined,
+    expected: answer,
+  }));
+
+  const kept = beside(draw, tag);
+  const root = commit([], kept.base);
+  const theirs = commit([root], kept.theirs);
+  const ours = commit([theirs], [...kept.theirs, file(`${tag}z${draw.part()}`, draw.blob())]);
+
+  const crissFiles = (i: number): ReadonlyArray<FileSpec> => [textFile(`${tag}c${draw.part()}`, `${i}\n`)];
+  const crissRoot = commit([], crissFiles(0));
+  const [left, right] = [commit([crissRoot], crissFiles(1)), commit([crissRoot], crissFiles(2))];
+  const [first, second] = [commit([left, right], crissFiles(3)), commit([right, left], crissFiles(4))];
+
+  return {
+    history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] },
+    cases,
+    inside: { ours, theirs },
+    unrelated: { ours: made[0]?.base ?? 0, theirs: made[1]?.base ?? 0 },
+    criss: { ours: first, theirs: second, bases: [left, right] },
+  };
+};
+
+/** A history with a merge for each class of `FOLDER_MERGE_CLASSES`, with the paths each conflict must name. */
+export const folderCarrier = (
+  texture: Texture,
+): { readonly history: History; readonly cases: ReadonlyArray<MergeCase> } => {
+  const draw = new Draw(texture);
+  const { nodes, commit } = commits(draw);
+
+  const cases = FOLDER_MERGE_CLASSES.map((label): MergeCase => {
+    const sides = join(folderSides(label, draw), beside(draw, ""));
+    const base = commit([], sides.base);
+
+    return {
+      label,
+      base,
+      ours: commit([base], sides.ours),
+      theirs: commit([base], sides.theirs),
+      tree: undefined,
+      expected: mergeModel(sides.base, sides.ours, sides.theirs),
+    };
+  });
+
+  return { history: { nodes, refs: [], shallow: [] }, cases };
+};

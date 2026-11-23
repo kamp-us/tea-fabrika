@@ -1,13 +1,15 @@
-// The laws every adapter of `Repository` passes (S1 to S13), exported as `/test`. A runner gives a
+// The laws every adapter of `Repository` passes (S1 to S14), exported as `/test`. A runner gives a
 // `Subject`: how to seed a history into its own kind of store. The suite draws a texture, makes one
 // history for each shape class from it, seeds each, and compares every answer with the model in
 // History.test-support.ts. A subject that passes these laws answers as every other one does.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Option, Result, Schema, type Scope, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+import type { Tracer } from "effect";
+import { Effect, Option, Result, Schema, type Scope } from "effect";
 import * as Commit from "./Commit.ts";
-import * as CommitId from "./CommitId.ts";
+import type * as CommitId from "./CommitId.ts";
 import {
+  CONFLICT_MERGE_CLASSES,
+  MERGE_CLASSES,
   MESSAGE_CLASSES,
   SIGNATURE_CLASSES,
   asWritten,
@@ -29,6 +31,7 @@ import {
   carrier,
   isAncestorModel,
   lineOrder,
+  mergeCarrier,
   missingId,
   objectSize,
   PAIR_KINDS,
@@ -51,12 +54,35 @@ import {
   walkModel,
   CRISS,
   type Committer,
-  type FlatSignature,
   type History,
+  type MergeCase,
   type Shape,
   type Texture,
 } from "./History.test-support.ts";
-import * as Ref from "./Ref.ts";
+import {
+  clockAt,
+  commitIdFrom,
+  conflictPaths,
+  encodeCommit,
+  expectedRefs,
+  expectedWrite,
+  expectNamedSpan,
+  failed,
+  flatAt,
+  idAt,
+  isTooShort,
+  mergeArgs,
+  mergedTree,
+  numAt,
+  plainRefs,
+  readRefsBack,
+  refNameFrom,
+  seedEach,
+  toSignature,
+  traced,
+  treeAt,
+  type Fields,
+} from "./Laws.test-support.ts";
 import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
@@ -96,20 +122,6 @@ export const settings = (
     committer,
   });
 
-const commitIdFrom = (text: string): CommitId.CommitId => Schema.decodeUnknownSync(CommitId.CommitId)(text);
-
-const refNameFrom = (text: string): Ref.RefName => Schema.decodeUnknownSync(Ref.RefName)(text);
-
-const idAt = (ids: ReadonlyArray<CommitId.CommitId>, index: number): CommitId.CommitId => {
-  const id = ids[index];
-
-  if (id === undefined) {
-    throw new Error(`the seeder gave no id for commit ${index}`);
-  }
-
-  return id;
-};
-
 const nodeAt = (history: History, i: number): History["nodes"][number] => {
   const node = history.nodes[i];
 
@@ -129,18 +141,6 @@ const nonEmpty = <A>(items: ReadonlyArray<A>): readonly [A, ...Array<A>] => {
 
   return [first, ...rest];
 };
-
-const treeAt = (trees: ReadonlyArray<Tree.TreeId>, index: number): Tree.TreeId => {
-  const tree = trees[index];
-
-  if (tree === undefined) {
-    throw new Error(`the seeder gave no tree for commit ${index}`);
-  }
-
-  return tree;
-};
-
-const encodeCommit = (commit: Commit.Commit): typeof Commit.Commit.Encoded => Schema.encodeSync(Commit.Commit)(commit);
 
 /** What `readCommit` of commit `i` must answer, as plain data. */
 const expectedCommit = (
@@ -164,28 +164,6 @@ const expectedCommit = (
     message: node.message,
   };
 };
-
-const plainRefs = (refs: ReadonlyArray<Ref.Ref>): ReadonlyArray<typeof Ref.Ref.Encoded> =>
-  refs.map((ref) => ({ name: ref.name, commit: ref.commit }));
-
-const expectedRefs = (
-  history: History,
-  ids: ReadonlyArray<CommitId.CommitId>,
-  under: string,
-): ReadonlyArray<typeof Ref.Ref.Encoded> =>
-  refsModel(history, under).map((ref) => ({ name: ref.name, commit: idAt(ids, ref.commit) }));
-
-const seedEach = <A, E>(
-  subject: Subject,
-  histories: ReadonlyArray<Shape>,
-  config: Settings.Settings,
-  check: (seeded: Seeded, shape: Shape) => Effect.Effect<A, E>,
-): Effect.Effect<ReadonlyArray<A>, E> =>
-  Effect.forEach(
-    histories,
-    (shape) => Effect.scoped(Effect.flatMap(subject.seed(shape.history, config), (seeded) => check(seeded, shape))),
-    { concurrency: 1 },
-  );
 
 const sorted = (numbers: ReadonlyArray<number>): ReadonlyArray<number> => [...numbers].sort((a, b) => a - b);
 
@@ -245,19 +223,7 @@ const readBack = (seeded: Seeded, history: History, label: string): Effect.Effec
     { concurrency: 1 },
   );
 
-const readRefsBack = (seeded: Seeded, history: History, label: string): Effect.Effect<void, unknown> =>
-  Effect.forEach(
-    refQueries(history),
-    (under) =>
-      Effect.map(seeded.repository.readRefs(refNameFrom(under)), (refs) => {
-        expect(plainRefs(refs), `${label}: refs under ${under}`).toEqual(expectedRefs(history, seeded.ids, under));
-      }),
-    { concurrency: 1 },
-  );
-
 const isMissing = Schema.is(Repository.NoSuchCommit);
-
-const isTooShort = Schema.is(Repository.HistoryTooShort);
 
 const failure = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<E, never> => Effect.flip(effect).pipe(Effect.orDie);
 
@@ -267,40 +233,6 @@ const failure = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<E, never> => 
 
 const treeIdFrom = (text: string): Tree.TreeId => Schema.decodeUnknownSync(Tree.TreeId)(text);
 
-const toSignature = (flat: FlatSignature): Commit.Signature =>
-  new Commit.Signature({ name: flat.name, email: flat.email, at: { seconds: flat.seconds, offset: flat.offset } });
-
-const flatAt = (texture: Texture, k: number): FlatSignature => {
-  const flat = texture.signatures[k % texture.signatures.length];
-
-  if (flat === undefined) {
-    throw new Error("the texture holds no signature");
-  }
-
-  return flat;
-};
-
-const numAt = (texture: Texture, k: number): number => texture.nums[k % texture.nums.length] ?? 0;
-
-/** The clock at a whole second and a drawn part of the next, so a committer's second is the one below, never rounded up. */
-const clockAt = (seconds: number, texture: Texture, k: number): Effect.Effect<void> =>
-  TestClock.setTime(seconds * 1000 + (numAt(texture, k) % 1000));
-
-/** The failure of a call that must fail: an answer is a defect with the law's words. */
-const failed = <A, E>(effect: Effect.Effect<A, E>, place: string): Effect.Effect<E, never> =>
-  Effect.flatMap(Effect.result(effect), (result) =>
-    Result.isFailure(result)
-      ? Effect.succeed(result.failure)
-      : Effect.die(new Error(`${place}: the call answered, and it must fail`)),
-  );
-
-interface Fields {
-  readonly tree: Tree.TreeId;
-  readonly parents: ReadonlyArray<CommitId.CommitId>;
-  readonly author: FlatSignature;
-  readonly message: string;
-}
-
 const writeCall = (repo: Repository.Repository["Service"], fields: Fields) =>
   repo.writeCommit({
     tree: fields.tree,
@@ -308,21 +240,6 @@ const writeCall = (repo: Repository.Repository["Service"], fields: Fields) =>
     author: toSignature(fields.author),
     message: fields.message,
   });
-
-/** What a commit written at `seconds` must read back as, for the settings' committer: its fields, and the committer at +0000. */
-const expectedWrite = (
-  id: CommitId.CommitId,
-  fields: Fields,
-  committer: Committer,
-  seconds: number,
-): typeof Commit.Commit.Encoded => ({
-  id,
-  tree: fields.tree,
-  parents: fields.parents,
-  author: toPlain(fields.author),
-  committer: { name: committer.name, email: committer.email, at: { seconds, offset: "+0000" } },
-  message: fields.message,
-});
 
 /** Writes a commit and reads it back: the answer and the read both hold the fields and the committer of the settings. */
 const writeAndRead = (
@@ -374,24 +291,6 @@ const readModelBack = (
     { concurrency: 1 },
   );
 };
-
-const traced = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<{ answer: A; spans: Array<Tracer.NativeSpan> }, E> =>
-  Effect.gen(function* () {
-    const spans: Array<Tracer.NativeSpan> = [];
-
-    const tracer = Tracer.make({
-      span: (options) => {
-        const span = new Tracer.NativeSpan(options);
-        spans.push(span);
-
-        return span;
-      },
-    });
-
-    const answer = yield* effect.pipe(Effect.withTracer(tracer));
-
-    return { answer, spans };
-  });
 
 /** One span named `git.<call>`, ended, with the attributes, none of them a bare key and none holding a secret. */
 const expectSpan = (
@@ -885,7 +784,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // the span of `writeCommit` `Repository.writeCommit`; annotate the written message or the settings' committer;
     // leave `kalfa.git.from` out of `moveRef`, or put it in when `from` is none.
     it.effect.prop(
-      "S9 spans: each call, the write calls too, ends one span named git.<call> with the attributes the plan gives, and leaks nothing",
+      "S9 spans: each call, the write and merge calls too, ends one span named git.<call> with the attributes the plan gives, and leaks nothing",
       { texture: textureArb },
       ({ texture }) =>
         Effect.gen(function* () {
@@ -1000,6 +899,58 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
               );
             }),
           );
+
+          // The merge calls, on a history whose every path, message and name holds the canary: a merge that is clean ends with
+          // the tree it made, one that conflicts with how many paths, and no span names a path.
+          const merging = mergeCarrier(texture, CANARY);
+
+          yield* seedEach(
+            subject,
+            [{ label: "merges", history: withCanary(merging.history) }],
+            config,
+            (seeded, shape) =>
+              Effect.gen(function* () {
+                const secrets = [CANARY, ...seeded.hidden];
+                const clean = merging.cases.find((each) => each.expected.kind === "clean");
+                // The class with the most paths, so a count that is always one is seen.
+                const conflicting = merging.cases.find((each) => each.label === MERGE_CLASSES.at(-1));
+
+                if (clean === undefined || conflicting === undefined) {
+                  return yield* Effect.die("the carrier holds no clean merge or no conflict");
+                }
+
+                const args = (merge: MergeCase) => mergeArgs(seeded, merge, false);
+                const merged = yield* traced(Effect.result(seeded.repository.mergeTrees(args(clean))));
+                expectNamedSpan(
+                  `${shape.label}, a clean mergeTrees`,
+                  merged.spans,
+                  "git.mergeTrees",
+                  {
+                    "vcs.ref.base.revision": args(clean).ours,
+                    "vcs.ref.head.revision": args(clean).theirs,
+                    "kalfa.git.merge_base": args(clean).mergeBase,
+                    "kalfa.git.tree": mergedTree(seeded, clean),
+                  },
+                  ["kalfa.git.conflicts"],
+                  secrets,
+                );
+
+                const refused = yield* traced(Effect.result(seeded.repository.mergeTrees(args(conflicting))));
+                expectNamedSpan(
+                  `${shape.label}, a conflicting mergeTrees`,
+                  refused.spans,
+                  "git.mergeTrees",
+                  {
+                    "vcs.ref.base.revision": args(conflicting).ours,
+                    "vcs.ref.head.revision": args(conflicting).theirs,
+                    "kalfa.git.merge_base": args(conflicting).mergeBase,
+                    "kalfa.git.conflicts": conflictPaths(conflicting).length,
+                  },
+                  ["kalfa.git.tree"],
+                  secrets,
+                );
+              }),
+          );
         }),
       run,
     );
@@ -1007,7 +958,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // Plant: add a `head` key to the service; let `readRefs` pack refs, so the object count changes; let `writeCommit`
     // point `refs/heads/main` at the commit it wrote.
     it.effect.prop(
-      "S10 no working copy: the service has the five read calls and the two write calls, no list of reads changes the store, and no list of writes moves a ref",
+      "S10 no working copy: the service has the five read calls and the three write calls, no list of reads changes the store, and no list of writes or merges moves a ref",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), DEFAULT, (seeded, shape) =>
@@ -1015,6 +966,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             expect(Object.keys(seeded.repository).sort(), `${shape.label}: the keys`).toEqual([
               "isAncestor",
               "mergeBases",
+              "mergeTrees",
               "moveRef",
               "readCommit",
               "readRefs",
@@ -1061,6 +1013,14 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             }
 
             yield* readRefsBack(seeded, shape.history, `${shape.label}: after writes`);
+
+            // Merges, most of them between commits that do not merge well: a merge writes objects and moves no ref.
+            for (let k = 0; k < 12; k++) {
+              const [x, y, z] = [pick(k + 3), pick(k + 15), pick(k + 27)];
+              yield* Effect.exit(seeded.repository.mergeTrees({ mergeBase: x, ours: y, theirs: z }));
+            }
+
+            yield* readRefsBack(seeded, shape.history, `${shape.label}: after merges`);
           }),
         ),
       run,
@@ -1512,6 +1472,134 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 yield* check(place);
               }
             }),
+          );
+        }),
+      run,
+    );
+
+    // Plant: take ours whenever the sides differ; compare blobs and not modes, so a mode made executable on one side
+    // comes back as it was; treat a change on both sides as theirs; name every changed path and not only the conflicting
+    // ones; delete the check that the three are commits, so a missing id is a defect; leave the merged tree out of the
+    // store, so a commit written on it fails with NoSuchTree; read the history, so a shallow store fails.
+    it.effect.prop(
+      "S14 merge trees: a clean merge gives the tree of the files the model gives and makes it when the store lacks it, a conflict names the model's paths and no others, ours and theirs swapped give the same answer, a shallow store answers, and an id that is no commit is NoSuchCommit",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const made = mergeCarrier(texture);
+          expect(
+            made.cases.map((each) => each.label),
+            "the generator reaches every merge class",
+          ).toEqual([...MERGE_CLASSES]);
+          expect(
+            made.cases.filter((each) => each.expected.kind === "conflict").map((each) => each.label),
+            "the model finds a conflict in exactly the conflict classes",
+          ).toEqual(CONFLICT_MERGE_CLASSES);
+
+          const shallow = cutShallow(made.history);
+
+          if (shallow === undefined) {
+            return yield* Effect.die("the carrier has no commit with a parent");
+          }
+
+          const histories: ReadonlyArray<Shape> = [
+            { label: "merges", history: made.history },
+            { label: "merges, shallow", history: shallow },
+          ];
+
+          const trees = new Map<string, Tree.TreeId>();
+
+          yield* seedEach(subject, histories, DEFAULT, (seeded, shape) =>
+            Effect.gen(function* () {
+              const repo = seeded.repository;
+
+              for (const merge of made.cases) {
+                // Swapped, the answer is the same: a clean merge gives one tree and a conflict names the same paths.
+                for (const swapped of shape.label === "merges" ? [false, true] : [false]) {
+                  const place = `${shape.label}, ${merge.label}${swapped ? ", ours and theirs swapped" : ""}`;
+                  const answer = yield* Effect.result(repo.mergeTrees(mergeArgs(seeded, merge, swapped)));
+
+                  if (merge.expected.kind === "clean") {
+                    expect(Result.isSuccess(answer), `${place}: a clean merge answers a tree`).toBe(true);
+
+                    if (Result.isSuccess(answer)) {
+                      expect(answer.success, `${place}: the tree of the files the model gives`).toBe(
+                        mergedTree(seeded, merge),
+                      );
+                      trees.set(merge.label, answer.success);
+                    }
+                  } else {
+                    expect(Result.isFailure(answer), `${place}: a conflict is a failure`).toBe(true);
+
+                    if (Result.isFailure(answer)) {
+                      expectFailure(answer.failure, Repository.Conflict, { paths: conflictPaths(merge) }, place);
+                    }
+                  }
+                }
+              }
+
+              // A commit the store lacks, and a tree's id, in each place a commit goes: nothing else is asked first.
+              const first = made.cases[0];
+              const real = seeded.trees.find((id) => id !== TREE_ID);
+
+              if (first === undefined || real === undefined) {
+                return yield* Effect.die("the carrier holds no merge or no tree with files");
+              }
+
+              const args = mergeArgs(seeded, first, false);
+              const gone = commitIdFrom(missingId(texture, 7, [...seeded.ids, ...seeded.trees]));
+
+              for (const [label, bad] of [
+                ["a commit the store lacks", gone],
+                ["a tree's id", commitIdFrom(real)],
+              ] as const) {
+                for (const [place, asked] of [
+                  ["the merge base", { ...args, mergeBase: bad }],
+                  ["ours", { ...args, ours: bad }],
+                  ["theirs", { ...args, theirs: bad }],
+                ] as const) {
+                  expectFailure(
+                    yield* failed(repo.mergeTrees(asked), `${shape.label}, ${label} as ${place}`),
+                    Repository.NoSuchCommit,
+                    { id: bad },
+                    `${shape.label}, ${label} as ${place}`,
+                  );
+                }
+              }
+            }),
+          );
+
+          // With no commit that holds the merged files, the store has no such tree to find: the merge makes it, and a commit
+          // can then be written on it.
+          const bare = mergeCarrier(texture, "", false);
+
+          yield* seedEach(
+            subject,
+            [{ label: "merges, no commit holds a merged tree", history: bare.history }],
+            DEFAULT,
+            (seeded) =>
+              Effect.forEach(
+                bare.cases.filter((merge) => merge.expected.kind === "clean"),
+                (merge) =>
+                  Effect.gen(function* () {
+                    const place = `no answer commit, ${merge.label}`;
+                    const tree = yield* seeded.repository.mergeTrees(mergeArgs(seeded, merge, false));
+                    expect(tree, `${place}: the same tree as before`).toBe(trees.get(merge.label));
+
+                    const written = yield* writeCall(seeded.repository, {
+                      tree,
+                      parents: [],
+                      author: flatAt(texture, 2),
+                      message: "m\n",
+                    });
+
+                    expect(
+                      (yield* seeded.repository.readCommit(written.id)).tree,
+                      `${place}: a commit on the tree`,
+                    ).toBe(tree);
+                  }),
+                { concurrency: 1 },
+              ),
           );
         }),
       run,

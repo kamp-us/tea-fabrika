@@ -5,7 +5,8 @@ import * as Commit from "../Commit.ts";
 import { CommitId } from "../CommitId.ts";
 import * as Ref from "../Ref.ts";
 import * as Repository from "../Repository.ts";
-import { TreeId } from "../Tree.ts";
+import { Path, TreeId } from "../Tree.ts";
+import { byBytes } from "./object.ts";
 
 const NEWLINE = 0x0a;
 
@@ -146,6 +147,48 @@ export const refs = (
     }
 
     return read;
+  });
+
+/**
+ * What `merge-tree --write-tree --no-messages --name-only -z` printed: the merged tree, and each conflicting path once, sorted by UTF-8 bytes.
+ *
+ * @internal
+ */
+export interface MergeTree {
+  readonly tree: TreeId;
+  readonly paths: ReadonlyArray<Path>;
+}
+
+/**
+ * Reads the output of `merge-tree -z`: the tree's id and then each conflicting path, every one ended by a NUL byte.
+ *
+ * **Details**
+ *
+ * The text is split on NUL and never on line breaks, since a path may hold one. Output that holds no tree, or that does not end in a NUL, is unreadable.
+ *
+ * @internal
+ */
+export const mergeTree = (output: string): Result.Result<MergeTree, Repository.GitUnavailable> =>
+  Result.gen(function* () {
+    if (!output.endsWith("\0")) {
+      return yield* Result.fail(unreadable("merge-tree printed no tree"));
+    }
+
+    const [first, ...rest] = output.slice(0, -1).split("\0");
+
+    const tree = yield* Result.mapError(Schema.decodeUnknownResult(TreeId)(first), () =>
+      unreadable("merge-tree printed a tree that is no tree id"),
+    );
+
+    const paths = yield* Result.all(
+      rest.map((path) =>
+        Result.mapError(Schema.decodeUnknownResult(Path)(path), () =>
+          unreadable("merge-tree named a path that is no path of a tree"),
+        ),
+      ),
+    );
+
+    return { tree, paths: [...new Set(paths)].sort(byBytes) };
   });
 
 /**

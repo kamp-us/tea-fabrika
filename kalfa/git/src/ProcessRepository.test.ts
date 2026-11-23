@@ -1,12 +1,13 @@
-// The laws of the git-binary adapter on a stand-in spawner (P2 to P11): what each exit code means, the time
+// The laws of the git-binary adapter on a stand-in spawner (P2 to P13): what each exit code means, the time
 // limit, git's version, the command's environment, the arguments of each call, that sizes are read before objects,
-// how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, and that no
-// call reaches a remote. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
+// how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, that no
+// call reaches a remote, what `merge-tree` printed and the version a merge needs. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, ConfigProvider, Context, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
+import mergeTreeRows from "./fixtures/merge-tree-2.40.1.json" with { type: "json" };
 import {
   commitIdArb,
   committerFrom,
@@ -15,14 +16,14 @@ import {
   partArb,
   wordArb,
 } from "./History.test-support.ts";
-import { bytes as objectBytes } from "./internal/object.ts";
+import { byBytes, bytes as objectBytes } from "./internal/object.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Ref from "./Ref.ts";
 import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import { settings } from "./RepositoryTest.ts";
 import * as Settings from "./Settings.ts";
-import { gitTable, standIn, type Call, type Reply, type Table } from "./StandIn.test-support.ts";
+import { gitTable, mergeTreeOutput, standIn, type Call, type Reply, type Table } from "./StandIn.test-support.ts";
 import * as Tree from "./Tree.ts";
 
 const int = (minimum: number, maximum: number): Arbitrary.Arbitrary<number> =>
@@ -331,7 +332,7 @@ it.effect.prop(
           expect(Result.isSuccess(result), `${found} opens exactly when it is 2.38 or newer`).toBe(isNewEnough(ma, mi));
 
           if (Result.isFailure(result)) {
-            expectFailure(result.failure, Repository.GitTooOld, {}, `${found} is too old`);
+            expectFailure(result.failure, Repository.GitTooOld, { needs: "2.38" }, `${found} is too old`);
             expect(JSON.stringify(result.failure), `${found}: names what it found`).toContain(`${ma}.${mi}.${pa}`);
           }
         }
@@ -362,9 +363,16 @@ const upper = Arbitrary.array(Arbitrary.schema(Schema.Literals([..."ABCDEFGHIJKL
   maxLength: 8,
 }).pipe(Arbitrary.map((letters) => letters.join("")));
 
-// Plant: `extendEnv: true`; drop `--no-replace-objects`.
+/** What git's merge reads from a repository's own config, written out at git's defaults, so no config steers a merge. */
+const MERGE_PINS = ["merge.renames=true", "merge.directoryRenames=conflict", "merge.renormalize=false"];
+
+/** The `-c` settings in the start of a command's arguments. */
+const startConfigs = (args: ReadonlyArray<string>): ReadonlyArray<string> =>
+  args.flatMap((word, i) => (args[i - 1] === "-c" ? [word] : []));
+
+// Plant: `extendEnv: true`; drop `--no-replace-objects`; drop `merge.renames=true` from the start of the commands.
 it.effect.prop(
-  "P5 git's environment: every command has the same arguments' start, extendEnv false, and only PATH and the pinned set",
+  "P5 git's environment: every command has the same arguments' start with the three merge pins, extendEnv false, and only PATH and the pinned set",
   { a: commitIdArb, path: wordArb, names: Arbitrary.array(upper, { minLength: 1, maxLength: 5 }), value: wordArb },
   ({ a, path, names, value }) =>
     Effect.gen(function* () {
@@ -389,6 +397,7 @@ it.effect.prop(
         repo.walk({ include: [first], exclude: [second] }),
         repo.mergeBases(first, second),
         repo.isAncestor(first, second),
+        repo.mergeTrees({ mergeBase: first, ours: first, theirs: second }),
       ];
 
       for (const call of calls) {
@@ -396,10 +405,15 @@ it.effect.prop(
       }
 
       const seen = yield* stand.calls;
-      expect(seen.length, "opening and five calls ran git").toBeGreaterThan(5);
+      expect(seen.length, "opening and six calls ran git").toBeGreaterThan(5);
+      expect(
+        seen.map((call) => call.verb),
+        "the merge ran git too",
+      ).toContain("merge-tree");
 
       for (const call of seen) {
         expect(call.args.slice(0, 2), `${call.verb}: the start`).toEqual(["--no-replace-objects", `--git-dir=${PATH}`]);
+        expect(startConfigs(call.args), `${call.verb}: the merge pins`).toEqual(expect.arrayContaining(MERGE_PINS));
         expect(call.extendEnv, `${call.verb}: nothing inherited`).toBe(false);
         expect(call.env, `${call.verb}: PATH and the pinned set only`).toEqual({ PATH: inherited["PATH"], ...PINNED });
       }
@@ -460,9 +474,11 @@ const START = [
   "gc.auto=0",
   "-c",
   "maintenance.auto=false",
+  ...MERGE_PINS.flatMap((pin) => ["-c", pin]),
 ];
 
-// Plant: swap the two ids given to `merge-base`; drop `--not` from `rev-list`.
+// Plant: swap the two ids given to `merge-base`; drop `--not` from `rev-list`; swap ours and theirs given to `merge-tree`;
+// drop `--name-only` or `-z` from it.
 it.effect.prop(
   "P7 git's arguments: each call asks git for exactly its plumbing command, with its ids and counts in order",
   { a: commitIdArb, commits: int(1, 40), refs: int(1, 40), withExclude: Arbitrary.schema(Schema.Boolean) },
@@ -523,6 +539,23 @@ it.effect.prop(
           "isAncestor",
           (repo) => repo.isAncestor(one, two),
           [CHECK, SHALLOW, ["merge-base", "--is-ancestor", ids[0] ?? "", ids[1] ?? ""]],
+        ],
+        [
+          "mergeTrees",
+          (repo) => repo.mergeTrees({ mergeBase: one, ours: two, theirs: three }),
+          [
+            CHECK,
+            [
+              "merge-tree",
+              "--write-tree",
+              "--no-messages",
+              "--name-only",
+              "-z",
+              `--merge-base=${ids[0] ?? ""}`,
+              ids[1] ?? "",
+              ids[2] ?? "",
+            ],
+          ],
         ],
       ];
 
@@ -831,7 +864,7 @@ const ALLOWED = [
   "update-ref",
 ];
 
-// Plant: run `push` after `update-ref`.
+// Plant: run `push` after `update-ref`; run `fetch` after `merge-tree`.
 it.effect(
   "P11 scenario: across every call, the git commands that run are plumbing that reads and writes this repository, and none reaches a remote",
   () =>
@@ -848,7 +881,16 @@ it.effect(
       const table: Table = { commits: [a, b], trees: [tree], refs: [[ref, a]] };
 
       const { repo, stand } = yield* open(
-        gitTable(table, (call) => (call.verb === "hash-object" ? { code: 0, stdout: `${written}\n` } : { code: 0 })),
+        gitTable(table, (call) => {
+          switch (call.verb) {
+            case "hash-object":
+              return { code: 0, stdout: `${written}\n` };
+            case "merge-tree":
+              return { code: 0, stdout: mergeTreeOutput(tree) };
+            default:
+              return { code: 0 };
+          }
+        }),
       );
 
       const author = new Commit.Signature({
@@ -865,6 +907,7 @@ it.effect(
         repo.isAncestor(a, b),
         repo.writeCommit({ tree, parents: [a], author, message: "m\n" }),
         repo.moveRef({ ref, from: Option.some(a), to: b }),
+        repo.mergeTrees({ mergeBase: a, ours: a, theirs: b }),
       ];
 
       for (const call of calls) {
@@ -879,5 +922,214 @@ it.effect(
       expect(verbs.has("hash-object") && verbs.has("update-ref"), "the scenario reaches both write commands").toBe(
         true,
       );
+      expect(verbs.has("merge-tree"), "the scenario reaches the merge command").toBe(true);
     }),
+);
+
+/** The failure of an answer that must be one: an answer is a thrown mistake with the law's words. */
+const answerFailure = <A, E>(answer: Result.Result<A, E>, place: string): E => {
+  if (Result.isFailure(answer)) {
+    return answer.failure;
+  }
+
+  throw new Error(`${place}: the call answered, and it must fail`);
+};
+
+const RecordedMerges = Schema.Struct({
+  git: Schema.String,
+  command: Schema.String,
+  rows: Schema.Array(
+    Schema.Struct({
+      note: Schema.String,
+      code: Schema.Int,
+      output: Schema.String,
+      expect: Schema.Struct({ tree: Schema.String, paths: Schema.Array(Schema.String) }),
+    }),
+  ),
+});
+
+/** The paths a conflict names: each once, sorted by their UTF-8 bytes. */
+const onceByBytes = (paths: ReadonlyArray<string>): ReadonlyArray<string> => [...new Set(paths)].sort(byBytes);
+
+// vector: git 2.40.1's `merge-tree -z` printed the exit code and the bytes of each row below, and the reader gives the tree
+// of a clean merge and the paths of a conflict, each once, sorted by bytes, from the recorded bytes and from the same paths
+// listed in another order with one of them twice.
+// Plant: delete the check that the output ends in a NUL, so a path with no ending NUL is a path; skip the check of each
+// path, so an empty path, `.git` or `a/../b` is a path; split the output on line breaks, so the path with a line break is cut; read exit 1 with no paths as a clean
+// merge; keep the paths in the order git printed them, or twice; read any other code as a merge; skip the check that the
+// three are commits, so `merge-tree` runs on a commit the repository lacks.
+it.effect.prop(
+  "P12 merge-tree's output: exit 0 is the tree, exit 1 is a Conflict with its paths once each and sorted by bytes, any other code is Exited, output with no tree is Unreadable, and a commit that is none stops it",
+  { a: commitIdArb, junk: wordArb, other: int(2, 255), turn: int(0, 50), repeat: int(0, 50) },
+  ({ a, junk, other, turn, repeat }) =>
+    Effect.gen(function* () {
+      const id = (letter: string): CommitId.CommitId => commitIdFrom(`${letter}${a.slice(1)}`);
+      const [base, ours, theirs] = [id("b"), id("c"), id("d")];
+      const tree = `e${a.slice(1)}`;
+      const table: Table = { commits: [base, ours, theirs], trees: [], refs: [] };
+
+      const ask = (reply: Reply, held: Table = table) =>
+        Effect.gen(function* () {
+          const { repo, stand } = yield* open(
+            gitTable(held, (call) => (call.verb === "merge-tree" ? reply : { code: 0 })),
+          );
+
+          return { answer: yield* Effect.result(repo.mergeTrees({ mergeBase: base, ours, theirs })), stand };
+        });
+
+      const recorded = Schema.decodeUnknownSync(RecordedMerges)(mergeTreeRows);
+      expect(recorded.git).toContain("git version");
+      expect(recorded.rows.length, "the list is not empty").toBeGreaterThan(6);
+      expect(recorded.rows.filter((row) => row.code === 0).length, "the list holds clean merges").toBeGreaterThan(1);
+      expect(recorded.rows.filter((row) => row.code === 1).length, "the list holds conflicts").toBeGreaterThan(4);
+
+      for (const row of recorded.rows) {
+        const text = Buffer.from(row.output, "base64").toString("utf8");
+        const { answer } = yield* ask({ code: row.code, stdout: text });
+
+        if (row.code === 0) {
+          expect(Result.isSuccess(answer) ? answer.success : answer, row.note).toBe(row.expect.tree);
+
+          continue;
+        }
+
+        expectFailure(
+          answerFailure(answer, row.note),
+          Repository.Conflict,
+          { paths: onceByBytes(row.expect.paths) },
+          row.note,
+        );
+
+        // The same paths, in another order and one of them twice: still each once, sorted.
+        const paths = row.expect.paths;
+        const turned = [...paths.slice(turn % paths.length), ...paths.slice(0, turn % paths.length)];
+        const again = mergeTreeOutput(row.expect.tree, [...turned, turned[repeat % turned.length] ?? ""]);
+        const scrambled = yield* ask({ code: 1, stdout: again });
+
+        expectFailure(
+          answerFailure(scrambled.answer, `${row.note}, scrambled`),
+          Repository.Conflict,
+          { paths: onceByBytes(paths) },
+          `${row.note}, scrambled`,
+        );
+      }
+
+      // Any other code is no answer, whatever it printed.
+      for (const code of [other, 2, 128, 255]) {
+        const { answer } = yield* ask({ code, stdout: mergeTreeOutput(tree, ["x"]), stderr: junk });
+
+        unavailable(answerFailure(answer, `exit ${code}`), Repository.Exited, { code }, `exit ${code}`);
+      }
+
+      // Output with no tree is unreadable, with either code; so is a conflict that names no path.
+      for (const [label, code, stdout] of [
+        ["no output, exit 0", 0, ""],
+        ["text that is no tree, exit 0", 0, `not a tree ${junk}\0`],
+        ["no output, exit 1", 1, ""],
+        ["text that is no tree, exit 1", 1, `not a tree ${junk}\0path\0`],
+        ["a tree and no ending NUL, exit 0", 0, tree],
+        ["a path with no ending NUL, exit 1", 1, `${tree}\0ab`],
+        ["an empty path, exit 1", 1, `${tree}\0\0`],
+        ["a path that names .git, exit 1", 1, `${tree}\0.git\0`],
+        ["a path with a part `..`, exit 1", 1, `${tree}\0a/../b\0`],
+      ] as const) {
+        const { answer } = yield* ask({ code, stdout });
+
+        unavailable(answerFailure(answer, label), Repository.Unreadable, {}, label);
+      }
+
+      const none = yield* ask({ code: 1, stdout: mergeTreeOutput(tree) });
+      expectFailure(
+        answerFailure(none.answer, "a conflict with no path"),
+        Repository.GitUnavailable,
+        {},
+        "a conflict with no path",
+      );
+
+      // A commit that is missing, or an object that is no commit, stops the call before `merge-tree` runs.
+      for (const [label, lacking] of [
+        ["the merge base", base],
+        ["ours", ours],
+        ["theirs", theirs],
+      ] as const) {
+        for (const [kind, held] of [
+          ["missing", { ...table, commits: table.commits.filter((commit) => commit !== lacking) }],
+          ["a tree", { ...table, commits: table.commits.filter((commit) => commit !== lacking), trees: [lacking] }],
+        ] as const) {
+          const { answer, stand } = yield* ask({ code: 0, stdout: mergeTreeOutput(tree) }, held);
+
+          expectFailure(
+            answerFailure(answer, `${label} ${kind}`),
+            Repository.NoSuchCommit,
+            { id: lacking },
+            `${label} ${kind}`,
+          );
+          expect(
+            (yield* stand.calls).filter((call) => call.verb === "merge-tree"),
+            `${label} ${kind}: merge-tree did not run`,
+          ).toEqual([]);
+        }
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// Plant: delete the gate, so `merge-tree` is recorded on git 2.39; compare the version as text, so 2.100 reads as older;
+// run `cat-file` before the gate, so the call has run a command; name no `needs`, or "2.38".
+it.effect.prop(
+  "P13 the version for merges: a layer opened on git below 2.40 fails mergeTrees with GitTooOld needing 2.40 before it runs a command, and git 2.40 and newer runs merge-tree",
+  { major: int(2, 12), minor: int(0, 150), patch: int(0, 20) },
+  ({ major, minor, patch }) =>
+    Effect.gen(function* () {
+      const id = (letter: string): CommitId.CommitId => commitIdFrom(letter.repeat(40));
+      const [base, ours, theirs] = [id("a"), id("b"), id("c")];
+      const tree = "d".repeat(40);
+
+      const cases: ReadonlyArray<readonly [number, number, number]> = [
+        [major, minor, patch],
+        [2, 38, 0],
+        [2, 39, 3],
+        [2, 40, 0],
+        [2, 40, 1],
+        [2, 100, 0],
+        [3, 0, 0],
+        [10, 0, 0],
+      ];
+
+      for (const [ma, mi, pa] of cases.filter(([x, y]) => isNewEnough(x, y))) {
+        for (const label of LABELS) {
+          const text = versionText(label, ma, mi, pa);
+          const found = `${label} ${ma}.${mi}.${pa}`;
+
+          const { repo, stand } = yield* open((call) =>
+            call.verb === "version"
+              ? { code: 0, stdout: text }
+              : script([base, ours, theirs], 200, (inner) =>
+                  inner.verb === "merge-tree" ? { code: 0, stdout: mergeTreeOutput(tree) } : { code: 0 },
+                )(call),
+          );
+
+          const opened = (yield* stand.calls).length;
+          const answer = yield* Effect.result(repo.mergeTrees({ mergeBase: base, ours, theirs }));
+          const ran = (yield* stand.calls).slice(opened);
+
+          const merges = ma > 2 || mi >= 40;
+          expect(Result.isSuccess(answer), `${found}: merges exactly when it is 2.40 or newer`).toBe(merges);
+
+          if (merges) {
+            expect(Result.isSuccess(answer) ? answer.success : answer, `${found}: merges`).toBe(tree);
+            expect(
+              ran.map((call) => call.verb),
+              `${found}: ran merge-tree`,
+            ).toContain("merge-tree");
+          } else {
+            const error = answerFailure(answer, `${found} is too old to merge`);
+            unavailable(error, Repository.GitTooOld, { needs: "2.40" }, `${found} is too old to merge`);
+            expect(JSON.stringify(error), `${found}: names what it found`).toContain(`${ma}.${mi}.${pa}`);
+            expect(ran, `${found}: no command ran`).toEqual([]);
+          }
+        }
+      }
+    }),
+  { arbitrary: { runs: 200, seed: 119120 } },
 );

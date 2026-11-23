@@ -127,6 +127,15 @@ _Avoid_: squash merge, flatten, fold
 A commit with two parents, joining two lines of commits.
 _Avoid_: land, merge (Delivery's word is land)
 
+**Ours and theirs**:
+The two sides a merge joins. Ours is the line the merge is made on, and becomes the merge commit's first parent; theirs is
+the line that joins it.
+_Avoid_: left and right, source and target, head and base
+
+**Unrelated histories**:
+Two commits with no merge base. A merge commit of them is refused.
+_Avoid_: orphan, disjoint
+
 **Conflict**:
 When a rebase or a merge cannot combine the files by itself. It stops and names the files.
 _Avoid_: clash, failure
