@@ -216,7 +216,8 @@ describe("T325 K9 machine caps, today's tooling", () => {
     } finally {
       rmSync(cache, { recursive: true, force: true });
     }
-  });
+    // Each run starts real child Vitest processes: 15.2 to 18.5 s of CI's 60 s limit at this count.
+  }, 180_000);
 
   // R4 finding 4. With no lock named, every shell gets the same system file, whatever its TMPDIR.
   // The program runs here, in the test process, on its test layers: TMPDIR is set both in this
@@ -462,7 +463,8 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
       ),
       { ...options, numRuns: 2 },
     );
-  });
+    // Each run starts real child Vitest processes: 15.2 to 18.5 s of CI's 60 s limit at this count.
+  }, 180_000);
 
   // R4 finding 6. Plants: trust any positional filter, omit untracked or staged files,
   // compare two endpoints, or use a matcher which skips hidden path segments.
@@ -612,7 +614,8 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
       }),
       options,
     );
-  });
+    // Each run starts real child Vitest processes: 15.2 to 18.5 s of CI's 60 s limit at this count.
+  }, 180_000);
 
   // Plant: allow a force trigger to turn local --changed into a full run. This loads the real
   // config only. It never starts a broad Vitest process, even if the guard is broken.

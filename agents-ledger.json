@@ -228,32 +228,7 @@
 		{
 			"file": ".agents/skills/lead/scripts/box.test.ts",
 			"rule": "fabrika(no-promises)",
-			"code": "it(\"K1 overlapping fetches preserve both branches' independently verified links\", async () => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-promises)",
 			"code": "await fc.assert("
-		},
-		{
-			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-promises)",
-			"code": "fc.asyncProperty(fc.boolean(), async (reverse) => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-promises)",
-			"code": "new Promise<{ code: number | null; text: string }>((resolve, reject) => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-promises)",
-			"code": "for (const got of await Promise.all(order.map(([name, ticket]) => fetch(name!, ticket!)))) {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-promises)",
-			"code": "for (const got of await Promise.all(order.map(([name, ticket]) => fetch(name!, ticket!)))) {"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/box.test.ts",
@@ -279,11 +254,6 @@
 			"file": ".agents/skills/lead/scripts/box.test.ts",
 			"rule": "fabrika(no-promises)",
 			"code": "async (runner) => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-promises)",
-			"code": "await fc.assert("
 		},
 		{
 			"file": ".agents/skills/lead/scripts/box.test.ts",

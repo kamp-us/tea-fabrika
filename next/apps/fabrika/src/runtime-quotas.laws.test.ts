@@ -721,7 +721,10 @@ const Narrow = Schema.Array(Cell).check(Schema.isMinLength(3), Schema.isMaxLengt
 
 const WIDE_TAPE = Array.from({ length: 10 }, (_, i) => ({ pick: i, amount: (i * 37) % 251, reopen: i % 2 === 0 }));
 
-const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } };
+// The two Q12 property laws took 14.3 and 17.4 s of CI's 60 s limit at 40 runs, so each runs as 2 laws of 20 runs (3 fast each) with their own seeds.
+const PARTS = [1, 2] as const;
+
+const half = (part: number) => ({ arbitrary: { seed: 119120 + part, runs: runsFor({ fast: 3, full: 20 }) } });
 
 const accepted = { _tag: "ok", result: { _tag: "accepted" } };
 
@@ -857,132 +860,138 @@ describe("P34c live wiring, both object stores", () => {
       }),
     );
 
-  it.effect.prop(
-    "Q12 every entry a live call commits is charged to the account of its cause, and each step to its name's own store",
-    { tape: Narrow },
-    ({ tape }) => charged(tape),
-    options,
-  );
+  for (const part of PARTS) {
+    it.effect.prop(
+      "Q12 every entry a live call commits is charged to the account of its cause, and each step to its name's own store" +
+        ` (part ${part} of ${PARTS.length})`,
+      { tape: Narrow },
+      ({ tape }) => charged(tape),
+      half(part),
+    );
+  }
 
   it.effect("pinned: Q12 charges a tape of 10 cells", () => charged(WIDE_TAPE));
 
-  it.effect.prop(
-    "Q12 at the exact cap the door gives the typed quota answer and saves nothing, while the other program stays writable",
-    { tape: Tape },
-    ({ tape }) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const first = required(tape[0]);
-          const resource = first.pick % 2 === 0 ? "writes" : "storage";
-          // An input counts 2 writes, so an odd cap also meets "one write short". A bare input and its
-          // step take about 900 bytes in the canonical encoding, so the storage caps hold a few.
-          const cap = resource === "writes" ? 2 + (first.amount % 8) : 4_000 + (first.amount % 8) * 2_000;
+  for (const part of PARTS) {
+    it.effect.prop(
+      "Q12 at the exact cap the door gives the typed quota answer and saves nothing, while the other program stays writable" +
+        ` (part ${part} of ${PARTS.length})`,
+      { tape: Tape },
+      ({ tape }) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const first = required(tape[0]);
+            const resource = first.pick % 2 === 0 ? "writes" : "storage";
+            // An input counts 2 writes, so an odd cap also meets "one write short". A bare input and its
+            // step take about 900 bytes in the canonical encoding, so the storage caps hold a few.
+            const cap = resource === "writes" ? 2 + (first.amount % 8) : 4_000 + (first.amount % 8) * 2_000;
 
-          const limits = {
-            ...QuotaRunnerTest.defaults,
-            ...(resource === "writes" ? { writes: cap } : { storage: cap }),
-          };
+            const limits = {
+              ...QuotaRunnerTest.defaults,
+              ...(resource === "writes" ? { writes: cap } : { storage: cap }),
+            };
 
-          const w = yield* world(limits);
-          const counted = new Map<string, number>(NAMES.map((name) => [name, 0]));
-          let refusals = 0;
-          let admitted = 0;
+            const w = yield* world(limits);
+            const counted = new Map<string, number>(NAMES.map((name) => [name, 0]));
+            let refusals = 0;
+            let admitted = 0;
 
-          const one = Effect.fnUntraced(function* (name: string, id: string, text: string) {
-            const program = programFor(name);
-            const before = yield* w.accounts;
-            const rows = yield* w.rows;
-            const head = yield* w.head;
-            const used = required(before.program[program]);
-            const reply = yield* w.input(name, id, Msg.cases.inc.make({ text }));
+            const one = Effect.fnUntraced(function* (name: string, id: string, text: string) {
+              const program = programFor(name);
+              const before = yield* w.accounts;
+              const rows = yield* w.rows;
+              const head = yield* w.head;
+              const used = required(before.program[program]);
+              const reply = yield* w.input(name, id, Msg.cases.inc.make({ text }));
 
-            if (Schema.is(Schema.Struct({ _tag: Schema.Literal("refused") }))(reply)) {
-              // The typed answer, before an envelope, a binding, a reply or a local step is saved.
-              expect(reply).toMatchObject(refused);
-              expect(yield* w.rows).toEqual(rows);
-              expect(yield* w.accounts).toEqual(before);
-              expect(yield* w.view(name)).toMatchObject({ count: required(counted.get(name)) });
-              refusals++;
+              if (Schema.is(Schema.Struct({ _tag: Schema.Literal("refused") }))(reply)) {
+                // The typed answer, before an envelope, a binding, a reply or a local step is saved.
+                expect(reply).toMatchObject(refused);
+                expect(yield* w.rows).toEqual(rows);
+                expect(yield* w.accounts).toEqual(before);
+                expect(yield* w.view(name)).toMatchObject({ count: required(counted.get(name)) });
+                refusals++;
 
-              if (resource === "writes") {
-                // Refused only when the message and its step do not both fit.
-                expect(used.writes + 2).toBeGreaterThan(cap);
+                if (resource === "writes") {
+                  // Refused only when the message and its step do not both fit.
+                  expect(used.writes + 2).toBeGreaterThan(cap);
+                }
+
+                return false;
               }
 
-              return false;
-            }
+              expect(reply).toMatchObject(accepted);
+              counted.set(name, required(counted.get(name)) + 1);
+              admitted++;
+              yield* w.settle(Effect.map(w.view(name), (view) => view.count === required(counted.get(name))));
+              const after = yield* w.accounts;
+              const paid = required(after.program[program]);
+              const fresh = cost(yield* w.entries(head));
+              // The reader's ack is written at the cap too, and it is no part of the charge.
+              expect(yield* w.acks(head)).toEqual([name]);
+              expect({ writes: paid.writes - used.writes, bytes: paid.bytes - used.bytes }).toEqual(fresh);
+              expect(paid.ahead).toEqual(none);
+              // The write that reaches the cap is admitted; nothing passes it.
+              expect(resource === "writes" ? paid.writes : paid.bytes).toBeLessThanOrEqual(cap);
 
-            expect(reply).toMatchObject(accepted);
-            counted.set(name, required(counted.get(name)) + 1);
-            admitted++;
-            yield* w.settle(Effect.map(w.view(name), (view) => view.count === required(counted.get(name))));
-            const after = yield* w.accounts;
-            const paid = required(after.program[program]);
-            const fresh = cost(yield* w.entries(head));
-            // The reader's ack is written at the cap too, and it is no part of the charge.
-            expect(yield* w.acks(head)).toEqual([name]);
-            expect({ writes: paid.writes - used.writes, bytes: paid.bytes - used.bytes }).toEqual(fresh);
-            expect(paid.ahead).toEqual(none);
-            // The write that reaches the cap is admitted; nothing passes it.
-            expect(resource === "writes" ? paid.writes : paid.bytes).toBeLessThanOrEqual(cap);
+              if (resource === "storage") {
+                // A message bigger than the room left is never admitted.
+                expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(cap - used.bytes);
+              }
+
+              return true;
+            });
+
+            // With room for it, the first bare input is admitted: the wall is not shut from the start.
+            expect(yield* one("alpha:1", "first", "")).toBe(true);
 
             if (resource === "storage") {
-              // A message bigger than the room left is never admitted.
-              expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(cap - used.bytes);
+              // The write that reaches the cap is admitted, so the door must try a message where it
+              // will land. Aim one, with its step, at the room left, a drawn few bytes short, under an
+              // id as long as the first's, so only its text adds bytes to what the first pair cost.
+              const pair = (ids: ReadonlyArray<string>) =>
+                Effect.map(w.entries(0), (entries) => cost(entries.filter((e) => ids.includes(e.id))).bytes);
+
+              const bare = yield* pair(["first", "step:first"]);
+              const left = cap - required((yield* w.accounts).program["quota/alpha"]).bytes;
+              const text = Str.repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)))("a");
+
+              if (!(yield* one("alpha:1", "aimed", text))) {
+                // A refusal is true only if the message did not fit: with the wall moved away the same
+                // message lands, and its committed charge, the message and its step, passes that room.
+                yield* w.widen;
+                expect(yield* w.input("alpha:1", "aimed", Msg.cases.inc.make({ text }))).toMatchObject(accepted);
+                yield* w.settle(Effect.map(w.view("alpha:1"), (view) => view.count === 2));
+                expect(yield* pair(["aimed", "step:aimed"])).toBeGreaterThan(left);
+
+                return;
+              }
             }
 
-            return true;
-          });
+            for (const [n, c] of tape.entries()) {
+              const name = required(NAMES[c.pick % 2]);
+              const text = resource === "storage" ? Str.repeat(c.amount)("é😀") : "";
+              yield* one(name, `fill:${n}`, text);
 
-          // With room for it, the first bare input is admitted: the wall is not shut from the start.
-          expect(yield* one("alpha:1", "first", "")).toBe(true);
-
-          if (resource === "storage") {
-            // The write that reaches the cap is admitted, so the door must try a message where it
-            // will land. Aim one, with its step, at the room left, a drawn few bytes short, under an
-            // id as long as the first's, so only its text adds bytes to what the first pair cost.
-            const pair = (ids: ReadonlyArray<string>) =>
-              Effect.map(w.entries(0), (entries) => cost(entries.filter((e) => ids.includes(e.id))).bytes);
-
-            const bare = yield* pair(["first", "step:first"]);
-            const left = cap - required((yield* w.accounts).program["quota/alpha"]).bytes;
-            const text = Str.repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)))("a");
-
-            if (!(yield* one("alpha:1", "aimed", text))) {
-              // A refusal is true only if the message did not fit: with the wall moved away the same
-              // message lands, and its committed charge, the message and its step, passes that room.
-              yield* w.widen;
-              expect(yield* w.input("alpha:1", "aimed", Msg.cases.inc.make({ text }))).toMatchObject(accepted);
-              yield* w.settle(Effect.map(w.view("alpha:1"), (view) => view.count === 2));
-              expect(yield* pair(["aimed", "step:aimed"])).toBeGreaterThan(left);
-
-              return;
+              if (c.reopen) {
+                const saved = yield* w.accounts;
+                yield* w.reopen;
+                expect(yield* w.accounts).toEqual(saved);
+              }
             }
-          }
 
-          for (const [n, c] of tape.entries()) {
-            const name = required(NAMES[c.pick % 2]);
-            const text = resource === "storage" ? Str.repeat(c.amount)("é😀") : "";
-            yield* one(name, `fill:${n}`, text);
-
-            if (c.reopen) {
-              const saved = yield* w.accounts;
-              yield* w.reopen;
-              expect(yield* w.accounts).toEqual(saved);
+            // Drive to the wall: the refusal must occur, and it repeats without a new row.
+            for (let n = 0; n < 12 && refusals < 2; n++) {
+              yield* one("alpha:2", `wall:${n}`, resource === "storage" ? Str.repeat(cap)("😀") : "");
             }
-          }
 
-          // Drive to the wall: the refusal must occur, and it repeats without a new row.
-          for (let n = 0; n < 12 && refusals < 2; n++) {
-            yield* one("alpha:2", `wall:${n}`, resource === "storage" ? Str.repeat(cap)("😀") : "");
-          }
-
-          expect(refusals).toBeGreaterThanOrEqual(2);
-          expect(admitted).toBeGreaterThan(0);
-          // The other program has its own room in the same Project.
-          expect(yield* one("beta:1", "other-program", "")).toBe(true);
-        }),
-      ),
-    options,
-  );
+            expect(refusals).toBeGreaterThanOrEqual(2);
+            expect(admitted).toBeGreaterThan(0);
+            // The other program has its own room in the same Project.
+            expect(yield* one("beta:1", "other-program", "")).toBe(true);
+          }),
+        ),
+      half(part),
+    );
+  }
 });
