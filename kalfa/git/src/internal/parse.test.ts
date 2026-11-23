@@ -1,7 +1,7 @@
 // P1, P15 and P17: what internal/parse.ts reads out of git's own output. The files under fixtures/ were recorded from
 // real git runs (each names the git version and the command), one row per case with the value its note gives.
 import { expect, it } from "@effect/vitest";
-import { Predicate, Result, Schema } from "effect";
+import { Arbitrary, Predicate, Result, Schema } from "effect";
 import * as Commit from "../Commit.ts";
 import * as Diff from "../Diff.ts";
 import catFile from "../fixtures/cat-file-2.40.1.json" with { type: "json" };
@@ -254,14 +254,25 @@ const isUnreadableReason = Schema.is(Repository.Unreadable);
 const unreadable = (result: Result.Result<unknown, Repository.GitUnavailable | Repository.NotUtf8>): boolean =>
   Result.isFailure(result) && isUnavailable(result.failure) && isUnreadableReason(result.failure.reason);
 
+// Bytes the way git prints them: one byte for each character below U+0100.
+const latin1 = (text: string): Uint8Array => Uint8Array.from(text, (character) => character.charCodeAt(0));
+
+// The one-line row of the recording, to cut or bend by hand: the ids, a raw entry for a path, and the header of its section.
+const before = "de980441c3ab03a8c07dda1ad27b8a11f39deb1e";
+
+const after = "7be73ce3c1b1cdaea86e8168dfee8575175953bf";
+
+const rawEntry = (path: string): Uint8Array => latin1(`:100644 100644 ${before} ${after} M\0${path}\0`);
+
+const header = (path: string): string =>
+  `diff --git a/${path} b/${path}\nindex ${before}..${after} 100644\n--- a/${path}\n+++ b/${path}\n`;
+
 // Plant: read the text after a hunk header's second `@@` as a line; delete the section count check, so a raw list with more or
 // fewer entries than the patch has sections still reads; stop a hunk at a line that looks like a header; name the last file in the
 // raw list and not the failing one; strip the line end of every line; number every line from 1, or a removed line in the new file;
 // decode a line with replacement, so the latin-1 rows read; read a binary file's bytes as lines; read a type change as one section.
-// A cut patch, a marker with no line before it, a section with no header, a header that is none, a line that lacks its side's
-// prefix and a path that is no path are each unreadable: drop the final-newline check, the no-line-before-the-marker check, the
-// section-header check, the hunk-header check, either `take` prefix (read it as the empty string) or the path mapper. A raw entry of
-// a tree's mode is unreadable too: drop the entry mapper. A line that starts with a BOM keeps it: decode with `ignoreBOM: false`.
+// A path that is no path of a tree is unreadable: drop the path mapper. A raw entry of a tree's mode is unreadable too: drop the
+// entry mapper. A line that starts with a BOM keeps it: decode with `ignoreBOM: false`.
 it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output recorded from git to the value its note gives, one section for each raw entry and two for a type change", () => {
   const recorded = Schema.decodeUnknownSync(DiffTreePatch)(diffTreePatch);
   expect(recorded.git).toContain("git version");
@@ -351,60 +362,16 @@ it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output 
     }
   }
 
-  // Rows made by hand. Git never prints these, so no recording holds them: each is the one-line row of the recording, cut or bent.
-  const before = "de980441c3ab03a8c07dda1ad27b8a11f39deb1e";
-  const after = "7be73ce3c1b1cdaea86e8168dfee8575175953bf";
-  const latin1 = (text: string): Uint8Array => Uint8Array.from(text, (character) => character.charCodeAt(0));
-  const rawEntry = (path: string): Uint8Array => latin1(`:100644 100644 ${before} ${after} M\0${path}\0`);
+  // Rows made by hand. Git never prints these, so no recording holds them.
+  // A line that is not UTF-8 in a file whose raw path is no path of a tree names no file, so it is unreadable.
+  const gitPath = Parse.changes(rawEntry(".git"));
+  expect(Result.isSuccess(gitPath), "hand-made: the raw list of the path row reads").toBe(true);
 
-  const header = (path: string): string =>
-    `diff --git a/${path} b/${path}\nindex ${before}..${after} 100644\n--- a/${path}\n+++ b/${path}\n`;
-
-  const bent: ReadonlyArray<{ readonly note: string; readonly path: string; readonly output: Uint8Array }> = [
-    {
-      note: "hand-made: a patch with a partial row after its last section has no final newline, and that row is not dropped",
-      path: "a",
-      output: latin1(`${header("a")}@@ -2 +2 @@ a\n-b\n+B\nx`),
-    },
-    {
-      note: "hand-made: a `\\ No newline` marker with no line before it, after a hunk side of zero lines",
-      path: "a",
-      output: latin1(`${header("a")}@@ -0,0 +2 @@ a\n\\ No newline at end of file\n+B\n`),
-    },
-    {
-      note: "hand-made: a section that does not start with `diff --git`, its header lines replaced by one line of text",
-      path: "a",
-      output: latin1("garbage\n@@ -2 +2 @@ a\n-b\n+B\n"),
-    },
-    {
-      note: "hand-made: a hunk header that is no header, a line of text that starts with `@@ `",
-      path: "a",
-      output: latin1(`${header("a")}@@ -x +y @@\n-b\n+B\n`),
-    },
-    {
-      note: "hand-made: the new side of a hunk holds a line that is not an added line",
-      path: "a",
-      output: latin1(`${header("a")}@@ -2,0 +2 @@ a\n-b\n`),
-    },
-    {
-      note: "hand-made: the old side of a hunk holds a line that is not a removed line",
-      path: "a",
-      output: latin1(`${header("a")}@@ -2 +2,0 @@ a\n+B\n`),
-    },
-    {
-      note: "hand-made: a line that is not UTF-8 in a file whose raw path is no path of a tree names no file, so it is unreadable",
-      path: ".git",
-      output: latin1(`${header(".git")}@@ -1 +1 @@\n-\u00ff\n+B\n`),
-    },
-  ];
-
-  for (const row of bent) {
-    const listed = Parse.changes(rawEntry(row.path));
-    expect(Result.isSuccess(listed), `${row.note}: the raw list reads`).toBe(true);
-
-    if (Result.isSuccess(listed)) {
-      expect(unreadable(Parse.patch(listed.success, row.output)), `${row.note}: is unreadable`).toBe(true);
-    }
+  if (Result.isSuccess(gitPath)) {
+    expect(
+      unreadable(Parse.patch(gitPath.success, latin1(`${header(".git")}@@ -1 +1 @@\n-\u00ff\n+B\n`))),
+      "hand-made: a line that is not UTF-8 in a file whose raw path is no path of a tree is unreadable",
+    ).toBe(true);
   }
 
   // A line that starts with a BOM keeps it: the line is read as it is, and a reader that drops a leading BOM reads another line.
@@ -460,4 +427,287 @@ it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output 
     Result.isSuccess(Parse.files([[bare("M", "both"), empty]])),
     "hand-made: a changed file with both sides reads",
   ).toBe(true);
+});
+
+const int = (minimum: number, maximum: number): Arbitrary.Arbitrary<number> =>
+  Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum, maximum })));
+
+// The recorded patches that git printed and `parse.patch` reads, each with its raw list and what it reads to.
+const readable = Schema.decodeUnknownSync(DiffTreePatch)(diffTreePatch).rows.flatMap((row) => {
+  const listed = Parse.changes(fromBase64(row.raw));
+  const output = fromBase64(row.output);
+
+  return "failure" in row.expect || !Result.isSuccess(listed) || output.length === 0
+    ? []
+    : [{ note: row.note, changed: listed.success, output, expect: row.expect }];
+});
+
+type Reading = ReturnType<typeof encodeContents>;
+
+const text = (octets: Uint8Array): string => String.fromCharCode(...octets);
+
+// A patch as its lines, each without its newline; the last item is what follows the last newline, which is nothing for a whole patch.
+const linesOf = (octets: Uint8Array): ReadonlyArray<string> => text(octets).split("\n");
+
+const joinLines = (lines: ReadonlyArray<string>): Uint8Array => latin1(lines.join("\n"));
+
+const sectionStarts = (lines: ReadonlyArray<string>): ReadonlyArray<number> =>
+  lines.flatMap((line, at) => (line.startsWith("diff --git ") ? [at] : []));
+
+// The lines of a section's header that `parse.patch` does not read: all but its first, up to its first hunk, and not the marker
+// of a binary file, which it does read.
+const quietHeaders = (lines: ReadonlyArray<string>): ReadonlyArray<number> => {
+  const starts = sectionStarts(lines);
+
+  return starts.flatMap((start, n) => {
+    const end = starts[n + 1] ?? lines.length;
+    const hunk = lines.findIndex((line, at) => at > start && at < end && line.startsWith("@@ "));
+    const stop = hunk === -1 ? end : hunk;
+
+    return lines.flatMap((line, at) =>
+      at > start && at < stop && !line.startsWith("Binary files ") && line !== "" ? [at] : [],
+    );
+  });
+};
+
+const hunkHeaders = (lines: ReadonlyArray<string>): ReadonlyArray<number> =>
+  lines.flatMap((line, at) => (/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/.test(line) ? [at] : []));
+
+const without = (lines: ReadonlyArray<string>, at: number): ReadonlyArray<string> => lines.filter((_, i) => i !== at);
+
+const inserted = (lines: ReadonlyArray<string>, at: number, line: string): ReadonlyArray<string> => [
+  ...lines.slice(0, at),
+  line,
+  ...lines.slice(at),
+];
+
+// The last line may lose or gain its end where the marker is cut off, so it is compared without its end.
+const bare = (line: string): string => line.replace(/\r?\n$/, "");
+
+// Whether a reading is a shorter reading of another: the same files, each but the last the same, and the last a binary file read
+// as a file with no line (its marker is cut) or a text file with the first lines of the whole one.
+const isShorterReading = (whole: Reading, got: Reading): boolean => {
+  const last = whole.length - 1;
+
+  if (
+    got.length !== whole.length ||
+    !got.slice(0, last).every((each, at) => JSON.stringify(each) === JSON.stringify(whole[at]))
+  ) {
+    return false;
+  }
+
+  const [kept, cut] = [whole[last], got[last]];
+
+  if (kept === undefined || cut === undefined || !Predicate.isTagged(cut, "Text")) {
+    return JSON.stringify(kept) === JSON.stringify(cut);
+  }
+
+  const keptLines = Predicate.isTagged(kept, "Text") ? kept.lines : [];
+
+  return (
+    cut.lines.length <= keptLines.length &&
+    cut.lines.every(
+      (line, at) =>
+        line._tag === keptLines[at]?._tag &&
+        line.at === keptLines[at]?.at &&
+        (at < cut.lines.length - 1
+          ? line.text === keptLines[at]?.text
+          : bare(line.text) === bare(keptLines[at]?.text ?? "")),
+    )
+  );
+};
+
+const tally = new Map<string, number>();
+
+const counted = (kind: string): void => {
+  tally.set(kind, (tally.get(kind) ?? 0) + 1);
+};
+
+// Plant: drop the final-newline check, so a patch cut inside a line reads that part of the line; drop the check that a hunk holds the
+// lines its header counts, so a cut inside a hunk, or a count that is wrong, still reads; drop the section-header check, so a line
+// before the first section or a section with no header still reads; drop the section count check, so a section lost or doubled still
+// reads; drop the hunk-header check, so a header that is none reads with no start; read a side's lines with no prefix check, so a
+// line of the other side reads as one of this side. Every one is read as a valid but wrong reading, or it throws.
+it.prop(
+  "P18 parse.patch: a patch cut at any byte or bent in one place is unreadable, or a shorter reading of the whole, and never throws",
+  { row: int(0, 1_000_000), kind: int(0, 6), pick: int(0, 1_000_000), flip: int(0, 1), junk: int(0, 3) },
+  ({ row, kind, pick, flip, junk }) => {
+    const chosen = readable[row % readable.length];
+    expect(chosen, "a recorded row").toBeDefined();
+
+    if (chosen === undefined) {
+      return;
+    }
+
+    const { note, changed, output, expect: whole } = chosen;
+    const lines = linesOf(output);
+    const starts = sectionStarts(lines);
+    const here = (items: ReadonlyArray<number>): number => items[pick % Math.max(1, items.length)] ?? -1;
+
+    const ask = (patch: Uint8Array) => {
+      const read = Parse.patch(changed, patch);
+      expect(Result.isSuccess(read) || unreadable(read), `${note}: a success, or Unreadable and no other failure`).toBe(
+        true,
+      );
+
+      return read;
+    };
+
+    // A cut at any byte, or at the end of any line: unreadable, or a shorter reading of the whole. A cut that keeps every section
+    // and loses only whole hunks, or the header of the last section after its first line, leaves a patch that is valid and holds
+    // fewer lines: nothing in a patch says a later hunk was there. A cut inside a hunk or a line, or one that loses a whole section,
+    // is no patch of the raw list.
+    if (kind === 0) {
+      counted("cut");
+      const ends = lines.map((_, at) => lines.slice(0, at).reduce((total, line) => total + line.length + 1, 0));
+      const read = ask(output.subarray(0, flip === 0 ? (ends[pick % ends.length] ?? 0) : pick % (output.length + 1)));
+
+      if (Result.isSuccess(read)) {
+        counted("cut: a shorter reading");
+        expect(isShorterReading(whole as Reading, encodeContents(read.success)), `${note}: a shorter reading`).toBe(
+          true,
+        );
+      }
+
+      return;
+    }
+
+    // A section's `diff --git` line lost or doubled: a section is lost, or one is added with nothing in it, which no raw list has.
+    if (kind === 1 || kind === 2) {
+      const at = here(starts);
+      counted(kind === 1 ? "drop a section line" : "double a section line");
+      expect(
+        unreadable(ask(joinLines(kind === 1 ? without(lines, at) : inserted(lines, at, lines[at] ?? "")))),
+        `${note}: unreadable`,
+      ).toBe(true);
+
+      return;
+    }
+
+    // A header line that is not read, lost or doubled: the reading is the whole's or none. The reader reads a section's file from the
+    // raw list and its lines from its hunks, so a line between its first line and its first hunk is ignored.
+    if (kind === 3) {
+      const at = here(quietHeaders(lines));
+
+      if (at !== -1) {
+        counted("a quiet header line");
+        const read = ask(joinLines(flip === 0 ? without(lines, at) : inserted(lines, at, lines[at] ?? "")));
+
+        if (Result.isSuccess(read)) {
+          expect(encodeContents(read.success), `${note}: the same reading`).toEqual(whole);
+        }
+      }
+
+      return;
+    }
+
+    // A hunk's count made one more or one less: the hunk holds more or fewer lines than the header says.
+    if (kind === 4) {
+      const at = here(hunkHeaders(lines));
+
+      if (at !== -1) {
+        const [, oldStart = "", oldCount, newStart = "", newCount, rest = ""] =
+          /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/.exec(lines[at] ?? "") ?? [];
+
+        const bend = (count: string | undefined): number =>
+          (count === undefined ? 1 : Number(count)) + (flip === 0 || count === "0" ? 1 : -1);
+
+        const [oldNext, newNext] = pick % 2 === 0 ? [bend(oldCount), newCount] : [oldCount, bend(newCount)];
+
+        // A header whose numbers are no numbers: it is no header, so the lines after it are no hunk.
+        if (junk === 0) {
+          counted("a hunk header that is none");
+          const bent = joinLines([...lines.slice(0, at), `@@ -x +y @@${rest}`, ...lines.slice(at + 1)]);
+          expect(unreadable(ask(bent)), `${note}: unreadable`).toBe(true);
+
+          return;
+        }
+
+        counted("a hunk count");
+
+        expect(
+          unreadable(
+            ask(
+              joinLines([
+                ...lines.slice(0, at),
+                `@@ -${oldStart},${oldNext ?? 1} +${newStart},${newNext ?? 1} @@${rest}`,
+                ...lines.slice(at + 1),
+              ]),
+            ),
+          ),
+          `${note}: unreadable`,
+        ).toBe(true);
+      }
+
+      return;
+    }
+
+    // A partial row after the last section, with no end of line: the patch was cut there, whatever the row holds.
+    if (kind === 6) {
+      counted("a partial row at the end");
+      expect(
+        unreadable(ask(latin1(`${text(output)}${["x", "+x", "@@ -1", "diff --git"][junk] ?? "x"}`))),
+        `${note}: unreadable`,
+      ).toBe(true);
+
+      return;
+    }
+
+    // A line of junk before a section: the reader ignores it between a section with no hunk and the next, and fails anywhere else.
+    const at = here(starts);
+    counted("junk before a section");
+    const read = ask(joinLines(inserted(lines, at, ["junk", "@@ junk", "+junk", "-junk"][junk] ?? "junk")));
+
+    if (Result.isSuccess(read)) {
+      expect(encodeContents(read.success), `${note}: the same reading`).toEqual(whole);
+    }
+  },
+  { arbitrary: { runs: 400, seed: 119120 } },
+);
+
+// The rows of P18 that were first found by hand, each the one-line row of the recording cut or bent, kept as they are.
+it("pinned: P18 a patch with a partial row after its last section, a marker with no line before it, a section with no header, a hunk header that is none, and a side with a line of the other side are each unreadable", () => {
+  const rows: ReadonlyArray<readonly [string, string]> = [
+    [
+      "a partial row after the last section has no final newline, and is not dropped",
+      `${header("a")}@@ -2 +2 @@ a\n-b\n+B\nx`,
+    ],
+    [
+      "a `\\ No newline` marker with no line before it, after a hunk side of zero lines",
+      `${header("a")}@@ -0,0 +2 @@ a\n\\ No newline at end of file\n+B\n`,
+    ],
+    [
+      "a section that does not start with `diff --git`, its header lines replaced by one line of text",
+      "garbage\n@@ -2 +2 @@ a\n-b\n+B\n",
+    ],
+    ["a hunk header that is no header, a line of text that starts with `@@ `", `${header("a")}@@ -x +y @@\n-b\n+B\n`],
+    ["the new side of a hunk holds a line that is not an added line", `${header("a")}@@ -2,0 +2 @@ a\n-b\n`],
+    ["the old side of a hunk holds a line that is not a removed line", `${header("a")}@@ -2 +2,0 @@ a\n+B\n`],
+  ];
+
+  const listed = Parse.changes(rawEntry("a"));
+  expect(Result.isSuccess(listed), "the raw list reads").toBe(true);
+
+  for (const [note, patch] of rows) {
+    if (Result.isSuccess(listed)) {
+      expect(unreadable(Parse.patch(listed.success, latin1(patch))), `${note}: is unreadable`).toBe(true);
+    }
+  }
+
+  // When the law above ran in this file, each kind of cut or bend was drawn, and a cut read as a shorter reading at least once.
+  if (tally.size > 0) {
+    for (const kind of [
+      "cut",
+      "cut: a shorter reading",
+      "drop a section line",
+      "double a section line",
+      "a quiet header line",
+      "a hunk count",
+      "a hunk header that is none",
+      "junk before a section",
+      "a partial row at the end",
+    ]) {
+      expect(tally.get(kind) ?? 0, `${kind}: drawn`).toBeGreaterThan(0);
+    }
+  }
 });
