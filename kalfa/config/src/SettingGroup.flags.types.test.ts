@@ -40,12 +40,13 @@ const group = SettingGroup.make("demo", port, carry, secret);
 type Settings = typeof group.settings;
 
 // A group with a live setting is read with the quiet window too, so its flags and flag values hold that name beside the
-// three declared ones (ticket 1841). A group with no live setting holds exactly what it declared.
-type Names = "instance.port" | "delivery.carry-rule" | "net.key-file" | "config.watch.debounce";
+// declared ones that a flag may set (ticket 1841). A group with no live setting holds exactly those. A file-only setting,
+// `net.key-file` here, has no key at all (ticket 1842).
+type Names = "instance.port" | "delivery.carry-rule" | "config.watch.debounce";
 
 const quiet = SettingGroup.make("demo", port, secret);
 
-type QuietNames = "instance.port" | "net.key-file";
+type QuietNames = "instance.port";
 
 const quietFlags = SettingGroup.flags(quiet);
 
@@ -104,7 +105,7 @@ it("F1 type: the flags fit a command's config and shared flags with no cast, the
   }>();
   expectTypeOf<keyof typeof flags>().toEqualTypeOf<Names>();
 
-  // A group with no live setting has exactly the flags it declared.
+  // A group with no live setting has exactly the flags a flag may set.
   expectTypeOf<keyof typeof quietFlags>().toEqualTypeOf<QuietNames>();
   expectTypeOf<keyof SettingGroup.FlagValues<typeof quiet.settings>>().toEqualTypeOf<QuietNames>();
 
