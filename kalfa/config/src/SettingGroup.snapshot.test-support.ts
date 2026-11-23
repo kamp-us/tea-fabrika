@@ -18,16 +18,20 @@ import {
   Option,
   Predicate,
   Schema,
+  SchemaGetter,
+  SchemaIssue,
   Scope,
   Stream,
 } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import { TestClock } from "effect/testing";
+import * as AppModule from "./App.ts";
 import { Setting, SettingGroup } from "./index.ts";
 import { hash, read } from "./internal/snapshot.ts";
 import { watched } from "./internal/window.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import { Reach } from "./SettingGroup.edit.test-support.ts";
+import * as OldSnapshot from "./Snapshot.ts";
 import { Origin } from "./Sources.ts";
 
 export { Reach };
@@ -175,8 +179,13 @@ const declare = (decl: Decl): Setting.Any => {
   return marked(live, fileOnly, decl.required === true ? made : made.pipe(Setting.withDefault("fallback")));
 };
 
+const groupFrom = (app: string, settings: Array<Setting.Any>) => SettingGroup.make(app, ...settings);
+
 const makeGroup = (app: string, decls: ReadonlyArray<Decl>) =>
-  SettingGroup.make(app, ...decls.map((decl) => declare(decl)));
+  groupFrom(
+    app,
+    decls.map((decl) => declare(decl)),
+  );
 
 type Group = ReturnType<typeof makeGroup>;
 
@@ -1134,6 +1143,10 @@ interface Refusal {
   readonly printed: string;
 }
 
+/** The kinds of reason a failed read holds, as `Fail` and `Die`: a success holds none. */
+export const kinds = (exit: Exit.Exit<unknown, unknown>): ReadonlyArray<string> =>
+  Exit.isFailure(exit) ? exit.cause.reasons.map((reason) => reason._tag) : [];
+
 /** The one `SettingsError` a failed read holds, and never a second error or a defect beside it. */
 export const refusal = (exit: Exit.Exit<unknown, unknown>): Refusal => {
   expect(Exit.isFailure(exit), "the read fails").toBe(true);
@@ -1159,3 +1172,227 @@ export const refusal = (exit: Exit.Exit<unknown, unknown>): Refusal => {
       }
     : { reason: "not a SettingsError", file: undefined, line: undefined, message: "", printed: "" };
 };
+
+// ---------------------------------------------------------------------------------------------
+// SN13: the hash does not depend on key order
+// ---------------------------------------------------------------------------------------------
+
+/** Values whose keys are in no order at every depth. */
+export const KNOWN_VALUES: Readonly<Record<string, Json>> = {
+  "b.x": { y: 1, a: [2, { d: 4, c: 3 }] },
+  "c.w": null,
+  "a.z": "q",
+};
+
+/** The SHA-256 of `[["a.z","q"],["b.x",{"a":[2,{"c":3,"d":4}],"y":1}],["c.w",null]]`, the sorted entries as compact JSON, made outside this package. */
+export const KNOWN_HASH = "11955bc314a9fe493f571a9dddf896248424459699f762f9994672f631a93ae9";
+
+/** The same data with the keys of every object, at every depth, in the opposite order. */
+export const reversed = (value: Json): Json => {
+  if (Array.isArray(value)) {
+    return value.map(reversed);
+  }
+
+  return isRecord(value)
+    ? Object.fromEntries(
+        Object.entries(value)
+          .reverse()
+          .map(([key, entry]) => [key, reversed(entry)]),
+      )
+    : value;
+};
+
+/** The same record, its keys in the opposite order at every depth. */
+export const flipped = (values: Readonly<Record<string, Json>>): Record<string, Json> =>
+  Object.fromEntries(
+    Object.entries(values)
+      .reverse()
+      .map(([key, entry]) => [key, reversed(entry)]),
+  );
+
+/** The hash of the values, as the snapshot makes it. */
+export const hashed = (values: Readonly<Record<string, Json>>) =>
+  hash(values).pipe(Effect.provide(Digest.layerWebCrypto));
+
+/** One snapshot of the older API, made over a group of one setting that holds any JSON, and what reads it back. */
+/** Values three records deep, which a setting of the older API can read by its keys. */
+export const Tree = Schema.Record(
+  Key,
+  Schema.Record(Key, Schema.Record(Key, Schema.Int).check(Schema.isMaxProperties(3))).check(Schema.isMaxProperties(3)),
+).check(Schema.isMaxProperties(3));
+
+export const older = Effect.fnUntraced(function* (draw: Draw, value: typeof Tree.Type) {
+  const app = AppModule.make({ name: draw.app, list: `${draw.app} settings` });
+  const path = named(draw.a);
+
+  const setting = app.Setting.make(path, {
+    schema: Tree,
+    default: {},
+    doc: "A record.",
+    scope: ["repo", "person"],
+    reload: "restart",
+    since: "0.0.0",
+  });
+
+  const group = app.Setting.group({ s0: setting });
+
+  const snapshot = yield* OldSnapshot.make(group, {
+    values: { s0: value },
+    origins: { [path]: Origin.cases.default.make({}) },
+  });
+
+  return {
+    path,
+    snapshot,
+    read: (input: Json) => OldSnapshot.read(group, input).pipe(Effect.provide(Digest.layerWebCrypto)),
+  };
+}, Effect.provide(Digest.layerWebCrypto));
+
+export const OldSnapshotError = OldSnapshot.SnapshotError;
+
+// ---------------------------------------------------------------------------------------------
+// SN14: the two guards a snapshot can reach in the read of a value
+// ---------------------------------------------------------------------------------------------
+
+export type Guard = "cast" | "encode";
+
+export const GUARDS: ReadonlyArray<Guard> = ["cast", "encode"];
+
+/** A guard that lies: it says every value is text. It is how this law tells the compiler a value is plain when it is not. */
+const claimsText = (_value: unknown): _value is string => true;
+
+/** A schema typed as text that decodes a text of a time to a `Date`: the one lie a program's author can tell, which the read must die on. */
+const Lying = Schema.String.pipe(
+  Schema.decodeTo(Schema.declare(claimsText), {
+    decode: SchemaGetter.transform((text: string) => {
+      const date: unknown = new Date(text);
+
+      return claimsText(date) ? date : text;
+    }),
+    encode: SchemaGetter.transform((text: string) => text),
+  }),
+);
+
+/** A text that decodes with a mark added, and encodes only when the result is at most three letters: "abc" decodes to "abc!", which it refuses to encode. */
+const Shortened = Schema.String.pipe(
+  Schema.decodeTo(Schema.String, {
+    decode: SchemaGetter.transform((text: string) => `${text}!`),
+    encode: SchemaGetter.transformEffect((text: string) =>
+      text.length <= 3
+        ? Effect.succeed(text.slice(0, -1))
+        : Effect.fail(new SchemaIssue.InvalidValue({ message: "the encoded text is too long" })),
+    ),
+  }),
+);
+
+/** A snapshot of one setting the loader could not have made, as the read gets it. */
+interface Guarded {
+  readonly id: Guard;
+  readonly group: Group;
+  readonly name: string;
+  readonly input: unknown;
+  /** A snapshot of the same group that reads, for the control. */
+  readonly fine: unknown;
+}
+
+export const guarded = (draw: Draw): Effect.Effect<ReadonlyArray<Guarded>> =>
+  Effect.gen(function* () {
+    const site = `.${draw.app}/${draw.app}.toml`;
+    const name = named(draw.a);
+
+    const one = (id: Guard, setting: Setting.Any, text: string, fine: string) =>
+      Effect.gen(function* () {
+        const make = (value: string) =>
+          Effect.map(hash({ [name]: value }), (sum) => ({
+            app: draw.app,
+            values: { [name]: value },
+            origins: { [name]: Origin.cases.file.make({ file: site, line: 1 }) },
+            hash: sum,
+          }));
+
+        return {
+          id,
+          group: groupFrom(draw.app, [setting]),
+          name,
+          input: yield* make(text),
+          fine: yield* make(fine),
+        } satisfies Guarded;
+      });
+
+    const described = Setting.withDescription("A generated setting.");
+
+    const lie = Lying;
+
+    return [
+      yield* one(
+        "cast",
+        Setting.make(name, lie).pipe(described),
+        `2020-01-${String(10 + (number(draw, 0) % 18))}T00:00:00.000Z`,
+        "",
+      ),
+      yield* one("encode", Setting.make(name, Shortened).pipe(described), `${word(draw, 0)}xyz`.slice(0, 3), "ab"),
+    ];
+  }).pipe(Effect.provide(Digest.layerWebCrypto));
+
+// ---------------------------------------------------------------------------------------------
+// SN15: every origin is checked before any value
+// ---------------------------------------------------------------------------------------------
+
+export type Order = "before" | "same" | "after";
+
+export const ORDERS: ReadonlyArray<Order> = ["before", "same", "after"];
+
+/** A snapshot with a refused value and an origin no start gives, and the origin's message: a value before it, at it, or after it. */
+interface Ordered {
+  readonly id: Order;
+  readonly label: string;
+  readonly input: unknown;
+  readonly message: string;
+}
+
+export const ordered = (draw: Draw, item: SettingGroup.Snapshot): Effect.Effect<ReadonlyArray<Ordered>> =>
+  Effect.gen(function* () {
+    const { app } = draw;
+    const base = plain(item);
+    const names = [named(draw.a), named(draw.b), named(draw.c)];
+
+    // For each setting: an origin no start gives it, and a value its schema refuses.
+    const bad = [
+      Origin.cases.flag.make({ name: `--${names[1]}` }),
+      Origin.cases.file.make({ file: `~/.${app}/${app}.toml`, line: 1 }),
+      Origin.cases.flag.make({ name: `--${names[2]}` }),
+    ];
+
+    const refused: ReadonlyArray<Json> = ["x", "x", 5];
+    const found: Array<Ordered> = [];
+
+    for (const [at, origin] of bad.entries()) {
+      for (const [id, to] of [
+        ["before", at - 1],
+        ["same", at],
+        ["after", at + 1],
+      ] as const) {
+        const name = names[to];
+        const value = refused[to];
+
+        if (name === undefined || value === undefined) {
+          continue;
+        }
+
+        const input = yield* sealed({
+          ...base,
+          origins: { ...base.origins, [names[at] ?? ""]: origin },
+          values: { ...base.values, [name]: value },
+        });
+
+        found.push({
+          id,
+          label: `a value refused at ${name} and an origin at ${names[at]}`,
+          input,
+          message: `${names[at]}: the snapshot gives it an origin ${app} cannot give.`,
+        });
+      }
+    }
+
+    return found;
+  }).pipe(Effect.provide(Digest.layerWebCrypto));

@@ -15,7 +15,7 @@
 // gives. Every start runs on a live disk in memory (MemoryFiles.test-support.ts), and time is Effect's `TestClock`.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import { fits } from "./internal/snapshot.ts";
 import {
   boot,
@@ -23,6 +23,19 @@ import {
   CHANGES,
   candidates,
   close,
+  flipped,
+  GUARDS,
+  kinds,
+  guarded,
+  hashed,
+  KNOWN_HASH,
+  KNOWN_VALUES,
+  ORDERS,
+  ordered,
+  older,
+  OldSnapshotError,
+  reversed,
+  Tree,
   collect,
   Declaration,
   Draw,
@@ -59,6 +72,8 @@ import {
   running,
   variable,
   type Change,
+  type Guard,
+  type Order,
   type Misfit,
 } from "./SettingGroup.snapshot.test-support.ts";
 
@@ -334,6 +349,121 @@ it.effect.prop(
         }
 
         reach.mark(String(one.step));
+      }
+
+      yield* close(rig);
+      reach.done();
+    }),
+  check,
+);
+
+// ---------------------------------------------------------------------------------------------
+// SN13, the hash does not depend on the order of keys
+// ---------------------------------------------------------------------------------------------
+
+// Plants: sort the keys of the top level only: a nested object in another order has another hash, red; sort no keys at all:
+// red; (old read) compare the saved hash with itself in `Snapshot.read`: a changed value reads, red.
+it.effect.prop(
+  "SN13 the hash of the values is one for any order of keys at any depth, it is not one for other values, and a known set of values has the hash written out here; the older read agrees",
+  { draw: Draw, values: Schema.Record(Schema.String, Schema.Json), tree: Tree },
+  ({ draw, values, tree }) =>
+    Effect.gen(function* () {
+      const sum = yield* hashed(values);
+
+      expect(yield* hashed(flipped(values)), "the keys in the opposite order").toBe(sum);
+      expect(yield* hashed({ ...values, [`Extra ${draw.app}`]: 1 }), "one more value").not.toBe(sum);
+
+      // The known values are spelled in no order, and their hash was made outside this package.
+      expect(yield* hashed(KNOWN_VALUES)).toBe(KNOWN_HASH);
+      expect(yield* hashed(flipped(KNOWN_VALUES))).toBe(KNOWN_HASH);
+
+      // The older read makes its hash the same way: keys of a value in another order read, and another value does not.
+      const made = yield* older(draw, tree);
+      const saved = made.snapshot.values[made.path];
+
+      const again = yield* made
+        .read({ ...made.snapshot, values: { [made.path]: reversed(saved ?? null) } })
+        .pipe(Effect.map((read) => read.snapshot.hash));
+
+      expect(again, "the older read of the same values in another key order").toBe(made.snapshot.hash);
+
+      // Another value of the same shape: a key less, or a key more when it has none.
+      const other = Object.fromEntries(Object.entries(tree).slice(1));
+      const another = Object.keys(tree).length === 0 ? { zzzz: {} } : other;
+      const changed = yield* Effect.exit(made.read({ ...made.snapshot, values: { [made.path]: another } }));
+
+      expect(Exit.isFailure(changed), "the older read of other values").toBe(true);
+
+      if (Exit.isFailure(changed)) {
+        expect(
+          changed.cause.reasons.some((reason) => reason._tag === "Fail" && Schema.is(OldSnapshotError)(reason.error)),
+        ).toBe(true);
+      }
+    }),
+  check,
+);
+
+// ---------------------------------------------------------------------------------------------
+// SN14, the two guards a value can reach in the read
+// ---------------------------------------------------------------------------------------------
+
+// Plants: delete the guard that dies on a value that is not plain data: a cast schema's `Date` is read, red; skip the
+// encode of the value again: a value whose encoded form the schema refuses is read, red.
+it.effect.prop(
+  "SN14 the read dies on a value that is not plain data (a cast schema), and refuses a value whose encoded form its schema refuses, with step 5's message",
+  { draw: Draw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const reach = new Reach<Guard>(GUARDS);
+      const [closing] = closings(draw.app);
+
+      const found = yield* guarded(draw);
+
+      // The author's bug: a defect, never a refusal a person could fix.
+      for (const one of found.filter((candidate) => candidate.id === "cast")) {
+        expect(kinds(yield* Effect.exit(readItem(one.group, one.input, closing))), "a cast schema").toEqual(["Die"]);
+        reach.mark(one.id);
+      }
+
+      for (const one of found.filter((candidate) => candidate.id === "encode")) {
+        const refused = refusal(yield* Effect.exit(readItem(one.group, one.input, closing)));
+
+        expect(refused.reason).toBe("snapshot");
+        expect(refused.message).toBe(`${one.name}: the snapshot's value is refused by its schema.\n  ${closing}`);
+
+        // The control: the same schema reads a value whose decoded form it also encodes.
+        const fine = yield* readItem(one.group, one.fine, closing);
+
+        expect(fine.map((entry) => entry.value)).toEqual(["ab!"]);
+        reach.mark(one.id);
+      }
+
+      reach.done();
+    }),
+  check,
+);
+
+// ---------------------------------------------------------------------------------------------
+// SN15, every origin is checked before any value
+// ---------------------------------------------------------------------------------------------
+
+// Plant: check each origin right before its own value: a value refused at an earlier setting speaks first, red.
+it.effect.prop(
+  "SN15 every origin is checked before any value: a snapshot with an origin no start gives and a refused value, at the same setting or another, gets the origin's message",
+  { draw: Draw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const reach = new Reach<Order>(ORDERS);
+      const rig = yield* boot(richScene(draw));
+      const item = yield* firstItem(rig);
+      const [closing] = closings(draw.app);
+
+      for (const one of yield* ordered(draw, item)) {
+        const found = refusal(yield* Effect.exit(readItem(rig.group, one.input, closing)));
+
+        expect(found.reason, one.label).toBe("snapshot");
+        expect(found.message, one.label).toBe(`${one.message}\n  ${closing}`);
+        reach.mark(one.id);
       }
 
       yield* close(rig);
