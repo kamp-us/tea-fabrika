@@ -1,6 +1,6 @@
 // A test's kind follows what it uses. Vitest picks a file's project by its name
 // (vitest.config.ts's projects), and only plain files run on pull requests and the merge queue, so a
-// `next/` test file whose own code starts a real thing must be named `*.integration.test.ts`, or
+// `next/` or `kalfa/` test file whose own code starts a real thing must be named `*.integration.test.ts`, or
 // `*.visual.test.ts` for a browser or Electron, and runs on main's full run (a test that needs a real resource runs only in main's full run; main's full run starts on a push to main and an hourly catch-up).
 //
 // What counts as a real thing is starters.ts's, which test-kind.ts reads too: a process, a socket,
@@ -16,6 +16,9 @@ import { DRIVES, reader, visitor } from "./starters.ts";
 /** The name of a test file that already says it starts a real thing. */
 const NAMED = /\.(?:integration|visual)\.test\.tsx?$/;
 
+/** The new work's folders, whose plain tests run on pull requests (vitest.config.ts's `next` project). */
+const NEW_WORK = /^(?:next|kalfa)\//;
+
 export const integrationTestName: CreateRule = {
   meta: {
     messages: {
@@ -26,7 +29,7 @@ export const integrationTestName: CreateRule = {
   create(context) {
     const file = pathIn(context);
 
-    if (!file.startsWith("next/") || !/\.test\.tsx?$/.test(file) || NAMED.test(file)) {
+    if (!NEW_WORK.test(file) || !/\.test\.tsx?$/.test(file) || NAMED.test(file)) {
       return {};
     }
 
