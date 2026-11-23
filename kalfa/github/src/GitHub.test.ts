@@ -14,6 +14,8 @@ import {
   GET_PULL,
   INSTALLATION_TOKEN,
   LANGUAGES,
+  STAR,
+  UPDATE_ISSUE,
   VECTORS,
   ZEN,
 } from "./Octokit.test-support.ts";
@@ -37,6 +39,8 @@ it("T1 vector: route holds the route text, the method and the path template of e
     GitHub.route(ZEN),
     GitHub.route(LANGUAGES),
     GitHub.route(DELETE_ORG),
+    GitHub.route(STAR),
+    GitHub.route(UPDATE_ISSUE),
     GitHub.route(DELETE_COMMENT),
   ];
 

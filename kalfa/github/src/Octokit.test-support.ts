@@ -25,8 +25,15 @@ export const DELETE_ORG = "DELETE /orgs/{org}"; // a 202 whose schema is a bare 
 
 export const DELETE_COMMENT = "DELETE /repos/{owner}/{repo}/issues/comments/{comment_id}"; // a 204, no body at all
 
-/** Two more real routes the type laws need: a required query parameter, and an answer that is a `OneOf`. */
+/** The other two methods of the description, each with a route of its own, so a method left out of the `Method` Schema shows. */
+export const STAR = "PUT /user/starred/{owner}/{repo}"; // a 204, no body
+
+export const UPDATE_ISSUE = "PATCH /repos/{owner}/{repo}/issues/{issue_number}"; // an optional body
+
+/** More real routes the type laws need: a required query parameter, an answer that is a `OneOf`, and a 200 beside a 204 with no body. */
 export const SEARCH_ISSUES = "GET /search/issues"; // `q` is required
+
+export const CONTRIBUTORS = "GET /repos/{owner}/{repo}/contributors"; // a 200 with a body beside a 204 with none, and no payload
 
 export const MERGE_RESULT = "GET /repos/{owner}/{repo}/pulls/{pull_number}/merge-async/{uuid}"; // `details` is a `OneOf` of three objects
 
@@ -42,6 +49,8 @@ export const VECTORS = [
   { route: ZEN, method: "GET", path: "/zen" },
   { route: LANGUAGES, method: "GET", path: "/repos/{owner}/{repo}/languages" },
   { route: DELETE_ORG, method: "DELETE", path: "/orgs/{org}" },
+  { route: STAR, method: "PUT", path: "/user/starred/{owner}/{repo}" },
+  { route: UPDATE_ISSUE, method: "PATCH", path: "/repos/{owner}/{repo}/issues/{issue_number}" },
   { route: DELETE_COMMENT, method: "DELETE", path: "/repos/{owner}/{repo}/issues/comments/{comment_id}" },
 ] as const;
 

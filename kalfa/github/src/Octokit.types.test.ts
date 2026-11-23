@@ -68,6 +68,14 @@ const apiDate = () => {
   expectTypeOf<Check.DescribedVersion<Shape<false, true, false>>>().toEqualTypeOf<never>();
   expectTypeOf<Check.DescribedVersion<Shape<true, false, false>>>().toEqualTypeOf<never>();
 
+  // A `paths` that lacks one of the two routes cannot say which date it describes, whatever the other holds. Plant: read
+  // a route that is not there as a change that was kept, and `{}` reads as 2022-11-28.
+  expectTypeOf<Check.DescribedVersion<{}>>().toEqualTypeOf<never>();
+  expectTypeOf<Check.DescribedVersion<Pick<Shape<true, true, true>, PullPath>>>().toEqualTypeOf<never>();
+  expectTypeOf<Check.DescribedVersion<Pick<Shape<false, false, false>, PullPath>>>().toEqualTypeOf<never>();
+  expectTypeOf<Check.DescribedVersion<Pick<Shape<true, true, true>, DispatchPath>>>().toEqualTypeOf<never>();
+  expectTypeOf<Check.DescribedVersion<Pick<Shape<false, false, false>, DispatchPath>>>().toEqualTypeOf<never>();
+
   // The date is the types' alone: the compiler refuses another value for it.
   // @ts-expect-error the types describe 2022-11-28
   const moved: Check.ApiVersion = "2026-03-10";

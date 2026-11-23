@@ -10,6 +10,7 @@ import type { VECTORS } from "./Octokit.test-support.ts";
 import {
   CANCEL,
   CHECK_RUNS,
+  CONTRIBUTORS,
   CREATE_ISSUE,
   DELETE_COMMENT,
   DELETE_ORG,
@@ -20,6 +21,8 @@ import {
   LANGUAGES,
   MERGE_RESULT,
   SEARCH_ISSUES,
+  STAR,
+  UPDATE_ISSUE,
   ZEN,
 } from "./Octokit.test-support.ts";
 
@@ -53,11 +56,14 @@ const routeText = () => {
     GitHub.route(ZEN),
     GitHub.route(LANGUAGES),
     GitHub.route(DELETE_ORG),
+    GitHub.route(STAR),
+    GitHub.route(UPDATE_ISSUE),
     GitHub.route(DELETE_COMMENT),
   ];
 
   expectTypeOf(compiled).toBeArray();
   expectTypeOf<GitHub.RouteName>().toEqualTypeOf<Check.RouteName>();
+  expectTypeOf<GitHub.Method>().toEqualTypeOf<"GET" | "PUT" | "POST" | "PATCH" | "DELETE">();
 
   // The same refusals said of the type itself, so they hold whatever else a call's options say: every real route is a
   // `RouteName`, and each typo is not.
@@ -132,6 +138,8 @@ const queryKeys = () => {
   const search = GitHub.route(SEARCH_ISSUES, { query: { q: Schema.String } });
   // @ts-expect-error `q` is required and not declared
   GitHub.route(SEARCH_ISSUES);
+  // @ts-expect-error `q` is required, and an options object that leaves it out is not enough
+  GitHub.route(SEARCH_ISSUES, {});
   // @ts-expect-error `q` is declared optional
   GitHub.route(SEARCH_ISSUES, { query: { q: Schema.optionalKey(Schema.String) } });
 
@@ -146,6 +154,18 @@ const payloadKeys = () => {
   GitHub.route(CREATE_ISSUE, { payload: Schema.Struct({ titel: Schema.String }) });
   // @ts-expect-error `title` is required
   GitHub.route(CREATE_ISSUE, { payload: Schema.Struct({ body: Schema.String }) });
+
+  // An optional field is accepted in either spelling: `Schema.optional` also encodes `undefined`.
+  const optionalBody = GitHub.route(CREATE_ISSUE, {
+    payload: Schema.Struct({ title: Schema.String, body: Schema.optional(Schema.String) }),
+  });
+
+  const optionalPermissions = GitHub.route(INSTALLATION_TOKEN, {
+    payload: Schema.Struct({ permissions: Schema.optional(Schema.Struct({ issues: Schema.Literals(["read"]) })) }),
+  });
+
+  expectTypeOf([optionalBody, optionalPermissions]).toBeArray();
+
   const beside = Schema.Struct({ title: Schema.String, titel: Schema.String });
   // @ts-expect-error a key GitHub's body lacks, beside every key it requires
   GitHub.route(CREATE_ISSUE, { payload: beside });
@@ -155,6 +175,8 @@ const payloadKeys = () => {
   GitHub.route(CANCEL, { payload: IssuePayload });
   // @ts-expect-error a route whose body is required cannot be declared without one
   GitHub.route(CREATE_ISSUE);
+  // @ts-expect-error nor with an options object that leaves the payload out
+  GitHub.route(CREATE_ISSUE, {});
 
   // Closed at every depth: the token's `permissions` is a nested object with named keys.
   const token = GitHub.route(INSTALLATION_TOKEN, {
@@ -214,6 +236,8 @@ const answerFields = () => {
   const empty = GitHub.route(DELETE_ORG, { success: Schema.Struct({}) });
   // @ts-expect-error a field on a 202 that GitHub answers with an empty object
   GitHub.route(DELETE_ORG, { success: Schema.Struct({ accepted: Schema.Boolean }) });
+  // @ts-expect-error nor a field of any value (`unknown` is read by no leaf rule)
+  GitHub.route(DELETE_ORG, { success: Schema.Struct({ accepted: Schema.Unknown }) });
 
   // A part of the description that is open is checked at run time only: anything fits.
   const zen = GitHub.route(ZEN, { success: Schema.String });
@@ -244,6 +268,11 @@ const bodilessAndBrand = () => {
   GitHub.route(DISPATCH, { payload: DispatchPayload });
   // @ts-expect-error 200 is the status that has a body
   GitHub.route(DISPATCH, { payload: DispatchPayload, bodiless: [200] });
+  // The contributors route answers a 200 with a body or a 204 with none and takes no body of its own: only the 2xx
+  // statuses ask for `bodiless`.
+  const contributors = GitHub.route(CONTRIBUTORS, { bodiless: [204] });
+  // @ts-expect-error a 200 beside a 204 must say which has no body, though nothing else on the route is required
+  GitHub.route(CONTRIBUTORS);
   // @ts-expect-error check runs answers only a 200, so it has nothing to name
   GitHub.route(CHECK_RUNS, { bodiless: [204] });
 
@@ -261,7 +290,7 @@ const bodilessAndBrand = () => {
   // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- the law writes the look-alike a hand would write
   const literal: typeof zen = { _tag: "Route", route: ZEN, method: "GET", path: "/zen" };
 
-  expectTypeOf([ok, both, made, literal]).toBeArray();
+  expectTypeOf([ok, both, contributors, made, literal]).toBeArray();
   expectTypeOf(zen.route).toEqualTypeOf<typeof ZEN>();
   expectTypeOf(zen.method).toEqualTypeOf<GitHub.Method>();
 };
