@@ -221,14 +221,14 @@ console.log("publish: pushed");
   }
 
   /** A tests commit carries its plant record; `body` stands for that file's text, and the default holds one plant line. */
-  commit(step: Step, paths: string[], only = false, body = "Plant: holds: broke the check: red") {
+  commit(step: Step, paths: string[], only = false, body: string | null = "Plant: holds: broke the check: red") {
     const bodyFile = join(this.dir, "body.md");
-    put(bodyFile, body);
+    put(bodyFile, body ?? "");
 
     return this.call("sh", [
       script,
       ...(only ? ["--commit-only"] : []),
-      ...(step === "tests" ? ["--body-file", bodyFile] : []),
+      ...((step === "tests" || step === "fix") && body !== null ? ["--body-file", bodyFile] : []),
       step,
       "321",
       `T321 ${step}: fixture`,
@@ -953,6 +953,51 @@ describe("1271 a tests commit carries its plant record in the body, today's tool
       }),
       options,
     );
+  });
+
+  // Plants: exempt a fix commit with a test file; refuse a fix commit with only product files.
+  it("a fix commit that names a test file needs the plant line, as a tests commit does", () => {
+    fc.assert(
+      fc.property(
+        word,
+        word,
+        fc.constantFrom("a.test.ts", "a.test-support.ts", "a.types.test.ts"),
+        (law, broke, name) => {
+          const file = `src/${name}`;
+          withRepo(
+            [
+              [file, "tests"],
+              ["src/owned.ts", "build"],
+            ],
+            (r) => {
+              r.changed(file);
+              r.changed("src/owned.ts");
+              const bare = r.commit("fix", [file, "src/owned.ts"], true, `${law} was run`);
+
+              expect(bare.code, bare.text).toBe(7);
+              expect(bare.text).toContain("Plant:");
+              expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+
+              const plant = `Plant: ${law}: ${broke}: red`;
+              const done = r.commit("fix", [file, "src/owned.ts"], true, plant);
+
+              expect(done.code, done.text).toBe(0);
+              expect(r.git("log", "-1", "--format=%B")).toContain(plant);
+            },
+          );
+        },
+      ),
+      options,
+    );
+  });
+
+  it("a fix commit that names only product files needs no plant line", () => {
+    withRepo([["src/owned.ts", "build"]], (r) => {
+      r.changed("src/owned.ts");
+      const done = r.commit("fix", ["src/owned.ts"], true, null);
+
+      expect(done.code, done.text).toBe(0);
+    });
   });
 
   it("scenario: a box's tests commit, which drive makes from the report, needs no plant line", () => {

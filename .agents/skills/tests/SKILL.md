@@ -168,7 +168,7 @@ These hold in every tests round, so the brief does not repeat them.
   per new law, `Plant: <law title>: <what you broke>: <the failure's first line>`, and the reach
   table under them when the plan has a `## Generators` section. The reviewer reads it from
   `git log`, not from your answer, and `stepcommit.sh` refuses a tests commit with no `Plant:`
-  line. A fix round sent back to the tests step commits the same way, with the plants it ran.
+  line. A fix round commits the same way, `stepcommit.sh --body-file <file> fix ...`, with the plants it ran: a `fix` commit that names a test file (`*.test.ts`, `*.test-support.ts`) is refused without a `Plant:` line.
   `stepcommit.sh` leak-checks and pushes. No force push. A refused push is reported with its
   exact command, never worked around. When `drive.ts` runs you in a box, commit nothing: drive
   commits.

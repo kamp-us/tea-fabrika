@@ -1,7 +1,8 @@
 #!/bin/sh
 # stepcommit.sh [--commit-only] [--body-file <file>] <step> <ticket> <subject> <file>...
 # --body-file puts the file's text in the commit body. A tests commit needs one with a plant line
-# ("Plant: <law>: <what was broken>: <first red line>"), so a reviewer reads the plants in git log;
+# ("Plant: <law>: <what was broken>: <first red line>"; a fix commit needs it only when it names a
+# *.test.ts or *.test-support.ts file), so a reviewer reads the plants in git log;
 # a box's commit (STEPCOMMIT_BOX) is drive's, which holds the report, and needs none.
 # <step> is tests, build, mutation, lead, or fix (a 0177 fix round: one agent writes the law and the
 # fix, so it may hold exam paths and takes tests' and build's paths; it signs nothing).
@@ -28,9 +29,11 @@ if body_file is not None:
     try: body = pathlib.Path(body_file).read_text().strip()
     except (OSError, ValueError) as e: refuse("cannot read --body-file " + body_file + ": " + str(e), 2)
 # The tests step's plant record lives only in its answer, which a reviewer never reads. A tests commit
-# carries it in the body: one "Plant: ..." line per new law (and, when the plan has a Generators
+# (or a fix round that names a test file) carries it in the body: one "Plant: ..." line per new law (and, when the plan has a Generators
 # section, the reach table under it). A box's commit is drive's, and its report holds the record.
-if step == "tests" and not os.environ.get("STEPCOMMIT_BOX") and not re.search(r"^[ \t]*plant:[ \t]*\S", body, re.I | re.M):
+# A fix round (one agent writes the law and the fix) owes it too, when a commit holds a test file.
+owes = step == "tests" or (step == "fix" and any(re.search(r"\.(test|test-support)\.ts\Z", p) for p in paths))
+if owes and not os.environ.get("STEPCOMMIT_BOX") and not re.search(r"^[ \t]*plant:[ \t]*\S", body, re.I | re.M):
     refuse("a tests commit needs its plant record in the body: pass --body-file <file> holding one line per new law, 'Plant: <law title>: <what you broke>: <the failure's first line>', and the reach table when the plan has a Generators section", 7)
 def git(*args, **kw):
     return subprocess.run(["git", *args], capture_output=True, **kw)
