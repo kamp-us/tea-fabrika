@@ -8,11 +8,12 @@
  */
 import { Schema } from "effect";
 
-const SEGMENT = "[a-z0-9]+(?:-[a-z0-9]+)*";
+// A part of a name, between two slashes: at most 64 characters, which the look-ahead counts before the part is read.
+const SEGMENT = "(?=[a-z0-9-]{1,64}(?:/|$))[a-z0-9]+(?:-[a-z0-9]+)*";
 
 /**
- * A secret's name, such as `transport/turn-key`: segments of lowercase letters and digits with single hyphens, joined by `/`, at most
- * 256 characters.
+ * A secret's name, such as `transport/turn-key`: segments of lowercase letters and digits with single hyphens, joined by `/`, a part at most
+ * 64 characters and the whole name at most 256.
  *
  * @category models
  */
