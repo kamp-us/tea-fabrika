@@ -122,7 +122,10 @@ describe("D19, an environment variable", () => {
 
 // D20. Plant: accept only `--`, and a one-character flag is refused; accept only ASCII, and a name past U+024F is
 // refused; allow `=`, and `--token=x` is accepted; check whitespace with `/ /` only, and a tab is accepted; refuse
-// more than 64 characters, and the long flag is refused.
+// more than 64 characters, and the long flag is refused. Amendment 2: allow a short flag of any length, and `-fo`
+// is accepted; refuse control characters (Cc) only, and a zero-width space or U+202E (Cf) is accepted; refuse Cc and
+// Cf but not a lone surrogate (Cs), and the surrogate is accepted; count a short flag's character by UTF-16 unit,
+// and `-` and one character outside the Basic Multilingual Plane is refused.
 describe("D20, a command-line flag", () => {
   it.prop(
     "a flag place is a flag as written on a command line and nothing else; every break of that, and any line or column, is refused",
@@ -188,8 +191,9 @@ const schemaErrorIn = (exit: Exit.Exit<void>): Schema.SchemaError | undefined =>
 
 // D23 [secrets]. A login holds a digit, so no fixed word of a message can hold it by chance. Every root is
 // refused as a home place and as a repo place in every run, the Windows drive with forward slashes included
-// (plan amendment 1).
-// Plant: drop the drive rule from `isRepoPath`, and the drive root is accepted as a repo place; accept an absolute home path; write the path into `HomePath`'s refusal message; decode in `report` with
+// (plan amendment 1), and so are a `file:` start and a drive joined to `Users` (plan amendment 2).
+// Plant: drop the drive rule from `isRepoPath`, and the drive root is accepted as a repo place; refuse only a first
+// part that is a letter and `:`, and the `file:` and joined-drive forms are accepted; accept an absolute home path; write the path into `HomePath`'s refusal message; decode in `report` with
 // `reportInput: true`, so the defect's issue holds the path; print a home place with its start cut off.
 describe("D23, no login name in any output", () => {
   it.effect.prop(

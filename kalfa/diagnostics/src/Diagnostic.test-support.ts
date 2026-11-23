@@ -167,14 +167,18 @@ const SEGMENT_KINDS: ReadonlyArray<Break<string, string>> = [
   { name: "a space at the start", apply: (part) => ` ${part}` },
   { name: "a space inside", apply: (part) => `${part} ${part}` },
   { name: "a space at the end", apply: (part) => `${part} ` },
-  { name: "ASCII punctuation", apply: (part) => `${part}#%,=[]{}!$&';:` },
+  // No colon here: a repo path's first part holds none (plan amendment 2). A colon deeper in a path is SIGIL_KINDS'.
+  { name: "ASCII punctuation", apply: (part) => `${part}#%,=[]{}!$&';` },
   { name: "a letter past ASCII", apply: (part) => `${part}é` },
   { name: "a character past U+024F", apply: (part) => `${part}设` },
   { name: "a character outside the Basic Multilingual Plane", apply: (part) => `${part}\u{1F600}` },
   { name: "more than 200 characters", apply: (part) => part.padEnd(201, "x") },
 ];
 
-/** A part that starts like a home folder or a variable. It is a good part anywhere but first in a repo path. */
+/**
+ * A part that starts like a home folder or a variable, or holds a colon. It is a good part anywhere but first in a repo
+ * path: a repo path's first part holds no colon (plan amendment 2).
+ */
 const SIGIL_KINDS: ReadonlyArray<Break<string, string>> = [
   { name: "a part that is ~", apply: () => "~" },
   { name: "a part that starts with ~", apply: (part) => `~${part}` },
@@ -182,6 +186,9 @@ const SIGIL_KINDS: ReadonlyArray<Break<string, string>> = [
   { name: "a part that is $HOME", apply: () => "$HOME" },
   { name: "a part that starts with $", apply: (part) => `$${part}` },
   { name: "a part that is a drive letter and a colon", apply: () => "C:" },
+  { name: "a part with a colon inside", apply: (part) => `${part}:${part}` },
+  { name: "a part that ends with a colon", apply: (part) => `${part}:` },
+  { name: "a part that is a scheme and a colon", apply: () => "file:" },
 ];
 
 /** A name a shell can expand, in each class: what it makes of a plain name. */
@@ -205,6 +212,8 @@ const FLAG_KINDS: ReadonlyArray<Break<string, string>> = [
   { name: "capitals", apply: (body) => `--${body.toUpperCase()}` },
   { name: "one hyphen and one character", apply: (body) => `-${body.slice(0, 1)}` },
   { name: "one hyphen and a digit", apply: () => "-1" },
+  { name: "one hyphen and a character past U+024F", apply: () => "-设" },
+  { name: "one hyphen and a character outside the Basic Multilingual Plane", apply: () => "-\u{1F600}" },
   { name: "a name past U+024F", apply: (body) => `--设置${body}` },
   { name: "a name outside the Basic Multilingual Plane", apply: (body) => `--\u{1F600}${body}` },
   { name: "more than 200 characters", apply: (body) => `--${body.padEnd(201, "x")}` },
@@ -396,6 +405,24 @@ const REPO_BREAKS: ReadonlyArray<Break<PlaceParts, object>> = [
     name: "a first part that is a drive letter, then Users and a login",
     apply: ({ segments, login }) => repo(drive("C", ["Users", login, ...segments])),
   },
+  // Plan amendment 2: no colon in the first part at all.
+  {
+    name: "a first part that is file: and then Users and a login",
+    apply: ({ segments, login }) => repo(["file:", "Users", login, ...segments].join("/")),
+  },
+  {
+    name: "a first part that is a drive letter and a colon joined to Users, then a login",
+    apply: ({ segments, login }) => repo([["C:", "Users"].join(""), login, ...segments].join("/")),
+  },
+  { name: "a first part with a colon inside", apply: ({ segments }) => repo(["a:b", ...segments].join("/")) },
+  {
+    name: "a first part that ends with a colon",
+    apply: ({ segments }) => repo([`${firstPart(segments)}:`, ...segments].join("/")),
+  },
+  {
+    name: "a first part that starts with a colon",
+    apply: ({ segments }) => repo([`:${firstPart(segments)}`, ...segments].join("/")),
+  },
   ...COUNT_BREAKS.map((count) => ({
     name: count.name,
     apply: ({ segments, line, column }: PlaceParts) => count.apply({ tag: "repo", path: join(segments), line, column }),
@@ -472,7 +499,7 @@ const ENVIRONMENT_BREAKS: ReadonlyArray<Break<PlaceParts, object>> = [
   ...noCounts("environment", ({ name }) => name),
 ];
 
-// Whitespace and control characters a flag may not hold, one of each kind.
+// Whitespace, control, format and lone surrogate characters a flag may not hold, one of each kind.
 const FLAG_REFUSED: ReadonlyArray<Case<string>> = [
   { name: "a space", value: " " },
   { name: "a tab", value: "\t" },
@@ -482,6 +509,12 @@ const FLAG_REFUSED: ReadonlyArray<Case<string>> = [
   { name: "ESC", value: "\u001B" },
   { name: "DEL", value: "\u007F" },
   { name: "a C1 control character", value: "\u0085" },
+  { name: "a zero-width space", value: "\u200B" },
+  { name: "a right-to-left override", value: "\u202E" },
+  { name: "a soft hyphen", value: "\u00AD" },
+  { name: "a zero-width joiner", value: "\u200D" },
+  { name: "a lone high surrogate", value: "\uD800" },
+  { name: "a lone low surrogate", value: "\uDC00" },
 ];
 
 const flag = (name: string): object => write("flag", { name });
@@ -493,12 +526,19 @@ const FLAG_BREAKS: ReadonlyArray<Break<PlaceParts, object>> = [
   { name: "three hyphens and a name", apply: (parts) => flag(`---${parts.flag}`) },
   { name: "no leading hyphen", apply: (parts) => flag(parts.flag) },
   { name: "a value after =", apply: (parts) => flag(`--${parts.flag}=${parts.flag}`) },
+  // Plan amendment 2: a short flag is one hyphen and exactly one character.
+  { name: "a short flag of two characters", apply: (parts) => flag(`-${parts.flag}x`) },
+  { name: "a short flag that is a name", apply: (parts) => flag(`-${parts.flag}.${parts.flag}`) },
+  { name: "a short flag of two characters past ASCII", apply: () => flag("-设置") },
+  { name: "a short flag with =", apply: () => flag("-f=x") },
   ...FLAG_REFUSED.flatMap((refused) => [
     {
       name: `${refused.name} inside`,
       apply: (parts: PlaceParts) => flag(`--${parts.flag}${refused.value}${parts.flag}`),
     },
     { name: `${refused.name} at the end`, apply: (parts: PlaceParts) => flag(`--${parts.flag}${refused.value}`) },
+    { name: `${refused.name} alone after two hyphens`, apply: () => flag(`--${refused.value}`) },
+    { name: `${refused.name} alone after one hyphen`, apply: () => flag(`-${refused.value}`) },
   ]),
   ...noCounts("flag", (parts) => `--${parts.flag}`),
 ];
@@ -566,6 +606,9 @@ const ROOTS: ReadonlyArray<{
   { name: "a Windows drive with backslashes", at: (login) => ["C:", "Users", login].join("\\") },
   { name: "a network share", at: (login) => ["", "", "server", login].join("\\") },
   { name: "a ~ and a login", at: (login) => `~${login}` },
+  // Plan amendment 2: a scheme start and a drive joined to its next word, each a first part with a colon.
+  { name: "a file: start", at: (login) => ["file:", "Users", login].join("/") },
+  { name: "a drive joined to Users", at: (login) => [["C:", "Users"].join(""), login].join("/") },
 ];
 
 /**

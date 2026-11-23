@@ -43,21 +43,24 @@ const Said = Schema.String.check(
 // A name a shell can expand as $NAME: a letter or an underscore, then letters, digits and underscores.
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-// A flag as written on a command line: one or two hyphens, then a name that does not start with a hyphen and holds
-// no whitespace, no "=" and no control character. So no value rides along in it.
-const FLAG = /^--?[^\s=\p{Cc}-][^\s=\p{Cc}]*$/u;
+// A flag as written on a command line: "-" and exactly one character, or "--" and a name. A character is not
+// whitespace, not "=", not a control character (Cc), not a format character (Cf, such as a zero-width space or a
+// right-to-left override) and not a lone surrogate (Cs), and a name does not start with a hyphen. So no value rides
+// along in it, and nothing hides in it.
+const FLAG = /^(?:-[^\s=\p{Cc}\p{Cf}\p{Cs}-]|--[^\s=\p{Cc}\p{Cf}\p{Cs}-][^\s=\p{Cc}\p{Cf}\p{Cs}]*)$/u;
 
-// A first part that never starts a repo path: "~" (a home folder, or "~login"), "$" (a variable), or a drive such as
-// "C:" (an absolute path on Windows).
-const NOT_A_REPO_START = /^(?:[~$]|[A-Za-z]:$)/;
+// A first part that never starts a repo path: one that starts with "~" (a home folder, or "~login") or "$" (a
+// variable), or holds a ":" (a drive such as "C:" or "C:" joined to the next word, or a scheme such as "file:"). Each
+// of those can lead to an absolute path or a login name.
+const NOT_A_REPO_START = /^[~$]|:/;
 
 // A segment of a path is not empty, ".", or "..", and holds no backslash.
 const isSegment = (segment: string): boolean =>
   segment !== "" && segment !== "." && segment !== ".." && !segment.includes("\\");
 
 // A path from the repo root: "." for the whole repo, else segments joined by "/". So no leading "/", no "./",
-// no "//" and no trailing "/". Its first part does not read as a home folder, a variable or a drive, so it never
-// passes for a file outside the repo.
+// no "//" and no trailing "/". Its first part does not read as a home folder, a variable, a drive or a scheme, so it
+// never passes for a file outside the repo.
 const isRepoPath = (path: string): boolean =>
   path === "." || (!NOT_A_REPO_START.test(path.split("/")[0] ?? "") && path.split("/").every(isSegment));
 
@@ -131,10 +134,10 @@ const Flag = Schema.TaggedStruct("flag", {
  *
  * **Details**
  *
- * - `repo`: a path from the repo root, and a line and a column when known. The whole repo is the path `.`. A path has no leading `/`, no `./` start, no `.` or `..` part, no empty part, no trailing `/` and no backslash. Its first part does not start with `~` or `$`, and is not a drive such as `C:`.
+ * - `repo`: a path from the repo root, and a line and a column when known. The whole repo is the path `.`. A path has no leading `/`, no `./` start, no `.` or `..` part, no empty part, no trailing `/` and no backslash. Its first part does not start with `~` or `$` and holds no `:`, so it is no drive such as `C:` and no scheme such as `file:`. A `:` deeper in the path is fine.
  * - `home`: a file under the home folder, written `~/` or `$NAME/` and then good parts, with a line and a column when known. So no absolute path and no login name is ever held. The package reads no home folder: a reader's shell expands the start.
  * - `environment`: an environment variable, by its `name`, as a shell reads one.
- * - `flag`: a command-line flag, by its `name` as typed, with its hyphens, such as `--instance.port` or `-f`. It holds no `=`, so no value rides along.
+ * - `flag`: a command-line flag, by its `name` as typed, with its hyphens: `-` and exactly one character, such as `-f`, or `--` and a name, such as `--instance.port`. It holds no `=`, no whitespace, no control or format character and no lone surrogate, so no value rides along and nothing hides in it.
  *
  * A line and a column count from 1. A column needs a line, and `.` takes no line. An environment variable and a flag take neither.
  *
