@@ -488,3 +488,6 @@ export const FilteredIssue = GitHub.route(CREATE_ISSUE, {
     milestone: Schema.optionalKey(Schema.Int),
   }),
 });
+
+/** A value a caller's type would refuse, passed on as the type asks, so a law can reach what only a cast reaches. */
+export const untyped = Schema.decodeUnknownSync(Schema.Any);

@@ -36,6 +36,7 @@ import {
   STATUSES,
   text,
   textVariants,
+  untyped,
   TokenPayload,
   word,
 } from "./GitHub.test-support.ts";
@@ -140,8 +141,15 @@ const withSlot = (
 describe("C1, the path", () => {
   it.effect.prop(
     "each path value is filled as encodeURIComponent writes it and decodes back; an empty or blank text, a dot alone, a lone surrogate, a number that is not whole, and a name only a prototype holds are refused before anything is sent",
-    { owner: word, repo: word, ref: word, slot: between(0, 2), length: between(0, 100000) },
-    ({ owner, repo, ref, slot, length }) =>
+    {
+      owner: word,
+      repo: word,
+      ref: word,
+      slot: between(0, 2),
+      length: between(0, 100000),
+      whole: between(0, 1000000000),
+    },
+    ({ owner, repo, ref, slot, length, whole }) =>
       Effect.gen(function* () {
         const base = { owner, repo, ref };
         const slotName = SLOTS[slot] ?? "ref";
@@ -217,6 +225,20 @@ describe("C1, the path", () => {
             );
             expect(requests[0]?.params, number.name).toEqual({ owner, repo, run_id: String(number.value) });
           }
+        }
+
+        // (k) A whole number given as a bigint, past a type that takes only `number`, is sent as its decimal text.
+        for (const big of [0n, BigInt(whole), 2n ** 64n + BigInt(whole)]) {
+          const { exit, requests } = yield* observed(
+            GitHub.call(CancelRun, { params: untyped({ owner, repo, run_id: big }) }),
+            () => json({}, 202),
+          );
+
+          expect(Exit.isSuccess(exit), `k: a bigint, ${big}`).toBe(true);
+          expect(requests[0]?.path, `k: a bigint, ${big}`).toBe(
+            `/repos/${enc(owner)}/${enc(repo)}/actions/runs/${big.toString(10)}/cancel`,
+          );
+          expect(requests[0]?.params, `k: a bigint, ${big}`).toEqual({ owner, repo, run_id: big.toString(10) });
         }
       }),
     { arbitrary: { seed: SEED, runs: 300 } },
@@ -484,6 +506,23 @@ describe("C3, a left-out field is never sent", () => {
 
           expect(refusedInput(exit, each.route), each.name).toBe(true);
           expect(requests, `${each.name}: nothing was sent`).toEqual([]);
+        }
+
+        // With nothing to send, the Request has no `body` key at all, not a `body` of `undefined`.
+        const bodiless = [
+          yield* observed(GitHub.call(CancelRun, { params: { ...OWNER, run_id: n } }), () => json({}, 202)),
+          yield* observed(GitHub.call(MakeToken, { params: { installation_id: n } }), () =>
+            json({ token: a, expires_at: "2026-11-22T00:00:00.000Z" }, 201),
+          ),
+          yield* observed(GitHub.call(ListCheckRuns, { params: { ...OWNER, ref: a }, query: { per_page: 1 } }), () =>
+            json({ check_runs: [] }),
+          ),
+        ];
+
+        for (const { exit, requests } of bodiless) {
+          expect(Exit.isSuccess(exit)).toBe(true);
+          expect(requests.length).toBe(1);
+          expect(Object.hasOwn(requests[0] ?? {}, "body"), "no body key").toBe(false);
         }
       }),
     { arbitrary: { seed: SEED, runs: 300 } },
