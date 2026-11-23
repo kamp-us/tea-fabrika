@@ -18,14 +18,14 @@ import type * as Check from "./internal/Check.ts";
  */
 export type RouteName = Check.RouteName;
 
-const Verb = Schema.Literals(["GET", "PUT", "POST", "PATCH", "DELETE"]);
-
 /**
  * An HTTP method of GitHub's REST description.
  *
  * @category models
  */
-export type Method = typeof Verb.Type;
+export const Method = Schema.Literals(["GET", "PUT", "POST", "PATCH", "DELETE"]);
+
+export type Method = typeof Method.Type;
 
 /**
  * The REST API version the checks' types describe. It does not compile when the types move to another date.
@@ -68,7 +68,7 @@ export type Route<R extends RouteName, Success, Query, Payload> = Declared<R, Su
 const split = (text: string): { readonly method: Method; readonly path: string } => {
   const space = text.indexOf(" ");
 
-  return { method: Schema.decodeUnknownSync(Verb)(text.slice(0, space)), path: text.slice(space + 1) };
+  return { method: Schema.decodeUnknownSync(Method)(text.slice(0, space)), path: text.slice(space + 1) };
 };
 
 /**

@@ -4,13 +4,13 @@
 // one of those and is `unknown` when the caller's declaration holds, or a `Refused` text when it does not, so an argument
 // typed `Schema & FitsX<...>` stops compiling at the caller's own field.
 import type { paths } from "@octokit/openapi-types";
-import type { Schema, Types } from "effect";
+import type { Schema } from "effect";
 
-type Verb = "get" | "put" | "post" | "patch" | "delete";
+type Method = "get" | "put" | "post" | "patch" | "delete";
 
 /** Every route text GitHub's description has, such as `"POST /repos/{owner}/{repo}/issues"`. */
 export type RouteName = {
-  [P in keyof paths & string]: { [V in Verb & keyof paths[P]]: `${Uppercase<V>} ${P}` }[Verb & keyof paths[P]];
+  [P in keyof paths & string]: { [V in Method & keyof paths[P]]: `${Uppercase<V>} ${P}` }[Method & keyof paths[P]];
 }[keyof paths & string];
 
 type Operation<R extends RouteName> = R extends `${infer V} ${infer P}`
@@ -150,7 +150,16 @@ type Walk<E, D, Leaves extends boolean> = unknown extends D
               : E
             : never;
 
-type Encoded<S extends Schema.Constraint> = Types.DeepMutable<S["Encoded"]>;
+// What the caller's Schema sends: its encoded type, mutable at every depth (a Schema's arrays are readonly, Octokit's are
+// not), and with `undefined` taken out of each optional key, since a key left out is dropped before it is sent.
+type Sent<T> =
+  T extends ReadonlyArray<infer I>
+    ? Array<Sent<I>>
+    : T extends object
+      ? { -readonly [K in keyof T]: Sent<Exclude<T[K], undefined>> }
+      : T;
+
+type Encoded<S extends Schema.Constraint> = Sent<S["Encoded"]>;
 
 type FitsQuery<R extends RouteName, Q extends Fields> = [Exclude<keyof Q, keyof QueryParams<R>>] extends [never]
   ? [Encoded<Schema.Struct<Q>>] extends [QueryParams<R>]
