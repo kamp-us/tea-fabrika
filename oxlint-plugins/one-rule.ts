@@ -12,7 +12,11 @@ const Config = Schema.Struct({
   rules: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   overrides: Schema.optional(
     Schema.Array(
-      Schema.Struct({ files: Schema.Array(Schema.String), rules: Schema.Record(Schema.String, Schema.Unknown) }),
+      Schema.Struct({
+        files: Schema.Array(Schema.String),
+        excludeFiles: Schema.optional(Schema.Array(Schema.String)),
+        rules: Schema.Record(Schema.String, Schema.Unknown),
+      }),
     ),
   ),
 });
@@ -47,29 +51,35 @@ export const ruleBlocks = (text: string, rule: string) => {
 
   return {
     rules: Rec.has(rules, rule) ? { [rule]: rules[rule] } : {},
-    overrides: Arr.flatMap(overrides, ({ files, rules: named }) =>
-      Rec.has(named, rule) ? [{ files, rules: { [rule]: named[rule] } }] : [],
+    overrides: Arr.flatMap(overrides, ({ files, excludeFiles, rules: named }) =>
+      Rec.has(named, rule)
+        ? [{ files, ...(excludeFiles === undefined ? {} : { excludeFiles }), rules: { [rule]: named[rule] } }]
+        : [],
     ),
   };
 };
 
 /**
- * Writes the one-rule config for `rule` of the repo at `root` (a JS rule, as the config names it: `fabrika/test-database`) in a folder of its own and
- * answers its path. The globs are made full paths under `root`, and the plugin is the repo's own `oxlint-plugins/index.ts`, so the file sits anywhere.
+ * Writes the one-rule config for `rule` of the repo at `root` as the config names it (`fabrika/test-database`, a JS rule of the repo's own plugin, or a built-in
+ * one, `eslint/no-restricted-properties`, given `js` false) in a folder of its own and answers its path. The globs are made full paths under `root`, and
+ * the plugin is the repo's own `oxlint-plugins/index.ts`, so the file sits anywhere.
  */
-export const oneRuleConfig = (root: string, rule: string): string => {
+export const oneRuleConfig = (root: string, rule: string, js = true): string => {
   const blocks = ruleBlocks(readFileSync(join(root, ".oxlintrc.json"), "utf8"), rule);
   const path = join(mkdtempSync(join(tmpdir(), "one-rule-")), "oxlintrc.json");
 
   writeFileSync(
     path,
     JSON.stringify({
-      plugins: [],
-      jsPlugins: [join(root, "oxlint-plugins/index.ts")],
+      plugins: js ? [] : ["eslint"],
+      jsPlugins: js ? [join(root, "oxlint-plugins/index.ts")] : [],
       rules: blocks.rules,
       overrides: Arr.map(blocks.overrides, (block) => ({
         ...block,
         files: Arr.map(block.files, (glob) => join(root, glob)),
+        ...(block.excludeFiles === undefined
+          ? {}
+          : { excludeFiles: Arr.map(block.excludeFiles, (glob) => join(root, glob)) }),
       })),
     }),
   );
