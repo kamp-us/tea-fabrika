@@ -714,6 +714,7 @@ describe("the real rule file on planted trees", () => {
       "kalfa-git": 0, // T1932's approved plan: source control reads commits and refs and imports no package of ours, so it ranks lowest
       "kalfa-diagnostics": 0, // it imports no package of ours, and kalfa-config (1) ranks above it
       "kalfa-github": 2, // T1945's approved plan: the live Layer reads its settings through kalfa-config (1), so github ranks one above it
+      "kalfa-transport": 0, // T2066's approved plan: transport imports no package of ours, so it ranks with the lowest
     });
   });
 

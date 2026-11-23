@@ -63,6 +63,10 @@
     "kalfa-github": {
       "imports": ["kalfa-config"],
       "pure": false
+    },
+    "kalfa-transport": {
+      "imports": [],
+      "pure": false
     }
   },
   "libraries": {
@@ -86,7 +90,8 @@
     "kalfa/ci": "kalfa-ci",
     "kalfa/diagnostics": "kalfa-diagnostics",
     "kalfa/git": "kalfa-git",
-    "kalfa/github": "kalfa-github"
+    "kalfa/github": "kalfa-github",
+    "kalfa/transport": "kalfa-transport"
   },
   "libraryRoots": ["next", "kalfa"],
   "acrossDeployables": ["relative-import-crosses-workspace"]
