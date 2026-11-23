@@ -311,9 +311,10 @@ const GITLINK_A = "a".repeat(40);
 
 const GITLINK_B = "b".repeat(40);
 
-// Plant (I7): ask `cat-file` the size of a gitlink's id, so `patchId` fails on the submodule.
+// Plant (I7): ask `cat-file` the size of a gitlink's id, so `patchId` fails on the submodule; leave the file side of a `T` entry
+// out of the sizes, so the file made a submodule is not counted.
 it.effect(
-  "I7 scenario: a commit with a submodule entry gets a patch id on real git, which follows the submodule's commit, even when the diff limit is one byte",
+  "I7 scenario: a commit with a submodule entry gets a patch id on real git, which follows the submodule's commit, even when the diff limit is one byte, and a file made a submodule counts the file's bytes",
   () =>
     Effect.gen(function* () {
       const dir = yield* bareRepository;
@@ -330,20 +331,22 @@ it.effect(
           "\n",
         );
 
-      const [c0, c1, c2, c3] = yield* fastImport(
+      const [c0, c1, c2, c3, c4] = yield* fastImport(
         dir,
         bytes(
           commit(1, undefined, "M 100644 inline a\ndata 2\nx\n\n"),
           commit(2, 1, `M 160000 ${GITLINK_A} sub\n`),
           commit(3, 2, `M 160000 ${GITLINK_B} sub\n`),
           commit(4, 2, ""),
+          // The file `a` becomes a submodule: one `T` entry, whose file side is 2 bytes.
+          commit(5, 1, `M 160000 ${GITLINK_B} a\n`),
         ),
       );
 
       const repo = yield* openRepository(dir, RepositoryTest.settings({ files: 1, diff: 1 }));
-      const [id0, id1, id2, id3] = [c0, c1, c2, c3].map((id) => commitIdFrom(id ?? ""));
+      const [id0, id1, id2, id3, id4] = [c0, c1, c2, c3, c4].map((id) => commitIdFrom(id ?? ""));
 
-      if (id0 === undefined || id1 === undefined || id2 === undefined || id3 === undefined) {
+      if (id0 === undefined || id1 === undefined || id2 === undefined || id3 === undefined || id4 === undefined) {
         return yield* Effect.die("fast-import gave fewer commits");
       }
 
@@ -356,5 +359,14 @@ it.effect(
       expect(added, "another commit in the submodule is another change").not.toBe(moved);
       expect(addedOther, "the same submodule at another commit added is another change").not.toBe(added);
       expect(yield* patchIdOrUndefined(repo, id1, id3), "a commit with the same files is no change").toBeUndefined();
+
+      // A file made a submodule: the file's bytes count against the one-byte limit, though the other side is a submodule.
+      const error = yield* Effect.flip(repo.patchId(id0, id4));
+      expectFailure(
+        error,
+        Repository.DiffTooLarge,
+        { most: 1 },
+        "a file made a submodule is over a diff limit of one byte",
+      );
     }).pipe(Effect.provide(NodeServices.layer)),
 );

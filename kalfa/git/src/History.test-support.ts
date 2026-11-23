@@ -1472,6 +1472,8 @@ export const EDIT_CLASSES = [
   "(a) a changed file",
   "(a) a file made a link",
   "(a) a link made a file",
+  "(a) a file made a link with the same bytes",
+  "(a) a link made a file with the same bytes",
   "(b) a mode-only change",
   "(c) a NUL in the first 8000 bytes on one side",
   "(c) a NUL at byte 8000, binary",
@@ -1724,6 +1726,23 @@ export const editCarrier = (texture: Texture): EditCarrier => {
   made("a deleted file", ["(a) a deleted file"], [other, text(src, base)], [other]);
   made("a file made a link", ["(a) a file made a link"], [text(src, base)], [text(src, [`t${q}`], "120000")]);
   made("a link made a file", ["(a) a link made a file"], [text(src, [`t${q}`], "120000")], [text(src, base)]);
+
+  // A file and a link that hold the same bytes are two blobs of one id, yet git prints every old line removed and every new line
+  // added, so two such changes with other bytes are two changes.
+  for (const target of [`x${q}`, `y${q}`]) {
+    made(
+      `a file made a link, both holding ${target}`,
+      ["(a) a file made a link with the same bytes"],
+      [text(src, [target])],
+      [text(src, [target], "120000")],
+    );
+    made(
+      `a link made a file, both holding ${target}`,
+      ["(a) a link made a file with the same bytes"],
+      [text(src, [target], "120000")],
+      [text(src, [target])],
+    );
+  }
 
   // Modes.
   made("a mode-only change", ["(b) a mode-only change"], [text(src, base)], [text(src, base, "100755")]);
