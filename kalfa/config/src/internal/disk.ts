@@ -43,7 +43,11 @@ const folder = (fs: FileSystem.FileSystem, call: Call, path: string | undefined)
         ),
       );
 
-/** Takes a folder this call made away again when it is still empty: another writer may have put its lock in it since. */
+/**
+ * Takes a folder this call made away again when it is still empty: another writer may have put its lock in it since.
+ *
+ * Known race: the listing and the remove are two calls, so a second writer can put its lock or its finished file in the folder between them, and the recursive remove then deletes it. Effect's `FileSystem.remove` has no remove-if-empty (Node's `fs.rm` without `recursive` refuses any folder, an empty one too), so no call removes only an empty folder.
+ */
 const unmake = (fs: FileSystem.FileSystem, call: Call, path: string) =>
   fs.readDirectory(path).pipe(
     Effect.flatMap((entries) => (entries.length === 0 ? fs.remove(path, { recursive: true }) : Effect.void)),
