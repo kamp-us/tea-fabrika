@@ -19,3 +19,28 @@ export class SettingsError extends Schema.TaggedError<SettingsError, { readonly 
     cause: Schema.optional(Schema.Defect()),
   },
 ) {}
+
+export interface Position {
+  readonly file: string;
+  readonly line?: number | undefined;
+}
+
+/** Where a fault was found, as a message opens: `file, line n: `. */
+const opening = (position: Position | undefined) =>
+  position === undefined ? "" : `${position.file}${position.line === undefined ? "" : `, line ${position.line}`}: `;
+
+/** One error: where it was found, what is wrong and the closing sentence, with the failure beneath it when there is one. */
+export const stop = (
+  app: string,
+  reason: SettingsError["reason"],
+  text: string,
+  position?: Position,
+  cause?: unknown,
+) =>
+  new SettingsError({
+    reason,
+    message: `${opening(position)}${text}\n  ${app} did not start.`,
+    file: position?.file,
+    line: position?.line,
+    cause,
+  });
