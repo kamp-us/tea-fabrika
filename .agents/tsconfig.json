@@ -77,6 +77,8 @@
     "skills/lead/scripts/sizecap.test.ts",
     "skills/mutation/scripts/scope.ts",
     "skills/mutation/scripts/scope.test.ts",
+    "skills/mutation/scripts/survivors.ts",
+    "skills/mutation/scripts/survivors.test.ts",
     "skills/sev/scripts/*.ts"
   ]
 }
