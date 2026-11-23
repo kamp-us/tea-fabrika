@@ -1,4 +1,4 @@
-// P1 and P13: what internal/parse.ts reads out of git's own output. The files under fixtures/ were recorded from
+// P1 and P15: what internal/parse.ts reads out of git's own output. The files under fixtures/ were recorded from
 // real git runs (each names the git version and the command), one row per case with the value its note gives.
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
@@ -151,7 +151,7 @@ const fromBase64 = (output: string): Uint8Array => new Uint8Array(Buffer.from(ou
 
 // Plant: split an entry's fields on spaces and not on NUL, so the path with a space reads short; read a submodule as a file
 // (`gitlink` false); take the status from the wrong field; drop the check that an entry ends with its NUL.
-it("P13 vector: parse.changes reads every entry of each diff-tree -r -z output recorded from git, a submodule kept apart", () => {
+it("P15 vector: parse.changes reads every entry of each diff-tree -r -z output recorded from git, a submodule kept apart", () => {
   const recorded = Schema.decodeUnknownSync(DiffTreeRaw)(diffTreeRaw);
   expect(recorded.git).toContain("git version");
   expect(recorded.rows.length).toBeGreaterThan(15);
