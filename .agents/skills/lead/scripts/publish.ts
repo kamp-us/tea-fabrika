@@ -56,7 +56,13 @@ const main = Effect.fn("publish.main")(function* (asked: Publish.Words) {
     ...(body === null ? {} : { body }),
   };
 
-  const published = yield* Publish.publish({ dir, branch, head, text, given, checkedOut }).pipe(
+  const published = yield* Publish.publish({
+    dir,
+    branch,
+    source: Publish.Source.cases.checkout.make({ head, checkedOut }),
+    text,
+    given,
+  }).pipe(
     Effect.provide(services),
     Effect.map((p) => ({ ok: true, line: Publish.line(branch, p) })),
     Effect.catch((e) => Effect.succeed({ ok: false, line: `refused: ${e.reason}` })),

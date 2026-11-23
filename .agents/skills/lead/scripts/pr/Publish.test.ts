@@ -40,7 +40,12 @@ const memory = (
   return { remote, github, layer };
 };
 
-const ask = (branch: string, head: string): Publish.Ask => ({ dir: ".", branch, head, text });
+const ask = (branch: string, head: string): Publish.Ask => ({
+  dir: ".",
+  branch,
+  source: Publish.Source.cases.commit.make({ sha: head }),
+  text,
+});
 
 describe("publish: a commit is pushed when it is made, with a draft PR from the first commit", () => {
   it.effect.prop(
@@ -131,7 +136,13 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
     const m = memory();
 
     return Effect.gen(function* () {
-      const e = yield* Effect.flip(Publish.publish({ ...ask("fabrikalfa/a", "a".repeat(40)), checkedOut: "main" }));
+      const e = yield* Effect.flip(
+        Publish.publish({
+          ...ask("fabrikalfa/a", "a".repeat(40)),
+          source: Publish.Source.cases.checkout.make({ head: "a".repeat(40), checkedOut: "main" }),
+        }),
+      );
+
       expect(e._tag).toBe("NoBranch");
       expect(e.reason).toContain("main");
       expect(e.reason).toContain("fabrikalfa/a");
@@ -142,13 +153,28 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
     }).pipe(Effect.provide(m.layer));
   });
 
+  // scenario: a named commit pushes with no checkout in question (drive's box runs in main's checkout).
+  it.effect("scenario: an exact commit publishes to any branch, whatever checkout it is asked from", () => {
+    const m = memory();
+    const sha = "b".repeat(40);
+
+    return Effect.gen(function* () {
+      yield* Publish.publish({ ...ask("fabrikalfa/a", sha), source: Publish.Source.cases.commit.make({ sha }) });
+      expect(m.remote.branches.get("fabrikalfa/a")).toBe(sha);
+    }).pipe(Effect.provide(m.layer));
+  });
+
   // scenario: the checkout is on the branch, so it publishes as before.
   it.effect("scenario: a checkout on the branch publishes", () => {
     const m = memory();
     const head = "a".repeat(40);
 
     return Effect.gen(function* () {
-      const p = yield* Publish.publish({ ...ask("fabrikalfa/a", head), checkedOut: "fabrikalfa/a" });
+      const p = yield* Publish.publish({
+        ...ask("fabrikalfa/a", head),
+        source: Publish.Source.cases.checkout.make({ head, checkedOut: "fabrikalfa/a" }),
+      });
+
       expect(p).toEqual({ pr: 1, opened: true, draft: true });
       expect(m.remote.branches.get("fabrikalfa/a")).toBe(head);
     }).pipe(Effect.provide(m.layer));
