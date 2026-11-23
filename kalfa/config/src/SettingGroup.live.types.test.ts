@@ -8,6 +8,7 @@
 // - TL1: type `changes` as `Stream.Stream<unknown>`.
 // - TL2: give `Read` a `changes` for a restart setting too, so the `@ts-expect-error` lines compile.
 // - TL3: add `readonly ref: SubscriptionRef<A>` to `Live`.
+// - TL4: put the window in `Values`, so its field is a key of what a program reads.
 import { expectTypeOf, it } from "@effect/vitest";
 import type { Effect } from "effect";
 import { type FileSystem, type Path, Schema, type Stream } from "effect";
@@ -93,4 +94,33 @@ it("TL3 type: a live value holds nothing beyond an Effect and `changes`, and the
   expectTypeOf<Layer.Success<typeof demoLayer>>().toEqualTypeOf<
     SettingGroup.Identifier<"demo", typeof group.settings>
   >();
+});
+
+// TL4: the window `config.watch.debounce` is a setting the package adds to a group with a live setting. It is a flag and
+// an origin, so `SettingGroup.flags(group)`, the `flags` the layer takes and `SettingGroup.origins(group)` hold its name in
+// their types. It is not the program's: `values` holds only what the program declared. A group with no live setting has
+// none of it.
+const restart = SettingGroup.make(
+  "plain",
+  Setting.make("rest.count", Schema.Int).pipe(Setting.withDefault(1), described),
+);
+
+const flagsOfGroup = SettingGroup.flags(group);
+
+const flagsOfRestart = SettingGroup.flags(restart);
+
+const originsRead = SettingGroup.origins(group);
+
+const originsOfRestart = SettingGroup.origins(restart);
+
+it("TL4 type: a group with a live setting holds the window in its flags and origins, never in its values, and a restart-only group holds it nowhere", () => {
+  expectTypeOf<"config.watch.debounce">().toExtend<keyof typeof flagsOfGroup>();
+  expectTypeOf<"config.watch.debounce">().toExtend<keyof SettingGroup.FlagValues<typeof group.settings>>();
+  expectTypeOf<"config.watch.debounce">().toExtend<keyof Effect.Success<typeof originsRead>>();
+  expectTypeOf<"debounce">().not.toExtend<keyof Values>();
+  expectTypeOf<keyof Values>().toEqualTypeOf<
+    "text" | "rule" | "pair" | "tags" | "count" | "name" | "on" | "list" | "table"
+  >();
+  expectTypeOf<"config.watch.debounce">().not.toExtend<keyof typeof flagsOfRestart>();
+  expectTypeOf<"config.watch.debounce">().not.toExtend<keyof Effect.Success<typeof originsOfRestart>>();
 });

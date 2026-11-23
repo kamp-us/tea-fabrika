@@ -665,11 +665,15 @@ describe("V8 own keys only", () => {
 // V2, a folder that comes and goes
 // ---------------------------------------------------------------------------------------------
 
-const Dig = Schema.Struct({ file: Schema.Literals(FILES), move: Schema.Literals(["drop", "make"]), choices: Choices });
+const Dig = Schema.Struct({
+  file: Schema.Literals(FILES),
+  move: Schema.Literals(["drop", "make", "bounce"]),
+  choices: Choices,
+});
 
 type Dig = typeof Dig.Type;
 
-/** A folder move picked from the folder as it is now: where it is, `drop` removes it with its file and `make` changes the file in place; where it is not, either makes the folder with the file in it. */
+/** A folder move picked from the folder as it is now: where it is, `drop` removes it with its file, `make` changes the file in place, and `bounce` removes the folder, makes it again and writes the file in it, all before the clock moves; where it is not, any of them makes the folder with the file in it. */
 const dig = (rig: Rig, specs: ReadonlyArray<Spec>, model: Model, step: Dig): Effect.Effect<string> =>
   Effect.gen(function* () {
     const site = places(rig.app)[step.file];
@@ -681,6 +685,16 @@ const dig = (rig: Rig, specs: ReadonlyArray<Spec>, model: Model, step: Dig): Eff
       delete model.texts[step.file];
 
       return "drop";
+    }
+
+    if (model.folders[step.file] && step.move === "bounce") {
+      // The folder goes and comes back inside one quiet window: a window that ends with the folder there.
+      yield* rig.disk.removeFolder(site.dir);
+      yield* rig.disk.makeFolder(site.dir);
+      yield* rig.disk.write(site.path, text);
+      model.texts[step.file] = text;
+
+      return "bounce";
     }
 
     const there = model.folders[step.file];
@@ -704,7 +718,8 @@ const Digging = Schema.Struct({
 });
 
 // Plants: (e) end the watch on `NotFound`: a folder made later is never seen; (f) keep watching the removed folder: the
-// file made again in a new folder is missed.
+// file made again in a new folder is missed; (f) when the folder is there again after the window, stay on the watch of the
+// folder that was removed: a folder removed and made again inside one window, and then a later write, is missed.
 describe("V2 a folder that comes and goes", () => {
   it.effect.prop(
     "with a file's folder missing at the start and made later, or removed while watched and made again, the live value follows the file each time, and the start does not wait for the folder",
@@ -719,6 +734,13 @@ describe("V2 a folder that comes and goes", () => {
           ...FILES.flatMap((file) =>
             (["drop", "make", "drop", "make"] as const).map((move) => ({ file, move, choices: digging.first })),
           ),
+          // A folder removed and made again inside one window, then a later write, which must still be followed. The user
+          // file is tried with no repo folder, so the repo file does not hide what the user file gives.
+          { file: "repo" as const, move: "bounce" as const, choices: [1, 1, 1] },
+          { file: "repo" as const, move: "make" as const, choices: [2, 2, 2] },
+          { file: "repo" as const, move: "drop" as const, choices: [1, 1, 1] },
+          { file: "user" as const, move: "bounce" as const, choices: [1, 1, 1] },
+          { file: "user" as const, move: "make" as const, choices: [2, 2, 2] },
         ];
 
         // Each run starts with both folders missing, with both there, and as generated.
@@ -731,6 +753,7 @@ describe("V2 a folder that comes and goes", () => {
           yield* walkWith(group, steps, (rig, model, step) => dig(rig, specs, model, step), { texts, folders: start }, [
             "drop",
             "make",
+            "bounce",
             "same",
           ]);
         }
@@ -969,6 +992,9 @@ describe("V4 a refused change holds the last good values", () => {
 
           if (refusal.token !== undefined) {
             expect(message).toContain(`${place.name}, line ${lineHolding(text, refusal.token)}`);
+            expect(warned[0]?.annotations["kalfa.config.line"], `${refusal.reason}: the line is annotated`).toBe(
+              lineHolding(text, refusal.token),
+            );
           }
 
           const span = updates(rig).slice(mark.spans).at(-1);
@@ -1748,6 +1774,76 @@ describe("V18 the window is a flag of a group that has a live setting", () => {
         expect(made).toThrow(/config\.watch\.debounce/u);
       }
     },
+    check,
+  );
+});
+
+// ---------------------------------------------------------------------------------------------
+// V19, a setting that only shares a word with the window is fine, and the window's own names stay taken
+// ---------------------------------------------------------------------------------------------
+
+const Apart = Schema.Struct({ shape: Shape, table: Table }).check(
+  Schema.makeFilter(({ shape, table }) => !specsFrom(shape).some((spec) => (spec.table ?? spec.key) === table)),
+);
+
+// Plant: leave the window out of the names a group is checked against: a setting named `config.watch.debounce`, `config`
+// or `config.watch`, or one that shares the window's variable, makes a group.
+describe("V19 a setting beside the window", () => {
+  it.effect.prop(
+    "a group with a user setting <table>.debounce and a live setting makes and reads its own value, and a user setting named like the window, its table or its variable still throws at make",
+    { input: Apart },
+    ({ input: { shape, table } }) =>
+      Effect.gen(function* () {
+        const specs = specsFrom(shape);
+
+        const mine = Setting.make(`${table}.debounce`, Port).pipe(
+          Setting.withDefault(DEFAULT),
+          Setting.withDescription("A setting that shares a word with the window."),
+        );
+
+        const group = makeGroup(shape.app, [...specs.map((spec) => declare(spec)), mine]);
+
+        const rig = yield* boot(group, {
+          texts: { repo: `${render(specs, [1, 1, 1], 0)}[${table}]\ndebounce = 4100\n` },
+        });
+
+        yield* flush(rig);
+
+        const now = yield* reads(rig);
+        const origins = yield* originsNow(rig);
+
+        // Its own value, not the window's text, and the window is read as the setting it is.
+        expect(now.debounce).toBe(4100);
+        expect(origins[`${table}.debounce`]).toMatchObject({ _tag: "file" });
+        expect(origins["config.watch.debounce"]).toEqual({ _tag: "default" });
+        yield* close(rig);
+
+        // The window's own name, its table, the table above it and its variable stay taken.
+        const taken = [
+          Setting.make("config.watch.debounce", Schema.String).pipe(
+            Setting.withDefault("1 second"),
+            Setting.withDescription("My own."),
+          ),
+          Setting.make("config.watch", Port).pipe(
+            Setting.withDefault(1),
+            Setting.withDescription("A value over the window's table."),
+          ),
+          Setting.make("config", Port).pipe(
+            Setting.withDefault(1),
+            Setting.withDescription("A value over the window's table."),
+          ),
+          Setting.make("config-watch.debounce", Port).pipe(
+            Setting.withDefault(1),
+            Setting.withDescription("Shares the window's variable."),
+          ),
+        ];
+
+        for (const setting of taken) {
+          expect(() => makeGroup(shape.app, [...specs.map((spec) => declare(spec)), setting]), setting.name).toThrow(
+            new RegExp(setting.name.replaceAll(".", "\\.")),
+          );
+        }
+      }),
     check,
   );
 });
