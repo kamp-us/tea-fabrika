@@ -131,29 +131,31 @@ describe("saved view membership, next/", () => {
 
   // The drain of W3, a law of its own. Each `end` of a full state checks the whole new state against its Schema, so the 1,024 ends of one run took
   // 0.1 s, a third of the churn law's time in CI with the drain inside it. A drain does not depend on the walk, only on the names in the state,
-  // so it takes 25 runs of its own and the churn keeps its 100.
-  it.prop(
-    "W3: a state walked at the bound drains through every size to empty",
-    [Walk],
-    ([walk]) => {
-      let [state] = watchers.init(atTheBound(), {});
+  // so it is four laws of 25 runs, one seed each: its 100 runs, 4 s locally for each part, and the churn keeps its 100.
+  for (const part of [0, 1, 2, 3]) {
+    it.prop(
+      `W3: a state walked at the bound drains through every size to empty, part ${part + 1}`,
+      [Walk],
+      ([walk]) => {
+        let [state] = watchers.init(atTheBound(), {});
 
-      for (const [pick, fresh] of walk) {
-        const open = clients(state);
-        const client = open.length > 0 && pick % 3 !== 0 ? nth(open, pick).client : fresh.client;
+        for (const [pick, fresh] of walk) {
+          const open = clients(state);
+          const client = open.length > 0 && pick % 3 !== 0 ? nth(open, pick).client : fresh.client;
 
-        [state] =
-          pick % 3 === 2
-            ? applyCell(watchers, state, { ...Tag.cases.end.make({}), client })
-            : applyCell(watchers, state, { ...Tag.cases.open.make({}), watch: { ...fresh, client } });
-      }
+          [state] =
+            pick % 3 === 2
+              ? applyCell(watchers, state, { ...Tag.cases.end.make({}), client })
+              : applyCell(watchers, state, { ...Tag.cases.open.make({}), watch: { ...fresh, client } });
+        }
 
-      for (const c of [...clients(state)]) {
-        [state] = applyCell(watchers, state, { ...Tag.cases.end.make({}), client: c.client });
-      }
+        for (const c of [...clients(state)]) {
+          [state] = applyCell(watchers, state, { ...Tag.cases.end.make({}), client: c.client });
+        }
 
-      expect(state).toEqual(Model.cases.empty.make({}));
-    },
-    { arbitrary: { seed: 119120, runs: 25 } },
-  );
+        expect(state).toEqual(Model.cases.empty.make({}));
+      },
+      { arbitrary: { seed: 119120 + part, runs: 25 } },
+    );
+  }
 });

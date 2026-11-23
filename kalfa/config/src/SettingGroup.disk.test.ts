@@ -476,14 +476,14 @@ it.effect.prop(
 );
 
 it.effect.prop(
-  "D4 with the lock's write refused the call fails `write`, the file is as it was and no lock is left",
+  "D4 the file sees one rename: with the lock's write refused the call fails `write`, the file is as it was and no lock is left",
   DiskDraw.fields,
   refusedAtLock("w:lock-write"),
   check,
 );
 
 it.effect.prop(
-  "D4 with the rename refused the call fails `write`, the file is as it was and no lock is left",
+  "D4 the file sees one rename: with the rename refused the call fails `write`, the file is as it was and no lock is left",
   DiskDraw.fields,
   refusedAtLock("w:rename"),
   check,
