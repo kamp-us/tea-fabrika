@@ -35,10 +35,17 @@
 //     its title and description, which become the squash commit's text; marks a draft ready for
 //     review, as `admin` does, which starts its real `ci-required`; reads `ci-required` at its
 //     head, once, or with --wait again each minute for up to an hour, in the background (a draft just
-//     marked ready has no `ci-required` yet, so give it --wait); then one
+//     marked ready has no `ci-required` yet, so give it --wait; a pull request that conflicts with main, or turns to
+//     conflict during the wait, exits 1 at once with the command that merges main in); then one
 //     `gh pr merge --squash --match-head-commit <head>`, which adds it to GitHub's merge queue.
 //     It prints `queued`, never `merged`: GitHub tests it on newest main and merges it later. No
 //     --admin, no --auto, no other merge method.
+//
+//   land.ts check <pr>
+//     the lead session, after it writes a pull request's body and before `queue`: runs exactly the body checks `queue`
+//     runs (Queue.body: the leak grep on the title and description, and each new exported name named under `## New names`),
+//     one function shared with `queue`. Changes nothing. Prints each missing name with the file it comes from and exits 1
+//     on any refusal; else prints one line and exits 0.
 //
 //   land.ts arm <pr>
 //     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips; pr/Arm.ts): refuses
@@ -73,7 +80,8 @@
 //     and restarts the build of every entry in the merge queue, so a pull request that is no sev fix
 //     and no ready pull request of a sev0 is refused while the queue holds an entry, naming it; with
 //     --wait it reads the queue again every --queue-every-seconds (default 60) for up to
-//     --queue-minutes (default 60), in the background, and merges once it is empty.
+//     --queue-minutes (default 60), in the background, and merges once it is empty. A merge that happened exits 0, even
+//     when the read of the pull request after it fails; only a refusal exits 1.
 //
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
@@ -128,6 +136,7 @@ const Check = Schema.Literals([
   "pr",
   "queue",
   "arm",
+  "body",
 ]);
 
 class Refused extends Schema.TaggedError<Refused>()("Refused", {
@@ -720,6 +729,33 @@ const queueCommand = Command.make(
   }),
 );
 
+// The body checks `queue` runs, alone: the leak grep on the title and description, and each new exported name named
+// under `## New names`. A lead runs it after writing a body and before `queue`; it asks GitHub for reads only and changes nothing.
+const checkCommand = Command.make(
+  "check",
+  { pr: PrNumber },
+  Effect.fn("land.checkCommand")(function* ({ pr }) {
+    const env = yield* loadEnv;
+
+    const checked = yield* Effect.gen(function* () {
+      const found = yield* (yield* PullRequests).view(pr);
+
+      return { found, refusal: yield* Queue.body(env.MAIN, found) };
+    }).pipe(
+      Effect.provide(Layer.merge(PullRequestsGh.layer(env.GH_REPO, env.MAIN), PushesProcess.layer(HERE))),
+      Effect.mapError(
+        (e) => new Refused({ check: e instanceof LeakGrepRefused ? "leak" : "body", reason: e.reason, output: "" }),
+      ),
+    );
+
+    if (checked.refusal !== null) {
+      return yield* new Refused({ check: "body", reason: `pr ${pr}: ${checked.refusal}`, output: "" });
+    }
+
+    yield* Console.log(`pr ${pr}: the body checks pass (leak grep on the title and description, ## New names)`);
+  }),
+);
+
 /** A refusal from a merge path: a leak grep that refused or could not run is the `leak` check's. */
 const refusedAt =
   (check: typeof Check.Type) =>
@@ -830,11 +866,16 @@ const adminCommand = Command.make(
       wait ? { minutes: queueMinutes, every: queueEvery } : undefined,
     );
 
-    const found = yield* (yield* PullRequests)
-      .view(pr)
-      .pipe(Effect.provide(PullRequestsGh.layer(env.GH_REPO, env.MAIN)), Effect.mapError(refusedAt("merge")));
+    // The merge happened, so this read only reports: a read that fails says so and the command still succeeds.
+    const found = yield* Effect.gen(function* () {
+      return yield* (yield* PullRequests).view(pr);
+    }).pipe(Effect.provide(PullRequestsGh.layer(env.GH_REPO, env.MAIN)), Effect.result);
 
-    yield* Console.log(`pr ${pr}: ${found.state}, merge commit ${found.mergeCommit ?? "none yet"}`);
+    yield* Console.log(
+      Result.isSuccess(found)
+        ? `pr ${pr}: ${found.success.state}, merge commit ${found.success.mergeCommit ?? "none yet"}`
+        : `pr ${pr}: merged, but its state could not be read afterward (${found.failure.reason})`,
+    );
   }),
 );
 
@@ -873,7 +914,17 @@ const closeNamed = Command.make(
 );
 
 const land = Command.make("land").pipe(
-  Command.withSubcommands([ready, run, queueCommand, armCommand, mergeCommand, adminCommand, merged, closeNamed]),
+  Command.withSubcommands([
+    ready,
+    run,
+    queueCommand,
+    checkCommand,
+    armCommand,
+    mergeCommand,
+    adminCommand,
+    merged,
+    closeNamed,
+  ]),
 );
 
 if (import.meta.main) {

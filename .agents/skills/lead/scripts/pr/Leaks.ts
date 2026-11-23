@@ -12,10 +12,21 @@ import { Pushes } from "./Pushes.ts";
 /** The words a squash puts on main: the pull request's title, then its description. */
 export const words = (found: Pick<Detail, "title" | "body">): string => `${found.title}\n\n${found.body}\n`;
 
-/** Fails unless the leak grep passed on the change, each commit and the words of pull request `found`. */
-export const gate = Effect.fn("Leaks.gate")(function* (dir: string, found: Pick<Detail, "oid" | "title" | "body">) {
+/** Fails unless the leak grep passed on the net change and each commit of the head `oid`. */
+export const diff = Effect.fn("Leaks.diff")(function* (dir: string, found: Pick<Detail, "oid">) {
   const pushes = yield* Pushes;
   yield* pushes.leakChange(dir, found.oid);
   yield* pushes.leakGrep(dir, found.oid);
+});
+
+/** Fails unless the leak grep passed on the words a squash puts on main: the title and the description. */
+export const text = Effect.fn("Leaks.text")(function* (dir: string, found: Pick<Detail, "title" | "body">) {
+  const pushes = yield* Pushes;
   yield* pushes.leakText(dir, words(found));
+});
+
+/** Fails unless the leak grep passed on the change, each commit and the words of pull request `found`. */
+export const gate = Effect.fn("Leaks.gate")(function* (dir: string, found: Pick<Detail, "oid" | "title" | "body">) {
+  yield* diff(dir, found);
+  yield* text(dir, found);
 });
