@@ -41,6 +41,10 @@ this skill for the law. The reviewer reads that law on its recheck.
    - A property states its coverage and fails loudly when a required case is never reached.
    - When moving a law onto a schema's Arbitrary, keep its old reach: set size and run counts at
      least as large as the old generator, and test the real limit, not the schema's cap.
+   - **A lower run count or input size keeps each plant red.** Any change that lowers a law's run
+     count or input size (a speed-up, a bound for time) is done when each `Plant:` line recorded for
+     that law, rerun at the new size over 5 seeds in a scratch copy of the tree, is still red. A plant
+     that now passes means the cut went too deep.
    - A hand-picked example stays only as a pinned case of a named past bug, in fast-check's
      `examples`, with the bug named beside it. A law that is only examples is not done.
    - A fixed test needs a label `fabrika/law-shape` accepts, from the labels in the plan,
@@ -112,8 +116,8 @@ this skill for the law. The reviewer reads that law on its recheck.
    `FABRIKA_TEST_DEPTH=full nice -n 19 pnpm exec vitest run --maxWorkers=1 --reporter=verbose --reporter=./.github/ci/slow-test-reporter.ts <one file>`.
    Verbose prints each law's time, and the reporter fails the run and names any law that used more
    than its share of the test timeout (`FABRIKA_SLOW_TEST_SHARE` sets the share).
-   Bound a slow law's generated inputs (size, run counts, record length) until it passes, run its
-   plants again, and put each law's time in your report. A file the laptop refuses (an
+   Bound a slow law's generated inputs (size, run counts, record length) until it passes, keep its
+   plants red as the lower-count bullet of step 2 says, and put each law's time in your report. A file the laptop refuses (an
    `.integration.` file) is named "not run here".
 7. **Commit, push and report** by the standing rules below.
 
@@ -176,8 +180,9 @@ These hold in every tests round, so the brief does not repeat them.
   turned down, no `oxlint-disable` on wrong code. A law you cannot write as
   planned is not weakened: stop that law and say exactly why, with file and line. A red lint caused
   only by product names that do not exist yet is reported, not hidden.
-- **Checks before the commit:** `pnpm format`, `pnpm lint` once, and the list ratchet CI runs that
-  local lint does not:
+- **Checks before the commit:** `pnpm format`, `pnpm lint` once, each `*.types.test.ts` you wrote or
+  changed under vitest by path (tsc checks its types and only vitest runs its bodies, and CI runs
+  both), and the list ratchet CI runs that local lint does not:
   `node next/apps/fabrika/src/exam/ratchet.ts --base "$(git merge-base origin/main HEAD)"` exits 0.
 - **Commit and push:** commit your own paths by name with the step-commit skill's
   `stepcommit.sh --body-file <file> tests <ticket> "<subject>" <path>...`, a plain-word subject,
