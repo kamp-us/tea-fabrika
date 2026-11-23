@@ -2,9 +2,10 @@
 // the settings, a path in a tree, a tree id, a blob id and a file mode, and a patch id. Every class a generator must reach is applied to each run's drawn value, and the law
 // names the classes it needs, so a class dropped from a generator fails here loudly.
 import { expect, it } from "@effect/vitest";
-import { Effect, Option, Result, Schema } from "effect";
+import { Option, Result, Schema } from "effect";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
+import * as Diff from "./Diff.ts";
 import checkRefFormat from "./fixtures/check-ref-format-2.40.1.json" with { type: "json" };
 import {
   DOT_GIT_FORMS,
@@ -613,31 +614,28 @@ it.prop(
   RUNS,
 );
 
-// Plant: allow `{40}|{64}` in the pattern; add the `i` flag; drop the pattern from `PatchId` and keep its brand. The module is
-// imported inside the law, so a module that is not built yet fails this law and not every law of the file.
-it.effect.prop(
+// Plant: allow `{40}|{64}` in the pattern; add the `i` flag; drop the pattern from `PatchId` and keep its brand.
+it.prop(
   "G8 patch ids: PatchId accepts 40 lowercase hex and refuses each other form, and keeps the text",
   { id: commitIdArb },
-  ({ id }) =>
-    Effect.gen(function* () {
-      const Diff = yield* Effect.orDie(Effect.tryPromise({ try: () => import("./Diff.ts"), catch: (cause) => cause }));
-      const refusals = idRefusals(id);
-      expect(
-        refusals.map(([label]) => label),
-        "the generator reaches every refused form",
-      ).toEqual(ID_REFUSE_CLASSES);
+  ({ id }) => {
+    const refusals = idRefusals(id);
+    expect(
+      refusals.map(([label]) => label),
+      "the generator reaches every refused form",
+    ).toEqual(ID_REFUSE_CLASSES);
 
-      const decode = Schema.decodeUnknownResult(Diff.PatchId);
-      const good = decode(id);
-      expect(Result.isSuccess(good), "lowercase hex is a patch id").toBe(true);
+    const decode = Schema.decodeUnknownResult(Diff.PatchId);
+    const good = decode(id);
+    expect(Result.isSuccess(good), "lowercase hex is a patch id").toBe(true);
 
-      if (Result.isSuccess(good)) {
-        expect(good.success, "the text is kept").toBe(id);
-      }
+    if (Result.isSuccess(good)) {
+      expect(good.success, "the text is kept").toBe(id);
+    }
 
-      for (const [label, text] of refusals) {
-        expect(Result.isFailure(decode(text)), `${label} is refused`).toBe(true);
-      }
-    }),
+    for (const [label, text] of refusals) {
+      expect(Result.isFailure(decode(text)), `${label} is refused`).toBe(true);
+    }
+  },
   RUNS,
 );
