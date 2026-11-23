@@ -1,6 +1,15 @@
 // mutbox.ts reads the plan's owners through plancheck.sh, so its laws run when that or what it reads changes.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
@@ -588,6 +597,8 @@ type Setup = {
   env?: Record<string, string>;
   docker?: boolean;
   lockPid?: number;
+  /** The processes of runs already in line, in arrival order: a place file each, in `docker.queue` beside the lock. */
+  queue?: number[];
   leftover?: string;
   related?: string;
   node?: string;
@@ -666,6 +677,14 @@ const run = (setup: Setup = {}) => {
     writeFileSync(lock, String(setup.lockPid));
   }
 
+  for (const [i, pid] of (setup.queue ?? []).entries()) {
+    mkdirSync(join(dir, "docker.queue"), { recursive: true });
+    writeFileSync(
+      join(dir, "docker.queue", `${String(i + 1).padStart(16, "0")}.json`),
+      JSON.stringify({ pid, label: "ahead" }),
+    );
+  }
+
   if (setup.leftover !== undefined) {
     writeFileSync(join(fake, "leftover"), `${setup.leftover}\n`);
   }
@@ -730,6 +749,7 @@ const run = (setup: Setup = {}) => {
       ? pipe(readFileSync(join(fake, "commits.txt"), "utf8"), Str.trim, Str.split("\n"))
       : null,
     lockLeft: existsSync(lock),
+    queueLeft: existsSync(join(dir, "docker.queue")) ? readdirSync(join(dir, "docker.queue")).sort() : [],
     inputLeft: existsSync(join(out, "in")),
     ms: DateTime.toEpochMillis(DateTime.nowUnsafe()) - started,
     fake,
@@ -904,6 +924,24 @@ describe("mutbox, the run against a stand-in docker", () => {
       Option.getOrThrow(Arr.findFirstIndex(taken.calls, (c) => pipe(c, Str.startsWith("run ")))),
     );
     expect(taken.lockLeft).toBe(false);
+  });
+
+  // scenario: a run given --wait takes a place in line, behind each run already there. The hourly run is on CI with a lock of its
+  // own, and drive's mutation step refuses at the lock before it starts mutbox, so a person's run by hand, or a caller that opts in, is the one that waits.
+  // Plants: take the lock with no place in line (a live run ahead is jumped); count a dead run's place as live;
+  // never give up at the limit.
+  it("scenario: a run that waits stays behind a live run in line and is stuck docker_busy at its limit, and skips a dead run's place", () => {
+    const behind = run({ queue: [process.pid], args: () => ["--wait", "1"] });
+    expect(behind.code, behind.text).toBe(30);
+    expect(behind.summary).toMatchObject({ outcome: "stuck", reason: "docker_busy" });
+    expect(behind.ranContainer).toBe(false);
+    expect(behind.queueLeft, "only the live run's place is left").toEqual(["0000000000000001.json"]);
+
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid!;
+    const taken = run({ queue: [dead], args: () => ["--wait", "60"] });
+    expect(taken.code, taken.text).toBe(0);
+    expect(taken.ranContainer).toBe(true);
+    expect(taken.queueLeft, "the dead run's place is dropped and its own is given back").toEqual([]);
   });
 
   // Plant: hand docker a path whose comma it reads as a mount option.
