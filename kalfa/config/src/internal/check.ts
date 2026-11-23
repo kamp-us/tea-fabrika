@@ -1,7 +1,7 @@
 /**
  * The whole-file check of a setting group: a file is read against the settings that may be set in it, and its first fault is the one error. It reads no file and starts nothing.
  */
-import { Option, Schema, SchemaAST, SchemaIssue, type SemVer } from "effect";
+import { Effect, Option, Schema, SchemaAST, SchemaIssue, type SemVer } from "effect";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import type * as Setting from "../Declaration.ts";
@@ -125,12 +125,7 @@ export const refused = (app: string, s: Setting.Any, origin: Origin) => {
 };
 
 /** Checks one file against the settings that may be set in it. Its first fault is the one error. */
-export const check = (
-  group: Group,
-  file: Setting.File,
-  found: Loaded,
-  names: Names,
-): Result.Result<void, SettingsError> => {
+export const check = Effect.fnUntraced(function* (group: Group, file: Setting.File, found: Loaded, names: Names) {
   const own = group.settings.filter((s) => s.files.includes(file));
   // The repo's minimum version was checked on its own, ahead of everything else.
   const value = file === "repo" ? Rec.remove(found.document.value, `${group.app}-version`) : found.document.value;
@@ -138,8 +133,7 @@ export const check = (
   // A file no setting may be set in refuses every key, where an empty Struct would take any object.
   const schema = own.length === 0 ? Schema.Record(Schema.String, Schema.Never) : struct(own, 0);
 
-  return Schema.decodeUnknownResult(schema)(value, { onExcessProperty: "error" }).pipe(
-    Result.mapError((error) => explain(group, file, found, names, error.issue)),
-    Result.map(() => undefined),
+  yield* Schema.decodeUnknownEffect(schema)(value, { onExcessProperty: "error" }).pipe(
+    Effect.mapError((error) => explain(group, file, found, names, error.issue)),
   );
-};
+});

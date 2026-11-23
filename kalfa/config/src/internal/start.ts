@@ -116,7 +116,7 @@ export const start = Effect.fnUntraced(function* (
 
   const repo = yield* load(app, format, place);
   yield* supported(app, repo, options.version);
-  yield* Effect.fromResult(check(group, "repo", repo, names));
+  yield* check(group, "repo", repo, names);
 
   // No home means no user configuration, so there is no file to read.
   const found: Loaded =
@@ -124,7 +124,7 @@ export const start = Effect.fnUntraced(function* (
       ? { name: user.name, document: empty }
       : yield* load(app, format, { path: user.path, name: user.name });
 
-  yield* Effect.fromResult(check(group, "user", found, names));
+  yield* check(group, "user", found, names);
 
   const files = { repo: Sources.file(repo.name, repo.document), user: Sources.file(found.name, found.document) };
   const values: Record<string, unknown> = {};
