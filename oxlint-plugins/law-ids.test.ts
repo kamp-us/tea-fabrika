@@ -59,6 +59,15 @@ describe("law ids", () => {
     expect(said).toContain("kalfa/one/src/A.test.ts:2");
   });
 
+  it("exits 2, naming the folder, when git cannot list it", () => {
+    const folder = join(home, "does-not-exist");
+    const ran = spawnSync("node", [SCRIPT, folder], { encoding: "utf8" });
+
+    expect(ran.status).toBe(2);
+    expect(ran.stderr).toContain(folder);
+    expect(ran.stderr).not.toContain("TypeError");
+  });
+
   it("allows one law with several cases", () => {
     const { status } = run({
       ...PACKAGE,
