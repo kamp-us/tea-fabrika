@@ -475,6 +475,81 @@ const place = (app: string, entries: ReadonlyArray<Entry>, held: ReadonlyArray<H
   return { scene, want, given };
 };
 
+/** The one-word names a setting may have that `Object.prototype` also holds, as the group's own name rule allows them. */
+const INHERITED = Object.getOwnPropertyNames(Object.prototype).filter(
+  (name) => Effect.runSync(thrown(() => SettingGroup.make("demo", declare(name)))) === undefined,
+);
+
+/**
+ * A group of settings named like keys of `Object.prototype`, none of them given a flag, started with no flags at all
+ * (`flags: {}`) and through the command line with none typed, whose handler gets the flags `SettingGroup.flags` made. It
+ * answers as it does with no flag: the first of the variable (unless file-only), the repo file and the user file that
+ * holds the setting, else its default.
+ */
+const inherited = Effect.fnUntraced(function* (
+  app: string,
+  seed: number,
+  held: Held,
+  scope: { readonly fileOnly: boolean; readonly files: Setting.Files },
+) {
+  const { fileOnly, files } = scope;
+
+  const group = makeGroup(
+    app,
+    INHERITED.map((name) => declare(name, { fileOnly, files })),
+  );
+
+  const env: Record<string, string> = {};
+  const repo = ["# note 0"];
+  const user = ["# note 0", "# note 1"];
+
+  const want = INHERITED.map((name, n) => {
+    const base = seed + 10 * n;
+    const key = `${app.toUpperCase()}_${name.toUpperCase()}`;
+
+    if (held.env && !fileOnly) {
+      env[key] = String(base + 1);
+    }
+
+    if (held.repo && files.includes("repo")) {
+      repo.push(`${name} = ${base + 2}`);
+    }
+
+    if (held.user && files.includes("user")) {
+      user.push(`${name} = ${base + 3}`);
+    }
+
+    return held.env && !fileOnly
+      ? { value: base + 1, origin: { _tag: "env", name: key } }
+      : held.repo && files.includes("repo")
+        ? { value: base + 2, origin: inFile(repoFile(app).name, repo.length) }
+        : held.user && files.includes("user")
+          ? { value: base + 3, origin: inFile(userFile(app).name, user.length) }
+          : { value: DEFAULT, origin: { _tag: "default" } };
+  });
+
+  const scene: Scene = {
+    disk: { files: { [repoFile(app).path]: `${repo.join("\n")}\n`, [userFile(app).path]: `${user.join("\n")}\n` } },
+    env: environment(env),
+  };
+
+  const byRecord = mustStart((yield* start(group, { ...scene, flags: {} })).exit);
+  const typedNone = yield* startFromArguments(group, scene, []);
+
+  expect(Option.isSome(typedNone)).toBe(true);
+  const byCommand = mustStart(Option.isSome(typedNone) ? typedNone.value : Exit.succeed({ values: {}, origins: {} }));
+
+  for (const [route, loaded] of [
+    ["flags: {}", byRecord],
+    ["the command's flags", byCommand],
+  ] as const) {
+    for (const [n, name] of INHERITED.entries()) {
+      // The `want` of the settings is read here by name, in the order they were declared.
+      expect({ value: loaded.values[name], origin: loaded.origins[name] }, `${route} ${name}`).toEqual(want[n]);
+    }
+  }
+});
+
 const Picks = Schema.Tuple([Held, Held, Held, Held]);
 
 const Absent = Schema.Boolean;
@@ -496,6 +571,8 @@ const expectWant = (
 
 // Plants: (a) put the flag's source after the environment's; (b) count a flag that was not given as given, with the
 // text empty.
+// Fix round 1: read the flag record with a plain index, so a setting named `constructor` finds `Object.prototype`'s key
+// as its flag: F3 and F8 red, with `flags: {}` and with the flags `SettingGroup.flags` made.
 it.effect.prop(
   "F3 each value is the first of flag, variable, repo file and user file that holds it, else its default, and a flag's origin names the flag",
   { app: Word, entries: Entries, picks: Picks, absent: Absent },
@@ -534,6 +611,22 @@ it.effect.prop(
       }
 
       expect(reached.size).toBe(16);
+
+      // A setting named like a key of `Object.prototype` has no flag, and starts as with no flag, in every placement
+      // of the variable and the files.
+      expect(INHERITED.length).toBeGreaterThan(0);
+
+      for (const here of EVERY) {
+        yield* inherited(
+          app,
+          entries[0]?.seed ?? 1000,
+          { ...here, flag: false },
+          {
+            fileOnly: false,
+            files: ["repo", "user"],
+          },
+        );
+      }
     }),
   check,
 );
@@ -974,6 +1067,17 @@ it.effect.prop(
           : { value: DEFAULT, origin: { _tag: "default" } };
 
       expect({ value: loaded.values[field(target)], origin: loaded.origins[name] }).toEqual(want);
+
+      // A file-only setting named like a key of `Object.prototype` has no flag either, and starts as with none.
+      yield* inherited(
+        app,
+        target.seed,
+        { flag: false, env: held.env, repo: held.repo, user: held.user },
+        {
+          fileOnly: true,
+          files,
+        },
+      );
     }),
   check,
 );
