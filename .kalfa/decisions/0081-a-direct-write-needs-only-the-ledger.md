@@ -2,7 +2,7 @@
 
 Decision 0072 says every write command takes `--direct`, and decision 0075 says a direct write is finished entries built by a plain function from the message. A check of every write command against its design found that none fits: each needs the stream's current state, and three also need the code host. We decided that a write command takes `--direct` only when its entries can be built from the Ledger, the device's settings and the message, and that the plain function takes the state as well as the message. We chose this because a device has no host login and should not get one for this, and because one function used by both the program and the direct write keeps the two from drifting apart. The design ticket is https://github.com/kamp-us/tea-fabrika/issues/1875.
 
-Six commands take `--direct`: Incidents' `declare`, `acknowledge`, `fix`, `resolve` and `learned`, and Delivery's `withdraw`. Three do not: Delivery's `ready`, and Reconciliation's `reconcile` and `adopt`.
+Eight commands take `--direct` (six when this was written; the paging-rule command and `kalfa program kill` were added on 2026-11-23, see the addition below and https://github.com/kamp-us/tea-fabrika/issues/1875#issuecomment-7110389958): Incidents' `declare`, `acknowledge`, `fix`, `resolve` and `learned`, Delivery's `withdraw`, the command that sets a paging rule and `kalfa program kill`. Three do not: Delivery's `ready`, and Reconciliation's `reconcile` and `adopt`.
 
 The function is one per package, plain, with a named message type for each command:
 
@@ -50,4 +50,4 @@ Two more commands take `--direct`, so eight do. Both were decided on the design 
 - The command that sets a paging rule takes it. Its entries need only the Ledger, the device's settings and the message, so it passes the test above; the list of six was written before that command existed.
 - `kalfa program kill <name>` takes it, so a stuck control program cannot block stopping a process, for example an agent stuck in a loop and spending money. The stop is written straight into the app's log, and the log checks that the person may stop that process (Program's admission check).
 
-The text above is unchanged, so read "six" there as eight.
+The line at the top that names the commands that take `--direct` now says eight, with a pointer here.
