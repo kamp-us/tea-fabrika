@@ -67,14 +67,16 @@ const bytes = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
 
 const ADA = "Ada <ada@example.test> 1700000000 +0000";
 
-// I1 runs the shared laws S1 to S24 on real git, 10 runs each, over bare repositories the seeder fills with files.
+// I1 runs the shared laws on real git, 6 runs each, over bare repositories the seeder fills with files. The whole file must end inside
+// the CI step's 17 minutes on a slow runner: 10 runs took 575 s on a fast one and past 1000 s on a slow one before the edit laws came, which
+// ended the step with the merge commit's laws not yet run. /memory runs the same laws at 100.
 // Plant: each S law's plant, run once on `/process`.
-RepositoryTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
+RepositoryTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 });
 
-MergeCommitTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
+MergeCommitTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 });
 
 // I1 for the commit edit helper (S34, S35), the same laws as on `/memory`, over real bare repositories.
-CommitEditTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
+CommitEditTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 });
 
 const signature = (flat: FlatSignature): Commit.Signature =>
   new Commit.Signature({ name: flat.name, email: flat.email, at: { seconds: flat.seconds, offset: flat.offset } });
