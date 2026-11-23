@@ -61,13 +61,19 @@
 //     its history. Every one runs the leak gate first, on the change, each commit, the title and the
 //     description, and refuses on any hit or on a grep that could not run.
 //
-//   land.ts admin <pr> [--wait-minutes <n>] [--every-seconds <n>]
+//   land.ts admin <pr> [--wait] [--wait-minutes <n>] [--every-seconds <n>] [--queue-minutes <n>] [--queue-every-seconds <n>]
 //     the lead session, the one way it admin merges (a hand-written `gh pr checks --watch` chain once
 //     merged while ci-required was still pending). As `merge --admin`, and also: a branch starting
 //     `can/` is refused; a draft is marked ready after the leak gate, then ci-required is given
-//     --wait-minutes (default 30, read every --every-seconds, default 30) to appear and end; it must be
+//     --wait-minutes (default 30, read every --every-seconds, default 30) to appear and end, and only
+//     once a CI run has started at its head, never in the seconds after a push (a ready event then
+//     starts a second run on one commit, and the required check stays "expected"); it must be
 //     completed and success at the head read last, which must not move while waiting; one pinned squash
-//     with --admin; then it prints the pull request's state and merge commit.
+//     with --admin; then it prints the pull request's state and merge commit. An admin merge moves main
+//     and restarts the build of every entry in the merge queue, so a pull request that is no sev fix
+//     and no ready pull request of a sev0 is refused while the queue holds an entry, naming it; with
+//     --wait it reads the queue again every --queue-every-seconds (default 60) for up to
+//     --queue-minutes (default 60), in the background, and merges once it is empty.
 //
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
@@ -771,8 +777,20 @@ const adminRoute = Effect.fn("land.adminRoute")(function* (env: Env) {
 });
 
 /** One merge by hand (pr/Merge.ts) on this route, with this wait for an admin merge; prints what it did. */
-const mergeBy = Effect.fn("land.mergeBy")(function* (env: Env, pr: number, route: Merge.Route, wait?: Queue.Wait) {
-  const done = yield* Merge.merge({ dir: env.MAIN, pr, route, ...(wait ? { wait } : {}) }).pipe(
+const mergeBy = Effect.fn("land.mergeBy")(function* (
+  env: Env,
+  pr: number,
+  route: Merge.Route,
+  wait?: Queue.Wait,
+  queueWait?: Queue.Wait,
+) {
+  const done = yield* Merge.merge({
+    dir: env.MAIN,
+    pr,
+    route,
+    ...(wait ? { wait } : {}),
+    ...(queueWait ? { queueWait } : {}),
+  }).pipe(
     Effect.provide(Layer.merge(queueServices(env), BranchesGit.layer(env.MAIN))),
     Effect.mapError(refusedAt("merge")),
   );
@@ -797,11 +815,20 @@ const adminCommand = Command.make(
     pr: PrNumber,
     minutes: Flag.Int("wait-minutes").pipe(Flag.withDefault(Merge.ADMIN_WAIT.minutes)),
     every: Flag.Int("every-seconds").pipe(Flag.withDefault(Merge.ADMIN_WAIT.every)),
+    wait: Flag.Boolean("wait"),
+    queueMinutes: Flag.Int("queue-minutes").pipe(Flag.withDefault(Queue.QUEST_WAIT.minutes)),
+    queueEvery: Flag.Int("queue-every-seconds").pipe(Flag.withDefault(Queue.QUEST_WAIT.every)),
   },
-  Effect.fn("land.adminCommand")(function* ({ pr, minutes, every }) {
+  Effect.fn("land.adminCommand")(function* ({ pr, minutes, every, wait, queueMinutes, queueEvery }) {
     const env = yield* loadEnv;
 
-    yield* mergeBy(env, pr, yield* adminRoute(env), { minutes, every });
+    yield* mergeBy(
+      env,
+      pr,
+      yield* adminRoute(env),
+      { minutes, every },
+      wait ? { minutes: queueMinutes, every: queueEvery } : undefined,
+    );
 
     const found = yield* (yield* PullRequests)
       .view(pr)

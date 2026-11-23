@@ -5,7 +5,8 @@
 //
 //   add      the pull request is open and into main -> leak grep on its net change, on each
 //            of its commits and on its title and description, each failing closed -> each new
-//            exported name is named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> a draft is marked ready
+//            exported name is named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> a draft whose head has a CI run
+//            (never in the seconds after a push; with a wait, one is given time to appear) is marked ready
 //            (as `land.ts admin` does), which starts its real `ci-required` -> `ci-required`
 //            is green on its head (read once; a quest may wait for it to end, within a limit) -> one
 //            squash pinned to that head, which adds it to the queue
@@ -81,6 +82,37 @@ export const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, 
   return Option.getOrElse(yield* ended, () => last);
 });
 
+/**
+ * Whether a CI run has started at `oid`: any check run GitHub Actions made there, which a push's own
+ * run makes within seconds. Marking a draft ready in the seconds after a push starts a second run on
+ * the same commit, and GitHub then reports the required check as "expected" and will not queue the
+ * pull request (2026-11-22). Read once, or with a wait again until one appears or the wait is over;
+ * a read that fails counts as not started.
+ */
+export const startedAt = Effect.fn("Queue.startedAt")(function* (oid: string, wait: Wait | undefined) {
+  const checks = yield* Checks;
+
+  if (wait === undefined) {
+    return yield* checks.started(oid);
+  }
+
+  const began = checks.started(oid).pipe(
+    Effect.filterOrFail(
+      (started) => started,
+      () => Pending.make(),
+    ),
+    Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)) }),
+    Effect.catchTag("Pending", () => Effect.succeed(false)),
+    Effect.timeoutOption(Duration.minutes(wait.minutes)),
+  );
+
+  return Option.getOrElse(yield* began, () => false);
+});
+
+/** The refusal for a draft whose head has no CI run yet: it is not marked ready, and nothing else is asked. */
+export const notStarted = (oid: string): string =>
+  `no CI run has started at ${oid} yet, so it is not marked ready (a ready event seconds after a push starts a second run on one commit, and the required check stays expected); give it a wait, or try again`;
+
 /** What `add` did: added it to the queue at this head, or found it merged already. */
 export const Added = Schema.TaggedUnion({
   queued: { pr: Schema.Finite, oid: Schema.String },
@@ -129,8 +161,13 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   }
 
   // Marking a draft ready starts its real `ci-required`, which has not registered yet: a read with no wait finds it missing and
-  // refuses, and a read with a wait gives it time to appear and end.
+  // refuses, and a read with a wait gives it time to appear and end. It waits first for the push's own run to start, so a ready
+  // event never lands in the seconds after a push.
   if (marking) {
+    if (!(yield* startedAt(found.oid, a.wait))) {
+      return yield* NotQueued.make({ reason: `pr ${found.number}: ${notStarted(found.oid)}` });
+    }
+
     yield* prs.ready(found.number);
   }
 

@@ -53,8 +53,10 @@ name: scheduled
 #
 # A branch's proof run (a branch's proof run runs only the tests its change reaches) is this workflow started by hand on a branch other than main. Its
 # `select` job runs proof.ts, which lists the tests the branch's change reaches against origin/main
-# with Vitest's own `--changed`, `.visual.` laws included. It runs no `.integration.` law, even one
-# its change reaches, on a changed set or a full set: only main's full run does. A change to a
+# with Vitest's own `--changed`, `.visual.` laws included, and on a changed set the `.integration.`
+# laws it reaches too; a full set runs none (the owner decided on 2026-11-22; pull requests and the
+# merge queue run none either). A hand start with `integration` runs only the `.integration.` files it
+# names, on one `changed` leg, whatever the change touches. A change to a
 # file in vitest.config.ts's `forceRerunTriggers` (a config, .oxlintrc.json, a tsconfig, the
 # lockfile, a package.json) runs the full set, on the `tests` legs above, and so does a hand start
 # whose `scope` input is `full`, for the test file that needs it (`law`). Any other change runs its set on
@@ -95,7 +97,8 @@ on:
   # never runs there (SC17). On a branch it is a proof run (a branch's proof run runs only the tests its change reaches): `changed` runs what the change
   # reaches, and a change to a rerun trigger still runs the full set; `full` runs the full set, for
   # `law`. Only main's run writes the issue. A full start is
-  # `gh workflow run scheduled.yaml --ref <branch> -f scope=full -f law=<test file>` (SC21).
+  # `gh workflow run scheduled.yaml --ref <branch> -f scope=full -f law=<test file>` (SC21), and a
+  # named start `gh workflow run scheduled.yaml --ref <branch> -f integration=<integration test file>`.
   workflow_dispatch:
     inputs:
       scope:
@@ -106,6 +109,13 @@ on:
         options: [changed, full]
       law:
         description: With scope full, the test file that needs the full set, as vitest lists it
+        type: string
+        required: false
+        default: ""
+      # One leg on one slot that runs only these files (proof.ts's `decodeIntegration`), for an
+      # adapter's real-resource laws before merge. Each a `.integration.test.ts` file the branch has.
+      integration:
+        description: With scope changed, the .integration.test.ts files to run alone on one leg, split by spaces
         type: string
         required: false
         default: ""
@@ -391,6 +401,7 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
           SCOPE: ${{ inputs.scope }}
           LAW: ${{ inputs.law }}
+          INTEGRATION: ${{ inputs.integration }}
         run: node .github/ci/proof.ts
       - name: record
         if: ${{ !cancelled() }}
@@ -402,9 +413,9 @@ jobs:
           retention-days: 90
 
   # A changed set's legs (a branch's proof run runs only the tests its change reaches): leg `k` runs exactly its list from `select`, over every project
-  # proof.ts lists, so a list may hold next/'s in-memory and visual laws and tooling tests together,
-  # at full depth, as the `tests` legs do. No real-resource law: only main's full run runs those
-  # (integration laws run only in main's full run), so a leg names no `next-integration` project either. Chromium comes first on a leg
+  # proof.ts lists, so a list may hold next/'s in-memory, real-resource and visual laws and tooling
+  # tests together, at full depth, as the `tests` legs do: a proof run the lead starts runs the
+  # integration laws its changed set reaches, or the ones it names (the owner decided on 2026-11-22). Chromium comes first on a leg
   # whose list holds a visual file. Its own matrix, which a run starts only when `select` said
   # `changed` with a leg, so it and `tests` never run in one run, and its own fail-fast stops each
   # leg of it. Its legs are next legs for the report (`changed (k)`), with next's test step limit
@@ -443,7 +454,7 @@ jobs:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           LEG: ${{ matrix.shard }}
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project next --project next-visual --project tooling $FILES --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
+        run: pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling --project tooling-integration $FILES --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       - name: results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

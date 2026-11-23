@@ -102,11 +102,12 @@ export const make = (repo: string): Effect.Effect<Checks["Service"], never, Chil
       return ChecksError.make({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
     };
 
-    const job = Effect.fn("ChecksGh.job")(function* (head: string, name: string) {
-      const key = `${head} ${name}`;
+    /** The latest Actions check run at `head`, of the name `name`, or of any name when `name` is left out. */
+    const latest = Effect.fn("ChecksGh.latest")(function* (head: string, name?: string) {
+      const key = `${head} ${name ?? ""}`;
       const before = seen.get(key);
       const path = `repos/${repo}/commits/${head}/check-runs`;
-      const query = ["-X", "GET", "-f", `check_name=${name}`, "-f", "filter=latest"];
+      const query = ["-X", "GET", ...(name === undefined ? [] : ["-f", `check_name=${name}`]), "-f", "filter=latest"];
       const unless = before === undefined ? [] : ["-H", `If-None-Match: ${before.etag}`];
       const args = ["-i", path, ...query, ...unless];
       const ran = yield* call(args);
@@ -134,6 +135,10 @@ export const make = (repo: string): Effect.Effect<Checks["Service"], never, Chil
       return found;
     });
 
+    const job = (head: string, name: string) => latest(head, name);
+
+    const started = (head: string) => Effect.map(latest(head), Option.isSome);
+
     const log = Effect.fn("ChecksGh.log")(function* (id: number) {
       // A test log is colored. Since gh 2.97.0, whose release notes name the escape-sequence fix
       // for `gh api`, gh exits 1 and prints nothing on an answer with terminal escape sequences
@@ -145,7 +150,7 @@ export const make = (repo: string): Effect.Effect<Checks["Service"], never, Chil
       return ran.code === 0 ? ran.out : yield* exited(args, ran);
     });
 
-    return Checks.of({ job, log });
+    return Checks.of({ job, started, log });
   });
 
 /** The service as a layer. */

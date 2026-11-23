@@ -27,6 +27,12 @@ export class Checks extends Context.Service<
   {
     /** The latest Actions check run named `name` at `head`; none before GitHub has made it. */
     readonly job: (head: string, name: string) => Effect.Effect<Option.Option<Job>, ChecksError>;
+    /**
+     * Whether GitHub Actions has made any check run at `head`, of any name and any status: the push's
+     * own run has registered, so the head is past the seconds right after a push, when a ready event
+     * starts a second run beside it (and leaves the required check "expected").
+     */
+    readonly started: (head: string) => Effect.Effect<boolean, ChecksError>;
     /** The whole log of the job with this id, as GitHub serves it. */
     readonly log: (id: number) => Effect.Effect<string, ChecksError>;
   }

@@ -3,17 +3,23 @@
 // this, after an install, and the `changed` job's legs run what it prints.
 //
 //   the branch's change against origin/main      the run tests
+//   is started with `integration` files          only those files, on one `changed` leg, one slot,
+//                                                whatever the change touches
 //   touches a file in forceRerunTriggers         the full set, on the `tests` job, as main does,
 //                                                less every `.integration.` law (integration laws run only in main's full run)
 //   is started with `scope: full` for a `law`     the full set too, and the record keeps the inputs
-//   reaches some tests                           those, on as many `changed` legs as they need
+//   reaches some tests                           those, on as many `changed` legs as they need,
+//                                                the `.integration.` laws it reaches included
 //   reaches no test                              nothing: the run is green with no test leg
 //
-// The set is Vitest's own (an existing, widely used tool comes before a hand-written one): `vitest list --changed <base>` over the `next`, `next-visual` and
-// `tooling` projects, the import graph `--changed` walks, with the files vitest.config.ts hands it as
-// watched files. The `.integration.` laws, `next-integration`'s and `tooling-integration`'s, run
-// only on main's full run, so a proof run lists none of them, even one its change reaches,
-// and `choose` drops any name a list still gives; today's run in no CI job (CI runs none of today's version's tests). A next/ change
+// The set is Vitest's own (an existing, widely used tool comes before a hand-written one): `vitest list --changed <base>` over every
+// project CI runs (PROJECTS), the import graph `--changed` walks, with the files vitest.config.ts hands it as
+// watched files. That includes the `.integration.` laws, `next-integration`'s (next/ and kalfa/) and
+// `tooling-integration`'s: the owner decided on 2026-11-22 that a proof run the lead starts runs the
+// integration laws its changed set reaches, or only the ones it names in `integration`, on one leg,
+// so an adapter's real-binary laws run before merge. A full set still runs none (FULL_PROJECTS), and
+// pull requests and the merge queue run none (related.ts's `onMergeLine`, check.yaml). Today's
+// tests run in no CI job (CI runs none of today's version's tests). A next/ change
 // adds the in-memory reader tests too (changes.mjs's `readers`), as the merge line does: they read
 // next/'s source as text, so the import graph cannot reach them, and making each file they read a
 // rerun trigger would make every next/ change run everything.
@@ -37,6 +43,9 @@
 // `full`) and, for `full`, the `law`: the test file that needs the full set. This script holds both
 // to the rules in `inputsOf` and has no default of its own, so the workflow's input is the one place a
 // default is declared (a choice that makes sense as a setting is a setting, declared once). `scope: changed` does not override a rerun trigger: the proof-run rule stands.
+// The third input, `integration`, names `.integration.test.ts` files to run alone (`decodeIntegration`):
+// one or more paths, split on whitespace, each one Vitest lists in an integration project at this
+// head. It is the narrow way to run a real-resource law before merge, so it wins over a trigger.
 //
 // The run keeps what it tested as its `proof-set` artifact and in its summary: the base commit, the
 // head, git's changed files, the inputs, each leg's files and seconds, and when. origin/main moves on,
@@ -46,7 +55,6 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Config, DateTime, Result, Schema } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
-import { isIntegration } from "../../oxlint-plugins/test-names.ts";
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, fewest, isTrigger, list, room, seconds, split, withReaders } from "./legs.ts";
@@ -55,18 +63,28 @@ import { readEnv, stepFiles } from "./step-env.ts";
 export { isTrigger };
 
 /**
- * The projects a proof run lists and runs: every one CI runs but `next-integration` and
- * `tooling-integration`, which only main's full run runs, and today's left out (CI runs none of today's version's tests).
+ * The projects a changed set lists and runs: every one CI runs, the two integration projects
+ * included (the owner decided on 2026-11-22), and today's left out (CI runs none of today's version's
+ * tests). scheduled.yaml's `changed` legs name these, in this order.
  */
-export const PROJECTS = ["next", "next-visual", "tooling"] as const;
+export const PROJECTS = ["next", "next-integration", "next-visual", "tooling", "tooling-integration"] as const;
+
+/**
+ * The projects a branch's full set runs, on scheduled.yaml's `tests` legs, and so the projects a full
+ * start's `law` must be in: no integration project (integration laws run only in main's full run).
+ */
+export const FULL_PROJECTS = ["next", "next-visual", "tooling"] as const;
+
+/** The projects a named `integration` file must be in. */
+const INTEGRATION_PROJECTS = ["next-integration", "tooling-integration"] as const;
 
 /** The `--project` flags of `projects`, in their order. */
 const flags = (projects: readonly string[]) => projects.flatMap((project) => ["--project", project]);
 
 /**
  * The `vitest list` calls a changed set is read from: `reached`, the tests the change reaches
- * against `base` over PROJECTS, and `readers`, the in-memory reader tests, asked for only when the
- * change touches next/ (`null` otherwise). Neither names an integration project (integration laws run only in main's full run).
+ * against `base` over PROJECTS, the integration laws among them, and `readers`, the in-memory
+ * reader tests, asked for only when the change touches next/ (`null` otherwise).
  */
 export const listings = (base: string, changed: readonly string[]) => ({
   reached: [...flags(PROJECTS), `--changed=${base}`],
@@ -82,7 +100,7 @@ export type Proof =
       readonly at: string;
       readonly vitest: string;
       /** The hand start's inputs: `changed` when a rerun trigger alone made this the full set. */
-      readonly inputs: Inputs;
+      readonly inputs: Exclude<Inputs, { readonly _tag: "integration" }>;
       /** git's changed files, base to head: the input of the choice, which a squash merge loses. */
       readonly changed: readonly string[];
       /** The changed files that match a rerun trigger. */
@@ -102,13 +120,34 @@ export type Proof =
       readonly legs: Readonly<Record<string, readonly string[]>>;
       /** Each leg's measured seconds, a file with no row at the table's median. */
       readonly seconds: Readonly<Record<string, number>>;
+    }
+  | {
+      readonly _tag: "integration";
+      readonly base: string;
+      readonly head: string;
+      readonly at: string;
+      readonly vitest: string;
+      /** The named files, which the one leg runs. */
+      readonly inputs: { readonly _tag: "integration"; readonly files: readonly string[] };
+      /** git's changed files, base to head. */
+      readonly changed: readonly string[];
+      /** One leg, `"1"`, the named files. */
+      readonly legs: Readonly<Record<string, readonly string[]>>;
+      readonly seconds: Readonly<Record<string, number>>;
     };
 
 /** The hand start's `scope` input, as scheduled.yaml gives it (a branch's proof run runs only the tests its change reaches). */
 const ScopeInput = Schema.Literals(["changed", "full"]);
 
-/** The hand start's inputs, decoded: `full` carries the `law` that needs the full set. */
-export const Inputs = Schema.TaggedUnion({ changed: {}, full: { law: Schema.String } });
+/**
+ * The hand start's inputs, decoded: `full` carries the `law` that needs the full set, and
+ * `integration` the `.integration.` files to run alone.
+ */
+export const Inputs = Schema.TaggedUnion({
+  changed: {},
+  full: { law: Schema.String },
+  integration: { files: Schema.Array(Schema.String) },
+});
 
 export type Inputs = typeof Inputs.Type;
 
@@ -176,20 +215,85 @@ export const inputsOf = (
   return Inputs.cases.full.make({ law: given });
 };
 
-/** Whether `vitest list` over the proof's projects gives back exactly `path`, by `lister`. */
+/** Whether `vitest list` over the full set's projects gives back exactly `path`, by `lister`. */
 export const inProjects =
   (lister: (args: readonly string[]) => readonly string[]) =>
   (path: string): boolean =>
-    lister([...PROJECTS.flatMap((project) => ["--project", project]), path]).includes(path);
+    lister([...flags(FULL_PROJECTS), path]).includes(path);
+
+/** The files `vitest list` over the integration projects gives back for `paths`, by `lister`. */
+export const listIntegration =
+  (lister: (args: readonly string[]) => readonly string[]) =>
+  (paths: readonly string[]): readonly string[] =>
+    lister([...flags(INTEGRATION_PROJECTS), ...paths]);
 
 /**
- * What the run tests. `triggers` come first, and so does `scope: full`: a change to a rerun trigger or
+ * The step's INTEGRATION, decoded onto `inputs`, or a throw, so the step fails and prints nothing.
+ * Empty or whitespace alone keeps `inputs`. Else it names one or more `.integration.test.ts` files,
+ * split on whitespace, each once, each listed by `listed` (Vitest over the integration projects, so a
+ * file the branch lacks is refused), and only with `scope: changed`: a named start runs those files
+ * and nothing else. A name or a repeat is refused before any list, so no path reads as a flag.
+ */
+export const decodeIntegration = (
+  inputs: Inputs,
+  given: string | undefined,
+  listed: (paths: readonly string[]) => readonly string[],
+): Inputs => {
+  const paths = (given ?? "").split(/\s+/).filter((path) => path !== "");
+
+  if (paths.length === 0) {
+    return inputs;
+  }
+
+  if (new Set(paths).size !== paths.length) {
+    throw new Error(`proof: INTEGRATION must name each file once, not ${JSON.stringify(paths)}`);
+  }
+
+  const unnamed = paths.filter((path) => !/^[^\s-]\S*\.integration\.test\.tsx?$/.test(path));
+
+  if (unnamed.length > 0) {
+    throw new Error(`proof: INTEGRATION must name .integration.test.ts files only, not ${JSON.stringify(unnamed)}`);
+  }
+
+  if (inputs._tag !== "changed") {
+    throw new Error("proof: INTEGRATION must be empty when the scope is full");
+  }
+
+  const found = new Set(listed(paths));
+  const missing = paths.filter((path) => !found.has(path));
+
+  if (missing.length > 0) {
+    throw new Error(
+      `proof: INTEGRATION must name files vitest lists in next-integration or tooling-integration at this head, not ${JSON.stringify(missing)}`,
+    );
+  }
+
+  return Inputs.cases.integration.make({ files: paths });
+};
+
+/**
+ * What the run tests. A named start comes first: its `integration` files alone, on one leg, so one
+ * slot, whatever the change touches. Then `triggers` and `scope: full`: a change to a rerun trigger or
  * a hand start for the full set is the full set whatever the import graph says. Else `files`, the set
- * Vitest listed, split by `sizing`, less every `.integration.` law, of next/ or of tooling: only
- * main's full run runs those. PROJECTS already lists none of them; the name holds them out
- * whatever a list gives.
+ * Vitest listed, split by `sizing`, every `.integration.` law it holds included.
  */
 export const choose = (seen: Seen, triggers: readonly string[], files: readonly string[], sizing: Sizing): Proof => {
+  if (seen.inputs._tag === "integration") {
+    const legs = { "1": seen.inputs.files };
+
+    return {
+      _tag: "integration",
+      base: seen.base,
+      head: seen.head,
+      at: seen.at,
+      vitest: seen.vitest,
+      inputs: seen.inputs,
+      changed: seen.changed,
+      legs,
+      seconds: { "1": Math.round(seconds(legs["1"], sizing.table) * 10) / 10 },
+    };
+  }
+
   if (triggers.length > 0 || seen.inputs._tag === "full") {
     return {
       _tag: "full",
@@ -207,10 +311,7 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
     throw new Error("proof: a test file's path holds a space, so it cannot be one word of a leg's list");
   }
 
-  const legs = legsOf(
-    files.filter((path) => !isIntegration(path)),
-    sizing,
-  );
+  const legs = legsOf(files, sizing);
 
   return {
     _tag: "changed",
@@ -228,17 +329,18 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
 };
 
 /**
- * What the select step gives the next jobs: `scope`, `full` or `changed`; `legs`, the `changed`
+ * What the select step gives the next jobs: `scope`, `full` or `changed` (a named start is `changed`,
+ * so the `changed` job runs its one leg); `legs`, the `changed`
  * job's matrix, a JSON list, `[]` when it starts no leg; and `files`, each leg's files as one line of
  * words, a JSON map by leg; and `slots`, the proof groups rotated by the workflow run number. `count`
  * is how many proof groups there are, MOST and PROOF_SLOTS (the merge line leaves the scheduled job groups).
  */
 export const outputs = (proof: Proof, run: number, count: number): string[] => {
-  const legs = proof._tag === "changed" ? proof.legs : {};
+  const legs = proof._tag === "full" ? {} : proof.legs;
   const groups = slots(run, count);
 
   return [
-    `scope=${proof._tag}`,
+    `scope=${proof._tag === "full" ? "full" : "changed"}`,
     `legs=${JSON.stringify(Object.keys(legs))}`,
     `files=${JSON.stringify(Object.fromEntries(Object.entries(legs).map(([leg, list]) => [leg, list.join(" ")])))}`,
     `slots=${JSON.stringify(groups)}`,
@@ -298,6 +400,17 @@ export const summary = (proof: Proof): string => {
     return [head, "", ...why, ...(why.length > 0 && triggered.length > 0 ? [""] : []), ...triggered, ""].join("\n");
   }
 
+  if (proof._tag === "integration") {
+    return [
+      head,
+      "",
+      `The named integration laws, chosen by hand (\`integration\`): ${proof.inputs.files.length} files on one leg, about ${proof.seconds["1"] ?? 0} s, and no other test:`,
+      "",
+      ...proof.inputs.files.map((path) => `- \`${path}\``),
+      "",
+    ].join("\n");
+  }
+
   const legs = Object.entries(proof.legs);
   const files = legs.reduce((sum, [, list]) => sum + list.length, 0);
 
@@ -347,6 +460,7 @@ if (import.meta.main) {
       record: Config.String("RECORD").pipe(Config.withDefault(undefined)),
       scope: Config.String("SCOPE").pipe(Config.withDefault(undefined)),
       law: Config.String("LAW").pipe(Config.withDefault(undefined)),
+      integration: Config.String("INTEGRATION").pipe(Config.withDefault(undefined)),
       ...stepFiles,
     }),
   );
@@ -380,14 +494,16 @@ if (import.meta.main) {
   const triggers = triggered(changed, isTrigger);
   const reach = listings(base, changed);
 
-  const inputs = inputsOf(
-    env.scope,
-    env.law,
-    inProjects((args) => list(root, args)),
+  const lister = (args: readonly string[]) => list(root, args);
+
+  const inputs = decodeIntegration(
+    inputsOf(env.scope, env.law, inProjects(lister)),
+    env.integration,
+    listIntegration(lister),
   );
 
   const files =
-    triggers.length > 0 || inputs._tag === "full"
+    triggers.length > 0 || inputs._tag !== "changed"
       ? []
       : withReaders(list(root, reach.reached), reach.readers === null ? [] : list(root, reach.readers));
 

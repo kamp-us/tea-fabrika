@@ -499,7 +499,13 @@ visible, and never weaken the rules to hide this message.
 7. **Obtain proof the box cannot supply** before the first review. Use eligible CI for each
    law. Launchd, real Electron and process-signal laws use eligible disposable CI, never the owner's
    laptop. A workflow's green result
-   proves only the laws it actually ran. Keep the test's own temp home, label, files and processes;
+   proves only the laws it actually ran. A proof run you start runs the `.integration.` laws its
+   changed set reaches, so an adapter's real-binary laws run before merge; a full set and pull
+   requests and the merge queue run none. To run named ones alone, on one leg and one slot, about
+   3 runner minutes: `gh workflow run scheduled.yaml --ref <branch> -f integration=<path>`, more
+   paths split by spaces, each an `.integration.test.ts` file the branch has (`.github/ci/proof.ts`
+   refuses any other). The branch needs main's `.github/ci/proof.ts` and `scheduled.yaml`.
+   Keep the test's own temp home, label, files and processes;
    one Electron app at a time, each with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`.
    No focus taken and nothing left behind. Look at every screenshot.
 8. **Ready to land.** A quest agent never signs as lead, pushes, opens the pull request or adds
@@ -537,8 +543,8 @@ visible, and never weaken the rules to hide this message.
    through that queue. For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
    For any other pull request, run `land.ts queue <pr>` once its checks
-   are green; it marks a draft ready itself, so give it `--wait` to
-   let the new `ci-required` appear. Both leak-check the change, each commit and the title and description, then add it to
+   are green; it marks a draft ready itself, once a CI run has started at its head, so give it `--wait` to
+   let that run and the new `ci-required` appear. Both leak-check the change, each commit and the title and description, then add it to
    the queue with one squash pinned to the head; `land.ts`'s header says how. `land.ts merge <pr>`
    is the only way to merge by hand; a bare `gh pr merge` is never used, since it skips the leak
    check (it once merged past a printed hit).
@@ -546,14 +552,22 @@ visible, and never weaken the rules to hide this message.
    up, and nobody runs the checks again on newest main by hand. The squash commit's title and
    message are the pull request's title and description, so write them to be read on main. Never
    pass `--auto`. Three exceptions take `land.ts admin <pr>`, the only admin merge (never a bare
-   `gh pr merge --admin`, never a shell chain around `gh pr checks --watch`): it marks a draft ready,
+   `gh pr merge --admin`, never a shell chain around `gh pr checks --watch`): it marks a draft ready
+   once a CI run has started at its head (never in the seconds after a push, when a ready event starts
+   a second run on one commit and leaves the required check expected),
    waits for `ci-required` to appear and end (`--wait-minutes`, default 30), and refuses unless it is
    a success at the head it merges, the leak grep is clean and the branch does not start `can/`. The
    exceptions are: a sev
    fix at either level, on a branch `sev.ts fix` named in a sev1 or `open --allow` or `next` named in a
    sev0, with current main in its head
    (the [sev skill](../sev/SKILL.md)); a
-   ready pull request in a sev0; and a docs-only pull request.
+   ready pull request in a sev0; and a docs-only pull request. An admin merge moves main and restarts
+   the build of every entry in the merge queue (three restarts in six minutes on 2026-11-22, each
+   about 15 runner minutes lost), so any admin merge except a sev fix or a sev0's ready pull request
+   first finds the queue empty: without `--wait` `land.ts admin` refuses and names the entry; with
+   `--wait` it reads the queue each minute for up to an hour (`--queue-minutes`,
+   `--queue-every-seconds`), so run it in the background. A sev fix and a sev0's ready pull request
+   never wait on the queue: the sev skill's one-at-a-time rule is theirs alone.
    A pull request the queue puts back out stays open: the
    quest merges main or fixes the red check, pushes, and it is queued again. No pull request is in a native stack: GitHub refuses `gh pr merge` and merge when ready on a stack member
    (github/gh-stack#591), so a chain is plain pull requests. A child targets its parent's branch.
