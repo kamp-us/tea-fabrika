@@ -207,6 +207,65 @@ describe("publish.ts's words: a new draft takes the title and body it is given",
   );
 });
 
+describe("publish.ts with --title or --body-file on an open pull request (gh pr edit fails here, so helpers patched by hand twice)", () => {
+  const Given = Schema.Struct({
+    title: Schema.NullOr(Schema.Literals(["New title", "T9 fix: x"])),
+    body: Schema.NullOr(Schema.Literals(["New body", "## Summary\n\nWhy"])),
+  });
+
+  // Plants: edit only when both are given, set the other part to a placeholder or to nothing, change the draft state, or leave the open pull request's words alone.
+  it.effect.prop(
+    "property: an open pull request takes the given title and body, keeps a part not given, and stays a draft or ready as it was",
+    { b: Branch, head: Sha, draft: Schema.Boolean, given: Given },
+    ({ b, head, draft, given }) => {
+      const m = memory([open(7, b, draft)]);
+      m.github.more.set(7, { title: "Old title", body: "Old body" });
+      const some = given.title !== null || given.body !== null;
+
+      return Effect.gen(function* () {
+        const done = yield* Publish.publish({
+          ...ask(b, head),
+          given: {
+            ...(given.title === null ? {} : { title: given.title }),
+            ...(given.body === null ? {} : { body: given.body }),
+          },
+        });
+
+        expect(m.github.calls).toEqual(
+          some ? [{ _tag: "edit", number: 7, title: given.title ?? "Old title", body: given.body ?? "Old body" }] : [],
+        );
+        expect(m.github.prs.find((p) => p.number === 7)?.draft).toBe(draft);
+        expect(done.edited === true).toBe(some);
+        expect(Publish.line(b, done)).toBe(
+          some
+            ? `pushed ${b}; PR 7 was already open, and its title and body are updated`
+            : `pushed ${b}; PR 7 was already open`,
+        );
+      }).pipe(Effect.provide(m.layer));
+    },
+  );
+
+  // Plant: send the given words to GitHub before the leak grep, or skip it for them.
+  it.effect(
+    "scenario: given words are leak-grepped before anything is pushed or edited; a refusal changes nothing",
+    () => {
+      const m = memory([open(7, "fabrikalfa/a", true)], {
+        pushes: { leakText: new LeakGrepRefused({ reason: "private_word" }) },
+      });
+
+      return Effect.gen(function* () {
+        const e = yield* Effect.flip(
+          Publish.publish({ ...ask("fabrikalfa/a", "1".repeat(40)), given: { title: "t", body: "b" } }),
+        );
+
+        expect(e._tag).toBe("LeakGrepRefused");
+        expect(m.remote.branches.size).toBe(0);
+        expect(m.github.calls).toEqual([]);
+      }).pipe(Effect.provide(m.layer));
+    },
+  );
+});
+
 describe("ready: a quest's steps passed, so its pull request takes the brief's words and is ready (every commit is pushed when it is made, with a draft pull request from the first commit)", () => {
   it.effect.prop(
     "property: the PR gets the brief's text, a draft is marked ready, a ready one is left as it is",

@@ -41,10 +41,13 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one r
   an exam path that no row names. A path the plan gives to another step stays refused, exam path
   or not. `box.sh fetch --sign` holds the same rule. Both read an exam list the step cannot edit:
   the script reads the box base's, fetch reads main's.
-- **A `lead` link signs only under a ticket no other branch's open PR holds.** Otherwise it
-  refuses (exit 5) and names that PR and branch: the new link would be that ticket's newest, outside
-  the PR's chain, and the commits check would read the PR's own lead links as `stale_link`. Sign
-  field rows and other lead work under a lead ticket of its own.
+- **A `lead` link signs only under a real ticket, and one no other branch's open PR holds.** The
+  ticket must be open in the tracker, or the script refuses (exit 5, `unknown_ticket`) and signs
+  nothing; a made-up number such as 0 is refused, so lead tooling files a ticket first (`tracker_file`). If the tracker cannot be
+  read it refuses too. Otherwise, a ticket whose open PR is on another branch refuses (exit 5)
+  and names that PR and branch: the new link would be that ticket's newest, outside the PR's chain,
+  and the commits check would read the PR's own lead links as `stale_link`. Sign field rows and other
+  lead work under a lead ticket of its own.
 - **One commit per call.** Several commits mean several calls, in order.
 - **Never rewrite history.** No `reset`, `rebase`, `commit --amend` or force-push. A takeover is a
   new commit on top. A rewrite leaves signed links that no longer match (`stale_link`).

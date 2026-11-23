@@ -166,6 +166,20 @@ console.log("publish: pushed");
 
     writeFileSync(join(bin, "publish"), `#!${process.execPath}\n${publish}`, { mode: 0o755 });
     this.env.STEPCOMMIT_PUBLISHER = join(bin, "publish");
+
+    // The tracker's list, as the app prints it: one line for each open ticket in T_TICKETS (default: 321 and 999); "fail" is a tracker that cannot be read.
+    const tickets = String.raw`
+const fs=require("node:fs");
+fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["tickets",...process.argv.slice(2)])+"\n");
+const open=process.env.T_TICKETS??"321 999";
+if(open==="fail"){console.error("ERROR tracker offline");process.exit(1);}
+console.log("[00:00:00.000] INFO (#5): agent_session { agent: 'lead' }");
+for(const n of open.split(" ").filter(Boolean)) console.log("[00:00:00.000] INFO (#2): #"+n+" open c0 a ticket");
+console.log("[00:00:00.000] INFO (#2): #7 closed c0 a closed ticket");
+`;
+
+    writeFileSync(join(bin, "tickets"), `#!${process.execPath}\n${tickets}`, { mode: 0o755 });
+    this.env.STEPCOMMIT_TICKETS = join(bin, "tickets");
     symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(bin, "oxfmt"));
     this.git("init", "-q", "-b", "fabrikalfa/one", `--separate-git-dir=${join(this.dir, "gitdata")}`);
     put(join(this.dir, "gitdata/info/exclude"), "node_modules/\n");
@@ -1009,6 +1023,67 @@ describe("1271 a tests commit carries its plant record in the body, today's tool
       expect(done.code, done.text).toBe(0);
     });
   });
+});
+
+describe("a lead link signs only under a real open ticket, today's tooling", () => {
+  // Plants: drop the check; accept a closed ticket or a made-up number; pass when the tracker cannot be read;
+  // check --commit-only or another step. Ticket 0 and 9902 were made up on 2026-11-22 to get past stale_link.
+  it("scenario: a signed lead commit is refused exactly when the ticket is no open tracker ticket, so a made-up number cannot sign, and asks the tracker only then", () => {
+    type Case = { ticket: string; tracker: string; step: Step; only: boolean };
+
+    // SAFETY: "lead" is a member of Owner, so this only widens a literal.
+    const lead = { ticket: "321", tracker: "321 999", step: "lead" as Owner, only: false };
+
+    const cases: Case[] = [
+      lead,
+      { ...lead, ticket: "0" },
+      { ...lead, ticket: "9902" },
+      { ...lead, ticket: "7" },
+      { ...lead, tracker: "fail" },
+      { ...lead, tracker: "" },
+      // The box's own ticket is 321, so the unchecked ones sign under it, with no tracker ticket for it.
+      { ...lead, tracker: "7", only: true },
+      { ...lead, tracker: "7", step: "build" },
+      { ...lead, tracker: "7", step: "fix" },
+    ];
+
+    each(cases, ({ ticket, tracker, step, only }) =>
+      withRepo([["src/owned.ts", step === "fix" ? "build" : step]], (r) => {
+        r.env.T_TICKETS = tracker;
+        r.changed("src/owned.ts");
+
+        const got = r.call("sh", [
+          script,
+          ...(only ? ["--commit-only"] : []),
+          step,
+          ticket,
+          `T${ticket} ${step}: fixture`,
+          "src/owned.ts",
+        ]);
+
+        const checked = step === "lead" && !only;
+        const refused = checked && (tracker === "fail" || !tracker.split(" ").includes(ticket));
+
+        if (refused) {
+          expect(got.code, got.text).toBe(5);
+          expect(got.text).toContain(
+            tracker === "fail"
+              ? "the tracker cannot be read"
+              : `unknown_ticket: ${ticket} is not an open tracker ticket`,
+          );
+          expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+          expect(r.git("diff", "--cached", "--name-only")).toBe("");
+          expect(r.signs()).toEqual([]);
+          expect(r.asked()).toBe(false);
+        } else {
+          expect(got.code, got.text).toBe(0);
+        }
+
+        const calls = existsSync(join(r.dir, "calls")) ? readFileSync(join(r.dir, "calls"), "utf8") : "";
+        expect(calls.includes('["tickets"')).toBe(checked);
+      }),
+    );
+  }, 180_000);
 });
 
 describe("T390 a lead link never lands on another branch's open PR ticket, today's tooling", () => {

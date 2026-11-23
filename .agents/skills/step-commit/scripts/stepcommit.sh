@@ -72,6 +72,18 @@ branch = git("branch", "--show-current").stdout.decode().strip()
 # ticket is any note on its commits, signed or not: a refusal here only asks for another ticket.
 if step == "lead" and not only:
     quest = branch.removesuffix("-wip")
+    # A lead link is signed under a real ticket: an open one in the tracker. A made-up number (ticket 0,
+    # 9902) is a link no ticket owns, and two such links collide as stale_link. STEPCOMMIT_TICKETS names
+    # the command that lists the tracker's tickets (a test's stub); the default asks the app's own tracker.
+    unknown = "a lead link cannot be signed: "
+    main_dir = os.environ.get("MAIN") or str(pathlib.Path(git("rev-parse", "--path-format=absolute", "--git-common-dir").stdout.decode().strip()).parent)
+    lister = os.environ["STEPCOMMIT_TICKETS"].split() if os.environ.get("STEPCOMMIT_TICKETS") else ["node", main_dir + "/apps/fabrika/src/cli.ts", "post", "list", "--as", "lead"]
+    home = os.environ.get("FABRIKA_HOME") or str(pathlib.Path.home() / "Library/Application Support/@kampus/fabrika-app")
+    try: listed = subprocess.run(lister, capture_output=True, text=True, env=dict(os.environ, FABRIKA_HOME=home))
+    except OSError as e: refuse(unknown + "the tracker cannot be read: " + str(e), 5)
+    if listed.returncode: refuse(unknown + "the tracker cannot be read, so ticket " + ticket + " cannot be checked", 5)
+    if ticket not in {m.group(1) for m in re.finditer(r": #([0-9]+) open ", listed.stdout)}:
+        refuse(f"unknown_ticket: {ticket} is not an open tracker ticket; sign a lead link under the ticket of the work (file one with tracker_file when there is none), never a made-up number", 5)
     # gh pr list --json commits asks for every author too, which GitHub refuses as too big.
     query = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100){totalCount nodes{number headRefName baseRefOid headRefOid commits(first:100){totalCount nodes{commit{oid}}}}}}}"
     cannot = "open PRs cannot be read, so a lead link cannot be checked: "
