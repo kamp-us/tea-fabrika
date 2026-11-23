@@ -48,6 +48,7 @@
     "@kalfa/markdown": "workspace:*",
     "@kalfa/records": "workspace:*",
     "@kalfa/secrets": "workspace:*",
+    "@kalfa/transport": "workspace:*",
     "@kampus/vitest": "workspace:*",
     "@oxlint/plugins": "catalog:",
     "@tea-fabrika/agents": "workspace:*",

@@ -1,0 +1,29 @@
+{
+  "name": "@kalfa/transport",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Move typed values over a socket: a value becomes one frame, a frame comes back as a value, and the sender's trace rides along. A format turns values into frames, and an in-memory pair of sockets stands in for a real one.",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./memory": "./src/MemorySocket.ts",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

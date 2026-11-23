@@ -71,6 +71,10 @@
     "kalfa-secrets": {
       "imports": ["kalfa-config"],
       "pure": false
+    },
+    "kalfa-transport": {
+      "imports": [],
+      "pure": false
     }
   },
   "libraries": {
@@ -96,7 +100,8 @@
     "kalfa/cli": "kalfa-cli",
     "kalfa/git": "kalfa-git",
     "kalfa/github": "kalfa-github",
-    "kalfa/secrets": "kalfa-secrets"
+    "kalfa/secrets": "kalfa-secrets",
+    "kalfa/transport": "kalfa-transport"
   },
   "libraryRoots": ["next", "kalfa"],
   "acrossDeployables": ["relative-import-crosses-workspace"]
