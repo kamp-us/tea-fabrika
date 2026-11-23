@@ -73,8 +73,9 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      test's merits.
    - Each generator on a machine reads the state it is folding and picks the next move from what is
      possible there. A hand-written list of cases is a defect.
-   - The tests report records a plant and its result for each new law. A law with no recorded plant
-     run is not done. A committed plant test is a defect; a lint rule's own planted lines are not
+   - The tests report records a plant and its result for each new law. It is in the tests
+     commits' bodies: read them with `git log --format=%B <base>..HEAD`, since the tests step's
+     answer never reaches you. A law with no recorded plant run is not done. A committed plant test is a defect; a lint rule's own planted lines are not
      one. Plant a break yourself where a law looks weak, and in at least three laws you pick: in
      your head or in a scratch copy, never in the branch. In a read-only box a command that writes
      ends your turn with no answer, so plant by reading there.

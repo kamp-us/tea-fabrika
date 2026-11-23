@@ -18,8 +18,8 @@ import { frozen } from "./internal/frozen.ts";
 import type { Live } from "./internal/live.ts";
 import { field, variable } from "./internal/names.ts";
 import { type Resolved, start } from "./internal/start.ts";
+import { toml } from "./internal/toml.ts";
 import type { Origin } from "./Sources.ts";
-import * as TomlParser from "./TomlParser.ts";
 
 export {
   /**
@@ -242,8 +242,7 @@ export const layer = <App extends string, R extends ReadonlyArray<Setting.Any>>(
 ): Layer.Layer<Identifier<App, R>, SettingsError, FileSystem.FileSystem | Path.Path> =>
   Layer.effect(
     key(group.app, group.settings),
-    start(group, options).pipe(
-      Effect.provide(TomlParser.layer),
+    start(group, toml, options).pipe(
       Effect.map(typed<R>),
       Effect.withSpan("config.layer", { attributes: { "kalfa.config.app": group.app } }),
     ),

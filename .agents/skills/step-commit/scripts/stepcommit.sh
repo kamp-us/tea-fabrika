@@ -1,5 +1,9 @@
 #!/bin/sh
-# stepcommit.sh [--commit-only] <step> <ticket> <subject> <file>...
+# stepcommit.sh [--commit-only] [--body-file <file>] <step> <ticket> <subject> <file>...
+# --body-file puts the file's text in the commit body. A tests commit needs one with a plant line
+# ("Plant: <law>: <what was broken>: <first red line>"; a fix commit needs it only when it names a
+# *.test.ts or *.test-support.ts file), so a reviewer reads the plants in git log;
+# a box's commit (STEPCOMMIT_BOX) is drive's, which holds the report, and needs none.
 # <step> is tests, build, mutation, lead, or fix (a 0177 fix round: one agent writes the law and the
 # fix, so it may hold exam paths and takes tests' and build's paths; it signs nothing).
 # The unsigned route is for boxes; MAIN signs the saved run at fetch.
@@ -9,14 +13,28 @@ exec python3 - "$here" "$@" <<'PY'
 import hashlib, json, os, pathlib, re, subprocess, sys, tempfile
 here = pathlib.Path(sys.argv[1])
 args = sys.argv[2:]
-only = bool(args and args[0] == "--commit-only")
-if only: args.pop(0)
+only, body_file = False, None
 def refuse(why, code=1):
     print("stepcommit: " + why, file=sys.stderr); sys.exit(code)
+while args and args[0] in ("--commit-only", "--body-file"):
+    if args.pop(0) == "--commit-only": only = True
+    elif args: body_file = args.pop(0)
+    else: refuse("--body-file needs a file", 2)
 if len(args) < 4: refuse("name step, ticket, subject and named paths", 2)
 step, ticket, subject, *paths = args
 if step not in ("tests", "build", "mutation", "lead", "fix"): refuse("unknown step " + step, 2)
 role = "tests" if step == "mutation" else step
+body = ""
+if body_file is not None:
+    try: body = pathlib.Path(body_file).read_text().strip()
+    except (OSError, ValueError) as e: refuse("cannot read --body-file " + body_file + ": " + str(e), 2)
+# The tests step's plant record lives only in its answer, which a reviewer never reads. A tests commit
+# (or a fix round that names a test file) carries it in the body: one "Plant: ..." line per new law (and, when the plan has a Generators
+# section, the reach table under it). A box's commit is drive's, and its report holds the record.
+# A fix round (one agent writes the law and the fix) owes it too, when a commit holds a test file.
+owes = step == "tests" or (step == "fix" and any(re.search(r"\.(test|test-support)\.ts\Z", p) for p in paths))
+if owes and not os.environ.get("STEPCOMMIT_BOX") and not re.search(r"^[ \t]*plant:[ \t]*\S", body, re.I | re.M):
+    refuse("a tests commit needs its plant record in the body: pass --body-file <file> holding one line per new law, 'Plant: <law title>: <what you broke>: <the failure's first line>', and the reach table when the plan has a Generators section", 7)
 def git(*args, **kw):
     return subprocess.run(["git", *args], capture_output=True, **kw)
 # A merge in progress (a step ending a merge of origin/main) leaves the merged branch's files staged;
@@ -299,7 +317,7 @@ if not coauthor:
     name = git("config", "--global", "user.name").stdout.decode().strip()
     email = git("config", "--global", "user.email").stdout.decode().strip()
     coauthor = f"{name} <{email}>"
-commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", "-m", subject, "-m", "Co-authored-by: " + coauthor])
+commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", "-m", subject, *(["-m", body] if body else []), "-m", "Co-authored-by: " + coauthor])
 if commit.returncode: sys.exit(commit.returncode)
 if not only and step != "fix":
     # STEPCOMMIT_SIGNER: drive.ts names main's own signer when the tree holds an agent's edits.

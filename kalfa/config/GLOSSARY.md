@@ -51,6 +51,11 @@ _Avoid_: project config, local config, repo file
 The app's settings file in a person's config home. User means the person whose config home it is.
 _Avoid_: person file, global config, home file, dotfile
 
+**File format**:
+How an app's configuration files are written: how its text is read, and how one key of it is set or removed. TOML is
+the only one built. It is inside the package, and no public name is a format.
+_Avoid_: syntax, grammar, parser, serializer
+
 **File scope**:
 Which of the repo configuration and the user configuration may set a setting.
 _Avoid_: scope, level, layer
