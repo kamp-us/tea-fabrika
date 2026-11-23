@@ -2,7 +2,7 @@
 // other close fails it, a caller's failure stays the caller's, no state is kept between frames, and bytes from the far end are
 // read as UTF-8 text.
 import { assert, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Exit, Fiber, Option, Predicate, Schema, Stream } from "effect";
+import { Arbitrary, Effect, Exit, Fiber, Option, Schema, Stream } from "effect";
 import { Socket } from "effect/socket";
 import { Format, Transport } from "./index.ts";
 import * as MemorySocket from "./MemorySocket.ts";
@@ -167,52 +167,69 @@ it.effect.prop(
   { arbitrary: { seed: SEED, runs: 200 } },
 );
 
-// C3. Plant: wrap the stage's error in a SocketError.
+/** A stage's failure that looks like a clean close: a plain object, and a SocketError of close 1000 that the stage's own socket raised. */
+const lookAlikes = (reason: string) =>
+  [
+    {
+      name: "an object shaped like a close",
+      failure: { reason: new Socket.SocketCloseError({ code: 1000, closeReason: reason }) },
+    },
+    {
+      name: "a SocketError of close 1000",
+      failure: new Socket.SocketError({ reason: new Socket.SocketCloseError({ code: 1000, closeReason: reason }) }),
+    },
+  ] as const;
+
+// C3. Plant: wrap the stage's error in a SocketError; end the chain cleanly on a stage's failure that is shaped like a close of 1000.
 it.effect.prop(
-  "C3 the caller's failure stays the caller's: a stage that fails after some values fails the chain with its own error, and the far end reads those values and sees a clean close",
+  "C3 the caller's failure stays the caller's: a stage that fails after some values fails the chain with its own error, even one shaped like a clean close, and the far end reads those values and sees a clean close",
   { values: Arbitrary.array(message, { maxLength: 10 }), failure: word },
   ({ values, failure }) =>
     Effect.gen(function* () {
-      const [near, far] = finished(
-        yield* settled(
-          Effect.gen(function* () {
-            const [nearSocket, farSocket] = yield* MemorySocket.pair;
+      const failing = [{ name: "a tagged error", failure: new StageFailed({ word: failure }) }, ...lookAlikes(failure)];
 
-            return yield* Effect.all(
-              [
-                Stream.fromIterable(values).pipe(
-                  Stream.concat(Stream.fail(new StageFailed({ word: failure }))),
-                  Transport.encode(Message),
-                  Transport.socket,
-                  Stream.runDrain,
-                  Effect.provideService(Socket.Socket, nearSocket),
-                  Effect.exit,
-                ),
-                Stream.empty.pipe(
-                  Transport.socket,
-                  Transport.decode(Message),
-                  Stream.runCollect,
-                  Effect.provideService(Socket.Socket, farSocket),
-                  Effect.exit,
-                ),
-              ],
-              { concurrency: "unbounded" },
-            );
-          }).pipe(Effect.scoped),
-        ),
-        "both ends",
-      );
+      for (const { name, failure: own } of failing) {
+        const [near, far] = finished(
+          yield* settled(
+            Effect.gen(function* () {
+              const [nearSocket, farSocket] = yield* MemorySocket.pair;
 
-      const { error, defect } = failureFrom(near);
+              return yield* Effect.all(
+                [
+                  Stream.fromIterable(values).pipe(
+                    Stream.concat(Stream.fail(own)),
+                    Transport.encode(Message),
+                    Transport.socket,
+                    Stream.runDrain,
+                    Effect.provideService(Socket.Socket, nearSocket),
+                    Effect.exit,
+                  ),
+                  Stream.empty.pipe(
+                    Transport.socket,
+                    Transport.decode(Message),
+                    Stream.runCollect,
+                    Effect.provideService(Socket.Socket, farSocket),
+                    Effect.exit,
+                  ),
+                ],
+                { concurrency: "unbounded" },
+              );
+            }).pipe(Effect.scoped),
+          ),
+          name,
+        );
 
-      expect(defect, "never a defect").toBe(false);
-      expect(
-        Option.map(error, (each) => Predicate.isTagged(each, "StageFailed") && each.word === failure),
-        "the chain fails with the stage's own error",
-      ).toEqual(Option.some(true));
-      expect(far, "the far end sees a clean close, after every value written before the failure").toEqual(
-        Exit.succeed(values),
-      );
+        const { error, defect } = failureFrom(near);
+
+        expect(defect, `${name}: never a defect`).toBe(false);
+        assert.isTrue(
+          Option.exists(error, (each) => each === own),
+          `${name}: the chain fails with the stage's own error`,
+        );
+        expect(far, `${name}: the far end sees a clean close, after every value written before the failure`).toEqual(
+          Exit.succeed(values),
+        );
+      }
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 100 } },
 );

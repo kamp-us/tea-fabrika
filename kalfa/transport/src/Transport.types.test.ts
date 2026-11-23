@@ -87,7 +87,7 @@ it("D3 type: the sketch's chain, provided one end of the memory pair and the JSO
 
 // Plant: make the sketch's chain drop the stage between `decode` and the end (the echoed values come back untouched), or stall it.
 it.effect.prop(
-  "D3 the sketch's chain runs: clicks mapped to progress, sent over one end of the pair, echoed by the other end and read back through a stage",
+  "D5 the sketch's chain runs: clicks mapped to progress, sent over one end of the pair, echoed by the other end and read back through a stage",
   { clicks: Arbitrary.array(between(0, 1_000_000), { minLength: 1, maxLength: 30 }) },
   ({ clicks }) =>
     Effect.gen(function* () {

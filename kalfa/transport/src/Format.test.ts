@@ -195,3 +195,49 @@ it.effect.prop(
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 200 } },
 );
+
+/** A value no JSON holds: a BigInt, alone or inside a struct or an array, or a structure that holds itself. */
+const unwritable: Arbitrary.Arbitrary<ReadonlyArray<{ readonly name: string; readonly value: unknown }>> =
+  Arbitrary.all({
+    n: Arbitrary.schema(Schema.BigInt),
+    key: word,
+  }).pipe(
+    Arbitrary.map(({ n, key }) => {
+      const cycle: Record<string, unknown> = { [key]: 1 };
+      cycle.self = cycle;
+      const loop: Array<unknown> = [key];
+      loop.push(loop);
+
+      return [
+        { name: "a BigInt", value: n },
+        { name: "a BigInt in a struct", value: { [key]: n } },
+        { name: "a BigInt in an array", value: [key, n] },
+        { name: "an object that holds itself", value: cycle },
+        { name: "an array that holds itself", value: loop },
+      ];
+    }),
+  );
+
+// F6. Plant: write a value no JSON holds as `null` or as its text; let the throw of the JSON writer escape as a defect; give the
+// failure another reason than `value`.
+it.effect.prop(
+  "F6 the format refuses what no JSON holds: `Format.layerJsonRpc`'s write of a BigInt or a structure that holds itself fails with a FormatError of value, and is no defect",
+  { values: unwritable },
+  ({ values }) =>
+    Effect.gen(function* () {
+      for (const { name, value } of values) {
+        const exit = yield* Effect.exit(
+          Format.use((format) => format.write({ method: "value", value, trace: Option.none() })),
+        );
+
+        const { error, defect } = failureFrom(exit);
+
+        expect(defect, `${name}: never a defect`).toBe(false);
+        expect(
+          Option.map(error, (each) => [each._tag, each.reason]),
+          name,
+        ).toEqual(Option.some(["FormatError", "value"]));
+      }
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 100 } },
+);
