@@ -58,7 +58,9 @@ const FILES = [
 
 /** Each `Schema.<name>` a string names, with the file it is in. */
 const named = FILES.flatMap((file) =>
-  stringsOf(file).flatMap((text) => [...text.matchAll(/\bSchema\.([A-Za-z_]\w*)/g)].map((m) => ({ file, name: m[1] }))),
+  stringsOf(file).flatMap((text) =>
+    [...text.matchAll(/\bSchema\.([A-Za-z_]\w*)/g)].map((m) => ({ file, name: m[1] ?? "" })),
+  ),
 );
 
 it("scenario: every Schema.<name> a lint message names is an export of the installed Effect", () => {
