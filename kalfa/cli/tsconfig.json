@@ -1,0 +1,39 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [
+          {
+            "include": ["**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "unnecessaryArrowBlock": "error",
+                "preferUnsafeConstructor": "error",
+                "unnecessaryEffectGen": "error",
+                "runOfExitToRunExit": "error",
+                "effectSucceedWithVoid": "error",
+                "schemaNumber": "error",
+                "schemaClassMissingBrand": "error",
+                "instanceOfSchema": "error"
+              }
+            }
+          },
+          // K10 hands `make` a Layer that needs a service nothing gives, and checks that the compiler refuses it; this
+          // check says so too, on that line, and so is off in that one file.
+          {
+            "include": ["src/Subcommand.types.test.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "missingLayerContext": "off"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "include": ["src"]
+}
