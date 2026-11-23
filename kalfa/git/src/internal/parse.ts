@@ -5,6 +5,7 @@ import * as Commit from "../Commit.ts";
 import { CommitId } from "../CommitId.ts";
 import * as Ref from "../Ref.ts";
 import * as Repository from "../Repository.ts";
+import { TreeId } from "../Tree.ts";
 
 const NEWLINE = 0x0a;
 
@@ -180,8 +181,9 @@ const commit = (id: CommitId, body: Uint8Array): Result.Result<Commit.Commit, Re
 
   const parents: Array<string> = [];
   const idents = new Map<string, Uint8Array>();
+  let tree: string | undefined;
 
-  for (const line of lines(body.subarray(0, blank))) {
+  for (const [index, line] of lines(body.subarray(0, blank)).entries()) {
     const space = line.indexOf(SPACE);
     const key = space === -1 ? line : line.subarray(0, space);
     const value = space === -1 ? new Uint8Array() : line.subarray(space + 1);
@@ -190,7 +192,14 @@ const commit = (id: CommitId, body: Uint8Array): Result.Result<Commit.Commit, Re
     if (key.length > 0) {
       const name = String.fromCharCode(...key);
 
-      if (name === "parent") {
+      if (name === "tree") {
+        // Git writes one `tree` line, and writes it first.
+        if (index !== 0) {
+          return Result.fail(bad("header"));
+        }
+
+        tree = String.fromCharCode(...value);
+      } else if (name === "parent") {
         parents.push(String.fromCharCode(...value));
       } else if (name === "author" || name === "committer") {
         if (idents.has(name)) {
@@ -209,12 +218,13 @@ const commit = (id: CommitId, body: Uint8Array): Result.Result<Commit.Commit, Re
     return Result.fail(bad("header"));
   }
 
+  const treeId = Schema.decodeUnknownResult(TreeId)(tree);
   const parentIds = Result.all(parents.map((parent) => Schema.decodeUnknownResult(CommitId)(parent)));
   const authored = signature(author);
   const committed = signature(committer);
   const message = text(body.subarray(blank + 2));
 
-  if (Result.isFailure(parentIds)) {
+  if (Result.isFailure(treeId) || Result.isFailure(parentIds)) {
     return Result.fail(bad("header"));
   }
 
@@ -233,6 +243,7 @@ const commit = (id: CommitId, body: Uint8Array): Result.Result<Commit.Commit, Re
   return Result.succeed(
     new Commit.Commit({
       id,
+      tree: treeId.success,
       parents: parentIds.success,
       author: authored.success,
       committer: committed.success,

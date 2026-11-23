@@ -1,12 +1,13 @@
 /**
- * What a commit holds: its id, its parents in git's order, who wrote it and who made it, each with a time, and its message.
+ * What a commit holds: its id, its tree, its parents in git's order, who wrote it and who made it, each with a time, and its message.
  *
  * **Details**
  *
- * The values keep what git wrote, so nothing is lost on the way through: the offset of a time as text (`-0000` and `+0000` are two values) and the message byte for byte. A commit has no tree yet.
+ * The values keep what git wrote, so nothing is lost on the way through: the offset of a time as text (`-0000` and `+0000` are two values) and the message byte for byte. A commit names its tree by id, and nothing else here reads the tree's files.
  */
 import { Schema } from "effect";
 import { CommitId } from "./CommitId.ts";
+import { TreeId } from "./Tree.ts";
 
 /**
  * Schema for a time zone offset as git writes it, `+0530`: a sign, two digits of hours and two of minutes.
@@ -54,12 +55,13 @@ export class Signature extends Schema.Class<Signature, { readonly brand: unique 
  *
  * **Details**
  *
- * `parents` are in git's order, so a merge commit's first parent is the line it was made on. `message` is the text after the blank line, with no trim and its trailing newline kept.
+ * `tree` is the files of the commit, by its id, git's first header line. `parents` are in git's order, so a merge commit's first parent is the line it was made on. `message` is the text after the blank line, with no trim and its trailing newline kept.
  *
  * @category models
  */
 export class Commit extends Schema.Class<Commit, { readonly brand: unique symbol }>("@kalfa/git/Commit")({
   id: CommitId,
+  tree: TreeId,
   parents: Schema.Array(CommitId),
   author: Signature,
   committer: Signature,
