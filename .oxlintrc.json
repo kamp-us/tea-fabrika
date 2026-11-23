@@ -1937,8 +1937,8 @@
       }
     },
     {
-      // T664, L15: the adapter itself is the one file that imports the parser.
-      "files": ["next/packages/libfabrika/src/settings/TomlParser.ts", "kalfa/config/src/TomlParser.ts"],
+      // T664, L15: the adapter itself is the one file that imports the parser; in kalfa/config the file is the TOML format, `internal/toml.ts`, and the adapter `TomlParser.ts` only wraps it (ticket 1843 slice 1, L2).
+      "files": ["next/packages/libfabrika/src/settings/TomlParser.ts", "kalfa/config/src/internal/toml.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -4652,7 +4652,7 @@
       "excludeFiles": [
         "kalfa/config/src/**/*.test.ts",
         "kalfa/config/src/**/*.test-support.ts",
-        "kalfa/config/src/TomlParser.ts"
+        "kalfa/config/src/internal/toml.ts"
       ]
     },
     {
@@ -4737,7 +4737,7 @@
       }
     },
     {
-      "files": ["kalfa/config/src/TomlParser.ts"],
+      "files": ["kalfa/config/src/internal/toml.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",

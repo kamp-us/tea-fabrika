@@ -1,11 +1,14 @@
 // T730, P38 slice 2, L9 of its approved plan: in next/apps only `dev.ts`, `cli.ts` and
 // `src/settings-start.integration.test.ts` import the TOML adapter; in libfabrika only the settings
-// module and `node/settings/`; and only `settings/TomlParser.ts` imports the parser. oxlint's own
+// module and `node/settings/`; and only one file per package imports the parser: `settings/TomlParser.ts` in
+// libfabrika, and `internal/toml.ts` in `kalfa/config/src` (ticket 1843 slice 1, L2: the kalfa adapter `TomlParser.ts`
+// no longer may, it wraps the format that lives in `internal/toml.ts`). oxlint's own
 // `no-restricted-imports` says so, in `.oxlintrc.json`, so this law is that rule's plant test, through
-// the real config at generated next/ paths. It was in next/apps/fabrika/src/settings-generated.test.ts
+// the real config at generated next/ and kalfa/ paths. It was in next/apps/fabrika/src/settings-generated.test.ts
 // until the exam-to-lint rule moved it here, beside the other lint rules' tests. Plant: drop
 // `src/settings-start.integration.test.ts` from the adapter's allowed files in `.oxlintrc.json`, and a
-// drawn start file is refused.
+// drawn start file is refused. L2's plant: put `kalfa/config/src/TomlParser.ts` back as the parser's exempt file in
+// place of `kalfa/config/src/internal/toml.ts`, and the parser's own file is refused while the adapter is let in.
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
@@ -14,6 +17,9 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 // L9's callers: where an import sits, and whether it may take the TOML adapter or the parser.
 const ADAPTER = "kalfa/config/src/TomlParser.ts";
+
+/** The one file of `kalfa/config/src` that imports the parser: the TOML format, inside the package. */
+const PARSER_HOME = "kalfa/config/src/internal/toml.ts";
 
 const RULE = "eslint(no-restricted-imports)";
 
@@ -62,8 +68,9 @@ const caller = fc.oneof(
       ),
     )
     .map(([w, folder]) => ({ file: `${folder}X${w}.ts`, adapter: false, parser: false })),
-  // The adapter itself is the one file that imports the parser.
-  fc.constant({ file: ADAPTER, adapter: true, parser: true }),
+  // The format is the one file that imports the parser; the adapter that wraps it may not.
+  fc.constant({ file: PARSER_HOME, adapter: true, parser: true }),
+  fc.constant({ file: ADAPTER, adapter: true, parser: false }),
 );
 
 const target = fc.constantFrom("package", "relative", "relative-bare", "parser", "parser-subpath");
@@ -78,17 +85,22 @@ const relative = (from: string, to: string) => {
   return a.length === n ? `./${rest}` : `${"../".repeat(a.length - n)}${rest}`;
 };
 
-describe("L9, only the start files take the TOML adapter in next/apps, and only the adapter takes the parser", () => {
+describe("L9, only the start files take the TOML adapter in next/apps, and only the format takes the parser", () => {
   it("oxlint refuses each import a caller may not make, in every spelling, and passes the rest", async () => {
     // Each run plants a batch of generated imports and lints them in one oxlint process.
     // Coverage: each start file must be drawn taking the adapter, or a lost allowance would pass.
+    // Each parser file must be drawn importing the parser, too: the format allowed, the adapter refused.
     const started = new Set<string>();
+    const parsed = new Set<string>();
     await fc.assert(
       fc.asyncProperty(
         fc.uniqueArray(fc.tuple(caller, target), { minLength: 1, maxLength: 12, selector: ([c]) => c.file }),
         async (cases) => {
           const planted = cases
-            .filter(([c, t]) => !(c.file === ADAPTER && t !== "parser" && t !== "parser-subpath"))
+            // The adapter importing itself, or the format importing the adapter that wraps it, is no case of this rule.
+            .filter(
+              ([c, t]) => !((c.file === ADAPTER || c.file === PARSER_HOME) && t !== "parser" && t !== "parser-subpath"),
+            )
             .map(([c, t]) => {
               const spec =
                 t === "package"
@@ -112,6 +124,10 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
             if (START.includes(p.file) && p.allowed) {
               started.add(p.file);
             }
+
+            if ((p.file === PARSER_HOME || p.file === ADAPTER) && p.spec.startsWith("toml-eslint-parser")) {
+              parsed.add(`${p.file} ${p.allowed ? "allowed" : "refused"}`);
+            }
           }
 
           const result = await plant(
@@ -131,5 +147,6 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
       { seed: SEED, numRuns: 100, endOnFailure: true },
     );
     expect([...started].sort()).toEqual([...START].sort());
+    expect([...parsed].sort()).toEqual([`${ADAPTER} refused`, `${PARSER_HOME} allowed`]);
   }, 120_000);
 });
