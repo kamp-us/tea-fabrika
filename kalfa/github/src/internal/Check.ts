@@ -151,12 +151,19 @@ type Walk<E, D, Leaves extends boolean> = unknown extends D
             : never;
 
 // What the caller's Schema sends: its encoded type, mutable at every depth (a Schema's arrays are readonly, Octokit's are
-// not), and with `undefined` taken out of each optional key, since a key left out is dropped before it is sent.
+// not), and with `undefined` taken out of each optional key only, since a key left out is dropped before it is sent. A
+// required key that may be `undefined` stays so: GitHub would never get a value for it.
+type IsOptional<T, K extends keyof T> = Partial<Pick<T, K>> extends Pick<T, K> ? true : false;
+
 type Sent<T> =
   T extends ReadonlyArray<infer I>
     ? Array<Sent<I>>
     : T extends object
-      ? { -readonly [K in keyof T]: Sent<Exclude<T[K], undefined>> }
+      ? {
+          -readonly [K in keyof T as IsOptional<T, K> extends true ? never : K]: Sent<T[K]>;
+        } & {
+          -readonly [K in keyof T as IsOptional<T, K> extends true ? K : never]?: Sent<Exclude<T[K], undefined>>;
+        }
       : T;
 
 type Encoded<S extends Schema.Constraint> = Sent<S["Encoded"]>;
