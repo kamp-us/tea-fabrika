@@ -23,6 +23,9 @@ case "$1" in
   [ "\${LAND_SIGN:-0}" = 0 ] || exit 1
   # A note is written by someone: name the fixture, as the real signer's caller has an identity.
   git -c user.name=Fixture -c user.email=fixture@example.test notes --ref=fabrika add -f -m '{"step":"lead"}' HEAD ;;
+*cli.ts)
+  # The tracker's list, one line for each open ticket in LAND_TICKETS.
+  for n in $LAND_TICKETS; do echo "agent:lead: #$n open a ticket"; done ;;
 *) echo "unexpected node $*" >>"$LAND_CALLS"; exit 99 ;;
 esac
 `;
@@ -45,6 +48,8 @@ case "$1 $2" in
   printf '{"number":%s,"headRefName":"fabrikalfa/t652-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":%s,"title":"%s","body":"%s","mergeCommit":null,"mergeable":"%s"}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" "$draft" "\${LAND_TITLE:-T652 fixture: one quest}" "\${LAND_BODY:-What the quest did.}" "$mergeable" ;;
 "api graphql") echo '{"data":{"repository":{"mergeQueue":null}}}' ;;
 "api --paginate")
+  # The open GitHub issues, one number a line, when it is the issues list that is asked for.
+  case "$3" in */issues?*) for n in $LAND_ISSUES; do echo "$n"; done; exit 0 ;; esac
   # The files the pull request changes, one JSON row each: one new export when a law names one.
   [ -z "\${LAND_PATCH:-}" ] || printf '{"path":"src/thing.ts","patch":"@@ -0,0 +1 @@\\\\n+export const %s = 1"}\\n' "$LAND_PATCH" ;;
 "api -i")
@@ -88,6 +93,9 @@ type World = {
   readonly pending?: boolean;
   /** The pull request's description, with `\n` for a new line; a short line when left out. */
   readonly body?: string;
+  /** The tracker's open tickets, and GitHub's open issues, as space-separated numbers. */
+  readonly tickets?: string;
+  readonly issues?: string;
   /** The one new export the pull request's diff adds, in `src/thing.ts`; none when left out. */
   readonly patch?: string;
   /** Run this command after `land.ts`, in place of `run <quest> <ticket>`; the main checkout is then the quest's tree. */
@@ -122,6 +130,8 @@ const land = (world: World) => {
       LAND_MERGEABLE: world.mergeable ?? "MERGEABLE",
       LAND_BODY: world.body ?? "What the quest did.",
       LAND_PATCH: world.patch ?? "",
+      LAND_TICKETS: world.tickets ?? "",
+      LAND_ISSUES: world.issues ?? "",
       BOXES: join(dir, "boxes"),
       REMOTE: join(dir, "origin"),
       GH_REPO: "owner/repo",
@@ -455,6 +465,25 @@ describe("land.ts, today's tooling", () => {
       { seed: 1270, numRuns: 8 },
     );
   }, 300_000);
+
+  // Plants: pass a close line whose number is a GitHub issue (pull requests 2009 and 2004 did, and `merged` closed nothing), or check it in `queue` only.
+  it("scenario: `land.ts check` and `queue` refuse a `fabrika close ticket` line that names a GitHub issue, say to use `Closes #N`, and pass an open tracker ticket", () => {
+    const text = "What it does.\\n\\nfabrika close ticket 1843";
+    const issue = { ...fine, body: text, tickets: "5", issues: "1843" };
+
+    for (const command of [
+      ["check", "77"],
+      ["queue", "77"],
+    ]) {
+      const got = land({ ...issue, command });
+      expect(got.code, got.err).toBe(1);
+      expect(got.err).toContain("fabrika close ticket 1843: 1843 is an open GitHub issue, not a tracker ticket");
+      expect(got.err).toContain("`Closes #1843`");
+    }
+
+    const ticket = land({ ...fine, body: text, tickets: "1843 5", command: ["check", "77"] });
+    expect(ticket.code, ticket.err).toBe(0);
+  }, 120_000);
 
   // Plant: let a wait for a good admin merge end in a refusal, as the command did after the merge.
   it("scenario: `land.ts admin --wait` exits 0 after a good admin merge, and only a refusal exits 1", () => {

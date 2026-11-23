@@ -86,6 +86,8 @@ export class PullRequests extends Context.Service<
     readonly enqueue: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
     /** Every entry of the merge queue for main now, first in line first; none when the queue is empty or main has no queue. */
     readonly queue: Effect.Effect<ReadonlyArray<QueueEntry>, PullRequestsError>;
+    /** The numbers of the GitHub issues that are open now, pull requests left out (a body closes one with `Closes #<n>`, never with `fabrika close ticket`). */
+    readonly openIssues: Effect.Effect<ReadonlyArray<number>, PullRequestsError>;
     /** The path of every file pull request `number` changes. */
     readonly files: (number: number) => Effect.Effect<ReadonlyArray<string>, PullRequestsError>;
     /** Each file pull request `number` changes, with its diff hunks (pr/Names.ts reads them, a new helper names the tools it searched, and a new name cites the industry's word). */

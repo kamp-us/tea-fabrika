@@ -261,6 +261,22 @@ export const make = (
 
     const enqueue = (number: number, oid: string) => Effect.asVoid(gh(mergeArgs(repo, number, oid)));
 
+    // REST, paged: the issues list holds pull requests too, which carry a `pull_request` key.
+    const openIssues = Effect.fn("PullRequestsGh.openIssues")(function* () {
+      const out = yield* gh([
+        "api",
+        "--paginate",
+        `repos/${repo}/issues?state=open&per_page=100`,
+        "--jq",
+        '.[] | select(has("pull_request") | not) | .number',
+      ]);
+
+      return out
+        .split("\n")
+        .filter((row) => row !== "")
+        .map(Number);
+    });
+
     // REST, paged: `gh pr view --json files` stops at 100 files.
     const files = Effect.fn("PullRequestsGh.files")(function* (number: number) {
       const out = yield* gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", ".[].filename"]);
@@ -325,6 +341,7 @@ export const make = (
       view,
       enqueue,
       queue: queue(),
+      openIssues: openIssues(),
       files,
       patches,
       arm,

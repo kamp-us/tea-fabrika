@@ -171,6 +171,7 @@ import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
+import * as TicketsCli from "./pr/TicketsCli.ts";
 import { pinFolder, stepOf, wipBranch } from "./quest.ts";
 import * as RunId from "./runid.ts";
 
@@ -2061,6 +2062,7 @@ const services = (env: Env) =>
     PushesProcess.layer(HERE),
     PullRequestsGh.layer(env.GH_REPO, env.MAIN),
     ChecksGh.layer(env.GH_REPO),
+    TicketsCli.layer(env.MAIN, TicketsCli.defaultHome()),
   ).pipe(Layer.provideMerge(Layer.merge(NodeServices.layer, Digest.layerWebCrypto)));
 
 /**
