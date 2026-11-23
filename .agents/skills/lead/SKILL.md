@@ -349,6 +349,7 @@ Read the header before you run one; this table only says what each is for.
 | `botpush.mjs` | push a branch and its step notes as the bot, in one atomic push |
 | `worktree.ts <name> <branch>` | make `../tf-<name>` on a new branch from `origin/main`, upstream `origin/<branch>`, packages installed |
 | `publish.ts <branch> [--title <t>] [--body-file <f>]` | leak-check, refuse unless the checkout is on `<branch>` (run it from that branch's worktree), push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it, and after `--commit-only` you run it, giving a new draft its title and its body (written with the pr skill) in place of the placeholder; on a branch whose PR is open, the same flags set that PR's title and body (draft state unchanged), so never `gh api -X PATCH` by hand |
+| `stepcommit.sh --empty lead <ticket> "<subject>"` | open a slice's draft PR on a fresh branch with a signed lead commit that holds no files, under an open ticket (`--commit-only` leaves the signing to `land.ts`); then run `publish.ts` as above. A plain `git commit --allow-empty` is unsigned, and `land.ts check` refuses the PR for it |
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
