@@ -2,11 +2,19 @@
 // `>` to `>=` in `slow` (red: a test exactly at its bar is flagged); the `depth` check dropped from
 // `onTestRunEnd` (red: a fast run fails); the `limit > 0` check dropped (red: a test with no limit is
 // flagged); the default `fail` made a no-op (red: the exit code stays 0); the share ignored for
-// `DEFAULT_SHARE` (red: a set share changes nothing).
+// `DEFAULT_SHARE` (red: a set share changes nothing); the mode ignored (red: report mode fails the run).
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as fc from "fast-check";
-import SlowTestReporter, { DEFAULT_SHARE, decodeShare, LISTED, line, slow, type Timed } from "./slow-test-reporter.ts";
+import SlowTestReporter, {
+  DEFAULT_SHARE,
+  decodeMode,
+  decodeShare,
+  LISTED,
+  line,
+  slow,
+  type Timed,
+} from "./slow-test-reporter.ts";
 
 const options = { numRuns: runsFor({ fast: 100, full: 100 }) };
 
@@ -202,4 +210,32 @@ it("pinned: the default way to fail sets the process exit code, which is what fa
   } finally {
     process.exitCode = before;
   }
+});
+
+it("report mode prints every slow test and fails nothing, and any mode but fail or report fails the run", () => {
+  expect(decodeMode(undefined)).toBe("fail");
+  expect(decodeMode("fail")).toBe("fail");
+  expect(decodeMode("report")).toBe("report");
+
+  fc.assert(
+    fc.property(
+      fc.string().filter((value) => value !== "fail" && value !== "report"),
+      (value) => {
+        expect(() => decodeMode(value)).toThrow();
+      },
+    ),
+    { ...options, examples: [["Report"], [""], ["warn"]] },
+  );
+
+  fc.assert(
+    fc.property(fc.array(placedAt(50), { maxLength: 12 }), (placed) => {
+      const tests = placed.map((one) => one.test);
+      const reported = run("full", tests, { FABRIKA_SLOW_TEST_SHARE: "0.5", FABRIKA_SLOW_TEST_MODE: "report" });
+      const failing = run("full", tests, { FABRIKA_SLOW_TEST_SHARE: "0.5" });
+
+      expect(reported.failed).toBe(0);
+      expect(reported.said).toEqual(failing.said);
+    }),
+    options,
+  );
 });
