@@ -414,6 +414,12 @@
       "imports": ["next-telemetry", "next-shared", "kalfa-config"]
     },
     {
+      "name": "kalfa-github",
+      "layer": 2,
+      "paths": ["kalfa/github/src"],
+      "imports": ["kalfa-config"]
+    },
+    {
       "name": "next-telemetry",
       "layer": 1,
       "paths": ["next/packages/libfabrika/src/telemetry"],
@@ -464,12 +470,6 @@
       "name": "kalfa-git",
       "layer": 0,
       "paths": ["kalfa/git/src"],
-      "imports": []
-    },
-    {
-      "name": "kalfa-github",
-      "layer": 0,
-      "paths": ["kalfa/github/src"],
       "imports": []
     },
     {
