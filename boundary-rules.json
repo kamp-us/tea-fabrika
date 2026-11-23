@@ -56,11 +56,19 @@
       "imports": [],
       "pure": false
     },
+    "kalfa-cli": {
+      "imports": ["kalfa-diagnostics"],
+      "pure": false
+    },
     "kalfa-git": {
       "imports": [],
       "pure": false
     },
     "kalfa-github": {
+      "imports": ["kalfa-config"],
+      "pure": false
+    },
+    "kalfa-secrets": {
       "imports": ["kalfa-config"],
       "pure": false
     }
@@ -85,8 +93,10 @@
     "kalfa/records": "kalfa-records",
     "kalfa/ci": "kalfa-ci",
     "kalfa/diagnostics": "kalfa-diagnostics",
+    "kalfa/cli": "kalfa-cli",
     "kalfa/git": "kalfa-git",
-    "kalfa/github": "kalfa-github"
+    "kalfa/github": "kalfa-github",
+    "kalfa/secrets": "kalfa-secrets"
   },
   "libraryRoots": ["next", "kalfa"],
   "acrossDeployables": ["relative-import-crosses-workspace"]

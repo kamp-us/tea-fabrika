@@ -446,11 +446,33 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ quest, ready, env 
   return { title: posted.title, file };
 });
 
+/**
+ * Fetches origin's main into a ref of this call alone and gives back its commit, then removes the ref. Never FETCH_HEAD
+ * (every fetch in a checkout writes it, and a session that fetched there at once swapped it before the read: "the fetched
+ * main is not a commit") and never a shared ref. Writes no FETCH_HEAD, so it takes none from anyone else.
+ */
+const fetchedMain = Effect.fnUntraced(function* (tree: string, check: typeof Check.Type) {
+  const git = gitIn(tree);
+  const ref = `refs/land-fetch/${process.pid}-${globalThis.crypto.randomUUID()}`;
+
+  return yield* Effect.acquireUseRelease(
+    git(
+      check,
+      "origin main could not be fetched",
+      "fetch",
+      "-q",
+      "--no-write-fetch-head",
+      "origin",
+      `+refs/heads/main:${ref}`,
+    ),
+    () => git(check, "the fetched main is not a commit", "rev-parse", `${ref}^{commit}`),
+    () => sh(tree, "git", ["update-ref", "-d", ref]),
+  );
+});
+
 /** Fetches main and merges it in as the bot, never a rebase; a conflict names each file's step. */
 export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: Quest) {
-  const git = gitIn(ready.tree);
-  yield* git("fetch", "origin main could not be fetched", "fetch", "-q", "origin", "main");
-  const main = yield* git("fetch", "the fetched main is not a commit", "rev-parse", "FETCH_HEAD^{commit}");
+  const main = yield* fetchedMain(ready.tree, "fetch");
   const behind = (yield* sh(ready.tree, "git", ["merge-base", "--is-ancestor", main, "HEAD"])).code !== 0;
 
   if (behind) {
@@ -793,8 +815,7 @@ const waitCommand = Command.make(
  */
 export const unsignedCommits = Effect.fn("land.unsignedCommits")(function* (tree: string, head: string) {
   const git = gitIn(tree);
-  yield* git("check", "origin main could not be fetched", "fetch", "-q", "origin", "main");
-  const main = yield* git("check", "the fetched main is not a commit", "rev-parse", "FETCH_HEAD^{commit}");
+  const main = yield* fetchedMain(tree, "check");
 
   if ((yield* sh(tree, "git", ["cat-file", "-e", `${head}^{commit}`])).code !== 0) {
     yield* git(
@@ -802,6 +823,7 @@ export const unsignedCommits = Effect.fn("land.unsignedCommits")(function* (tree
       `the pull request head ${head.slice(0, 8)} could not be fetched`,
       "fetch",
       "-q",
+      "--no-write-fetch-head",
       "origin",
       head,
     );

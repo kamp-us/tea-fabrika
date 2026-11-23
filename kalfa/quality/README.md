@@ -79,8 +79,8 @@ service about the test files it is about to run, right before it runs them, and 
 (`not_allowed`) stops the run. No command line, in any order or spelling, reaches Stryker unasked.
 
 On disposable CI, `gh workflow run plants.yaml --ref <branch> -f plant=host-pnpm-path`. The package's
-`./cli` export is an `effect/cli` command named `quality`, which a future `kalfa` finds through the
-`kalfa.cli` field of this `package.json`.
+`./cli` export is an `effect/cli` command named `quality`, which a future `kalfa` will find once the
+package exports a `subcommand` and gets its `kalfa.cli` field back, with its refit to `@kalfa/cli`.
 
 ## Settings
 
