@@ -1,5 +1,4 @@
 Approved by the lead agent, builds issues 1749, 1842; body 130897f5f378
-
 Plancheck-Version: 3
 
 # Plan: a file-only setting, which only a configuration file may set (ticket 1842)
