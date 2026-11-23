@@ -12,6 +12,9 @@
 // - T4: type `Setting.files` as `(files: ReadonlyArray<string>)`.
 // - T5: add `"person"` to `Setting.File`; ticket 1843 slice 2 (the reasons are eight, `edit` added): leave `"edit"` out
 //   of `SettingsError`'s literals; ticket 1843 slice 3 (the reasons are nine, `write` added): leave `"write"` out of them.
+//   Ticket 1845, slice 1 (the reasons are ten, `snapshot` added): leave `"snapshot"` out of `SettingsError`'s literals.
+// - SN11 (ticket 1845, slice 1): (a) type `snapshots`' requirement as `Identifier<App, R>` only and provide `Digest` inside:
+//   the exact-type line fails; (b) add `Digest` to the layer from files: the T3 line on the layer's services fails.
 // - T7 (ticket 1843, slice 2): type `SettingGroup.edit`'s `set` as taking `setting: Setting.Any`, so the
 //   `@ts-expect-error` for another group's setting is unused.
 // - T9 (ticket 1843, slice 3): type the disk `set`'s value as `unknown`, so the `@ts-expect-error` for a wrong value is
@@ -25,8 +28,10 @@
 //   `T` whole at the record line.
 import { expectTypeOf, it } from "@effect/vitest";
 import { Effect, type FileSystem, Option, type Path, Schema } from "effect";
+import type * as Digest from "effect/crypto/Digest";
 import type * as Duration from "effect/Duration";
 import type * as Layer from "effect/Layer";
+import type * as Stream from "effect/Stream";
 import { Setting, SettingGroup } from "./index.ts";
 
 const Rule = Schema.Literals(["people", "robots"]);
@@ -272,13 +277,25 @@ it("T4 type: a default of the wrong type, an empty or misnamed file list, a seco
   expectTypeOf<typeof Setting.files>().parameter(0).toEqualTypeOf<Setting.Files>();
 });
 
-it("T5 type: the layer's only error is SettingsError with its nine reasons, and a file is the repo's or the user's", () => {
+it("T5 type: the layer's only error is SettingsError with its ten reasons, and a file is the repo's or the user's", () => {
   expectTypeOf<Layer.Error<typeof demoLayer>>().toEqualTypeOf<SettingGroup.SettingsError>();
   expectTypeOf<Layer.Services<typeof demoLayer>>().toEqualTypeOf<FileSystem.FileSystem | Path.Path>();
   expectTypeOf<SettingGroup.SettingsError["reason"]>().toEqualTypeOf<
-    "version" | "syntax" | "unknown" | "scope" | "invalid" | "missing" | "read" | "edit" | "write"
+    "version" | "syntax" | "unknown" | "scope" | "invalid" | "missing" | "read" | "edit" | "write" | "snapshot"
   >();
   expectTypeOf<Setting.File>().toEqualTypeOf<"repo" | "user">();
+});
+
+// SN11: the loader's stream of snapshots needs the group's layer and the digest, never fails, and leaves the layer from
+// files as it was: it needs no digest.
+const snapshots = SettingGroup.snapshots(group);
+
+it("SN11 type: `snapshots(group)` is exactly a stream of snapshots that cannot fail and needs the group's layer and the digest", () => {
+  expectTypeOf<typeof snapshots>().toEqualTypeOf<
+    Stream.Stream<SettingGroup.Snapshot, never, SettingGroup.Identifier<"demo", typeof group.settings> | Digest.Digest>
+  >();
+  expectTypeOf<Layer.Services<typeof demoLayer>>().toEqualTypeOf<FileSystem.FileSystem | Path.Path>();
+  expectTypeOf<Effect.Services<typeof provided>>().toEqualTypeOf<FileSystem.FileSystem | Path.Path>();
 });
 
 // T6: a setting's value is plain data. The lines that must compile are in `plain`, the lines that must not are in
