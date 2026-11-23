@@ -4,7 +4,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
-import { Predicate, Schema } from "effect";
+import { Schema } from "effect";
 import * as Entry from "./Entry.ts";
 import * as EntryId from "./EntryId.ts";
 import * as Errors from "./Errors.ts";
@@ -75,27 +75,14 @@ it("P1 scenario: the manifest is a private package with one dependency held at a
 const unavailable = (names: ReadonlyArray<string>): ReadonlyArray<string> =>
   names.filter((name) => name.endsWith(part("Un", "available")));
 
-/** What the root gives, by the name it gives it under. */
-const rooted = new Map<string, unknown>(Object.entries(Root));
-
-/**
- * Whether the root gives `name` as the file's own export or as the file whole.
- *
- * **Details**
- *
- * A package above names `Settings.Settings`, `Ledger.Ledger` and `EntryId.child`, so the root may give a file's own export under its name, or the file whole
- * under it. Both are "the very one the file makes". A copy is neither.
- */
-const givesFile = (name: string, file: object, own: object): boolean =>
-  rooted.get(name) === file || rooted.get(name) === own;
-
-// E1. Plant: leave `RevisionConflict` out of `Refusal`; export a copy of `EntryId` (the same schema made again); export a copy of `child`; drop `Placed` from
+// E1. Plant: leave `RevisionConflict` or `EmptyTags` out of `Refusal`; export a copy of `EntryId` (the same schema made again); export a copy of `child`; drop `Placed` from
 // the root; export `Failure` with two members; name an export `ChatUnavailable`; export a second `Settings` made again.
-it("E1 scenario: the root entry point gives the Ledger, the ids, the entries, the settings and the eight errors with the two unions, the very ones their files make", () => {
+it("E1 scenario: the root entry point gives the Ledger, the ids, the entries, the settings and the nine errors with the two unions, the very ones their files make", () => {
   // scenario: the root entry point at head; no generated input says what a module re-exports.
-  expect(givesFile("Ledger", Ledger, Ledger.Ledger), "the service").toBe(true);
-  expect(givesFile("EntryId", EntryId, EntryId.EntryId), "the entry id").toBe(true);
-  expect(givesFile("Settings", Settings, Settings.Settings), "the settings").toBe(true);
+  expect(Root.Ledger, "the service").toBe(Ledger.Ledger);
+  expect(Root.EntryId, "the entry id").toBe(EntryId.EntryId);
+  expect(Root.child, "child").toBe(EntryId.child);
+  expect(Root.Settings, "the settings").toBe(Settings.Settings);
   expect(Root.EntryName, "the entry name").toBe(EntryId.EntryName);
   expect(Root.Revision, "the revision").toBe(Entry.Revision);
   expect(Root.Position, "the position").toBe(Entry.Position);
@@ -103,26 +90,27 @@ it("E1 scenario: the root entry point gives the Ledger, the ids, the entries, th
   expect(Root.Entry, "the entry").toBe(Entry.Entry);
   expect(Root.Placed, "the answer to an append").toBe(Entry.Placed);
 
-  // `child` is reached as `child` or as `EntryId.child`: either way it is the very function the file makes.
-  const reached = [...rooted.values()].flatMap((each) =>
-    Predicate.isObject(each) ? [each, ...Object.values(each)] : [each],
-  );
-
-  expect(reached.includes(EntryId.child), "child").toBe(true);
-
   expect(Root.BadEntry, "BadEntry").toBe(Errors.BadEntry);
   expect(Root.IdReused, "IdReused").toBe(Errors.IdReused);
   expect(Root.TooBig, "TooBig").toBe(Errors.TooBig);
   expect(Root.AdmissionRefused, "AdmissionRefused").toBe(Errors.AdmissionRefused);
   expect(Root.RevisionConflict, "RevisionConflict").toBe(Errors.RevisionConflict);
+  expect(Root.EmptyTags, "EmptyTags").toBe(Errors.EmptyTags);
   expect(Root.Unreachable, "Unreachable").toBe(Errors.Unreachable);
   expect(Root.BadRow, "BadRow").toBe(Errors.BadRow);
   expect(Root.StorageFailed, "StorageFailed").toBe(Errors.StorageFailed);
   expect(Root.Refusal, "the refusals").toBe(Errors.Refusal);
   expect(Root.Failure, "the failures").toBe(Errors.Failure);
 
-  expect(new Set(Errors.Refusal.members), "a refusal is exactly one of the five").toEqual(
-    new Set([Errors.BadEntry, Errors.IdReused, Errors.TooBig, Errors.AdmissionRefused, Errors.RevisionConflict]),
+  expect(new Set(Errors.Refusal.members), "a refusal is exactly one of the six").toEqual(
+    new Set([
+      Errors.BadEntry,
+      Errors.IdReused,
+      Errors.TooBig,
+      Errors.AdmissionRefused,
+      Errors.RevisionConflict,
+      Errors.EmptyTags,
+    ]),
   );
   expect(new Set(Errors.Failure.members), "a failure is exactly one of the three").toEqual(
     new Set([Errors.Unreachable, Errors.BadRow, Errors.StorageFailed]),

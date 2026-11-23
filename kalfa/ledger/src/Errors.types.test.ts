@@ -1,4 +1,4 @@
-// D6, the errors' types: the five refusals, the three failures, the cause a failure holds hidden, and how a package above wraps and catches them. They are
+// D6, the errors' types: the six refusals, the three failures, the cause a failure holds hidden, and how a package above wraps and catches them. They are
 // checked by the compiler (`tsc`, and the root `typecheck`), not by a test run: each `@ts-expect-error` below is a mistake the plan names, and it must stay a
 // compile error. The helper holds the law's lines and takes its values as parameters, and its `it` only names it, so the file also runs under vitest by path.
 import { expectTypeOf, it } from "@effect/vitest";
@@ -15,7 +15,12 @@ type MemberKeys<T> = T extends unknown ? keyof T : never;
 const errorTypes = (raw: Error, hidden: Redacted.Redacted<Error>, plain: string, refusal: Errors.Refusal) => {
   // The two unions are exactly their members.
   expectTypeOf<Errors.Refusal>().toEqualTypeOf<
-    Errors.BadEntry | Errors.IdReused | Errors.TooBig | Errors.AdmissionRefused | Errors.RevisionConflict
+    | Errors.BadEntry
+    | Errors.IdReused
+    | Errors.TooBig
+    | Errors.AdmissionRefused
+    | Errors.RevisionConflict
+    | Errors.EmptyTags
   >();
   expectTypeOf<Errors.Failure>().toEqualTypeOf<Errors.Unreachable | Errors.BadRow | Errors.StorageFailed>();
 
@@ -74,6 +79,7 @@ const errorTypes = (raw: Error, hidden: Redacted.Redacted<Error>, plain: string,
         TooBig: () => Effect.succeed("big"),
         AdmissionRefused: () => Effect.succeed("refused"),
         RevisionConflict: () => Effect.succeed("conflict"),
+        EmptyTags: () => Effect.succeed("no tags"),
         Unreachable: () => Effect.succeed("unreachable"),
         BadRow: () => Effect.succeed("row"),
       }),
@@ -84,7 +90,7 @@ const errorTypes = (raw: Error, hidden: Redacted.Redacted<Error>, plain: string,
   return [rawUnreachable, rawBadRow, rawStorage, textUnreachable, noneBadRow, wrapper, refused, textReason];
 };
 
-it("D6 type: Refusal is the five refusals and Failure the three failures, a failure holds its cause hidden, and a package above wraps them and catches each by its tag", () => {
+it("D6 type: Refusal is the six refusals and Failure the three failures, a failure holds its cause hidden, and a package above wraps them and catches each by its tag", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(errorTypes).toBeFunction();
 });

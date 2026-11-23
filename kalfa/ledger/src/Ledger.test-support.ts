@@ -303,11 +303,18 @@ export const errorTexture = Arbitrary.all({
 
 type ErrorTexture = Drawn<typeof errorTexture>;
 
-/** The eight errors a package may answer with, as a union a test can list. */
+/** The nine errors a package may answer with, as a union a test can list. */
 export type AnyError = Errors.Refusal | Errors.Failure;
 
-/** The tags of the five refusals and of the three failures, in the order `eachError` gives them. */
-export const REFUSAL_TAGS = ["BadEntry", "IdReused", "TooBig", "AdmissionRefused", "RevisionConflict"] as const;
+/** The tags of the six refusals and of the three failures, in the order `eachError` gives them. */
+export const REFUSAL_TAGS = [
+  "BadEntry",
+  "IdReused",
+  "TooBig",
+  "AdmissionRefused",
+  "RevisionConflict",
+  "EmptyTags",
+] as const;
 
 export const FAILURE_TAGS = ["Unreachable", "BadRow", "StorageFailed"] as const;
 
@@ -317,7 +324,7 @@ interface Made {
   readonly fields: Readonly<Record<string, unknown>>;
 }
 
-/** One of each of the eight errors, made from the texture's fields, each beside the fields it was given. */
+/** One of each of the nine errors, made from the texture's fields, each beside the fields it was given. */
 export const eachError = (texture: ErrorTexture): ReadonlyArray<Made> => {
   const bad = { part: texture.part };
   const big = { bytes: texture.bytes, limit: texture.limit };
@@ -331,6 +338,7 @@ export const eachError = (texture: ErrorTexture): ReadonlyArray<Made> => {
     { error: new Errors.TooBig(big), fields: big },
     { error: new Errors.AdmissionRefused(refused), fields: refused },
     { error: new Errors.RevisionConflict(conflict), fields: conflict },
+    { error: new Errors.EmptyTags({}), fields: {} },
     { error: new Errors.Unreachable({ cause }), fields: { cause } },
     { error: new Errors.BadRow({ cause }), fields: { cause } },
     { error: new Errors.StorageFailed({ cause }), fields: { cause } },
