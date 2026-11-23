@@ -74,7 +74,7 @@ export const fields = (
   );
 
 /** The setting names within two edits of `typed`, nearest first: the "Did you mean" of the mistyped-key check. */
-const near = (names: ReadonlyArray<string>, typed: string): Option.Option<string> =>
+export const near = (names: ReadonlyArray<string>, typed: string): Option.Option<string> =>
   Option.map(
     Option.fromNullishOr(
       names

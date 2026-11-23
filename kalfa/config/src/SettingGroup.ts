@@ -19,7 +19,7 @@ import { SettingsError } from "./internal/error.ts";
 import { type FlagValues, type Flags, make as build } from "./internal/flags.ts";
 import { frozen } from "./internal/frozen.ts";
 import type { Live } from "./internal/live.ts";
-import { field, variable } from "./internal/names.ts";
+import { clashes, refusedApp, variable } from "./internal/names.ts";
 import { shown } from "./internal/place.ts";
 import { receive } from "./internal/receive.ts";
 import * as references from "./internal/reference.ts";
@@ -27,7 +27,7 @@ import * as schema from "./internal/schema.ts";
 import { make as snapshot, same, type Snapshot } from "./internal/snapshot.ts";
 import { type Resolved, start } from "./internal/start.ts";
 import { toml } from "./internal/toml.ts";
-import { debounce, type Watched, watched } from "./internal/window.ts";
+import { type Watched, watched } from "./internal/window.ts";
 import type { Origin } from "./Sources.ts";
 
 export {
@@ -127,14 +127,14 @@ const key = <App extends string, R extends ReadonlyArray<Setting.Any>>(app: App,
     ["@kalfa/config/SettingGroup", app, ...settings.map((setting) => setting.name)].join("/"),
   );
 
-const App = /^[a-z][a-z0-9]*$/u;
-
 const Segment = /^[a-z0-9]+(-[a-z0-9]+)*$/u;
 
 /** Why a group cannot be read, or undefined when it can. */
 const refusal = (app: string, settings: ReadonlyArray<Setting.Any>) => {
-  if (!App.test(app)) {
-    return `${JSON.stringify(app)} is not an app name: it must be one lowercase word, as demo`;
+  const unnamed = refusedApp(app);
+
+  if (unnamed !== undefined) {
+    return unnamed;
   }
 
   for (const [n, setting] of settings.entries()) {
@@ -171,21 +171,6 @@ const refusal = (app: string, settings: ReadonlyArray<Setting.Any>) => {
   }
 
   return undefined;
-};
-
-const clashes = (app: string, a: Setting.Any, b: Setting.Any) => {
-  const [short, long] = a.name.length <= b.name.length ? [a.name, b.name] : [b.name, a.name];
-
-  if (short === long || long.startsWith(`${short}.`)) {
-    return "are one name, or a value and its table";
-  }
-
-  // The window is read by its setting name and never as a field of the program's values, so only the program's own fields can clash.
-  if (a !== debounce && b !== debounce && field(a.name) === field(b.name)) {
-    return `are read as one field, ${field(a.name)}`;
-  }
-
-  return variable(app, a.name) === variable(app, b.name) ? `share ${variable(app, a.name)}` : undefined;
 };
 
 // SAFETY: `start` fills one field of `values` for each setting the program declared, named by `field`, with that
