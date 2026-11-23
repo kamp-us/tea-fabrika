@@ -3,7 +3,7 @@
 // it right after each commit it signs; a person runs it where a commit step could not push.
 //
 //   node publish.ts <branch> [--title <title>] [--body-file <path>]
-//                               run in the checkout; one line on stdout, exit 0 pushed, 1 refused
+//                               run in the checkout that is on <branch> (its worktree), else refused; one line on stdout, exit 0 pushed, 1 refused
 //
 // A new draft takes `--title` and the text of `--body-file` when they are given, else the first commit's
 // subject and a placeholder. A pull request already open keeps its own words unless `--title` or `--body-file`
@@ -35,6 +35,7 @@ const main = Effect.fn("publish.main")(function* (asked: Publish.Words) {
     return yield* setExit(1);
   }
 
+  const checkedOut = yield* git(dir, "branch", "--show-current");
   const title = yield* git(dir, "log", "-1", "--format=%s", head);
   const services = Layer.mergeAll(PushesProcess.layer(import.meta.dirname), PullRequestsGh.layer(repo, dir));
   const fs = yield* FileSystem.FileSystem;
@@ -55,7 +56,7 @@ const main = Effect.fn("publish.main")(function* (asked: Publish.Words) {
     ...(body === null ? {} : { body }),
   };
 
-  const published = yield* Publish.publish({ dir, branch, head, text, given }).pipe(
+  const published = yield* Publish.publish({ dir, branch, head, text, given, checkedOut }).pipe(
     Effect.provide(services),
     Effect.map((p) => ({ ok: true, line: Publish.line(branch, p) })),
     Effect.catch((e) => Effect.succeed({ ok: false, line: `refused: ${e.reason}` })),

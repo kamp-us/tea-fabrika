@@ -126,6 +126,34 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
     ),
   );
 
+  // scenario: a helper ran publish.ts from main's checkout for a ticket branch, so main's HEAD was about to be pushed onto it.
+  it.effect("scenario: a checkout on another branch is refused, naming both, with nothing pushed", () => {
+    const m = memory();
+
+    return Effect.gen(function* () {
+      const e = yield* Effect.flip(Publish.publish({ ...ask("fabrikalfa/a", "a".repeat(40)), checkedOut: "main" }));
+      expect(e._tag).toBe("NoBranch");
+      expect(e.reason).toContain("main");
+      expect(e.reason).toContain("fabrikalfa/a");
+      expect(e.reason).toContain("git worktree list");
+      expect(yield* Recorder.calls(Pushes)).toEqual([]);
+      expect(m.remote.branches.has("fabrikalfa/a")).toBe(false);
+      expect(m.github.prs).toEqual([]);
+    }).pipe(Effect.provide(m.layer));
+  });
+
+  // scenario: the checkout is on the branch, so it publishes as before.
+  it.effect("scenario: a checkout on the branch publishes", () => {
+    const m = memory();
+    const head = "a".repeat(40);
+
+    return Effect.gen(function* () {
+      const p = yield* Publish.publish({ ...ask("fabrikalfa/a", head), checkedOut: "fabrikalfa/a" });
+      expect(p).toEqual({ pr: 1, opened: true, draft: true });
+      expect(m.remote.branches.get("fabrikalfa/a")).toBe(head);
+    }).pipe(Effect.provide(m.layer));
+  });
+
   // scenario: the push and the draft are two calls; a refused draft must not read as a pass.
   it.effect("scenario: GitHub refusing the draft fails the publish after the push, so the commit is on GitHub", () =>
     Effect.gen(function* () {

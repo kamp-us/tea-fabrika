@@ -85,6 +85,11 @@ export type Ask = {
   readonly text: Text;
   /** The title and the body that were asked for by name. A part left out stays as the open pull request has it. */
   readonly given?: Partial<Text>;
+  /**
+   * The branch the checkout in `dir` is on, when HEAD is what gets pushed (`publish.ts`). When it is not `branch`, the
+   * publish is refused before any push. A caller that pushes an exact SHA from elsewhere (drive's box) leaves it out.
+   */
+  readonly checkedOut?: string;
 };
 
 const checked = (branch: string) =>
@@ -96,6 +101,15 @@ const checked = (branch: string) =>
 
 export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
   const branch = yield* checked(a.branch);
+
+  if (a.checkedOut !== undefined && a.checkedOut !== branch) {
+    return yield* NoBranch.make({
+      reason:
+        `this checkout is on ${a.checkedOut === "" ? "no branch (detached HEAD)" : a.checkedOut}, not ${branch}, ` +
+        `so its HEAD does not belong on ${branch}; run publish.ts from ${branch}'s worktree (\`git worktree list\` shows it)`,
+    });
+  }
+
   const pushes = yield* Pushes;
   const prs = yield* PullRequests;
   yield* pushes.leakGrep(a.dir, a.head);
