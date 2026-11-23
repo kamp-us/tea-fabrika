@@ -7,9 +7,10 @@ This package says what a diagnostic is and nothing about printing one. The comma
 service prints, and it picks the exit code. This package never prints, never logs and never picks an exit code, and
 it imports no other package of its repo, so any of them can import it.
 
-Two words to keep apart. A **declared code** (`Diagnostic.Declared`) is a code and its long text, made once with
+Three words to keep apart. A **declared code** (`Diagnostic.Declared`) is a code and its long text, made once with
 `Diagnostic.make`. A **reported diagnostic** (`Diagnostic.Reported`) is one report: the code with a severity, a
-message, a place and a hint.
+message, a place and a hint. A **carried diagnostic** (`Diagnostic.Carried`) is a declared code and its fields that a
+typed error holds, unchecked until it is reported.
 
 ## Declare a code
 
@@ -81,6 +82,9 @@ Diagnostic.formatPlace(flag); // "flag --instance.port"
 ```
 
 - Lines and columns count from 1. A column needs a line. `.` takes no line.
+- In a package whose lint refuses a `_tag` written by hand (`anti-slop-effect/no-manual-tagged-construction`, which
+  the kalfa packages turn on), build each place with its kind's maker, `Diagnostic.Place.cases.<kind>.make`, as the
+  example under "Carry it on an error" does. The maker checks the place as it builds it, and throws on a bad one.
 - A repo path has no leading `/`, no `./` start, no `.` or `..` part, no empty part, no trailing `/` and no backslash.
   Its first part does not start with `~` or `$` and holds no `:`, so it never reads as a file outside the repo: not
   `~login`, not `$HOME`, not a drive such as `C:`, and not a scheme such as `file:`. A `:` deeper in the path is fine.
@@ -93,6 +97,50 @@ Diagnostic.formatPlace(flag); // "flag --instance.port"
 - A refusal says which rule failed and never repeats the path, since a path may hold a login name.
 - The package reads no home folder and no environment. A place only names where: a reader's own shell expands `~` and
   `$NAME`.
+
+## Carry it on an error
+
+A typed error can say which diagnostic it is, so the command that runs it can report it without knowing the error.
+The error holds a **carried diagnostic** (`Diagnostic.Carried`) under the key `diagnostic`: a declared code and the
+fields beside it, made with `Diagnostic.carry`. A carried diagnostic is always an error: `carry` takes no severity.
+
+```ts
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
+import * as Diagnostics from "@kalfa/diagnostics/Diagnostics";
+import { Effect, Option, Schema } from "effect";
+
+export class UnknownSettingError extends Schema.TaggedError<UnknownSettingError, { readonly brand: unique symbol }>()(
+  "UnknownSettingError",
+  {
+    setting: Schema.String,
+    line: Schema.Int,
+  },
+) {
+  get diagnostic(): Diagnostic.Carried {
+    return Diagnostic.carry(UnknownSetting, {
+      message: `The setting \`${this.setting}\` is not declared.`,
+      place: Diagnostic.Place.cases.repo.make({ path: ".config/settings.toml", line: this.line }),
+      hint: "Check the spelling against the settings reference.",
+    });
+  }
+}
+
+// Where the error is handled: report what it carries through `report`, or nothing.
+const reportCarried = (error: UnknownSettingError) =>
+  Option.match(Diagnostic.fromError(error), {
+    onNone: () => Effect.void,
+    onSome: (carried) => Diagnostics.report(carried.declared, carried.fields),
+  });
+```
+
+- `carry` checks nothing. A blank message or a bad place is caught when the handler reports it: `report` dies, as
+  for any report. A package's own tests report each of its errors, so they catch it.
+- `fromError` takes any value. It answers `Option.some` of what the value carries under `diagnostic`, whether the
+  value holds the key or its class gives it, and `Option.none()` when it carries none. Only a value `carry` made
+  counts. A getter that throws is not caught, and no `cause` is followed: an error that wraps another says itself
+  which diagnostic it is.
+- Reporting stays one way in: `report` checks the fields, and only it hands the service a value. This package picks
+  no exit code; the command that runs the subcommand does.
 
 ## Test what was reported
 
