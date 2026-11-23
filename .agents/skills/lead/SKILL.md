@@ -666,6 +666,10 @@ Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in th
   head the pull request holds on each read, and exits 0 only on a success; a cancelled run is named.
   `queue --wait` and `admin --wait` make the same wait, so a hand-written loop over `gh run list` or a
   workflow run picked by head SHA has no place (a ready event starts a second run at one head, and such a loop read the first).
+  Before you name a cause for a red or cancelled run, read the failed step's log:
+  `gh api repos/kamp-us/tea-fabrika/actions/jobs/<id>/logs --allow-escape-sequences`, on the job whose
+  step failed. A job GitHub shows as `cancelled` may be the red job itself, ended by its own
+  `stop the run` step.
 - **No agent approves a pull request, and no agent answers a question the machine put to a
   person.**
 - **A step is a program,** and a prompt you would have typed is its first source. A v0 has no
