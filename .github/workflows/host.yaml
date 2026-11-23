@@ -10,10 +10,12 @@ name: host
 #
 #   gh workflow run host.yaml --ref <branch>
 #
-# By hand, `-f suite=<name>` runs one fixed suite: l13 (the default), e88-r6, box or p8. `p8` is the
+# By hand, `-f suite=<name>` runs one fixed suite: l13 (the default), e88-r6, box, p8 or config-watch. `p8` is the
 # SIGKILL law of .github/ci/progress-reporter.integration.test.ts (P8), on `ubuntu-latest`: a branch
 # proof run never starts an `.integration.` law (integration laws run only in main's full run), so this suite is where that law
-# runs on a disposable machine before main's full run does.
+# runs on a disposable machine before main's full run does. `config-watch` is R3 of kalfa/config
+# (kalfa/config/src/SettingGroup.live.integration.test.ts) on `macos-15`: what FSEvents and kqueue report for a folder
+# watch, which the in-memory stand-in of kalfa/config copies. It has no `pull_request` path of its own: it starts by hand only.
 on:
   pull_request:
     paths:
@@ -31,7 +33,7 @@ on:
         type: choice
         required: true
         default: l13
-        options: [l13, e88-r6, box, p8]
+        options: [l13, e88-r6, box, p8, config-watch]
 
 permissions:
   contents: read
@@ -207,4 +209,31 @@ jobs:
         with:
           name: p8
           path: ${{ runner.temp }}/p8*
+          if-no-files-found: error
+
+  config-watch:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'config-watch'
+    # R3 of @kalfa/config on the file system Apple ships: its watch of a folder, of a rename over a file, of a folder that
+    # is removed and made again. Linux runs the same law in a proof run (scheduled.yaml).
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: R3 law
+        env:
+          FABRIKA_TEST_DEPTH: full
+        run: |
+          git rev-parse HEAD > "$RUNNER_TEMP/config-watch-head.txt"
+          pnpm exec vitest run --project next-integration --maxWorkers=1 --fileParallelism=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/config-watch.json" \
+            kalfa/config/src/SettingGroup.live.integration.test.ts
+      - name: R3 proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: config-watch
+          path: ${{ runner.temp }}/config-watch*
           if-no-files-found: error

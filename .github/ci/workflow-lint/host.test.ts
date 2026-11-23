@@ -17,13 +17,20 @@ const run = (workflow: Record<string, unknown>) =>
 const boxRun = (workflow: Record<string, unknown>) =>
   allSteps(job(workflow, "box")).find((step) => step["name"] === "Box laws")!;
 
+const watchSteps = (workflow: Record<string, unknown>) => allSteps(job(workflow, "config-watch"));
+
+const watchRun = (workflow: Record<string, unknown>) => watchSteps(workflow).find((step) => step["name"] === "R3 law")!;
+
+const watchProof = (workflow: Record<string, unknown>) =>
+  watchSteps(workflow).find((step) => step["name"] === "R3 proof")!;
+
 const p8Steps = (workflow: Record<string, unknown>) => allSteps(job(workflow, "p8"));
 
 const p8Run = (workflow: Record<string, unknown>) => p8Steps(workflow).find((step) => step["name"] === "P8 law")!;
 
 const p8Proof = (workflow: Record<string, unknown>) => p8Steps(workflow).find((step) => step["name"] === "P8 proof")!;
 
-it("format: host.yaml keeps L13 as default and exposes the fixed E88 R6, box and P8 dispatches", () => {
+it("format: host.yaml keeps L13 as default and exposes the fixed E88 R6, box, P8 and config-watch dispatches", () => {
   expect(lintHost(JSON.stringify(hostFile()))).toEqual([]);
 });
 
@@ -57,9 +64,11 @@ it("scenario: different suites keep separate groups and newer pushes retain thei
       }
     });
 
-  expect(new Set(["l13", "e88-r6", "box", "p8"].map((suite) => group("same-head", suite))).size).toBe(4);
+  expect(new Set(["l13", "e88-r6", "box", "p8", "config-watch"].map((suite) => group("same-head", suite))).size).toBe(
+    5,
+  );
 
-  for (const suite of ["l13", "e88-r6", "box", "p8"]) {
+  for (const suite of ["l13", "e88-r6", "box", "p8", "config-watch"]) {
     expect(group("old-head", suite, 1128)).toBe(group("new-head", suite, 1128));
   }
 
@@ -94,14 +103,21 @@ for (const [name, plant, rule] of [
   [
     "another suite",
     (w) => {
-      map(input(w)["suite"])["options"] = ["l13", "e88-r6", "box", "p8", "all"];
+      map(input(w)["suite"])["options"] = ["l13", "e88-r6", "box", "p8", "config-watch", "all"];
+    },
+    "H1",
+  ],
+  [
+    "config-watch missing from the suite's options",
+    (w) => {
+      map(input(w)["suite"])["options"] = ["l13", "e88-r6", "box", "p8"];
     },
     "H1",
   ],
   [
     "p8 missing from the suite's options",
     (w) => {
-      map(input(w)["suite"])["options"] = ["l13", "e88-r6", "box"];
+      map(input(w)["suite"])["options"] = ["l13", "e88-r6", "box", "config-watch"];
     },
     "H1",
   ],
@@ -314,6 +330,44 @@ for (const [name, plant, rule] of [
       map(p8Proof(w)["with"])["path"] = `\${{ runner.temp }}/*`;
     },
     "H9",
+  ],
+  [
+    "config-watch runs on every event",
+    (w) => {
+      delete job(w, "config-watch")["if"];
+    },
+    "H10",
+  ],
+  [
+    "config-watch runs on Linux",
+    (w) => {
+      job(w, "config-watch")["runs-on"] = "ubuntu-latest";
+    },
+    "H10",
+  ],
+  [
+    "config-watch runs another test file",
+    (w) => {
+      watchRun(w)["run"] = String(watchRun(w)["run"]).replace(
+        "SettingGroup.live.integration.test.ts",
+        "another.test.ts",
+      );
+    },
+    "H10",
+  ],
+  [
+    "config-watch ignores a failed law",
+    (w) => {
+      watchRun(w)["continue-on-error"] = true;
+    },
+    "H10",
+  ],
+  [
+    "config-watch proof is saved only after a passing law",
+    (w) => {
+      watchProof(w)["if"] = "success()";
+    },
+    "H10",
   ],
   [
     "different suites share one concurrency group",
