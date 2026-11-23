@@ -57,7 +57,7 @@ import {
   type Texture,
 } from "./History.test-support.ts";
 import * as Ref from "./Ref.ts";
-import { expectFailure } from "./Repository.test-support.ts";
+import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
 import * as Tree from "./Tree.ts";
@@ -85,9 +85,6 @@ export interface SuiteOptions {
   /** The most one law may take, in milliseconds. */
   readonly timeout: number;
 }
-
-/** The committer the written commits name, unless a law draws its own. */
-export const COMMITTER: Committer = { name: "Bot", email: "bot@example.test" };
 
 /** Settings with generous limits, the ones a law wants to push set, and the committer every written commit names. */
 export const settings = (

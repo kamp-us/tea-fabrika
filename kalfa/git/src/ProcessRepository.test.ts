@@ -18,9 +18,9 @@ import {
 import { bytes as objectBytes } from "./internal/object.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Ref from "./Ref.ts";
-import { expectFailure } from "./Repository.test-support.ts";
+import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
-import { COMMITTER, settings } from "./RepositoryTest.ts";
+import { settings } from "./RepositoryTest.ts";
 import * as Settings from "./Settings.ts";
 import { gitTable, standIn, type Call, type Reply, type Table } from "./StandIn.test-support.ts";
 import * as Tree from "./Tree.ts";

@@ -41,8 +41,7 @@ import {
   wordArb,
 } from "./History.test-support.ts";
 import * as Ref from "./Ref.ts";
-import { expectFailure } from "./Repository.test-support.ts";
-import { COMMITTER } from "./RepositoryTest.ts";
+import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Settings from "./Settings.ts";
 import * as Tree from "./Tree.ts";
 
