@@ -2,20 +2,33 @@
 // order, what it refuses, that each build of the Layer starts empty, and the span a report makes. They are
 // laws D5 to D7 and D17.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Array as Arr, Cause, Effect, Exit, Result, Schema } from "effect";
+import { Arbitrary, Array as Arr, Effect, Exit, Option } from "effect";
 import {
+  badHeld,
   between,
   blank,
   blanksFrom,
   brokenPlaces,
+  CarryingError,
+  carriers,
+  diedOfSchemaError,
+  everyClass,
   fieldVariants,
   goodCode,
   goodFields,
   goodFieldsAndParts,
+  goodText,
   type Item,
+  leftBehind,
   observed,
+  observedCarried,
   placeParts,
+  readWatched,
+  expectedReport,
+  type Failure,
+  rootedAtLogin,
   SEED,
+  schemaErrorIn,
 } from "./Diagnostic.test-support.ts";
 import * as Diagnostic from "./Diagnostic.ts";
 import * as Diagnostics from "./Diagnostics.ts";
@@ -113,12 +126,6 @@ const withABadOne = Arbitrary.all({
   parts: placeParts,
 });
 
-// Whether an exit is a defect holding a SchemaError and no typed failure.
-const diedOfSchemaError = <A, E>(exit: Exit.Exit<A, E>): boolean =>
-  Exit.isFailure(exit) &&
-  !Cause.hasFails(exit.cause) &&
-  Result.match(Cause.findDefect(exit.cause), { onSuccess: Schema.isSchemaError, onFailure: () => false });
-
 // D6. Plant: append the report before it is checked, and the bad one is collected; or fail with the error
 // instead of dying, and the exit holds a typed failure; or count only space, tab and line feed as blank, and a
 // hint of a no-break space is collected; or drop the first-part rule from `isRepoPath`, and a repo place that
@@ -199,6 +206,154 @@ describe("D17, the span", () => {
             "kalfa.diagnostics.severity": fields.severity,
             "kalfa.diagnostics.place.type": fields.place._tag,
           });
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
+});
+
+// What one drawn entry of a list is: a code, fields (drawn or made odd), and the pieces the values that carry nothing
+// are made from. `kind` picks which class of value it stands for.
+const entry = Arbitrary.all({
+  code: goodCode,
+  drawn: goodFieldsAndParts,
+  variant: between(0, 1000000),
+  kind: between(0, 1000000),
+  text: goodText,
+  count: between(-100000, 100000),
+});
+
+type Entry = typeof entry extends Arbitrary.Arbitrary<infer Drawn> ? Drawn : never;
+
+/** A value to hand the handler, and the reports it must make of it: none unless the value carries. */
+interface Step {
+  readonly value: Failure;
+  readonly reports: ReadonlyArray<ReturnType<typeof expectedReport>>;
+}
+
+// The one value an entry stands for.
+const toStep = ({ code, drawn, variant, kind, text, count }: Entry): Step => {
+  const declared = declare(code);
+  const choices = [drawn.fields, ...fieldVariants(drawn)];
+  const spread = Arr.getUnsafe(choices, variant % choices.length);
+  const every = everyClass(declared, spread, { text, count });
+  const one = Arr.getUnsafe(every, kind % every.length);
+
+  return { value: one.value, reports: one.carries ? [expectedReport(declared, spread)] : [] };
+};
+
+// One value of each class (a) to (f), made from an entry.
+const everyOnce = ({ code, drawn, text, count }: Entry): ReadonlyArray<Step> => {
+  const declared = declare(code);
+
+  return everyClass(declared, drawn.fields, { text, count }).map((one) => ({
+    value: one.value,
+    reports: one.carries ? [expectedReport(declared, drawn.fields)] : [],
+  }));
+};
+
+const carriedRun = Arbitrary.all({
+  list: Arbitrary.array(entry, { maxLength: 6 }),
+  once: entry,
+  bad: Arbitrary.all({ code: goodCode, fields: goodFields, blanks: blank, parts: placeParts }),
+  spot: between(0, 1000),
+});
+
+// D30. Plant: (j) widen the carried severity to whatever the fields hold, and a smuggled "warning" is collected as a
+// warning; (h) drop a home place's column in `carry`, and the collected place differs; (i) answer none from
+// `fromError` when the fields would not decode, and the bad one is skipped and the run does not die.
+describe("D30, carried, then reported", () => {
+  it.effect.prop(
+    "a handler that reads each value with fromError and reports what is carried collects exactly the carried ones, in order, as errors; a carrier of bad fields kills the run with a SchemaError after the good reports before it",
+    { run: carriedRun },
+    ({ run }) =>
+      Effect.gen(function* () {
+        const drawn = run.list.map(toStep);
+        const once = everyOnce(run.once);
+
+        // The drawn list, and one value of each class (a) to (f).
+        for (const steps of [drawn, once]) {
+          const handled = yield* observedCarried(steps.map(({ value }) => value));
+
+          expect(Exit.isSuccess(handled.exit)).toBe(true);
+          expect(handled.reported).toEqual(steps.flatMap(({ reports }) => reports));
+        }
+
+        // Each bad set of fields, carried by each class of carrier in turn, at a spot among the good values.
+        const good = [...drawn, ...once];
+        const before = good.slice(0, run.spot % (good.length + 1));
+        const after = good.slice(before.length);
+        const declared = declare(run.bad.code);
+
+        for (const [index, { name, held }] of badHeld(run.bad).entries()) {
+          const carrier = Arr.getUnsafe(carriers(declared, { ...held, severity: run.bad.fields.severity }), index % 3);
+
+          const handled = yield* observedCarried([
+            ...before.map(({ value }) => value),
+            carrier.value,
+            ...after.map(({ value }) => value),
+          ]);
+
+          expect(diedOfSchemaError(handled.exit), name).toBe(true);
+          // The reports before the spot stay, and the bad one is not among them.
+          expect(handled.reported, name).toEqual(before.flatMap(({ reports }) => reports));
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
+});
+
+// A code a login's path is carried under. It holds no digit, so a login that holds one is never in it by chance.
+const LEAK = declare("demo/leak");
+
+// D31 [secrets]. A login holds a digit, so no fixed word of a message can hold it by chance. Each login in each root
+// (k) is carried as a repo place and as a home place, on a class getter, with a fixed message and hint.
+// Plant: check the place in `carry` and throw `new Error(JSON.stringify(fields.place))` on a bad one, and the thrown
+// message holds the login.
+describe("D31, a carried login goes nowhere", () => {
+  it.effect.prop(
+    "a path under any machine's home root, carried as a repo place or a home place, is read and carried with no throw and no span, and reporting it dies with a SchemaError that holds the login in no output",
+    { drawn: placeParts },
+    ({ drawn }) =>
+      Effect.gen(function* () {
+        for (const rooted of rootedAtLogin(drawn)) {
+          for (const { name, value } of rooted.places) {
+            const label = `${rooted.name}, ${name}`;
+
+            const error = new CarryingError({
+              declared: LEAK,
+              message: "m",
+              place: value,
+              hint: "h",
+              severity: "error",
+            });
+
+            // Reading it throws nothing and makes no span: only a report makes one.
+            const read = yield* readWatched(error);
+
+            expect(Option.isSome(read.found), label).toBe(true);
+            expect(read.spans, label).toEqual([]);
+
+            const run = yield* observedCarried([error]);
+            const refusal = schemaErrorIn(run.exit);
+
+            expect(refusal, label).toBeDefined();
+            expect(run.reported, label).toEqual([]);
+            expect(
+              run.spans.map((span) => span.name),
+              label,
+            ).toEqual(["diagnostics.report"]);
+
+            const outputs = [
+              ...leftBehind(refusal),
+              JSON.stringify(run.reported),
+              JSON.stringify(run.spans.flatMap((span) => [...span.attributes])),
+            ];
+
+            for (const output of outputs) {
+              expect(output, label).not.toContain(rooted.login);
+            }
+          }
         }
       }),
     { arbitrary: { seed: SEED, runs: 100 } },

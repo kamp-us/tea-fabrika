@@ -1,11 +1,11 @@
 /**
- * What a diagnostic is: a code, a severity, a message, a place and a hint, and the declaration of a code with its long text.
+ * What a diagnostic is: a code, a severity, a message, a place and a hint, the declaration of a code with its long text, and a carried diagnostic, which a typed error holds.
  *
  * **Details**
  *
- * A package declares each code once with `make`, and reports only through a declared code (see `Diagnostics`). Nothing here runs a program, prints or picks an exit code.
+ * A package declares each code once with `make`, and reports only through a declared code (see `Diagnostics`). A typed error says which diagnostic it is with `carry`, and the command that handles it reads that with `fromError`. Nothing here runs a program, prints or picks an exit code.
  */
-import { Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 
 // A code: a root name, a slash, a name. Lowercase words joined by single hyphens, as in "config/unknown-setting".
 // The root starts with a letter, as a subcommand's first word does; the name may start with a digit.
@@ -277,4 +277,103 @@ export const make = (code: string, options: { readonly explain: string }): Decla
   }
 
   return { [TypeId]: TypeId, code, explain: options.explain };
+};
+
+// Only `carry` builds a Carried: the key is a symbol this module does not export. `Symbol.for`, as for Declared, so a
+// second copy of the package reads the same key.
+const CarriedId: unique symbol = Symbol.for("@kalfa/diagnostics/Carried");
+
+// What a typed error holds beside the code: a message, a place and a hint, as a caller writes them.
+type CarriedText = Omit<typeof Reported.Encoded, "code" | "severity">;
+
+/**
+ * A carried diagnostic: a declared code and the fields beside it, which a typed error holds, made by `carry`.
+ *
+ * **Details**
+ *
+ * The fields are kept as given and checked only when the code that handles the error reports them. A carried diagnostic is always an error, never a warning, since the subcommand stopped. The `fields` fit `Diagnostics.Fields`, so a handler passes them straight to `report`.
+ *
+ * @category models
+ */
+export interface Carried {
+  readonly [CarriedId]: typeof CarriedId;
+  /** The declared code. */
+  readonly declared: Declared;
+  /** The message, place and hint as given, unchecked, and the severity `"error"`. */
+  readonly fields: CarriedText & { readonly severity: "error" };
+}
+
+/**
+ * Makes the carried diagnostic that a typed error holds.
+ *
+ * **When to use**
+ *
+ * Use to say, in the `diagnostic` getter of a typed error, which diagnostic the error is.
+ *
+ * **Details**
+ *
+ * It takes no severity: a carried diagnostic is always an error. It checks nothing, and keeps the message, place and hint exactly as given. A blank message or a bad place is caught when the handler reports it, and `report` dies then. Only the message, place and hint are copied, so a severity hidden in a wider object never rides along.
+ *
+ * **Example** (A typed error that carries its diagnostic)
+ *
+ * ```ts
+ * import * as Diagnostic from "@kalfa/diagnostics/Diagnostic"
+ * import { Schema } from "effect"
+ * import { UnknownSetting } from "./codes.ts"
+ *
+ * export class UnknownSettingError extends Schema.TaggedError<UnknownSettingError>()("UnknownSettingError", {
+ *   setting: Schema.String,
+ *   line: Schema.Int
+ * }) {
+ *   get diagnostic(): Diagnostic.Carried {
+ *     return Diagnostic.carry(UnknownSetting, {
+ *       message: `The setting \`${this.setting}\` is not declared.`,
+ *       place: Diagnostic.Place.cases.repo.make({ path: ".config/settings.toml", line: this.line }),
+ *       hint: "Check the spelling against the settings reference."
+ *     })
+ *   }
+ * }
+ * ```
+ *
+ * @category constructors
+ */
+export const carry = (declared: Declared, fields: CarriedText): Carried => ({
+  [CarriedId]: CarriedId,
+  declared,
+  fields: { severity: "error", message: fields.message, place: fields.place, hint: fields.hint },
+});
+
+const isCarried = (value: unknown): value is Carried => Predicate.hasProperty(value, CarriedId);
+
+/**
+ * Reads the carried diagnostic from any value a subcommand failed with.
+ *
+ * **When to use**
+ *
+ * Use when a failure is handled, to report what it carries, or to find out that it carries nothing.
+ *
+ * **Details**
+ *
+ * It answers `Option.some` of what the value holds under `diagnostic`, whether the value holds the key itself or its class gives it with a getter, and `Option.none()` when it carries none. Only a value that `carry` made counts: a plain reported diagnostic or a look-alike reads as carrying none. A getter that throws is not caught, and no `cause` is followed: an error that wraps another says itself which diagnostic it is.
+ *
+ * **Example** (Reporting what a failure carries)
+ *
+ * ```ts
+ * import * as Diagnostic from "@kalfa/diagnostics/Diagnostic"
+ * import * as Diagnostics from "@kalfa/diagnostics/Diagnostics"
+ * import { Effect, Option } from "effect"
+ *
+ * export const reportCarried = (cause: unknown) =>
+ *   Option.match(Diagnostic.fromError(cause), {
+ *     onNone: () => Effect.void,
+ *     onSome: (carried) => Diagnostics.report(carried.declared, carried.fields)
+ *   })
+ * ```
+ *
+ * @category reading
+ */
+export const fromError = (cause: unknown): Option.Option<Carried> => {
+  const diagnostic = Predicate.hasProperty(cause, "diagnostic") ? cause.diagnostic : undefined;
+
+  return isCarried(diagnostic) ? Option.some(diagnostic) : Option.none();
 };

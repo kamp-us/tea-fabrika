@@ -8,7 +8,7 @@ import { expectTypeOf, it } from "@effect/vitest";
 import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import * as Diagnostics from "@kalfa/diagnostics/Diagnostics";
 import * as TestDiagnostics from "@kalfa/diagnostics/TestDiagnostics";
-import { Effect } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 export const UnknownSetting = Diagnostic.make("config/unknown-setting", {
   explain: "A settings file names a setting that no app declares. Check the spelling against the settings reference.",
@@ -49,8 +49,33 @@ Diagnostic.formatPlace(flag); // "flag --instance.port"
 const program = found.pipe(Effect.andThen(TestDiagnostics.reported), Effect.provide(TestDiagnostics.layer));
 // [{ code: "config/unknown-setting", severity: "error", message: "...", place: { ... }, hint: "..." }]
 
+export class UnknownSettingError extends Schema.TaggedError<UnknownSettingError, { readonly brand: unique symbol }>()(
+  "UnknownSettingError",
+  {
+    setting: Schema.String,
+    line: Schema.Int,
+  },
+) {
+  get diagnostic(): Diagnostic.Carried {
+    return Diagnostic.carry(UnknownSetting, {
+      message: `The setting \`${this.setting}\` is not declared.`,
+      place: Diagnostic.Place.cases.repo.make({ path: ".config/settings.toml", line: this.line }),
+      hint: "Check the spelling against the settings reference.",
+    });
+  }
+}
+
+// Where the error is handled: report what it carries through `report`, or nothing.
+const reportCarried = (error: UnknownSettingError) =>
+  Option.match(Diagnostic.fromError(error), {
+    onNone: () => Effect.void,
+    onSome: (carried) => Diagnostics.report(carried.declared, carried.fields),
+  });
+
 it("D24 type: the README's examples compile", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
   expectTypeOf(program).toBeObject();
+  // `Option.match` gives a union of its two branches, so the check is `toExtend`, not equality.
+  expectTypeOf(reportCarried).returns.toExtend<Effect.Effect<void, never, Diagnostics.Diagnostics>>();
   expectTypeOf(Diagnostic.formatPlace).toEqualTypeOf<(place: Diagnostic.Place) => string>();
 });

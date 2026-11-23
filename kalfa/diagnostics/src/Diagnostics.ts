@@ -41,7 +41,7 @@ export type Fields = Omit<typeof Diagnostic.Reported.Encoded, "code">;
  *
  * **When to use**
  *
- * Use when a handler finds something to say about a place.
+ * Use when a handler finds something to say about a place, or when it handles an error that carries a diagnostic, read with `Diagnostic.fromError`.
  *
  * **Details**
  *

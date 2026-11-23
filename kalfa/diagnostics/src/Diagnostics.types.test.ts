@@ -1,7 +1,7 @@
-// D8, D9, D16 and D25: the public types of `report`, of the test Layer, of the service's own method and of a
-// place. They are checked by the compiler, not by a test run.
+// D8, D9, D16, D25 and D32: the public types of `report`, of the test Layer, of the service's own method, of a
+// place and of a carried diagnostic. They are checked by the compiler, not by a test run.
 import { expectTypeOf, it } from "@effect/vitest";
-import { type Context, Effect, type Layer } from "effect";
+import { type Context, Effect, type Layer, type Option } from "effect";
 import * as Diagnostic from "./Diagnostic.ts";
 import * as Diagnostics from "./Diagnostics.ts";
 import * as TestDiagnostics from "./TestDiagnostics.ts";
@@ -108,4 +108,44 @@ const placeContract = () => {
 it("D25 type: a place reads nothing, and its text is a plain function", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
   expectTypeOf(placeContract).toBeFunction();
+});
+
+// A carried diagnostic's fields beside its code, as a caller writes them: no severity.
+type Written = Omit<Fields, "severity">;
+
+const carryContract = (declared: Diagnostic.Declared, carried: Diagnostic.Carried, service: Service) => {
+  const place = Cases.repo.make({ path: "." });
+
+  // D32 plant: let `carry` take a severity, and the `@ts-expect-error` on its severity line is unused.
+  expectTypeOf(Diagnostic.carry).toEqualTypeOf<
+    (declared: Diagnostic.Declared, fields: Written) => Diagnostic.Carried
+  >();
+  expectTypeOf(Diagnostic.carry(declared, { message: "m", place, hint: "h" })).toEqualTypeOf<Diagnostic.Carried>();
+  // @ts-expect-error a carried diagnostic is always an error: `carry` takes no severity
+  expectTypeOf(Diagnostic.carry(declared, { severity: "warning", message: "m", place, hint: "h" })).toBeObject();
+  // @ts-expect-error a code written as a string is not a declared code
+  expectTypeOf(Diagnostic.carry("config/unknown-setting", { message: "m", place, hint: "h" })).toBeObject();
+
+  // D32 plant: widen the carried fields' severity to `Diagnostic.Severity`, and this exact-type check fails.
+  expectTypeOf<Diagnostic.Carried["fields"]["severity"]>().toEqualTypeOf<"error">();
+  expectTypeOf(Diagnostics.report(carried.declared, carried.fields)).toEqualTypeOf<
+    Effect.Effect<void, never, Diagnostics.Diagnostics>
+  >();
+  expectTypeOf(Diagnostic.fromError).parameters.toEqualTypeOf<[unknown]>();
+  expectTypeOf(Diagnostic.fromError).returns.toEqualTypeOf<Option.Option<Diagnostic.Carried>>();
+
+  // D32 plant: drop the symbol key from `Carried`, and this object literal compiles and its `@ts-expect-error` is unused.
+  // @ts-expect-error an object literal with a declared code and fields is no carried diagnostic: only `carry` builds one
+  const forged: Diagnostic.Carried = { declared, fields: carried.fields };
+
+  expectTypeOf([forged]).toBeArray();
+
+  // D16 holds for a carried diagnostic too: the service's own method takes only what `report` hands it.
+  // @ts-expect-error a code and a carried diagnostic's fields are not what `report` hands the service
+  expectTypeOf(service.report({ code: carried.declared.code, ...carried.fields })).toBeObject();
+};
+
+it("D32 type: a carried diagnostic is always an error, only carry builds one, and report takes it as it is", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(carryContract).toBeFunction();
 });

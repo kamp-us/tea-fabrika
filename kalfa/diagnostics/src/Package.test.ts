@@ -173,3 +173,28 @@ it.effect("D24 scenario: every code block of the README is in the file the compi
     expect(checked).not.toMatch(/(?:const|let) \w+ = \{ _tag:/);
   }).pipe(Effect.provide(NodeServices.layer)),
 );
+
+// What the README shows of a carried diagnostic: the getter on an error, the maker, the reader, the one way in, the
+// maker of a place for a package whose lint refuses a `_tag` written by hand, and that lint's name.
+const CARRIED_SHAPE = [
+  "get diagnostic(): Diagnostic.Carried",
+  "Diagnostic.carry(",
+  "Diagnostic.fromError(",
+  "Diagnostics.report(carried.declared, carried.fields)",
+  "Diagnostic.Place.cases.<kind>.make",
+  "no-manual-tagged-construction",
+];
+
+// D24, widened. Plant: delete the README line that names the makers, and `no-manual-tagged-construction` and
+// `Diagnostic.Place.cases.<kind>.make` are in the failure. And edit the carry example in the README only, and that block is in the failure above.
+it.effect("D24 scenario: the README shows the carried shape and the maker of a place", () =>
+  Effect.gen(function* () {
+    // scenario: the package's own README at head; no generated input says what a README shows.
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+
+    const readme = yield* fs.readFileString(path.join(yield* packageDir, "README.md"));
+
+    expect(CARRIED_SHAPE.filter((shown) => !readme.includes(shown))).toEqual([]);
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
