@@ -46,6 +46,9 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one r
   a draft pull request when it has none. If the push cannot run, it exits 6 with the commit
   made (and signed, unless it is a `fix`): put the command it prints in your report and go on with your step, and the lead
   runs it. `--commit-only` and a box's commit push nothing here; the quest's host part pushes them.
+- **It ends a merge of main.** With a merge in progress (`git merge --no-commit origin/main`), name
+  your own paths and each conflict you resolved, and it makes the merge commit. Main's files the
+  merge left staged, unchanged, need no naming and no owner. Any other staged path refuses with exit 4.
 - The co-author comes from `FABRIKA_COAUTHOR` (`Name <email>`), or your global git config. It never
   reads a box's own git config.
 
