@@ -1,0 +1,43 @@
+{
+  "name": "@kalfa/github",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rslib build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@octokit/openapi-types": "catalog:",
+    "@rslib/core": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "files": [
+    "dist",
+    "!dist/.rsbuild"
+  ],
+  "exports": {
+    ".": "./src/GitHub.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/GitHub.d.ts",
+        "default": "./dist/GitHub.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  }
+}
