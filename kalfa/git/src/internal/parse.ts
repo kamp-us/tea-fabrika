@@ -616,10 +616,7 @@ const sections = (
         at += 1;
         const removed = take("-", "Removed", Number(oldStart), oldCount === undefined ? 1 : Number(oldCount));
 
-        const added =
-          removed === undefined
-            ? undefined
-            : take("+", "Added", Number(newStart), newCount === undefined ? 1 : Number(newCount));
+        const added = take("+", "Added", Number(newStart), newCount === undefined ? 1 : Number(newCount));
 
         if (removed === undefined || added === undefined) {
           return yield* Result.fail(unreadable("a hunk holds fewer lines than its header says"));
