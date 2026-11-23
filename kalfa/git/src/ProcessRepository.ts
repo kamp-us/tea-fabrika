@@ -5,13 +5,13 @@
  *
  * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a call. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`, and a ref that could not be moved is read again with `for-each-ref`. It writes with `hash-object` and `update-ref` and runs no command that reaches a remote.
  */
-import { Config, Duration, Effect, Layer, Option, Predicate, Result, Schema, Stream } from "effect";
+import { Config, Duration, Effect, Layer, Option, Predicate, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Commit from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
 import { bytes } from "./internal/object.ts";
 import * as Parse from "./internal/parse.ts";
-import * as Ref from "./Ref.ts";
+import type * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
 
@@ -161,30 +161,6 @@ const whole = Effect.fnUntraced(function* (run: Run) {
   }
 });
 
-// The ref names a `for-each-ref` printed as `%(objectname) %(refname)` holds, each with the id it points at.
-const listing = (output: string): Result.Result<ReadonlyArray<Listed>, Repository.GitUnavailable> =>
-  Result.all(
-    output
-      .split("\n")
-      .filter((line) => line !== "")
-      .map((line) => {
-        const [id, name, ...rest] = line.split(" ");
-
-        return id === undefined || name === undefined || rest.length > 0
-          ? Result.fail(
-              unavailable(
-                new Repository.Unreadable({ cause: new Error("a for-each-ref line has an unexpected form") }),
-              ),
-            )
-          : Result.succeed({ id, name });
-      }),
-  );
-
-interface Listed {
-  readonly id: string;
-  readonly name: string;
-}
-
 // Every folder a ref would sit in, shortest first: `refs/heads/a/b` has `refs/heads` and `refs/heads/a`.
 const folders = (ref: Ref.RefName): ReadonlyArray<string> => {
   const parts = ref.split("/");
@@ -193,21 +169,14 @@ const folders = (ref: Ref.RefName): ReadonlyArray<string> => {
 };
 
 // Up to `count` refs at or below `under`, sorted by name: the ref itself first when it exists.
-const listed = Effect.fnUntraced(function* (run: Run, under: string, count: number) {
+const refsUnder = Effect.fnUntraced(function* (run: Run, under: string, count: number) {
   const output = yield* Effect.flatMap(
     run(["for-each-ref", `--count=${count}`, "--format=%(objectname) %(refname)", under]),
     succeeded,
   );
 
-  return yield* Effect.fromResult(listing(yield* stdoutText(output)));
+  return yield* Effect.fromResult(Parse.refIds(yield* stdoutText(output)));
 });
-
-const refNamed = (name: string): Result.Result<Ref.RefName, Repository.GitUnavailable> =>
-  Result.mapError(Schema.decodeUnknownResult(Ref.RefName)(name), () =>
-    unavailable(
-      new Repository.Unreadable({ cause: new Error("a for-each-ref line names a ref that is not a ref name") }),
-    ),
-  );
 
 // Why `update-ref` failed, read from the repository and never from what git said: the ref is not where the caller said
 // it was (`RefMoved`), or another ref is in its way (`RefInTheWay`), else git ended with a code no call reads as an answer.
@@ -217,7 +186,7 @@ const failed = Effect.fnUntraced(function* (
   output: Output,
 ) {
   // The ref sorts first, then what is below it, so two refs show both.
-  const [first, second] = yield* listed(run, move.ref, 2);
+  const [first, second] = yield* refsUnder(run, move.ref, 2);
   const at = first?.name === move.ref ? first.id : undefined;
 
   if (at !== Option.getOrUndefined(move.from)) {
@@ -227,14 +196,14 @@ const failed = Effect.fnUntraced(function* (
   const below = at === undefined ? first : second;
 
   if (below !== undefined) {
-    return yield* new Repository.RefInTheWay({ ref: move.ref, other: yield* Effect.fromResult(refNamed(below.name)) });
+    return yield* new Repository.RefInTheWay({ ref: move.ref, other: below.name });
   }
 
   for (const folder of folders(move.ref)) {
-    const [other] = yield* listed(run, folder, 1);
+    const [other] = yield* refsUnder(run, folder, 1);
 
     if (other?.name === folder) {
-      return yield* new Repository.RefInTheWay({ ref: move.ref, other: yield* Effect.fromResult(refNamed(folder)) });
+      return yield* new Repository.RefInTheWay({ ref: move.ref, other: other.name });
     }
   }
 

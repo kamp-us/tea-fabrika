@@ -219,7 +219,7 @@ export class NoRepository extends Schema.TaggedError<NoRepository, { readonly br
 type Fails = GitUnavailable | TimedOut;
 
 // What a caller says to write a commit: the committer is the settings' and the clock's, never the caller's.
-type Written = {
+type NewCommit = {
   readonly tree: TreeId;
   readonly parents: ReadonlyArray<CommitId>;
   readonly author: Commit.Signature;
@@ -267,7 +267,7 @@ export class Repository extends Context.Service<
       descendant: CommitId,
     ) => Effect.Effect<boolean, NoSuchCommit | HistoryTooShort | Fails>;
     readonly writeCommit: (
-      commit: Written,
+      commit: NewCommit,
     ) => Effect.Effect<Commit.Commit, NoSuchTree | NoSuchCommit | NulInMessage | TooLargeToWrite | Fails>;
     readonly moveRef: (move: {
       readonly ref: Ref.RefName;
@@ -284,7 +284,7 @@ export class Repository extends Context.Service<
  */
 export type Raw = Omit<Repository["Service"], "writeCommit"> & {
   readonly writeCommit: (
-    commit: Written & { readonly committer: Commit.Signature },
+    commit: NewCommit & { readonly committer: Commit.Signature },
   ) => ReturnType<Repository["Service"]["writeCommit"]>;
 };
 
@@ -344,7 +344,7 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
 
       return answer;
     }),
-    writeCommit: Effect.fn("git.writeCommit")(function* (commit: Written) {
+    writeCommit: Effect.fn("git.writeCommit")(function* (commit: NewCommit) {
       yield* Effect.annotateCurrentSpan({ "kalfa.git.tree": commit.tree, "kalfa.git.parents": commit.parents });
 
       if (commit.message.includes("\0")) {
@@ -353,16 +353,16 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
 
       const seconds = Math.floor((yield* Clock.currentTimeMillis) / 1000);
 
-      const written = {
+      const signed = {
         ...commit,
         committer: new Commit.Signature({ ...settings.committer, at: { seconds, offset: "+0000" } }),
       };
 
-      if (bytes(written).length > settings.limits.bytes) {
+      if (bytes(signed).length > settings.limits.bytes) {
         return yield* new TooLargeToWrite({ most: settings.limits.bytes });
       }
 
-      const made = yield* limited(raw.writeCommit(written));
+      const made = yield* limited(raw.writeCommit(signed));
       yield* Effect.annotateCurrentSpan({ "kalfa.git.commit": made.id });
 
       return made;

@@ -369,13 +369,13 @@ const isAncestor = (
   Result.map(history(store, [ancestor, descendant]), () => reach(store, [descendant]).has(ancestor));
 
 // What a write to the store answers, and the store after it: a call that fails leaves the store as it was.
-type Written<A, E> = readonly [Result.Result<A, E>, Store];
+type Step<A, E> = readonly [Result.Result<A, E>, Store];
 
 // A commit put in the store. Its tree is in the store, then each parent is, in order: the error names the first that is not.
-const written = (
+const withCommit = (
   store: Store,
   made: Commit.Commit,
-): Written<Commit.Commit, Repository.NoSuchTree | Repository.NoSuchCommit> => {
+): Step<Commit.Commit, Repository.NoSuchTree | Repository.NoSuchCommit> => {
   if (!store.trees.has(made.tree)) {
     return [Result.fail(new Repository.NoSuchTree({ id: made.tree })), store];
   }
@@ -391,10 +391,10 @@ const written = (
 
 // A ref pointed at a commit of the store, checked as git's `update-ref` checks: the commit is in the store, the ref is at
 // `from` now (none means it is not there), and no other ref is a folder of it or sits in its folder.
-const moved = (
+const withRef = (
   store: Store,
   move: { readonly ref: Ref.RefName; readonly from: Option.Option<CommitId>; readonly to: CommitId },
-): Written<void, Repository.NoSuchCommit | Repository.RefMoved | Repository.RefInTheWay> => {
+): Step<void, Repository.NoSuchCommit | Repository.RefMoved | Repository.RefInTheWay> => {
   if (!store.commits.has(move.to)) {
     return [Result.fail(new Repository.NoSuchCommit({ id: move.to })), store];
   }
@@ -434,7 +434,7 @@ export const layer = (
       const read = <A, E>(call: (held: Store) => Result.Result<A, E>): Effect.Effect<A, E> =>
         Effect.flatMap(Cell.get(cell), (held) => Effect.fromResult(call(held)));
 
-      const write = <A, E>(call: (held: Store) => Written<A, E>): Effect.Effect<A, E> =>
+      const write = <A, E>(call: (held: Store) => Step<A, E>): Effect.Effect<A, E> =>
         Effect.flatMap(Cell.modify(cell, call), Effect.fromResult);
 
       return Context.make(
@@ -449,9 +449,9 @@ export const layer = (
             writeCommit: (fields) =>
               commit(fields).pipe(
                 Effect.provideService(Digest.Digest, digest),
-                Effect.flatMap((made) => write((held) => written(held, made))),
+                Effect.flatMap((made) => write((held) => withCommit(held, made))),
               ),
-            moveRef: (move) => write((held) => moved(held, move)),
+            moveRef: (move) => write((held) => withRef(held, move)),
           },
           settings,
         ),
