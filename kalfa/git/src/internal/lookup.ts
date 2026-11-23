@@ -3,6 +3,7 @@
 import { Result, Schema } from "effect";
 import * as Repository from "../Repository.ts";
 import { Path } from "../Tree.ts";
+import * as Folder from "./folder.ts";
 import { byBytes } from "./object.ts";
 
 /**
@@ -47,13 +48,6 @@ export const find = (path: Path, at: At): Result.Result<void, Repository.NotAFil
   return Result.succeed(undefined);
 };
 
-// Every folder a path sits in, the top one first: `a/b/c` has `a` and `a/b`.
-const folders = (path: Path): ReadonlyArray<Path> =>
-  path
-    .split("/")
-    .slice(0, -1)
-    .map((_, index, parts) => Schema.decodeSync(Path)(parts.slice(0, index + 1).join("/")));
-
 /**
  * Checks an edit against what the base tree holds: it fails `NotAFile` for the first changed path by bytes that `find` refuses, removal included, so a link is never replaced or removed, and then `PathInTheWay` for the first new file by bytes that sits below a file the edit keeps or below another new file.
  *
@@ -76,14 +70,14 @@ export const check = (
     }
 
     for (const path of paths) {
-      const other = folders(path).find((above) => {
+      const other = Folder.above(path).find((above) => {
         const change = edit.get(above);
 
         return change === undefined ? at(above) === "file" : change !== "absent";
       });
 
       if (changes.get(path) !== "absent" && other !== undefined) {
-        return yield* Result.fail(new Repository.PathInTheWay({ path, other }));
+        return yield* Result.fail(new Repository.PathInTheWay({ path, other: Schema.decodeSync(Path)(other) }));
       }
     }
   });

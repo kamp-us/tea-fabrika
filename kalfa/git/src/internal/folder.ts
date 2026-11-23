@@ -7,6 +7,17 @@ import type { Listed } from "./parse.ts";
 
 const encoder = new TextEncoder();
 
+/**
+ * Every folder a path sits in, the top one first: `a/b/c` has `a` and `a/b`, and `a` has none.
+ *
+ * @internal
+ */
+export const above = (path: string): ReadonlyArray<string> =>
+  path
+    .split("/")
+    .slice(0, -1)
+    .map((_, at, parts) => parts.slice(0, at + 1).join("/"));
+
 // A name as text, or nothing when its bytes are not UTF-8: no path of an edit can name such an entry.
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 

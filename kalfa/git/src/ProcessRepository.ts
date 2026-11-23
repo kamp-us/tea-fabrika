@@ -633,15 +633,7 @@ const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Par
       }
 
       // Every folder above a changed path is made again, the deepest first, from its own listing: a folder whose entries come out the same keeps its id.
-      const above = new Set([
-        "",
-        ...paths.flatMap((path) =>
-          path
-            .split("/")
-            .slice(0, -1)
-            .map((_, at, parts) => parts.slice(0, at + 1).join("/")),
-        ),
-      ]);
+      const above = new Set(["", ...paths.flatMap((path) => Folder.above(path))]);
 
       const depth = (folder: string): number => (folder === "" ? 0 : folder.split("/").length);
       const made = new Map<string, string | undefined>();
