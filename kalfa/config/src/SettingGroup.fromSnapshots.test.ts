@@ -20,7 +20,6 @@ import { Effect, Option } from "effect";
 import { field } from "./internal/names.ts";
 import type { Settled } from "./internal/read.ts";
 import {
-  alike,
   apply,
   boot,
   builds,
@@ -103,7 +102,8 @@ const owed = (app: string, before: ReadonlyArray<Settled>, after: ReadonlyArray<
 
 // Plants: (i) set a restart value from a later snapshot too: red; (i) keep the first's origins for live settings: red;
 // (j) compare a restart value with the first snapshot, not the last taken: a value that stays logs again and one that
-// goes back logs nothing, red; (k) end the fold on a refused item: the next good one is not taken, red.
+// goes back logs nothing, red; (k) end the fold on a refused item: the next good one is not taken, red; (m) hand
+// `typed` another group in `layerFromSnapshots`: the receiver's own `snapshots` gives another app or other values, red.
 it.effect.prop(
   "SN6 the receiver starts on the first item and follows: after each later item each live field yields the last taken value and its `changes` gave the distinct taken values, each restart field reads the first's value, the origins follow a live setting and keep a restart setting's first, each restart value that differs from the last taken logs one line, each refused item logs one warning and moves nothing, and `snapshots` gives the last taken",
   { draw: Draw },
@@ -152,10 +152,10 @@ it.effect.prop(
           takens.push(next);
         }
 
-        expect(
-          alike(yield* heldNow(inbox), yield* snapshotFrom(draw, group, nextFrame)),
-          `${label}: snapshots gives the last taken`,
-        ).toBe(true);
+        // The receiver re-offers what it took, whole: the app, the values, the origins and the hash.
+        expect(yield* heldNow(inbox), `${label}: snapshots gives the last taken`).toEqual(
+          yield* snapshotFrom(draw, group, nextFrame),
+        );
 
         frame = nextFrame;
         last = next;
@@ -237,9 +237,7 @@ it.effect.prop(
       expect(yield* running(inbox), "the last values hold").toEqual(expected(settledFrom(draw, group, first), target));
       expect(infos(inbox.capture), "one line").toEqual([ended(draw.app)]);
       expect(warnings(inbox.capture), "no warning").toEqual([]);
-      expect(alike(yield* heldNow(inbox), yield* snapshotFrom(draw, group, frame)), "snapshots holds the last").toBe(
-        true,
-      );
+      expect(yield* heldNow(inbox), "snapshots holds the last").toEqual(yield* snapshotFrom(draw, group, frame));
       yield* closeInbox(inbox);
       reach.mark("ended");
 
