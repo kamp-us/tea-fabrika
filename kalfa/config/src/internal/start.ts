@@ -21,6 +21,28 @@ export interface Resolved {
   readonly taken: Stream.Stream<ReadonlyArray<Settled>>;
 }
 
+/** What a process reads from a resolved list: each value under its field, a live setting as a `Live`, and the reference of each live setting by name. The quiet window is the package's own setting, so the values hold only what the program declared. */
+export const running = Effect.fnUntraced(function* (settled: ReadonlyArray<Settled>) {
+  const values: Record<string, unknown> = {};
+  const lives = new Map<string, SubscriptionRef.SubscriptionRef<unknown>>();
+
+  for (const { setting, value } of settled) {
+    if (setting === debounce) {
+      continue;
+    }
+
+    if (setting.live) {
+      const made = yield* reading(value);
+      values[field(setting.name)] = made.live;
+      lives.set(setting.name, made.ref);
+    } else {
+      values[field(setting.name)] = value;
+    }
+  }
+
+  return { values: Object.freeze(values), lives };
+});
+
 /**
  * Starts a group: reads and checks both files, then resolves every setting, and fails with the first fault. A group with a live setting goes on watching its files, in the layer's scope.
  */
@@ -52,24 +74,7 @@ export const start = Effect.fnUntraced(function* (
   const taken = { repo: yield* readRepo(setup), user: yield* readUser(setup) };
   const held: Held = { ...taken, settled: yield* settle(setup, taken.repo, taken.user) };
 
-  const values: Record<string, unknown> = {};
-  const lives = new Map<string, SubscriptionRef.SubscriptionRef<unknown>>();
-
-  for (const { setting, value } of held.settled) {
-    // The quiet window is the package's own setting, so the program's values hold only what the program declared.
-    if (setting === debounce) {
-      continue;
-    }
-
-    if (setting.live) {
-      const made = yield* reading(value);
-      values[field(setting.name)] = made.live;
-      lives.set(setting.name, made.ref);
-    } else {
-      values[field(setting.name)] = value;
-    }
-  }
-
+  const { values, lives } = yield* running(held.settled);
   const started = new Map(held.settled.map(({ setting, origin }) => [setting.name, Object.freeze(origin)]));
   const origins = yield* Ref.make(Object.freeze(Object.fromEntries(started)));
   const taking = yield* SubscriptionRef.make(held.settled);
@@ -83,7 +88,7 @@ export const start = Effect.fnUntraced(function* (
   }
 
   const resolved: Resolved = {
-    values: Object.freeze(values),
+    values,
     origins: Ref.get(origins),
     taken: SubscriptionRef.changes(taking),
   };

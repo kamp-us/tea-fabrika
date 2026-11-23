@@ -1,53 +1,11 @@
 /**
  * A running group's follower: it takes each change to a configuration file, in one fiber, as the start takes the files, and publishes what moved. A change that is refused is logged, and the last good values hold.
  */
-import { Deferred, Effect, Equal, type Duration, Ref, Stream, SubscriptionRef } from "effect";
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
+import { Deferred, type Duration, Effect, Stream, SubscriptionRef } from "effect";
 import type * as Setting from "../Declaration.ts";
-import type { Origin } from "../Sources.ts";
-import { type Held, readRepo, readUser, type Settled, type Setup, settle } from "./read.ts";
+import { apply, type Sinks } from "./apply.ts";
+import { type Held, readRepo, readUser, type Setup, settle } from "./read.ts";
 import { ticks } from "./watch.ts";
-
-/** What the follower publishes to: the reference of each live setting by name, and the origins as they are now. */
-interface Sinks {
-  readonly lives: ReadonlyMap<string, SubscriptionRef.SubscriptionRef<unknown>>;
-  readonly origins: Ref.Ref<Readonly<Record<string, Origin>>>;
-  /** What each setting's origin was at the start: a restart setting keeps it. */
-  readonly started: ReadonlyMap<string, Origin>;
-  /** Every resolved list as taken: the one now, then each one a change takes. */
-  readonly taken: SubscriptionRef.SubscriptionRef<ReadonlyArray<Settled>>;
-}
-
-/** Publishes what one taken change moved: each live value that differs, and one line for each restart value that differs. The origins follow the live settings. */
-const publish = Effect.fnUntraced(function* (setup: Setup, sinks: Sinks, held: Held, next: Held, file: Setting.File) {
-  for (const [before, after] of Arr.zip(held.settled, next.settled)) {
-    const { name } = after.setting;
-    const ref = sinks.lives.get(name);
-
-    if (Equal.equals(before.value, after.value)) {
-      continue;
-    }
-
-    if (ref === undefined) {
-      yield* Effect.logInfo(`${setup.names[file]}: ${name} changed. It applies when ${setup.group.app} starts again.`);
-    } else {
-      yield* SubscriptionRef.set(ref, after.value);
-    }
-  }
-
-  yield* Ref.set(
-    sinks.origins,
-    Object.freeze(
-      Rec.fromEntries(
-        next.settled.map(({ setting, origin }) => [
-          setting.name,
-          Object.freeze(sinks.lives.has(setting.name) ? origin : (sinks.started.get(setting.name) ?? origin)),
-        ]),
-      ),
-    ),
-  );
-});
 
 /** Takes one file's new text: read again, checked whole as the start does it, every setting resolved again, and what moved published. Fails with the first fault, and then nothing is published. */
 const take = Effect.fnUntraced(function* (setup: Setup, sinks: Sinks, held: Held, file: Setting.File) {
@@ -56,7 +14,7 @@ const take = Effect.fnUntraced(function* (setup: Setup, sinks: Sinks, held: Held
   const user = file === "user" ? yield* readUser(taking) : held.user;
   const next: Held = { repo, user, settled: yield* settle(taking, repo, user) };
 
-  yield* publish(setup, sinks, held, next, file);
+  yield* apply(sinks, setup.group.app, held.settled, next.settled, setup.names[file]);
   yield* SubscriptionRef.set(sinks.taken, next.settled);
 
   return next;

@@ -22,6 +22,7 @@ import { frozen } from "./internal/frozen.ts";
 import type { Live } from "./internal/live.ts";
 import { field, variable } from "./internal/names.ts";
 import { shown } from "./internal/place.ts";
+import { receive } from "./internal/receive.ts";
 import { make as snapshot, same, type Snapshot } from "./internal/snapshot.ts";
 import { type Resolved, start } from "./internal/start.ts";
 import { toml } from "./internal/toml.ts";
@@ -303,6 +304,31 @@ export type {
    */
   Snapshot,
 };
+
+/**
+ * Starts a group from a stream of snapshots, in a process that cannot read files. The first snapshot starts it; each later one updates its live settings.
+ *
+ * **Details**
+ *
+ * The first item is read strictly and starts the group, so the group yields the values the loading process read, and `origins` gives where they came from. Each later item is read the same way and applied as the file follower applies a change: a live setting gets its new value, and a changed restart setting is logged as `<name> changed. It applies when <app> starts again.` while its value and origin stay. A snapshot that does not fit the group is refused: the first fails the layer with reason `snapshot`, a later one is logged as a warning and the last good values hold. A stream that ends before its first item fails the layer, and one that ends later is logged once. It runs in the span `config.layer`, and each later item in a root span `config.update`.
+ *
+ * **Gotchas**
+ *
+ * The stream cannot fail: a carrier's failure is the app's to handle, so one cannot be passed in. The layer reads no file and no environment, so the stop on a variable for a file-only setting holds on the loading process only. Needs `Digest`.
+ *
+ * @category layers
+ */
+export const layerFromSnapshots = <App extends string, R extends ReadonlyArray<Setting.Any>, RS>(
+  group: SettingGroup<App, R>,
+  snapshots: Stream.Stream<unknown, never, RS>,
+): Layer.Layer<Identifier<App, R>, SettingsError, RS | Digest.Digest> =>
+  Layer.effect(
+    key(group.app, group.settings),
+    receive({ app: group.app, settings: watched(group.settings) }, snapshots).pipe(
+      Effect.map((started) => typed<R>({ app: group.app, settings: watched(group.settings) }, started)),
+      Effect.withSpan("config.layer", { attributes: { "kalfa.config.app": group.app } }),
+    ),
+  );
 
 /**
  * One edit of one configuration file's text: set one setting of the group, or take it out.
