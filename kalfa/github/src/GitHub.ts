@@ -430,6 +430,12 @@ const run = Effect.fn("github.call")(function* (
 
   const refused = (side: "input" | "answer") => (error: Schema.SchemaError) => refuse(side, error.message, error);
 
+  // The one place every call passes through, the live layer's and the fake's alike: a token a none route would drop is a
+  // mistake in the code that called, so it dies with the route and never the token, before anything is sent.
+  if (op.auth === "none" && options?.token !== undefined) {
+    return yield* Effect.die(`${op.route} is declared auth: "none", so it sends no token`);
+  }
+
   const filled = yield* Effect.fromResult(wire.fill(op.path, given.params ?? {})).pipe(
     Effect.mapError((message) => refuse("input", message)),
   );

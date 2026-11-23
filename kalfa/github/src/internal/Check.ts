@@ -235,26 +235,35 @@ export interface Settings {
   readonly auth?: "none";
 }
 
-// What the options say for a key: every value it may hold, and the default when it may be left out.
-type Said<O extends Settings, K extends keyof Settings> = K extends keyof O ? Exclude<O[K], undefined> : never;
+// What the options say for a key: every value it may hold. Options typed as a union are read member by member, since `keyof`
+// of a union keeps only the keys every member has.
+type Said<O extends Settings, K extends keyof Settings> = O extends unknown
+  ? K extends keyof O
+    ? Exclude<O[K], undefined>
+    : never
+  : never;
 
-type MayBeLeftOut<O extends Settings, K extends keyof Settings> = K extends keyof O
-  ? Partial<Pick<O, K>> extends Pick<O, K>
-    ? true
-    : false
-  : true;
+// Whether the options may leave a key out: a member without it, or a key whose value may be `undefined` (an optional key
+// reads so, and so does a key typed `undefined` in a config without `exactOptionalPropertyTypes`).
+type MayBeLeftOut<O extends Settings, K extends keyof Settings> = O extends unknown
+  ? K extends keyof O
+    ? undefined extends O[K]
+      ? true
+      : false
+    : true
+  : never;
 
 /**
  * How a route's answer is read: every `body` its options may say, and `"json"` when they may say none. The type is a union
  * that holds the value, however the options were built.
  */
-export type BodyKind<O extends Settings> = Said<O, "body"> | (MayBeLeftOut<O, "body"> extends true ? "json" : never);
+export type BodyKind<O extends Settings> = Said<O, "body"> | (true extends MayBeLeftOut<O, "body"> ? "json" : never);
 
 /**
  * Who a route's request is sent as: every `auth` its options may say, and `"login"` when they may say none. The type is a
  * union that holds the value, however the options were built.
  */
-export type AuthKind<O extends Settings> = Said<O, "auth"> | (MayBeLeftOut<O, "auth"> extends true ? "login" : never);
+export type AuthKind<O extends Settings> = Said<O, "auth"> | (true extends MayBeLeftOut<O, "auth"> ? "login" : never);
 
 /** What a caller may pass to `route` after the route text, each part by the description's rules. */
 type Declaration<

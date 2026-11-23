@@ -67,7 +67,8 @@ const runs = GitHub.call(ListCheckRuns, {
 ```
 
 `call` takes a third argument, `{ token }`, a `Redacted` string: the token this one call is sent with, in place of the
-service's login. It does not compile on an `auth: "none"` route. The token is never put in the path, the query, a span or an
+service's login. It does not compile on a route that may be `auth: "none"`; a cast that gets one past the types makes the call
+die, naming the route and never the token, before anything is sent. The token is never put in the path, the query, a span or an
 error.
 
 The input is what the route declared, and nothing else: `params` when the route text has `{name}` parts, `query` when a query
