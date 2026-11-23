@@ -5,7 +5,7 @@
  *
  * Each is a plain function of streams that keeps nothing from one frame to the next, so a socket sits in a chain of stages as one more stage: `encode`, `socket`, `decode`. The format is the `Format` service and the socket is Effect's own `Socket`, so any Layer of either works.
  */
-import { Data, Effect, Option, Predicate, Schema, Stream } from "effect";
+import { Array as Arr, Channel, Data, Effect, Option, Predicate, Schema, Stream } from "effect";
 import { Socket } from "effect/socket";
 import { Format, FormatError } from "./Format.ts";
 import type { Frame } from "./Frame.ts";
@@ -110,7 +110,7 @@ export const decodeTraced =
  *
  * **Details**
  *
- * Writing and reading run together, so an end can answer what it reads while it is still sending. A close with code 1000 ends the stream cleanly after every frame read before it, and any other close fails it with Effect's own `SocketError`. A failure of `out` fails the stream as it is. The stream runs inside one span named `transport.socket`. When `out` ends nothing is closed, since the far end may still send. The socket closes, with code 1000, when the scope of the chain ends.
+ * Each frame of bytes is read as text on its own, so half a character at the end of one frame is no part of the next. Writing and reading run together, so an end can answer what it reads while it is still sending. A close with code 1000 ends the stream cleanly after every frame read before it, and any other close fails it with Effect's own `SocketError`. A failure of `out` fails the stream as it is. The stream runs inside one span named `transport.socket`. When `out` ends nothing is closed, since the far end may still send. The socket closes, with code 1000 written by this function, when the scope of the chain ends.
  *
  * @category sockets
  */
@@ -122,7 +122,7 @@ export const socket = <E, R>(
       out.pipe(
         // A failure of `out` is wrapped on the way in, so a `SocketError` that comes out is the socket's own, never one a stage raised.
         Stream.mapError((error) => new Staged({ error })),
-        Stream.pipeThroughChannel(Socket.toChannelString<Staged<E>>(connection)),
+        Stream.pipeThroughChannel(textFrames<Staged<E>>(connection)),
         Stream.catchIf(isNormalClose, () => Stream.empty),
         Stream.mapError((error) => (error instanceof Staged ? error.error : error)),
       ),
@@ -133,3 +133,20 @@ class Staged<E> extends Data.TaggedClass("@kalfa/transport/Staged")<{ readonly e
 
 const isNormalClose = (error: Socket.SocketError | Staged<unknown>): error is Socket.SocketError =>
   Socket.isSocketError(error) && Predicate.isTagged(error.reason, "SocketCloseError") && error.reason.code === 1000;
+
+// A socket Layer may close its connection with no code when the scope ends (Effect's Node server does), which the far end reads as 1005, a failure. This writes 1000 first: the finalizer is added after the reader is acquired, so it runs before the reader's own release.
+const closing = (connection: Socket.Socket): Socket.Socket =>
+  Socket.make({
+    reader: Effect.tap(connection.reader, () =>
+      Effect.flatMap(connection.writer, (writer) =>
+        Effect.addFinalizer(() => Effect.ignore(writer.write(new Socket.CloseEvent(1000)))),
+      ),
+    ),
+    writer: connection.writer,
+  });
+
+// One frame is the text of its own bytes: a decoder is made for each, so half a character at the end of a frame is no part of the next one, and it reads as U+FFFD in its own text, where `decode` refuses it.
+const textFrames = <IE>(connection: Socket.Socket) =>
+  Socket.toChannel<IE>(closing(connection)).pipe(
+    Channel.map((chunk) => Arr.map(chunk, (bytes) => new TextDecoder().decode(bytes))),
+  );
