@@ -145,15 +145,25 @@ const CONSTRUCTS: ReadonlyArray<string> = [
 /**
  * One description: a line of marks, then each construct under a drawn text line (the construct is the line below a text
  * line, and the first of the description is the marks), joined by a break (the seeds' unless one is given), and a final
- * break when asked. The order of the constructs turns with the seeds, and every one is in every description.
+ * break when asked. The order of the constructs turns with the seeds, and every one is in every description. The first text
+ * line ends in two spaces, and the whole description does too when `spaced` is given.
  */
-export const describe = (draw: TextDraw, n: number, options: { final?: boolean; br?: Break } = {}): string => {
+export const describe = (
+  draw: TextDraw,
+  n: number,
+  options: { final?: boolean; br?: Break; spaced?: boolean } = {},
+): string => {
   const br = options.br ?? BREAKS[pick(draw, n + 1) % BREAKS.length] ?? "\n";
   const turn = pick(draw, n + 3) % CONSTRUCTS.length;
   const order = [...CONSTRUCTS.slice(turn), ...CONSTRUCTS.slice(0, turn)];
 
-  const lines = order.flatMap((construct, i) => [draw.lines[(n + i) % draw.lines.length] ?? "x", construct]);
-  const body = [MARKS[n % MARKS.length] ?? "z", ...lines].join(br);
+  // The first text line ends in two spaces, which Markdown reads as a hard line break and drops.
+  const lines = order.flatMap((construct, i) => [
+    `${draw.lines[(n + i) % draw.lines.length] ?? "x"}${i === 0 ? "  " : ""}`,
+    construct,
+  ]);
+
+  const body = `${[MARKS[n % MARKS.length] ?? "z", ...lines].join(br)}${options.spaced === true ? "  " : ""}`;
 
   return options.final === true ? `${body}${br}` : body;
 };
@@ -162,7 +172,25 @@ export const describe = (draw: TextDraw, n: number, options: { final?: boolean; 
 // Declared settings and groups
 // ---------------------------------------------------------------------------------------------
 
-type Kind = "int" | "literal" | "pattern" | "branded" | "record" | "array" | "required" | "text";
+type Kind =
+  | "int"
+  | "literal"
+  | "pattern"
+  | "branded"
+  | "record"
+  | "array"
+  | "required"
+  | "text"
+  // The kinds whose checks have an exact JSON Schema form: a text of at least one character, a text of code points
+  // between bounds, an array of at least one item or between bounds, an array without a repeat, a record with at least one
+  // property, and a text that starts with a letter.
+  | "nonempty"
+  | "codepoints"
+  | "arrmin"
+  | "arrbounds"
+  | "unique"
+  | "props"
+  | "starts";
 
 type Files = Setting.Files;
 
@@ -243,6 +271,65 @@ const declare = (spec: Spec): Setting.Any => {
       );
     case "required":
       return marked(spec, Setting.make(spec.name, Port).pipe(described(spec), scoped(spec)));
+    case "nonempty":
+      return marked(
+        spec,
+        Setting.make(spec.name, Schema.NonEmptyString).pipe(Setting.withDefault("x"), described(spec), scoped(spec)),
+      );
+    case "codepoints":
+      return marked(
+        spec,
+        Setting.make(spec.name, Schema.String.check(Schema.isMinCodePoints(2), Schema.isMaxCodePoints(8))).pipe(
+          Setting.withDefault("ab"),
+          described(spec),
+          scoped(spec),
+        ),
+      );
+    case "arrmin":
+      return marked(
+        spec,
+        Setting.make(spec.name, Schema.Array(Schema.Int).check(Schema.isMinLength(1))).pipe(
+          Setting.withDefault([1]),
+          described(spec),
+          scoped(spec),
+        ),
+      );
+    case "arrbounds":
+      return marked(
+        spec,
+        Setting.make(spec.name, Schema.Array(Schema.Int).check(Schema.isBetweenLength(1, 3))).pipe(
+          Setting.withDefault([1, 2]),
+          described(spec),
+          scoped(spec),
+        ),
+      );
+    case "unique":
+      return marked(
+        spec,
+        Setting.make(spec.name, Schema.Array(Schema.Int).check(Schema.isUnique())).pipe(
+          Setting.withDefault([1, 2]),
+          described(spec),
+          scoped(spec),
+        ),
+      );
+    case "props":
+      return marked(
+        spec,
+        Setting.make(spec.name, Schema.Record(Schema.String, Schema.Int).check(Schema.isMinProperties(1))).pipe(
+          Setting.withDefault({ x: 1 }),
+          described(spec),
+          scoped(spec),
+        ),
+      );
+    case "starts":
+      return marked(
+        spec,
+        Setting.make(spec.name, Schema.String.check(Schema.isStartingWith("a"))).pipe(
+          Setting.withDefault("a1"),
+          described(spec),
+          scoped(spec),
+        ),
+      );
     case "text":
       return marked(
         spec,
@@ -284,6 +371,13 @@ const defaultFor = (kind: Kind, text: string): Option.Option<Json> =>
     Match.when("record", () => Option.some({ a: 90 })),
     Match.when("array", () => Option.some([70])),
     Match.when("required", () => Option.none()),
+    Match.when("nonempty", () => Option.some("x")),
+    Match.when("codepoints", () => Option.some("ab")),
+    Match.when("arrmin", () => Option.some([1])),
+    Match.when("arrbounds", () => Option.some([1, 2])),
+    Match.when("unique", () => Option.some([1, 2])),
+    Match.when("props", () => Option.some({ x: 1 })),
+    Match.when("starts", () => Option.some("a1")),
     Match.orElse(() => Option.some(text)),
   );
 
@@ -316,6 +410,27 @@ export const specsB = (draw: TextDraw): ReadonlyArray<Spec> => {
     fileOnly: false,
     description: describe(draw, n + 1),
     default: defaultFor(kind, TEXTS[pick(draw, n) % TEXTS.length] ?? ""),
+  }));
+};
+
+/** Groups C and D: the kinds whose checks have an exact JSON Schema form, so `jsonSchema` never throws for them. */
+export const specsC = (draw: TextDraw): ReadonlyArray<Spec> =>
+  exact(draw, ["nonempty", "codepoints", "arrmin", "props"], 6);
+
+export const specsD = (draw: TextDraw): ReadonlyArray<Spec> =>
+  exact(draw, ["arrbounds", "unique", "starts", "nonempty"], 7);
+
+const exact = (draw: TextDraw, kinds: ReadonlyArray<Kind>, seed: number): ReadonlyArray<Spec> => {
+  const names = namesFor(draw);
+
+  return kinds.map((kind, n) => ({
+    name: names[n] ?? "x.y",
+    kind,
+    files: filesFor(draw, n, n + seed),
+    live: false,
+    fileOnly: false,
+    description: describe(draw, n + seed),
+    default: defaultFor(kind, ""),
   }));
 };
 
@@ -391,6 +506,13 @@ export const validValue = (draw: TextDraw, spec: Spec, n: number): Json =>
     Match.when("record", () => ({ a: number(draw, n) })),
     Match.when("array", () => [number(draw, n), number(draw, n + 1)]),
     Match.when("required", () => number(draw, n + 2)),
+    Match.when("nonempty", () => word(draw, n)),
+    Match.when("codepoints", () => `${word(draw, n)}雪`),
+    Match.when("arrmin", () => [number(draw, n)]),
+    Match.when("arrbounds", () => [number(draw, n), number(draw, n + 1)]),
+    Match.when("unique", () => [number(draw, n), number(draw, n + 1) + 1]),
+    Match.when("props", () => ({ [word(draw, n)]: number(draw, n) })),
+    Match.when("starts", () => `a${word(draw, n)}`),
     Match.orElse(() => TEXTS[pick(draw, n) % TEXTS.length] ?? "x"),
   );
 
@@ -404,6 +526,13 @@ const refusedValue = (draw: TextDraw, spec: Spec): Json =>
     Match.when("record", () => ({ a: "x" })),
     Match.when("array", () => [1, "x"]),
     Match.when("required", () => "x"),
+    Match.when("nonempty", () => ""),
+    Match.when("codepoints", () => "a"),
+    Match.when("arrmin", () => []),
+    Match.when("arrbounds", () => [1, 2, 3, 4]),
+    Match.when("unique", () => [1, 1]),
+    Match.when("props", () => ({})),
+    Match.when("starts", () => "b"),
     Match.orElse(() => 5),
   );
 
@@ -434,7 +563,7 @@ const VERSIONS_REFUSED: ReadonlyArray<Json> = [
 
 export const WINDOWS_VALID = ["100 millis", "2 weeks", "1.5 seconds", "-Infinity", "Infinity", "3 minute", "0 nanos"];
 
-const WINDOWS_REFUSED: ReadonlyArray<Json> = [
+export const WINDOWS_REFUSED: ReadonlyArray<Json> = [
   "2 fortnights",
   "1millis",
   "1 Millis",
@@ -472,7 +601,7 @@ export const documents = (
 
   if (first !== undefined) {
     docs.push({ id: "refused", value: put({}, first.name, refusedValue(draw, first)), accepted: false });
-    docs.push({ id: "table-for-value", value: put({}, first.name, { x: 1 }), accepted: false });
+    docs.push({ id: "table-for-value", value: put({}, first.name, { zz: "q" }), accepted: false });
     docs.push({ id: "value-for-table", value: put({}, first.name.split(".")[0] ?? "x", 1), accepted: false });
   }
 
@@ -801,3 +930,21 @@ export const lone = (draw: TextDraw): Spec => ({
   description: describe(draw, 0),
   default: defaultFor("int", ""),
 });
+
+// ---------------------------------------------------------------------------------------------
+// Schemas JSON Schema cannot hold exactly: `jsonSchema` throws for each
+// ---------------------------------------------------------------------------------------------
+
+/** One setting whose schema has no exact JSON Schema form: a text length counts UTF-16 units where JSON Schema counts code points, a lowercase text and a pattern with no `u` flag have no form, and a bare filter none either. */
+export const LOOSE: ReadonlyArray<{ readonly label: string; readonly schema: Schema.Codec<string, string> }> = [
+  { label: "a text of at least two characters", schema: Schema.String.check(Schema.isMinLength(2)) },
+  { label: "a text of at most eight characters", schema: Schema.String.check(Schema.isMaxLength(8)) },
+  { label: "a text between bounds", schema: Schema.String.check(Schema.isBetweenLength(2, 8)) },
+  { label: "a lowercase text", schema: Schema.String.check(Schema.isLowercased()) },
+  { label: "a pattern without the u flag", schema: Schema.String.check(Schema.isPattern(/^a$/)) },
+  { label: "a bare filter", schema: Schema.String.check(Schema.makeFilter((text: string) => text.length > 0)) },
+];
+
+/** A required setting of a schema. */
+export const looseSetting = (name: string, schema: Schema.Codec<string, string>) =>
+  Setting.make(name, schema).pipe(Setting.withDescription("A setting with no exact JSON Schema form."));

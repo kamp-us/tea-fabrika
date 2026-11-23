@@ -14,13 +14,17 @@
 // one gap.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Option, Schema } from "effect";
+import { ConfigProvider, Effect, Layer, Match, Option, Schema } from "effect";
 import { Setting, SettingGroup } from "./index.ts";
 import { debounce } from "./internal/window.ts";
 import * as JsonSchema from "./JsonSchema.ts";
+import * as MemoryFiles from "./MemoryFiles.test-support.ts";
+import { refusal } from "./SettingGroup.snapshot.test-support.ts";
 import {
   BREAKS,
   describe,
+  LOOSE,
+  looseSetting,
   lone,
   committed,
   DOC_CLASSES,
@@ -34,6 +38,7 @@ import {
   leafAt,
   makeGroup,
   namesFor,
+  number,
   pick,
   Reach,
   readJson,
@@ -42,12 +47,15 @@ import {
   type Spec,
   specsA,
   specsB,
+  specsC,
+  specsD,
   startAccepts,
   TEXTS,
   TextDraw,
   topAt,
   variable,
   word,
+  WINDOWS_REFUSED,
 } from "./SettingGroup.text.test-support.ts";
 
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
@@ -99,7 +107,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const reach = new Reach<Reached>([...DOC_CLASSES, "none-scope"]);
 
-      for (const specs of [specsA(draw), specsB(draw)]) {
+      for (const specs of [specsA(draw), specsB(draw), specsC(draw), specsD(draw)]) {
         const group = makeGroup(draw.app, specs);
 
         for (const file of FILES) {
@@ -141,36 +149,66 @@ it.effect.prop(
 // X1b, the version pattern and the largest safe integer
 // ---------------------------------------------------------------------------------------------
 
-const SAFE = Number.MAX_SAFE_INTEGER;
+const SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 
-// Plants: (h) leave the version out of the repo schema: the safe version is refused, red; write the pattern with `\d*` for a
-// component: `01.2.3` is accepted, red.
+type Place = "major" | "minor" | "patch" | "prerelease" | "build";
+
+const PLACES: ReadonlyArray<Place> = ["major", "minor", "patch", "prerelease", "build"];
+
+/** The numbers a version holds around the limit: the edge, one past it, sixteen and seventeen digits, and what the seeds draw. */
+const edges = (draw: TextDraw): ReadonlyArray<string> => [
+  "0",
+  "1",
+  `${SAFE - 1n}`,
+  `${SAFE}`,
+  `${SAFE + 1n}`,
+  `${SAFE + 2n}`,
+  "8999999999999999",
+  "9999999999999999",
+  "10000000000000000",
+  "1000000000000000",
+  "99999999999999999999",
+  `${BigInt(number(draw, 0)) * BigInt(number(draw, 1)) * BigInt(number(draw, 2)) * 1000000n}`,
+];
+
+const versionWith = (place: Place, n: string) =>
+  Match.value(place).pipe(
+    Match.when("major", () => `${n}.0.0`),
+    Match.when("minor", () => `0.${n}.0`),
+    Match.when("patch", () => `0.0.${n}`),
+    Match.when("prerelease", () => `1.0.0-${n}`),
+    Match.orElse(() => `1.0.0+${n}`),
+  );
+
+// Plants: (h) leave the version out of the repo schema: the safe version is refused, red; write each number as at most
+// fifteen digits: the largest safe integer, with sixteen, is refused, red; write each number as `\d+`: one past the limit
+// is accepted, red; leave a numeric pre-release identifier as `\d+`: one past the limit is accepted, red.
 it.effect.prop(
-  "X1b pinned: the version pattern holds the largest safe integer as a limit it cannot say: a component up to 9007199254740991 is read alike by the editor and the start, and one above it is read by the editor and refused by the start",
+  "X1b the version pattern holds the largest safe integer: the editor and the start read alike a version whose number is up to, at and past 9007199254740991, in each of the three parts, in a numeric pre-release identifier, and in a build identifier, which has no limit",
   { draw: TextDraw },
   ({ draw }) =>
     Effect.gen(function* () {
-      const reach = new Reach<"safe" | "above">(["safe", "above"]);
+      const reach = new Reach<Place | "above">([...PLACES, "above"]);
       const group = makeGroup(draw.app, specsB(draw));
       const editor = editorFor(SettingGroup.jsonSchema(group, "repo"));
       const key = `${draw.app}-version`;
-      const part = pick(draw, 0) % 3;
 
-      const at = (n: number | string) => [`${n}.0.0`, `0.${n}.0`, `0.0.${n}`][part] ?? `${n}.0.0`;
-      const safe = at(SAFE - (pick(draw, 1) % 2));
-      const above = at(`${SAFE + 1}`);
+      for (const place of PLACES) {
+        for (const n of edges(draw)) {
+          const value = { [key]: versionWith(place, n) };
+          const start = yield* startAccepts(group, "repo", value);
+          // The start's own rule: a number is at most the largest safe integer, a build identifier is any digits.
+          const wanted = place === "build" || BigInt(n) <= SAFE;
 
-      for (const [version, id] of [
-        [safe, "safe"],
-        [above, "above"],
-      ] as const) {
-        const value = { [key]: version };
-        const start = yield* startAccepts(group, "repo", value);
+          expect(start, `${place} ${n}: the start`).toBe(wanted);
+          expect(editorAccepts(editor, value), `${place} ${n}: the editor`).toBe(start);
 
-        expect(start, `${id}: the start`).toBe(id === "safe");
-        // The pattern is a text shape, so it takes the one above the limit too: the known gap, held whole.
-        expect(editorAccepts(editor, value), `${id}: the editor`).toBe(true);
-        reach.mark(id);
+          if (place !== "build" && BigInt(n) > SAFE) {
+            reach.mark("above");
+          }
+        }
+
+        reach.mark(place);
       }
 
       reach.done();
@@ -205,7 +243,7 @@ it.effect.prop(
     Effect.sync(() => {
       const reach = new Reach<Form>(FORMS);
 
-      for (const specs of [specsA(draw), specsB(draw)]) {
+      for (const specs of [specsA(draw), specsB(draw), specsC(draw), specsD(draw)]) {
         const group = makeGroup(draw.app, specs);
         const live = specs.some((spec) => spec.live);
 
@@ -273,22 +311,25 @@ it.effect.prop(
         }
       }
 
-      // A setting whose schema has a bare filter has no JSON Schema form: the call throws, for either file.
-      const bare = Setting.make(
-        namesFor(draw)[0] ?? "x.y",
-        Schema.String.check(Schema.makeFilter((text: string) => text.length > 0)),
-      ).pipe(Setting.withDescription("A text with a bare check."), Setting.withDefault("x"));
-
-      const throws = (grouped: SettingGroup.SettingGroup<string, ReadonlyArray<Setting.Any>>) => {
+      // A setting whose schema has no exact JSON Schema form has none: the call throws, for either file, live or not, and
+      // names why. A schema that has one, beside it, does not save it.
+      const throws = (grouped: SettingGroup.SettingGroup<string, ReadonlyArray<Setting.Any>>, label: string) => {
         for (const file of FILES) {
-          expect(() => SettingGroup.jsonSchema(grouped, file)).toThrow(
+          expect(() => SettingGroup.jsonSchema(grouped, file), label).toThrow(
             "A setting's schema cannot be written as JSON Schema without loosening it.",
           );
         }
       };
 
-      throws(SettingGroup.make(draw.app, bare));
-      throws(SettingGroup.make(draw.app, Setting.live(bare)));
+      for (const one of LOOSE) {
+        const name = namesFor(draw)[0] ?? "x.y";
+        const loose = looseSetting(name, one.schema);
+        const beside = looseSetting(namesFor(draw)[1] ?? "x.z", Schema.String);
+
+        throws(SettingGroup.make(draw.app, loose), one.label);
+        throws(SettingGroup.make(draw.app, Setting.live(loose)), `${one.label}, live`);
+        throws(SettingGroup.make(draw.app, beside, loose), `${one.label}, beside one that has a form`);
+      }
 
       reach.mark("throws");
       reach.done();
@@ -356,7 +397,7 @@ const reference = (draw: TextDraw): ReadonlyArray<Spec> => {
       files: ["repo"],
       live: false,
       fileOnly: true,
-      description: describe(draw, 2, { br: lf ?? "\n" }),
+      description: describe(draw, 2, { br: lf ?? "\n", spaced: true }),
       default: Option.some("people"),
     },
     {
@@ -497,3 +538,77 @@ it.effect.prop(
 );
 
 const readValue = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
+// ---------------------------------------------------------------------------------------------
+// W3, the window's refusal says what it wants
+// ---------------------------------------------------------------------------------------------
+
+type Source = "file" | "variable" | "flag";
+
+const SOURCES: ReadonlyArray<Source> = ["file", "variable", "flag"];
+
+const WANTS = "is not a length of time. Write it as text, as 100 millis or 2 seconds.";
+
+// Plants: (j) drop the window's `title` annotation: the refusal says "a valid value", red; drop its `description`: the
+// rule is gone from the message, red.
+it.effect.prop(
+  "W3 the window's refusal says what it wants: a text that is no length of time, set in a file, by a variable and by a flag, stops the start `invalid`, naming where it was and saying it is not a length of time and how to write one",
+  { draw: TextDraw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const reach = new Reach<Source>(SOURCES);
+      const group = makeGroup(draw.app, specsA(draw));
+      const closing = `${draw.app} did not start.`;
+      const pad = pick(draw, 2) % 4;
+      const comments = Array.from({ length: pad }, (_, n) => `# note ${n}\n`).join("");
+      const repo = `/work/.${draw.app}/${draw.app}.toml`;
+
+      const started = (
+        files: Record<string, string>,
+        env: Record<string, string>,
+        flags: Record<string, Option.Option<string>>,
+      ) =>
+        Effect.exit(
+          Effect.scoped(
+            Layer.build(
+              SettingGroup.layer(group, { version: "1.2.3", repo: "/work", flags }).pipe(
+                Layer.provide(MemoryFiles.layer({ files })),
+              ),
+            ),
+          ).pipe(
+            Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME: "/people/one", ...env } }))),
+          ),
+        );
+
+      for (const bad of WINDOWS_REFUSED) {
+        // A file holds a text or a number, and the window is a text either way.
+        const inFile = refusal(
+          yield* started({ [repo]: `${comments}[config.watch]\ndebounce = ${JSON.stringify(bad)}\n` }, {}, {}),
+        );
+
+        expect(inFile.reason, `file ${JSON.stringify(bad)}`).toBe("invalid");
+        expect(inFile.line, `file ${JSON.stringify(bad)}: its line`).toBe(pad + 2);
+        expect(inFile.message, `file ${JSON.stringify(bad)}`).toBe(
+          `.${draw.app}/${draw.app}.toml, line ${pad + 2}: ${WINDOW} ${WANTS}\n  ${closing}`,
+        );
+        reach.mark("file");
+
+        if (Schema.is(Schema.NonEmptyString)(bad)) {
+          const byVariable = refusal(yield* started({}, { [variable(draw.app, WINDOW)]: bad }, {}));
+
+          expect(byVariable.reason, `variable ${bad}`).toBe("invalid");
+          expect(byVariable.message, `variable ${bad}`).toBe(`${variable(draw.app, WINDOW)} ${WANTS}\n  ${closing}`);
+          reach.mark("variable");
+
+          const byFlag = refusal(yield* started({}, {}, { [WINDOW]: Option.some(bad) }));
+
+          expect(byFlag.reason, `flag ${bad}`).toBe("invalid");
+          expect(byFlag.message, `flag ${bad}`).toBe(`--${WINDOW} ${WANTS}\n  ${closing}`);
+          reach.mark("flag");
+        }
+      }
+
+      reach.done();
+    }),
+  check,
+);
