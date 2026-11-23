@@ -1,6 +1,6 @@
 import { defineConfig } from "@rslib/core";
 
-// The build every kalfa package has: one ES module and one type file per source file, tests left out.
+// What `pnpm build` in this package runs: one ES module and one type file per source file, tests left out.
 export default defineConfig({
   lib: [{ format: "esm", bundle: false, dts: true, syntax: "es2023" }],
   source: {
