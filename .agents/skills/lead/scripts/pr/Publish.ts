@@ -18,6 +18,48 @@ export const DRAFT_BODY =
   "Opened as a draft at this branch's first commit, so no code stays only on a branch (every commit " +
   "is pushed when it is made). It is marked ready when its steps have passed.";
 
+/** What `publish.ts` was asked: the branch, and the words a new draft takes instead of the placeholder. */
+export type Words = {
+  readonly branch: string;
+  readonly title: string | null;
+  readonly bodyFile: string | null;
+};
+
+/**
+ * Read `<branch> [--title <title>] [--body-file <path>]`, the flags in any order and each at most once, or
+ * `null` for anything else: no branch, two, an unknown flag, a flag with no value.
+ */
+export const words = (args: ReadonlyArray<string>): Words | null => {
+  const take = (
+    rest: ReadonlyArray<string>,
+    got: { branch: string | null; title: string | null; bodyFile: string | null },
+  ): Words | null => {
+    const [head, value, ...more] = rest;
+
+    if (head === undefined) {
+      return got.branch === null ? null : { ...got, branch: got.branch };
+    }
+
+    if (head === "--title" || head === "--body-file") {
+      const field = head === "--title" ? "title" : "bodyFile";
+
+      return value === undefined || value === "" || value.startsWith("--") || got[field] !== null
+        ? null
+        : take(more, { ...got, [field]: value });
+    }
+
+    return head.startsWith("--") || got.branch !== null ? null : take(rest.slice(1), { ...got, branch: head });
+  };
+
+  return take(args, { branch: null, title: null, bodyFile: null });
+};
+
+/** What a new draft says: the title and body it was given, else the commit's subject and the placeholder. */
+export const draftText = (subject: string, asked: Words, body: string | null): Text => ({
+  title: asked.title ?? subject,
+  body: body ?? DRAFT_BODY,
+});
+
 /** A branch no commit step pushes to: main, or none (a detached head). */
 export class NoBranch extends Schema.TaggedError<NoBranch, { readonly brand: unique symbol }>()("NoBranch", {
   reason: Schema.String,

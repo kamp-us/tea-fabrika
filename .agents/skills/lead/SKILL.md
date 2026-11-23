@@ -331,7 +331,7 @@ Read the header before you run one; this table only says what each is for.
 | `mutbox.ts` | the mutation run's Stryker sample in a container |
 | `runplan.sh` | a read-only plan writer in the main checkout |
 | `botpush.mjs` | push a branch and its step notes as the bot, in one atomic push |
-| `publish.ts` | leak-check, push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it |
+| `publish.ts <branch> [--title <t>] [--body-file <f>]` | leak-check, push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it, and after `--commit-only` you run it, giving a new draft its title and its body (written with the pr skill) in place of the placeholder |
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
@@ -482,6 +482,8 @@ visible, and never weaken the rules to hide this message.
 5. **Run the steps in order,** in the background: tests, build, review (no mutation step, 0066). Each runs
    through `drive.ts`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
+   Before the build brief, read the tests report's reach table against the plan's `## Generators`
+   ids. An id with no plant seen red goes back to tests; it is never a note in the build brief.
    Never start a review while a host-only law the plan names has not passed on a real machine. The build runs it, or you run it right after
    the build (step 7). Launchd, real Electron and process-signal laws run on eligible disposable CI,
    never on the owner's laptop.

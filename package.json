@@ -42,6 +42,7 @@
     "@kalfa/ci": "workspace:*",
     "@kalfa/config": "workspace:*",
     "@kalfa/diagnostics": "workspace:*",
+    "@kalfa/markdown": "workspace:*",
     "@kalfa/records": "workspace:*",
     "@kampus/vitest": "workspace:*",
     "@oxlint/plugins": "catalog:",
