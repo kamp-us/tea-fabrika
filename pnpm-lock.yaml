@@ -212,6 +212,9 @@ catalogs:
     '@modelcontextprotocol/server':
       specifier: 2.4.0
       version: 2.4.0
+    '@octokit/openapi-types':
+      specifier: 29.0.1
+      version: 29.0.1
     '@opentelemetry/api':
       specifier: 1.9.1
       version: 1.9.1
@@ -747,6 +750,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.1.3(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(vitest@5.0.5(patch_hash=a6bb69c3bcb136e22a97f79cea68a82a9d95f9fffeb606d2f216dc44c1536d59)(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+      '@octokit/openapi-types':
+        specifier: 'catalog:'
+        version: 29.0.1
       '@rslib/core':
         specifier: 'catalog:'
         version: 1.0.5(typescript@7.0.2)
@@ -3434,6 +3440,9 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
+
+  '@octokit/openapi-types@29.0.1':
+    resolution: {integrity: sha512-9qWOMFNxxLokERcms42rU0PTLqQmVs7g5E41TI4mCOxmpFayD1rfC7XxOL55cG9MBZLFlC31BrR37myMKardwg==}
 
   '@opentelemetry/api-logs@0.223.0':
     resolution: {integrity: sha512-Oepm6etVPFCn0VWB1t833iOTgz1eYBDUPxcrOR/XvwzD1+Ag9VzSPSrrKAFNJ/haatj+8CXbG47pZXvdNQKDJw==}
@@ -7927,6 +7936,8 @@ snapshots:
       '@emnapi/runtime': 1.11.2
       '@tybys/wasm-util': 0.10.4
     optional: true
+
+  '@octokit/openapi-types@29.0.1': {}
 
   '@opentelemetry/api-logs@0.223.0':
     dependencies:
