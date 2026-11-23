@@ -2391,6 +2391,8 @@ interface EditSpec {
   readonly part: string;
   readonly picks: ReadonlyArray<number>;
   readonly refuse: number;
+  readonly bad: number;
+  readonly which: number;
 }
 
 const EDIT_SPEC = {
@@ -2398,6 +2400,8 @@ const EDIT_SPEC = {
   part: partArb,
   picks: Arbitrary.array(int(0, EDIT_MENU - 1), { minLength: 0, maxLength: 5 }),
   refuse: int(0, 3),
+  bad: int(0, 5),
+  which: int(0, 1),
 };
 
 const STAGES = ["cat-file", "ls-tree", "hash-object", "mktree"];
@@ -2492,12 +2496,27 @@ it.effect.prop(
         [],
         [[`a${p}`, held(0)]],
         [[`zz${p}`, "absent"]],
+        // A change that always writes a blob and a folder, so the malformed ids below are met in every run.
+        [[`a${p}`, fresh(0)]],
         [
           [`c${p}/e${p}`, held(3)],
           [`nof${p}/q`, "absent"],
           [`f${p}/zz`, "absent"],
         ],
       ];
+
+      // What a git that is not itself would print for an object id: nothing, a word, a short id, a long one, capitals, two ids.
+      const malformed = [
+        "\n",
+        "written\n",
+        `${hexId("c", 1).slice(1)}\n`,
+        `${hexId("c", 1)}0\n`,
+        `${hexId("c", 1).toUpperCase()}\n`,
+        `${hexId("c", 1)}\n${hexId("c", 2)}\n`,
+      ];
+
+      const writers = ["hash-object", "mktree"] as const;
+      const wrote = { "hash-object": 0, mktree: 0 };
 
       for (const [n, changes] of [drawn, ...fixed].entries()) {
         const model = editModel(normal, changes, limit);
@@ -2544,7 +2563,16 @@ it.effect.prop(
                       return `${id} commit 200\n`;
                     }
 
-                    return id === `${commit}^{tree}` ? `${root} tree 100\n` : `${id} missing\n`;
+                    if (id === `${commit}^{tree}`) {
+                      return `${root} tree 100\n`;
+                    }
+
+                    // A tree and a blob of the store are held too, with their own type: a tree is its own tree, a blob has none.
+                    if (trees.has(id) || (id.endsWith("^{tree}") && trees.has(id.slice(0, -"^{tree}".length)))) {
+                      return `${id.replace("^{tree}", "")} tree 100\n`;
+                    }
+
+                    return blobs.has(id) ? `${id} blob 3\n` : `${id} missing\n`;
                   })
                   .join(""),
               };
@@ -2609,6 +2637,50 @@ it.effect.prop(
         const place = `edit ${n}`;
         const verbs = seen.map((each) => each.verb);
         const stages = verbs.map((verb) => STAGES.indexOf(verb));
+
+        // A tree's id and a blob's id the store holds are no commit: the base is refused by name, and git is asked once and writes nothing.
+        // Plant: delete editTree's `checked.get(base)?.type !== "commit"` check, red.
+        if (model.kind !== "too-large") {
+          const wrong = [root, ...dirs.slice(0, 1).map((dir) => treeId.get(dir) ?? ""), contentId(held(0))];
+
+          for (const id of wrong) {
+            const { repo: other, stand: otherStand } = yield* open(git, { blob: limit });
+            const before = (yield* otherStand.calls).length;
+            const refused = yield* Effect.result(other.editTree(commitIdFrom(id), edit));
+            const ran = (yield* otherStand.calls).slice(before).map((each) => each.verb);
+
+            expect(Result.isFailure(refused), `${place}: ${id} is no commit`).toBe(true);
+
+            if (Result.isFailure(refused)) {
+              expectFailure(refused.failure, Repository.NoSuchCommit, { id }, `${place}: ${id} is named`);
+            }
+
+            expect(ran, `${place}: a base that is no commit is asked about once and nothing is written`).toEqual([
+              "cat-file",
+            ]);
+          }
+        }
+
+        // A command that writes an object and prints something that is no object id is git failing us: the edit fails GitUnavailable, and no
+        // tree is answered. Plant: delete `printedId`'s `OBJECT_ID` test, red.
+        const writer = writers[spec.which] ?? "mktree";
+
+        if (model.kind === "files" && verbs.includes(writer)) {
+          wrote[writer] += 1;
+
+          const bent = yield* open(
+            (call) => (call.verb === writer ? { code: 0, stdout: malformed[spec.bad] ?? "" } : git(call)),
+            { blob: limit },
+          );
+
+          const bad = yield* Effect.result(bent.repo.editTree(commit, edit));
+
+          expect(Result.isFailure(bad), `${place}: ${writer} printed no object id, so the edit fails`).toBe(true);
+
+          if (Result.isFailure(bad)) {
+            unavailable(bad.failure, Repository.Unreadable, {}, `${place}: ${writer} printed no object id`);
+          }
+        }
 
         expect(
           stages.every((stage, k) => stage >= 0 && stage >= (stages[k - 1] ?? 0)),
@@ -2781,6 +2853,11 @@ it.effect.prop(
           `${place}: the tree is the top folder's, or the base's own when nothing changed`,
         ).toBe(changedDirs.length === 0 ? root : hexId("f", mktrees.length));
       }
+
+      expect(
+        wrote[writers[spec.which] ?? "mktree"],
+        "an edit that writes through the command drawn was met",
+      ).toBeGreaterThan(0);
     }),
   { arbitrary: { runs: 100, seed: 119120 } },
 );

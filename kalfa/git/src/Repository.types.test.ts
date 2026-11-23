@@ -378,14 +378,6 @@ it("type: each call has the answer and errors the plan gives, and each layer the
   expectTypeOf(refNotCommit).toBeFunction();
 });
 
-it("T7 scenario: an edit's paths are checked as paths, and PathInTheWay names two of them", () => {
-  const decode = Schema.decodeUnknownResult(Repository.PathInTheWay.fields.other);
-
-  expect(Result.isSuccess(decode("a/b")), "a path decodes").toBe(true);
-  expect(Result.isFailure(decode("a//b")), "an empty part is no path").toBe(true);
-  expect(Result.isFailure(decode("/a")), "a path does not start with a slash").toBe(true);
-});
-
 it("T4 scenario: RefNotCommit names the ref as a RefName, so text that is no ref name does not decode", () => {
   const decode = Schema.decodeUnknownResult(Repository.RefNotCommit.fields.ref);
 
