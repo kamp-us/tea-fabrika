@@ -1524,7 +1524,7 @@ export const settledFrom = (draw: Draw, group: Group, frame: Frame): ReadonlyArr
 
 /** The snapshot the loader makes for a frame. */
 export const snapshotFrom = (draw: Draw, group: Group, frame: Frame) =>
-  make(readGroup(group), settledFrom(draw, group, frame)).pipe(Effect.provide(digestLayer));
+  make(readGroup(group).app, settledFrom(draw, group, frame)).pipe(Effect.provide(digestLayer));
 
 export type Move = "live" | "restart" | "origin" | "nothing" | "refused" | "back";
 
