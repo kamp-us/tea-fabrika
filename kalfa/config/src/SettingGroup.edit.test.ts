@@ -1,7 +1,9 @@
-// Ticket 1843, slice 2, kalfa/config (new work): E1 to E10 and S1 of the approved plan
+// Ticket 1843, slice 2, kalfa/config (new work): E1 to E8, E10 and S1 of the approved plan
 // (.kalfa/quests/kalfa-config-edit-PLAN.md, with its Amendment 1), for `SettingGroup.edit` (SettingGroup.ts), read
 // through the package's root entry (index.ts). Written before the code. E11 is in internal/change.test.ts, the type
-// laws T5 and T7 in SettingGroup.types.test.ts, and P1 in Package.integration.test.ts.
+// laws T5 and T7 in SettingGroup.types.test.ts, and P1 in Package.integration.test.ts. E9 went with ticket 1844: a
+// record under its own header, as dotted sub-keys or as an array of tables, now edits (SettingGroup.record.test.ts), and
+// the id E9 is not used again.
 //
 // What the edit does, as these laws hold it to (the plan's "What the edit does", and Amendment 1):
 // - `SettingGroup.edit(group, text, file).set(setting, value)` and `.remove(setting)` each answer an
@@ -58,7 +60,6 @@ import {
   startRefusal,
   spliceFor,
   startOn,
-  tabled,
   targetSetting,
   unchanged,
   valued,
@@ -561,40 +562,6 @@ it.effect.prop(
 );
 
 // ---------------------------------------------------------------------------------------------
-// E9, one key that cannot change as one
-// ---------------------------------------------------------------------------------------------
-
-// Plant: (s) answer the text unchanged when the format refuses the path: red.
-it.effect.prop(
-  "E9 a key that is not one key here: a record setting under its own header, as dotted sub-keys or as an array of tables, fails edit with the key's line",
-  Draw.fields,
-  (draw) =>
-    Effect.gen(function* () {
-      const reach = new Reach<Id>(["s"]);
-
-      for (const scene of tabled(draw)) {
-        for (const found of [
-          yield* doSet(scene.group, scene.text, scene.file, scene.target, scene.value),
-          yield* doRemove(scene.group, scene.text, scene.file, scene.target),
-        ]) {
-          expect(found._tag).toBe("error");
-
-          if (found._tag === "error") {
-            expect(found.reason).toBe("edit");
-            expect(found.file).toBe(fileName(scene.app, scene.file));
-            expect(found.line, "the first line that names the key").toBe(scene.line);
-          }
-        }
-
-        reach.mark("s");
-      }
-
-      reach.done();
-    }),
-  check,
-);
-
-// ---------------------------------------------------------------------------------------------
 // E10, no change gives the same text
 // ---------------------------------------------------------------------------------------------
 
@@ -651,7 +618,6 @@ it.effect.prop(
         other: "invalid",
         unknown: "unknown",
         version: "invalid",
-        edit: "edit",
       };
 
       for (const scene of hiding(draw)) {

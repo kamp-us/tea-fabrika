@@ -62,7 +62,6 @@ import {
   refused,
   scoped,
   spliceFor,
-  tabled,
   targetSetting,
   unchanged,
   valued,
@@ -269,7 +268,6 @@ it.effect.prop(
         ...faulty(draw).map((s) => ({ ...s, value: port, removes: true, bare: false })),
         ...flat(draw).map((s) => ({ ...s, removes: true, bare: false })),
         ...broken(draw).map((s) => ({ ...s, value: port, removes: true, bare: false })),
-        ...tabled(draw).map((s) => ({ ...s, removes: true, bare: false })),
       ];
 
       for (const [n, s] of scenes.entries()) {
