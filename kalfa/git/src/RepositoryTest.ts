@@ -223,9 +223,10 @@ const MOVE_CLASSES = [
   "from a commit while the ref is at another",
   "from a commit while the ref is gone",
   "making a ref inside a ref's name",
-  "making a ref above a ref",
+  "making a ref above two refs, which names the first by bytes",
   "to a commit the store lacks",
   "to a tree's id",
+  "two moves from one commit at once",
 ];
 
 // ---------------------------------------------------------------------------------------------------------
@@ -1401,7 +1402,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
 
               for (const [label, ref, other] of [
                 ["making a ref inside a ref's name", `${names.main}/x`, names.main],
-                ["making a ref above a ref", "refs/kalfa/candidates", names.candidate],
+                ["making a ref above two refs, which names the first by bytes", "refs/kalfa/candidates", names.earlier],
               ] as const) {
                 classes.add(label);
 
@@ -1449,6 +1450,28 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 ).toEqual([{ name: ref, commit: at(to) }]);
                 yield* check(`${label}: every other ref is as it was`);
               }
+
+              // Two moves from the commit the ref is at, run at once: one wins and the other finds the ref moved.
+              classes.add("two moves from one commit at once");
+              const racers = [MOVE.merge, MOVE.side];
+
+              const raced = yield* Effect.forEach(
+                racers,
+                (to) => Effect.result(move(names.main, Option.some(MOVE.one), to)),
+                { concurrency: "unbounded" },
+              );
+
+              expect(raced.filter(Result.isSuccess).length, "exactly one of two moves from one commit wins").toBe(1);
+
+              for (const result of raced.filter(Result.isFailure)) {
+                expectFailure(result.failure, Repository.RefMoved, { ref: names.main }, "the move that lost");
+              }
+
+              const [landed] = yield* repo.readRefs(refNameFrom(names.main));
+              const winner = racers.find((to) => at(to) === landed?.commit);
+              expect(winner, "the ref is at the commit of the move that won").toBeDefined();
+              model.set(names.main, winner ?? MOVE.one);
+              yield* check("two moves from one commit at once: the ref is where the winner put it");
 
               expect([...classes].sort(), "the generator reaches every move class").toEqual([...MOVE_CLASSES].sort());
 

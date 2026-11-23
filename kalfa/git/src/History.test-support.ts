@@ -1444,7 +1444,7 @@ export const moveCarrier = (
   texture: Texture,
 ): {
   readonly history: History;
-  readonly names: Record<"main" | "side" | "candidate" | "fresh" | "remote" | "gone" | "branch", string>;
+  readonly names: Record<"main" | "side" | "candidate" | "earlier" | "fresh" | "remote" | "gone" | "branch", string>;
 } => {
   const draw = new Draw(texture);
   const part = draw.part();
@@ -1457,12 +1457,15 @@ export const moveCarrier = (
         { name: "refs/heads/main", commit: MOVE.main },
         { name: "refs/heads/side", commit: MOVE.side },
         { name: `refs/kalfa/candidates/e${part}`, commit: MOVE.three },
+        // Listed after `e`, sorted before it: the ref in the way that comes first by bytes is not the first listed.
+        { name: `refs/kalfa/candidates/d${part}`, commit: MOVE.one },
       ],
     },
     names: {
       main: "refs/heads/main",
       side: "refs/heads/side",
       candidate: `refs/kalfa/candidates/e${part}`,
+      earlier: `refs/kalfa/candidates/d${part}`,
       fresh: `refs/kalfa/candidates/n${part}`,
       remote: `refs/remotes/origin/n${part}`,
       gone: `refs/heads/g${part}`,
