@@ -1,4 +1,4 @@
-Approved by the lead agent, builds issues 1909, 1928, 0087, 0063; body 45b78724c65e
+Approved by the lead agent, builds issues 1909, 1928, 0087, 0063; body d7666870a2a3
 Plancheck-Version: 3
 
 # Plan: @kalfa/markdown, read a body into a document (ticket 1928)
@@ -477,3 +477,16 @@ None.
 3. **Pull request https://github.com/kamp-us/tea-fabrika/pull/1993 edits the same README paragraph.**
    Both change the last paragraph of `kalfa/markdown/README.md` ("come in later changes"). Whichever
    lands second rebases; the two sentences do not conflict in meaning.
+
+## Amendment 1 (2026-11-22): the review's findings
+
+- **M1's no-overlap rule has one exception, as narrow as mdast's fact.** mdast starts a setext heading at the first
+  link definition of the run right above it, so those siblings overlap. M1 exempts only that: a setext heading that
+  starts where that run starts and ends below its last child. An ATX heading after a definition gets no exemption.
+  The README says it beside "parts with no position".
+- **Existing tools, test support.** The tree walker and the position remover in `Markdown.test-support.ts` (`walk`,
+  `plain`): searched `unist-util-visit` 5.2.0 and `unist-util-remove-position` in the lockfile. The first is locked for
+  another package but is not a dependency of `kalfa/markdown`; adding a dependency for 15 lines of test support is
+  more to keep in step than the walk itself. Kept as written.
+- **README.** The opening says the package decides how Markdown is read and written; writing a document back is out
+  of scope, so the opening says "read" for the body and "read and written" only for frontmatter.
