@@ -92,7 +92,7 @@ it.effect("scenario: E1 the ticket's file: only the one value changes, every oth
 );
 
 // E2's check on a list of cases, for the property's runs and for the pinned run.
-const keepsBytes = (cases: ReadonlyArray<Support.SetCase>) =>
+const keepsBytes = (cases: ReadonlyArray<Support.SetCase>, classes: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const seen = new Set<string>();
 
@@ -100,7 +100,7 @@ const keepsBytes = (cases: ReadonlyArray<Support.SetCase>) =>
       const text = Support.fileText(c.typed, c.body);
       const changed = Support.changedKeys(c.typed, c.values);
       const added = Support.addedKeys(c.typed, c.values);
-      const answer = yield* labeled(c.name, Frontmatter.set(text, c.values, Base.S1));
+      const answer = yield* labeled(c.name, Support.setOnce(text, c.values));
       const kept = Support.keeps(c.typed, answerFrontmatter(answer, c.name), changed, added.length > 0);
 
       if (Result.isFailure(kept)) {
@@ -122,26 +122,29 @@ const keepsBytes = (cases: ReadonlyArray<Support.SetCase>) =>
       }
     }
 
-    deepStrictEqual(Support.unreached(seen, OLD_AND_VALUES), [], "classes never checked in this run");
+    deepStrictEqual(Support.unreached(seen, classes), [], "classes never checked in this run");
   });
 
 // E2. Plants, each one wrong rule in Frontmatter.ts (run once, never kept): start a later-line value's text at the end of its key's `:`, so
 // `  # note` goes, (h) red; end a value's text at yaml's node end, so ` # c` goes, (i) red; rebuild the frontmatter from the pairs' own texts, so
 // comment and blank lines go, (j) red. The other classes' plants are E3's.
-it.effect.prop(
-  "E2 every other byte kept: only each changed value's text is replaced and the new keys' lines are added at the end",
-  { run: Base.run },
-  ({ run }) => keepsBytes(Support.typedSets(run)),
-  runs(300),
-);
+// Each group of classes is a law of its own with 300 runs (Support.CASE_GROUPS), so a law holds a third of a run's work.
+for (const group of Support.CASE_GROUPS) {
+  it.effect.prop(
+    `E2 every other byte kept: only each changed value's text is replaced and the new keys' lines are added at the end, for ${group.name}`,
+    { run: Base.run },
+    ({ run }) => keepsBytes(Support.groupCases(run, group), group.classes),
+    runs(300),
+  );
+}
 
 // E3's read-back of a list of cases, for the property's runs and for the pinned run.
-const readsBack = (cases: ReadonlyArray<Support.SetCase>) =>
+const readsBack = (cases: ReadonlyArray<Support.SetCase>, classes: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const seen = new Set<string>();
 
     for (const c of cases) {
-      const answer = yield* labeled(c.name, Frontmatter.set(Support.fileText(c.typed, c.body), c.values, Base.S1));
+      const answer = yield* labeled(c.name, Support.setOnce(Support.fileText(c.typed, c.body), c.values));
       const file = yield* labeled(`${c.name}, read again`, Frontmatter.read(answer, Base.S1));
       const expected = { ...Support.dataRead(c.typed), ...c.values };
 
@@ -157,7 +160,7 @@ const readsBack = (cases: ReadonlyArray<Support.SetCase>) =>
       }
     }
 
-    deepStrictEqual(Support.unreached(seen, OLD_AND_VALUES), [], "classes never checked in this run");
+    deepStrictEqual(Support.unreached(seen, classes), [], "classes never checked in this run");
   });
 
 // E3. Plants: end a value's text at its first space, (a) red; for a quoted value, end its text at its start plus its read text's length, (b) red;
@@ -168,13 +171,20 @@ const readsBack = (cases: ReadonlyArray<Support.SetCase>) =>
 // text, (l) red; put new keys at column 0, (m) red; append a new key as a new line in a flow top map, (n) red; take new keys' column from the first
 // pair and fail when there is none (not for a flow map), (p) red; write a new text plain when the old value was plain `old`, (q) red; skip a key the file lacks, (u) red; apply
 // the edits from the first offset to the last without moving later ones when two to five values change, (v) red.
+for (const group of Support.CASE_GROUPS) {
+  it.effect.prop(
+    `E3 it reads back: the answer reads as the old data with the set values over it, for ${group.name}`,
+    { run: Base.run },
+    ({ run }) => readsBack(Support.groupCases(run, group), group.classes),
+    runs(300),
+  );
+}
+
 it.effect.prop(
-  "E3 it reads back: the answer reads as the old data with the set values over it, under S1, S2, S3 and S5",
+  "E3 it reads back under S2, S3 and S5: the answer reads as the old data with the set values over it",
   { run: Base.run },
   ({ run }) =>
     Effect.gen(function* () {
-      yield* readsBack(Support.typedSets(run));
-
       for (const schema of Support.schemaSets(run)) {
         const back = yield* labeled(schema.name, schema.check);
 
@@ -193,8 +203,8 @@ it.effect("pinned: E2 and E3 over the wide cases, the whole grid and the first t
     const [run] = yield* Arbitrary.sampleEffect(Base.run, { count: 1, seed: 119120 });
     const cases = Support.typedSets(run ?? expect.unreachable("no run"), true);
 
-    yield* keepsBytes(cases);
-    yield* readsBack(cases);
+    yield* keepsBytes(cases, OLD_AND_VALUES);
+    yield* readsBack(cases, OLD_AND_VALUES);
   }),
 );
 

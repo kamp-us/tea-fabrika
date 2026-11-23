@@ -66,31 +66,38 @@ const roundTrip = Effect.fnUntraced(function* <S extends Schema.Codec<unknown, u
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-// F1's round trips over one run's variants. A run that is not `wide` leaves out the long fixed pieces of the pools, which every run draws alike.
-const checkRoundTrips = (run: Support.Run, wide: boolean) =>
+// F1's round trips over one run's variants, in parts that are laws of their own with 300 runs each: S1 over the data variants, S1 over the body
+// variants, and each other shape over the data variants. A run that is not `wide` leaves out the long fixed pieces of the pools, which every run
+// draws alike.
+const BODY_ONLY = ["t", "u", "v"];
+
+const dataS1 = (run: Support.Run, wide: boolean) =>
   Effect.gen(function* () {
     const checked: Array<string> = [];
 
-    for (const [index, variant] of Support.dataVariants(run.seeds, wide).entries()) {
+    for (const variant of Support.dataVariants(run.seeds, wide)) {
       strictEqual(Support.reachedBy(variant), true, `group ${variant.group} is not in its pool`);
 
       const json = Support.jsonData(run.json, variant.pools);
-      const label = (shape: string) => `${shape} ${variant.group}`;
 
       checked.push(variant.group, ...Support.jsonReached(json));
 
-      yield* roundTrip(label("S1"), Support.S1, json, variant.body);
-
-      // S2 to S5 hold the same texts as S1, in the fields of a Struct: a run that is not `wide` takes them for every fourth variant, from
-      // where its pick says, so 300 runs take each group in each shape many times over; the pinned run takes them all.
-      if (wide || (index + (run.picks[0] ?? 0)) % 4 === 0) {
-        yield* roundTrip(label("S2"), Support.S2, Support.s2Data(run, variant.pools), variant.body);
-        yield* roundTrip(label("S3"), Support.S3, Support.s3Data(run, variant.pools), variant.body);
-        yield* roundTrip(label("S3 date"), Support.S3Date, Support.s3DateData(run, variant.pools), variant.body);
-        yield* roundTrip(label("S4"), Support.S4, Support.s4Data(run, variant.pools), variant.body);
-        yield* roundTrip(label("S5"), Support.S5, Support.s5Data(run, variant.pools), variant.body);
-      }
+      yield* roundTrip(`S1 ${variant.group}`, Support.S1, json, variant.body);
     }
+
+    deepStrictEqual(
+      missing(
+        checked,
+        GROUPS.filter((id) => !BODY_ONLY.includes(id)),
+      ),
+      [],
+      "groups never checked in this run",
+    );
+  });
+
+const bodiesS1 = (run: Support.Run) =>
+  Effect.gen(function* () {
+    const checked: Array<string> = [];
 
     for (const variant of Support.bodyVariants(run.seeds)) {
       checked.push(variant.group);
@@ -98,7 +105,46 @@ const checkRoundTrips = (run: Support.Run, wide: boolean) =>
       yield* roundTrip(`body ${variant.group}`, Support.S1, Support.jsonData(run.json, variant.pools), variant.body);
     }
 
-    deepStrictEqual(missing(checked, GROUPS), [], "groups never checked in this run");
+    deepStrictEqual(missing(checked, BODY_ONLY), [], "groups never checked in this run");
+  });
+
+// Each other shape holds the same texts as S1, in the fields of a Struct.
+const SHAPES = [
+  {
+    name: "S2",
+    check: (run: Support.Run, variant: Support.Variant) =>
+      roundTrip(`S2 ${variant.group}`, Support.S2, Support.s2Data(run, variant.pools), variant.body),
+  },
+  {
+    name: "S3 and S3 date",
+    check: (run: Support.Run, variant: Support.Variant) =>
+      Effect.gen(function* () {
+        yield* roundTrip(`S3 ${variant.group}`, Support.S3, Support.s3Data(run, variant.pools), variant.body);
+        yield* roundTrip(
+          `S3 date ${variant.group}`,
+          Support.S3Date,
+          Support.s3DateData(run, variant.pools),
+          variant.body,
+        );
+      }),
+  },
+  {
+    name: "S4",
+    check: (run: Support.Run, variant: Support.Variant) =>
+      roundTrip(`S4 ${variant.group}`, Support.S4, Support.s4Data(run, variant.pools), variant.body),
+  },
+  {
+    name: "S5",
+    check: (run: Support.Run, variant: Support.Variant) =>
+      roundTrip(`S5 ${variant.group}`, Support.S5, Support.s5Data(run, variant.pools), variant.body),
+  },
+];
+
+const inShape = (shape: (typeof SHAPES)[number], run: Support.Run, wide: boolean) =>
+  Effect.gen(function* () {
+    for (const variant of Support.dataVariants(run.seeds, wide)) {
+      yield* shape.check(run, variant);
+    }
   });
 
 // F1. Plants, each one wrong rule in Frontmatter.ts (run once, never kept):
@@ -106,19 +152,40 @@ const checkRoundTrips = (run: Support.Run, wide: boolean) =>
 //  rebuild the body from lines split on a lone \r too, (c) and (u) red; take the last fence, not the next, (t) red;
 //  trim the body, (a) and (b) red; replace lone surrogates before writing, (f) red; key the map by key.toLowerCase(), (m) red.
 it.effect.prop(
-  "F1 write then read gives the same data and body, for every shape and every group of input",
+  "F1 write then read gives the same data and body, for every group of input under S1",
   { run: Support.run },
-  ({ run }) => checkRoundTrips(run, false),
+  ({ run }) => dataS1(run, false),
   runs(300),
 );
+
+it.effect.prop(
+  "F1 write then read gives the same data and body, for every body of the file under S1",
+  { run: Support.run },
+  ({ run }) => bodiesS1(run),
+  runs(300),
+);
+
+for (const shape of SHAPES) {
+  it.effect.prop(
+    `F1 write then read gives the same data and body, for every group of input under ${shape.name}`,
+    { run: Support.run },
+    ({ run }) => inShape(shape, run, false),
+    runs(300),
+  );
+}
 
 // F1 on the wide variants: the same checks over the long fixed pieces of the pools (up to 5,000 characters). Plant (run once, restored): `write` drops
 // the data when a text is exactly 5,000 characters: the fixed piece goes red here, and the property, whose pieces are 4,999 at most, does not.
 it.effect("pinned: F1 write then read over the long fixed pieces of every group", () =>
   Effect.gen(function* () {
     const [run] = yield* Arbitrary.sampleEffect(Support.run, { count: 1, seed: 119120 });
+    const wide = run ?? expect.unreachable("no run");
 
-    yield* checkRoundTrips(run ?? expect.unreachable("no run"), true);
+    yield* dataS1(wide, true);
+
+    for (const shape of SHAPES) {
+      yield* inShape(shape, wide, true);
+    }
   }),
 );
 

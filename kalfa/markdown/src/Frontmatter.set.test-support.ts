@@ -8,6 +8,7 @@
 //
 // The plan names 26 classes, (a) to (z). A class is a list of forms, `FORMS`. Every case carries the forms its pieces hold, a law keeps the forms of the
 // cases it checked, and a law fails when a class has a form that no checked case held (`unreached`), so no class is left to chance.
+import type { Exit } from "effect";
 import { Effect, Equal, Predicate, Result, Schema } from "effect";
 import * as Base from "./Frontmatter.test-support.ts";
 import * as Frontmatter from "./Frontmatter.ts";
@@ -855,6 +856,64 @@ export const casesFor = (run: Base.Run, wide = false): ReadonlyArray<SetCase> =>
 
 /** Every class's cases: typed files with the values a call sets, for the laws about bytes and about reading back. */
 export const typedSets = casesFor;
+
+/**
+ * The cases of a run in three groups of classes, which E2 and E3 each take as a law of its own with all of its runs: each law then holds a third of a
+ * run's work, so none of them nears CI's time limit, and every class is reached by one law in every run.
+ */
+export interface CaseGroup {
+  readonly name: string;
+  readonly classes: ReadonlyArray<string>;
+  readonly from: number;
+  readonly to: number | undefined;
+}
+
+export const CASE_GROUPS: ReadonlyArray<CaseGroup> = [
+  { name: "the old forms, classes a to l", classes: OLD_CLASSES, from: 0, to: OLD_CLASSES.length + 1 },
+  {
+    name: "the styled and the side files, classes m to p",
+    classes: ["m", "n", "o", "p"],
+    from: OLD_CLASSES.length + 1,
+    to: 21,
+  },
+  { name: "the new values, classes q to v", classes: ["q", "r", "s", "u", "v"], from: 21, to: undefined },
+];
+
+export const groupCases = (run: Base.Run, group: CaseGroup, wide = false): ReadonlyArray<SetCase> =>
+  casesFor(run, wide).slice(group.from, group.to);
+
+type SetAnswer = Exit.Exit<string, Frontmatter.NoFrontmatter | Frontmatter.BadFrontmatter>;
+
+const answered = new Map<string, SetAnswer>();
+
+// A number JSON cannot hold, or minus zero, must keep its own key.
+const cacheKey = (text: string, values: Readonly<Record<string, Json>>): string =>
+  `${text}\u0000${JSON.stringify(values, (_key, item: Json) =>
+    Predicate.isNumber(item) && (!Number.isFinite(item) || Object.is(item, -0)) ? { "#number": String(item) } : item,
+  )}`;
+
+/**
+ * What `Frontmatter.set` answers a text and values under S1, made once for the whole run of the file: E2 and E3 each ask it of the same cases (the
+ * runs of one seed are the same in every law), and the call is a pure function of its arguments, so the second law reads the first one's answer.
+ */
+export const setOnce = (
+  text: string,
+  values: Readonly<Record<string, Json>>,
+): Effect.Effect<string, Frontmatter.NoFrontmatter | Frontmatter.BadFrontmatter> =>
+  Effect.suspend(() => {
+    const key = cacheKey(text, values);
+    const hit = answered.get(key);
+
+    return hit !== undefined
+      ? hit
+      : Effect.exit(Frontmatter.set(text, values, Base.S1)).pipe(
+          Effect.flatMap((exit) => {
+            answered.set(key, exit);
+
+            return exit;
+          }),
+        );
+  });
 
 // ---------------------------------------------------------------------------------------------------------------------
 // What a law may ask of a call: which bytes changed, where, and what was written
