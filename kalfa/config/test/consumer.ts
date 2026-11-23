@@ -2,6 +2,7 @@ import * as Root from "@kalfa/config";
 import * as App from "@kalfa/config/App";
 // @ts-expect-error Test sources are not public package subpaths.
 import type * as Test from "@kalfa/config/App.test";
+import * as Cli from "@kalfa/config/cli";
 import * as Codec from "@kalfa/config/Codec";
 import type * as Files from "@kalfa/config/Files";
 // @ts-expect-error Internal compiled files are not public package subpaths.
@@ -16,6 +17,7 @@ import * as Sources from "@kalfa/config/Sources";
 import * as Toml from "@kalfa/config/Toml";
 import * as TomlParser from "@kalfa/config/TomlParser";
 import { Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
+import type { Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 
 const app: App.App = App.make({ name: "demo", list: "demo config get" });
@@ -111,6 +113,35 @@ const worker = (
     Effect.provide(Root.SettingGroup.layerFromSnapshots(declaredGroup, Stream.make(snapshot))),
   );
 
+// The `config` command (ticket 1846, slice 2): one `effect/cli` command named by its root name, over every group of one app, whose
+// error is the one `SettingsError` and which needs only the file system and the path. `kalfa` hands it the repo's root.
+const configured = Cli.config("demo", [declaredGroup], { version: "1.2.3", repo: "/work" });
+
+const configName: "config" = configured.name;
+
+const configFailures: ReadonlyArray<Command.Error<typeof configured>> = [];
+
+const configError: ReadonlyArray<Root.SettingGroup.SettingsError> = configFailures;
+
+const configNeeds: ReadonlyArray<Command.Services<typeof configured>> = [];
+
+const configServices: ReadonlyArray<FileSystem.FileSystem | Path.Path> = configNeeds;
+
 const refusals: [typeof Private, typeof Test] | null = null;
 
-void [checked, rooted, edited, removed, snapshotted, worker, Sources, Toml, Codec, JsonSchema, refusals];
+void [
+  checked,
+  rooted,
+  edited,
+  removed,
+  snapshotted,
+  worker,
+  Sources,
+  Toml,
+  Codec,
+  JsonSchema,
+  configName,
+  configError,
+  configServices,
+  refusals,
+];
