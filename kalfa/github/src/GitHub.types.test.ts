@@ -523,7 +523,8 @@ const Counted = Schema.String.pipe(
 );
 
 // T14. Plant: make `body` optional on every route, and the `/zen` line with no body compiles; type a text route's success as any
-// Schema, and the `Schema.Finite` line compiles; type `auth` as `string`, and the `"nobody"` line compiles.
+// Schema, and the `Schema.Finite` line compiles; type `auth` as `string`, and the `"nobody"` line compiles; type `auth` as the
+// route's own parameter `A`, and the `"login"` line compiles.
 const routeOptions = () => {
   const ok = [
     GitHub.route(ZEN, { body: "text" }),
@@ -547,10 +548,14 @@ const routeOptions = () => {
   const number = GitHub.route(ZEN, { body: "text", success: Schema.Finite });
   // @ts-expect-error `nobody` is no way to send a request
   const nobody = GitHub.route(GET_REPO, { auth: "nobody" });
+  // @ts-expect-error `login` is what a route does when it says nothing, so it is no value to write
+  const login = GitHub.route(GET_REPO, { auth: "login" });
+  // @ts-expect-error `app` is no way this ticket sends a request
+  const app = GitHub.route(GET_REPO, { auth: "app" });
   // @ts-expect-error a media type is a text
   const accept = GitHub.route(GET_REPO, { accept: 1 });
 
-  expectTypeOf([ok, noBody, noBodyOption, octocat, number, nobody, accept]).toBeArray();
+  expectTypeOf([ok, noBody, noBodyOption, octocat, number, nobody, login, app, accept]).toBeArray();
   // The route holds what it was declared with, and the defaults when it left the options out.
   expectTypeOf(GitHub.route(ZEN, { body: "text" }).body).toEqualTypeOf<"text">();
   expectTypeOf(GitHub.route(GET_REPO).body).toEqualTypeOf<"json">();

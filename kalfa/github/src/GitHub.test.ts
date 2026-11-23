@@ -850,18 +850,20 @@ describe("C6, GitHub's 4xx", () => {
 
 // ---- C7, other statuses
 
-// C7, widened in 1945: a 5xx is no longer here (C14 reads it). Plant: read 300 to 399 as ServerError; treat only 200 as a success.
+// C7, widened in 1945: a 5xx is no longer here (C14 reads it), and 600 and over is not one. Plant: read 300 to 399 as ServerError; read
+// 600 and over as ServerError; treat only 200 as a success.
 describe("C7, other statuses", () => {
   it.effect.prop(
     "a status that is not 2xx, 4xx or 5xx fails with Undecodable on the answer side, naming the status and holding no cause; each 2xx status is a success",
     {
       informational: between(100, 199),
       redirect: between(300, 399),
+      beyond: between(600, 999),
       success: between(200, 299),
     },
-    ({ informational, redirect, success }) =>
+    ({ informational, redirect, beyond, success }) =>
       Effect.gen(function* () {
-        for (const status of [informational, redirect]) {
+        for (const status of [informational, redirect, beyond, 600]) {
           const { exit } = yield* observed(callRuns(), () => json({ check_runs: [], message: "nope" }, status));
           const found = reasonHeld(exit);
 
