@@ -1,5 +1,6 @@
-// Ticket 1926 T1: Frontmatter's public types, checked by the lead's typecheck (a type law is red only in a typecheck).
-// Plant: type `write`'s data as `unknown`, so the first `@ts-expect-error` below is unused and tsc says so.
+// Ticket 1926 T1 and ticket 1927 T2: Frontmatter's public types, checked by the lead's typecheck (a type law is red only in a typecheck).
+// T1 plant: type `write`'s data as `unknown`, so the first `@ts-expect-error` below is unused and tsc says so.
+// T2 plant: type `set`'s `values` as `Schema.JsonObject`, so the `@ts-expect-error` lines of `contractSet` are unused and tsc says so.
 import { expectTypeOf, it } from "@effect/vitest";
 import { type Effect, Schema } from "effect";
 import type * as Option from "effect/Option";
@@ -61,4 +62,36 @@ const contract = () => {
 it("T1 type: read, write and split have the types the plan gives, checked by the lead's typecheck", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(contract).toBeFunction();
+});
+
+const Optional = Schema.Struct({ id: Schema.String, note: Schema.optionalKey(Schema.String) });
+
+// A Schema that needs a service to decode and another to encode.
+declare const BothNeed: Schema.Codec<{ readonly id: string }, { readonly id: string }, "Decode", "Encode">;
+
+const contractSet = () => {
+  expectTypeOf(Frontmatter.set("", { status: "accepted" }, Shape)).toEqualTypeOf<
+    Effect.Effect<string, Frontmatter.NoFrontmatter | Frontmatter.BadFrontmatter, never>
+  >();
+  // The Schema's services, to decode the old data and to encode the new, are the Effect's.
+  expectTypeOf(Frontmatter.set("", { id: "x" }, BothNeed)).toEqualTypeOf<
+    Effect.Effect<string, Frontmatter.NoFrontmatter | Frontmatter.BadFrontmatter, "Decode" | "Encode">
+  >();
+
+  // Each wrong call is an arrow that answers the Effect, so the only error on its line is the one that is expected.
+  // @ts-expect-error a value of the wrong type does not compile
+  const wrongType = () => Frontmatter.set("", { number: "87" }, Shape);
+  // @ts-expect-error a status outside the Schema's literals does not compile
+  const wrongStatus = () => Frontmatter.set("", { status: "decided" }, Shape);
+  // @ts-expect-error a key outside a Struct's fields does not compile
+  const wrongKey = () => Frontmatter.set("", { other: 1 }, Shape);
+  // @ts-expect-error undefined for an optional field does not compile: `set` never removes a key
+  const removed = () => Frontmatter.set("", { note: undefined }, Optional);
+
+  expectTypeOf([wrongType, wrongStatus, wrongKey, removed]).toBeArray();
+};
+
+it("T2 type: set has the type the plan gives, checked by the lead's typecheck", () => {
+  // These compile-time laws need tsc, which the lead runs after build.
+  expectTypeOf(contractSet).toBeFunction();
 });
