@@ -2,7 +2,7 @@
 // only the laws that load them, and lists every mutant that lived. Today's lead tooling, run by the
 // builder once its laws are green, and by the reviewer on the branch.
 //
-//   node .agents/skills/mutation/scripts/survivors.ts --out <folder> [--base <commit>] [--head <commit>] [--files <a.ts,b.ts>]
+//   node .agents/skills/mutation/scripts/survivors.ts --out <folder> [--base <commit>] [--head <commit>] [--files <a.ts,b.ts>] [--answered] [--answers <file>]
 //
 // - `--base` is where the change starts; none is `git merge-base origin/main HEAD`.
 // - `--head` is the commit to check; none is the working tree as it is now, uncommitted and
@@ -12,6 +12,13 @@
 // - `--files` names the product files to mutate, such as the files that hold the guarding checks. A file the change touches
 //   is mutated on its changed lines; a file it does not touch is mutated whole. None: every product
 //   file the change touches, by the hourly run's own file rule (`scope.ts`).
+// - `--answered` takes each `Survivor: <file>:<line> <reason>` line of the commit bodies from `--base` to
+//   `--head` (HEAD when none) as the answer to the mutant on that line; `<file>:*` answers a file no law loads
+//   or every mutant of a file. A line has its evidence after ` -- `: `Survivor: <file>:<line> <reason> -- <the
+//   input or plant tried and why it cannot reach the line, or why the mutant is equivalent>`. A line with no
+//   evidence, or one bare word of it ("unreachable"), answers nothing. `--answers` names a file of such lines too, such as the commit body about to be
+//   written. An answered mutant is counted and no longer listed, so exit 0 says every survivor is killed or
+//   answered. Without either flag no line is read and a mutant that lived is always listed.
 // - `--out` is your scratch folder; mutbox's whole answer is `<out>/mutbox.json`.
 //
 // Settings, each from the environment with its default, as the lead's other settings are read:
@@ -21,8 +28,8 @@
 //   BOXES           the boxes folder beside the main checkout, as env.sh finds it; the one Docker
 //                   box's lock is `<BOXES>/state/docker.lock`
 //
-// Exit 0: no mutant lived. 1: a mutant lived, or a file in scope has no law that loads it; each is
-// one line. 2: refused before the run (too wide, a bad `--files`), or the box is stuck.
+// Exit 0: no mutant lived, or each one that did is answered. 1: a mutant lived, or a file in scope has no
+// law that loads it, and no `Survivor:` line answers it; each is one line. 2: refused before the run (too wide, a bad `--files`), or the box is stuck.
 //
 // How it runs, with no second Stryker config: it makes a commit whose parent holds the base's
 // version of each file in scope (or no file, for one mutated whole) and the head everywhere else, so
@@ -348,6 +355,26 @@ export const staticLines = (rows: ReadonlyArray<Row>): ReadonlyArray<string> => 
   return Arr.map([...lines], ([place, mutators]) => `static  ${place} ${Arr.join(mutators, ", ")}`);
 };
 
+/**
+ * A `Survivor: <file>:<line> <reason> -- <evidence>` line: the build says the mutant there guards nothing, and
+ * shows why. `line` is null for `<file>:*`.
+ */
+export type Answer = { readonly file: string; readonly line: number | null };
+
+const ANSWER = /^Survivor:[ \t]+(\S+):(\d+|\*)[ \t]+\S.*?[ \t]+--[ \t]+\S+[ \t]+\S/;
+
+/** The `Survivor:` lines of a text; a line with no reason, or with no evidence of at least two words, is no answer. Pure. */
+export const answersIn = (text: string): ReadonlyArray<Answer> =>
+  Arr.flatMap(Str.split(text, "\n"), (row) => {
+    const found = ANSWER.exec(row);
+
+    return found === null ? [] : [{ file: found[1] ?? "", line: found[2] === "*" ? null : Number(found[2]) }];
+  });
+
+/** Whether a mutant on a line, or a file no law loads (`line` null), has an answer. Pure. */
+export const isAnswered = (answers: ReadonlyArray<Answer>, file: string, line: number | null): boolean =>
+  Arr.some(answers, (answer) => answer.file === file && (answer.line === null || answer.line === line));
+
 // ---------------------------------------------------------------- the run
 
 const git = (root: string, args: ReadonlyArray<string>, env: ReadonlyArray<string> = []) =>
@@ -501,6 +528,14 @@ const Ask = {
     Flag.withDescription("Product files to mutate, separated by commas, as the plan names them"),
     Flag.withDefault(undefined),
   ),
+  answered: Flag.Boolean("answered").pipe(
+    Flag.withDescription("Count each mutant a Survivor: line of the commit bodies, base to head, answers"),
+    Flag.withDefault(false),
+  ),
+  answers: Flag.String("answers").pipe(
+    Flag.withDescription("A file of Survivor: lines that answer mutants too, such as the commit body to be written"),
+    Flag.withDefault(undefined),
+  ),
 };
 
 const check = Effect.fnUntraced(function* (ask: {
@@ -508,6 +543,8 @@ const check = Effect.fnUntraced(function* (ask: {
   readonly base: string | undefined;
   readonly head: string | undefined;
   readonly files: string | undefined;
+  readonly answered: boolean;
+  readonly answers: string | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -551,6 +588,17 @@ const check = Effect.fnUntraced(function* (ask: {
 
   const files = yield* Effect.fromResult(pick({ changed: touched, named, tree: new Set(list), cap }));
 
+  const answers = [
+    ...(ask.answered ? answersIn(yield* ok(root, ["log", "--format=%B", `${base}..${ask.head ?? "HEAD"}`])) : []),
+    ...(ask.answers === undefined
+      ? []
+      : answersIn(
+          yield* fs
+            .readFileString(path.resolve(ask.answers))
+            .pipe(Effect.mapError(() => Refused.make({ detail: `--answers names no readable file: ${ask.answers}` }))),
+        )),
+  ];
+
   if (files.length === 0) {
     return yield* Console.log("survivors: no product file changed between base and head, so nothing to mutate");
   }
@@ -562,13 +610,15 @@ const check = Effect.fnUntraced(function* (ask: {
     yield* Console.log(`left out  ${test.path}: ${test.reason}`);
   }
 
+  const unloaded = Arr.filter(bare, (file) => !isAnswered(answers, file, null));
+
   if (laws.length === 0) {
-    for (const file of bare) {
+    for (const file of unloaded) {
       yield* Console.log(`no law loads  ${file}: every mutant there lives`);
     }
 
     return yield* Effect.sync(() => {
-      process.exitCode = 1;
+      process.exitCode = unloaded.length > 0 ? 1 : 0;
     });
   }
 
@@ -660,9 +710,13 @@ const check = Effect.fnUntraced(function* (ask: {
     sources.set(file, yield* show(file));
   }
 
+  const lived = [...summary.b.survivors, ...summary.b.uncovered];
+  const open = Arr.filter(lived, (row) => !isAnswered(answers, row.file, row.line));
+  const explained = lived.length - open.length + bare.length - unloaded.length;
+
   const lines = [
-    ...Arr.map(bare, (file) => `no law loads  ${file}: every mutant there lives`),
-    ...survivorLines([...summary.b.survivors, ...summary.b.uncovered], (file) => sources.get(file) ?? ""),
+    ...Arr.map(unloaded, (file) => `no law loads  ${file}: every mutant there lives`),
+    ...survivorLines(open, (file) => sources.get(file) ?? ""),
   ];
 
   for (const line of [...lines, ...staticLines(summary.b.ignored)]) {
@@ -678,6 +732,7 @@ const check = Effect.fnUntraced(function* (ask: {
     Arr.join(
       [
         `survivors: ${lines.length} to kill or explain; ${counts}`,
+        explained > 0 ? `; ${explained} answered by a Survivor: line` : "",
         summary.sample === null ? "" : `; ${summary.sample.selected} of ${summary.sample.total} mutants sampled`,
         summary.reach === null ? "" : `; ${summary.reach}`,
         summary.b.unreached > 0

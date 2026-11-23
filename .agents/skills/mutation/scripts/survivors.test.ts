@@ -2,8 +2,10 @@ import { Array as Arr, Result } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  answersIn,
   changed,
   coverage,
+  isAnswered,
   lawFolder,
   leftOut,
   mutable,
@@ -394,6 +396,88 @@ describe("survivors, what a mutant changed", () => {
           expect(staticLines(full)).toHaveLength(places.size);
         },
       ),
+      options,
+    );
+  });
+});
+
+describe("survivors, which mutants a Survivor: line answers", () => {
+  const words = (min: number) =>
+    fc.array(fc.stringMatching(/^[a-z]{1,8}$/), { minLength: min, maxLength: 5 }).map((parts) => Arr.join(parts, " "));
+
+  const answer = fc.record({
+    file: anyFile,
+    line: fc.option(fc.integer({ min: 1, max: 400 }), { nil: null }),
+    reason: words(1),
+    evidence: words(2),
+  });
+
+  const row = (a: { file: string; line: number | null; reason: string; evidence: string }) =>
+    `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- ${a.evidence}`;
+
+  // A line that gives no answer: a missing reason, no ` -- `, no evidence, or one bare word of it.
+  const unsound = fc
+    .tuple(answer, fc.constantFrom("no reason", "no dashes", "no evidence", "one word"))
+    .map(([a, flaw]) =>
+      flaw === "no reason"
+        ? `Survivor: ${a.file}:${a.line ?? "*"} -- ${a.evidence}`
+        : flaw === "no dashes"
+          ? `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} ${a.evidence}`
+          : flaw === "no evidence"
+            ? `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- `
+            : `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- unreachable`,
+    );
+
+  const noise = fc.constantFrom(
+    "",
+    "Plant: a: b: c",
+    "tests: add a law",
+    "survivor: lower case",
+    "  Survivor: indented a.ts:1 r -- e f",
+  );
+
+  // Plants: accept a line with no evidence; accept one bare word of evidence; read `*` as a number; match a
+  // line by file only; let a file's own `*` answer a different file.
+  it("a Survivor: line with a reason and evidence answers its mutant, and nothing else does", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.tuple(answer, fc.array(fc.oneof(unsound, noise), { maxLength: 3 })), { maxLength: 6 }),
+        fc.nat(),
+        (rows, pick) => {
+          const text = Arr.join(
+            Arr.flatMap(rows, ([a, other]) => [...other, row(a)]),
+            "\n",
+          );
+
+          const got = answersIn(text);
+          expect(got).toEqual(Arr.map(rows, ([a]) => ({ file: a.file, line: a.line })));
+
+          for (const [a] of rows) {
+            // A file's own line is answered, and a `*` answers any line of its file and the file no law loads.
+            expect(isAnswered(got, a.file, a.line ?? pick)).toBe(true);
+            expect(isAnswered(got, a.file, null)).toBe(Arr.some(got, (g) => g.file === a.file && g.line === null));
+          }
+
+          expect(isAnswered(got, "nowhere/else.ts", pick)).toBe(false);
+          expect(isAnswered(got, "nowhere/else.ts", null)).toBe(false);
+
+          const lines = Arr.filter(got, (g) => g.line !== null);
+
+          for (const g of lines) {
+            expect(isAnswered(got, g.file, 1000)).toBe(Arr.some(got, (h) => h.file === g.file && h.line === null));
+          }
+        },
+      ),
+      options,
+    );
+  });
+
+  // Plants: let a text of no Survivor: line answer anything; take a line without its evidence.
+  it("lines that carry no evidence, or no reason, answer nothing", () => {
+    fc.assert(
+      fc.property(fc.array(fc.oneof(unsound, noise), { maxLength: 8 }), (rows) => {
+        expect(answersIn(Arr.join(rows, "\n"))).toEqual([]);
+      }),
       options,
     );
   });
