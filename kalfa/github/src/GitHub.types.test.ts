@@ -140,6 +140,8 @@ const queryKeys = () => {
   GitHub.route(SEARCH_ISSUES);
   // @ts-expect-error `q` is required, and an options object that leaves it out is not enough
   GitHub.route(SEARCH_ISSUES, {});
+  // @ts-expect-error `q` is required, and a value of `undefined` is dropped before it is sent, so it never reaches GitHub
+  GitHub.route(SEARCH_ISSUES, { query: { q: Schema.UndefinedOr(Schema.String) } });
   // @ts-expect-error `q` is declared optional
   GitHub.route(SEARCH_ISSUES, { query: { q: Schema.optionalKey(Schema.String) } });
 
@@ -175,6 +177,8 @@ const payloadKeys = () => {
   GitHub.route(CANCEL, { payload: IssuePayload });
   // @ts-expect-error a route whose body is required cannot be declared without one
   GitHub.route(CREATE_ISSUE);
+  // @ts-expect-error `title` is required, and a value of `undefined` is dropped before it is sent
+  GitHub.route(CREATE_ISSUE, { payload: Schema.Struct({ title: Schema.UndefinedOr(Schema.String) }) });
   // @ts-expect-error nor with an options object that leaves the payload out
   GitHub.route(CREATE_ISSUE, {});
 
