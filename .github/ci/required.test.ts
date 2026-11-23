@@ -136,6 +136,20 @@ it("6: a failed, cancelled, empty or unknown result fails, whatever the output s
   );
 });
 
+it("10: a cancelled job's line says to open its failed step, since a red job's stop step ends it cancelled too", () => {
+  fc.assert(
+    fc.property(green, fc.constantFrom("changes", ...gated), (needs, name) => {
+      needs[name] = { result: "cancelled" };
+      const verdict = judge(needs);
+      expect(verdict.pass).toBe(false);
+      expect(verdict.lines).toContain(
+        `${name}: cancelled (a newer push, or the red job's own stop step: open its failed step), fail`,
+      );
+    }),
+    options,
+  );
+});
+
 it("7: changes or a gated job missing from needs fails, and is named", () => {
   fc.assert(
     fc.property(green, fc.constantFrom("changes", ...gated), (needs, name) => {
