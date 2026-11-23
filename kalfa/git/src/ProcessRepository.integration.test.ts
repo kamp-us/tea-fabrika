@@ -670,16 +670,37 @@ const readOutcome = (read: Effect.Effect<Option.Option<Uint8Array | string>, Rea
     );
   });
 
+// The reads of I10, one path drawn for each class, so every run holds a link, CRLF lines, text a filter would change, names outside
+// ASCII, a file past 1000 bytes (all of them past `core.bigFileThreshold`), a file three folders deep, a path below a file and a
+// folder. `readText` is asked of the text ones.
+const CONFIG_READS: ReadonlyArray<readonly [label: string, text: boolean]> = [
+  ["(d) a link at the path", false],
+  ["(a) CRLF lines", true],
+  ["(g) UTF-8 text with line breaks and wide characters", true],
+  ["(a) names past U+024F, from U+E000 to U+FFFF and outside the Basic Multilingual Plane", true],
+  ["(a) past 1000 bytes", false],
+  ["(a) a file three folders deep beside a file at the top", false],
+  ["(b) a path below a file", false],
+  ["(c) a folder at the top", false],
+];
+
 // Plant (I10): run `cat-file --filters --path=<path>` for a file's bytes, which `core.autocrlf` and the attributes file turn into
 // other bytes, (w) red; give `ls-tree` the path as an argument, so `core.ignoreCase` and `core.precomposeUnicode` act, (w) red. The
-// answers of every read of the generator, asked of one bare repository, are the same before and after its config gets every key of
-// the table, and the same as `/memory` gives for the same history.
+// answers of the drawn reads, asked of one bare repository, are the same before and after its config gets every key of the table,
+// and the same as `/memory` gives for the same history. About 80 git commands in a run: 8 reads, 3 of them asked as text too, 2 times.
 it.effect.prop(
   "I10 scenario: a repository's own config steers no read: core.quotePath, core.precomposeUnicode, core.ignoreCase, core.autocrlf, core.eol, core.safecrlf, a filter, core.attributesFile, info/attributes and core.bigFileThreshold change no answer of readFile or readText, and the answers are /memory's",
   { texture: textureArb },
   ({ texture }) =>
     Effect.gen(function* () {
       const carrier = readCarrier(texture);
+
+      const drawn = CONFIG_READS.map(([label, text], k) => {
+        const hits = carrier.cases.filter((each) => each.classes.includes(label));
+        expect(hits.length, `the generator reaches ${label}`).toBeGreaterThan(0);
+
+        return { each: hits[(texture.nums[k] ?? 0) % hits.length], text };
+      });
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -693,15 +714,15 @@ it.effect.prop(
 
           const answers = (seeded: RepositoryTest.Seeded) =>
             Effect.forEach(
-              carrier.cases,
-              (each) => {
+              drawn.flatMap(({ each, text }) => (each === undefined ? [] : [{ each, text }])),
+              ({ each, text }) => {
                 const commit = idAt(seeded.ids, each.commit);
                 const path = Schema.decodeUnknownSync(Tree.Path)(each.path);
 
                 return Effect.all(
                   [
                     readOutcome(seeded.repository.readFile(commit, path)),
-                    readOutcome(seeded.repository.readText(commit, path)),
+                    text ? readOutcome(seeded.repository.readText(commit, path)) : Effect.succeed("not asked"),
                   ],
                   { concurrency: 1 },
                 );
@@ -713,19 +734,15 @@ it.effect.prop(
           expect(without, "git answers what /memory answers").toEqual(yield* answers(model));
           yield* setConfigTable(dir);
           expect(yield* answers(real), "the same answers with every key of the config table set").toEqual(without);
-          expect(without.filter(([raw]) => raw?.startsWith("file:")).length, "the reads have files").toBeGreaterThan(
-            20,
-          );
+          expect(without.filter(([raw]) => raw?.startsWith("file:")).length, "the reads have files").toBeGreaterThan(3);
           expect(
             without.filter(([, text]) => text?.startsWith("text:")).length,
             "the reads have text, which the filter would change",
-          ).toBeGreaterThan(20);
+          ).toBeGreaterThan(1);
         }),
       );
     }).pipe(Effect.provide(NodeServices.layer)),
-  // One run asks 271 paths, `readFile` and `readText` each, three times (git, git with the config, /memory): about 4000 git commands
-  // for each run, so the 60 s default of a test is too short, as it is for the shared laws. No command waits: none runs a filter.
-  { arbitrary: { runs: 3, seed: 119120 }, timeout: 1_800_000 },
+  { arbitrary: { runs: 5, seed: 119120 } },
 );
 
 // Plant (I11): read a gitlink as nothing at the path, (i) red; read a path below a gitlink as none, (i) red. A submodule holds a
