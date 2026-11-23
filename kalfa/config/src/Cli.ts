@@ -23,7 +23,7 @@ const FILES = ["repo", "user"] as const;
 
 const file = Flag.Literals("file", FILES);
 
-/** Prints a text whole. Every text ends in exactly one line break, which the log adds, so the output is the text byte for byte. */
+/** Prints a text whole. Every text ends in exactly one line break, which the log adds, so what is printed is the text byte for byte. */
 const print = (text: string) => (text === "" ? Effect.void : Console.log(text.slice(0, -1)));
 
 /** The setting a person typed, found by its name and never as a key of a plain object. Fails `unknown` for a name that is no setting, with the nearest name when one is within two edits. */
