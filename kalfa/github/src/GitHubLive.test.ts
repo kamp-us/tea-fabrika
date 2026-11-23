@@ -888,10 +888,10 @@ const trail = (
 // H9, a redirect keeps the token on GitHub's origin. Plant: leave `FetchHttpClient.RequestInit` out (the stand-in is handed `redirect:
 // "follow"`); follow by hand and keep every header (x sends the token to the other host); drop `authorization` on every hop (y's
 // same-origin hop loses it); compare the host, not the origin (z's other port keeps it); ignore `github.redirects` (a long chain is
-// followed to its end).
+// followed to its end); re-add `authorization` when a later hop returns to the address's origin (a chain that left and came back).
 describe("H9, a redirect keeps the token on GitHub's origin", () => {
   it.effect.prop(
-    "every request carries redirect: manual; a request to another origin, host, scheme or port, carries no authorization, proxy-authorization or cookie, and one that has stayed on the address's origin keeps its token; a 303, and a 301 or 302 after a POST, goes on as a GET with no body, and a 307 or 308 keeps both; a chain longer than github.redirects stops and fails as Undecodable answer naming the status; the token is in no URL and no header another host got",
+    "every request carries redirect: manual; a request to another origin, host, scheme or port, carries no authorization, proxy-authorization or cookie, and one that has stayed on the address's origin keeps its token; a 303, and a 301 or 302 after a POST, goes on as a GET with no body, and a 307 or 308 keeps both; once a chain has left GitHub's origin no later request carries a token, even one back on that origin; a chain longer than github.redirects stops and fails as Undecodable answer naming the status; the token is in no URL and no header another host got",
     { drawn: drawn9 },
     ({ drawn }) =>
       Effect.gen(function* () {
@@ -912,6 +912,18 @@ describe("H9, a redirect keeps the token on GitHub's origin", () => {
             KINDS.map((kind) => ({
               name: `${status} to ${kind}`,
               chain: [{ status, kind, segment: drawn.secret }],
+              limit: 20,
+            })),
+          ),
+          // A chain that leaves GitHub's origin and comes back: the token does not come back with it.
+          ...STATUSES.flatMap((status) =>
+            (["other host", "same host, other scheme", "same host, other port"] as const).map((kind) => ({
+              name: `${status} to ${kind}, then back to the own origin, then on`,
+              chain: [
+                { status, kind, segment: drawn.secret },
+                { status, kind: "own origin, full" as const, segment: drawn.secret },
+                { status: 302 as const, kind: "own origin, relative" as const, segment: drawn.secret },
+              ],
               limit: 20,
             })),
           ),
@@ -973,6 +985,9 @@ describe("H9, a redirect keeps the token on GitHub's origin", () => {
 
               if (model.keeps[index] === true) {
                 expect(seen.headers.authorization, `${at}: the token stays on this origin`).toBe(`Bearer ${token}`);
+              } else {
+                // Once a chain has left GitHub's origin the token never comes back, even when a later hop returns to it.
+                expect(Object.hasOwn(seen.headers, "authorization"), `${at}: gone for good after leaving`).toBe(false);
               }
 
               expect(showsAny([seen.url], forms), `${at}: the URL`).toEqual([]);
