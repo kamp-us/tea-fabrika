@@ -430,5 +430,20 @@ it.effect(
         expect(error.paths.length, "one path").toBe(1);
         expect(error.paths[0]?.startsWith("a~"), "the file moved to a name of its own").toBe(true);
       }
+
+      // 5. The same one folder deeper: a file at `a/b` against a file at `a/b/c`.
+      const deeper = yield* mergedRepository([
+        { parent: undefined, files: [] },
+        { parent: 0, files: [["a/b", "o\n"]] },
+        { parent: 0, files: [["a/b/c", "t\n"]] },
+      ]);
+
+      const deep = yield* failure(deeper.repo.mergeTrees(deeper.merge));
+      expectFailure(deep, Repository.Conflict, {}, "a file in a folder against a file below it");
+
+      if (Schema.is(Repository.Conflict)(deep)) {
+        expect(deep.paths.length, "one path").toBe(1);
+        expect(deep.paths[0]?.startsWith("a/b~"), "the file moved to a name of its own").toBe(true);
+      }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

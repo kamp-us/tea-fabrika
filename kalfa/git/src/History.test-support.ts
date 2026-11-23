@@ -1579,6 +1579,7 @@ export const FOLDER_MERGE_CLASSES = [
   "ours adds a file, theirs adds a file in a folder of its name",
   "ours adds a file in a folder, theirs adds a file of the folder's name",
   "a file against a file two folders below it",
+  "a file in a folder against a file below it",
 ] as const;
 
 /** One merge in a history: three commits by index, and what the merge of their trees must answer. */
@@ -1732,6 +1733,8 @@ const folderSides = (label: (typeof FOLDER_MERGE_CLASSES)[number], draw: Draw): 
       return { base: [], ours: [file(`${name}/${b}`, v1)], theirs: [file(name, v0)] };
     case "a file against a file two folders below it":
       return { base: [], ours: [file(name, v0)], theirs: [file(`${name}/${b}/${c}`, v1)] };
+    case "a file in a folder against a file below it":
+      return { base: [], ours: [file(`${name}/${b}`, v0)], theirs: [file(`${name}/${b}/${c}`, v1)] };
   }
 };
 
