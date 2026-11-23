@@ -454,6 +454,8 @@ jobs:
           SHARD: ${{ matrix.shard }}/${{ needs.changes.outputs.vitest-legs || 5 }}
           FILTER: ${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/ kalfa/' }}
           FABRIKA_TEST_DEPTH: full
+          FABRIKA_SLOW_TEST_MODE: report
+          FABRIKA_SLOW_TEST_SHARE: "0.1"
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers.
       - name: chromium
@@ -473,6 +475,8 @@ jobs:
           SHARD: ${{ matrix.shard }}/${{ needs.changes.outputs.e2e-legs || 2 }}
           CHANGED: ${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}
           FABRIKA_TEST_DEPTH: full
+          FABRIKA_SLOW_TEST_MODE: report
+          FABRIKA_SLOW_TEST_SHARE: "0.1"
       # After both test steps, so a vitest leg and an e2e leg each feed it their own next.json.
       - name: shard times
         if: ${{ !cancelled() }}
@@ -585,6 +589,8 @@ jobs:
         env:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           FABRIKA_TEST_DEPTH: full
+          FABRIKA_SLOW_TEST_MODE: report
+          FABRIKA_SLOW_TEST_SHARE: "0.1"
         run: pnpm exec vitest run --project next-integration $FILES --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/related.json"
       - name: tooling
         if: fromJSON(needs.select.outputs.projects)[matrix.shard] == 'tooling'
@@ -592,6 +598,8 @@ jobs:
         env:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           FABRIKA_TEST_DEPTH: full
+          FABRIKA_SLOW_TEST_MODE: report
+          FABRIKA_SLOW_TEST_SHARE: "0.1"
         run: pnpm exec vitest run --project tooling $FILES --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/related.json"
       - name: consumer fault
         if: success() && needs.select.outputs.consumer == matrix.shard
