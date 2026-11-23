@@ -39,8 +39,9 @@ symbolic, or points at a tag, a tree or a blob, fails `readRefs` with `RefNotCom
 
 ## Two adapters
 
-- `@kalfa/git/memory` keeps a store as a plain value of commits, refs and shallow commits. A commit's id is computed
-  as git computes it, so the same commit has the same id here and in a real repository.
+- `@kalfa/git/memory` keeps a store as a plain value of commits, trees, blobs, refs and shallow commits. A commit's id
+  and a tree's id are computed as git computes them, so the same commit with the same files has the same id here and
+  in a real repository.
 - `@kalfa/git/process` runs the git binary (2.38 or newer) on a bare repository, through Effect's
   `ChildProcessSpawner`. The app provides the Node spawner at the top. Every command runs with `--git-dir`, with no
   replacement objects, no hooks and no config of the machine, and with only `PATH` and a pinned set of variables.
@@ -51,6 +52,28 @@ ProcessRepository.layer({ path: "repo.git", settings });
 MemoryRepository.layer(store, settings);
 // Layer<Repository | MemoryStore>
 ```
+
+## Commits hold trees
+
+A commit has a `tree`, the id of its files, as git writes it on the commit's first line. `readCommit` and `walk` answer
+it. In the memory store, `MemoryRepository.tree(store, files)` puts files in a store and answers the store and the
+tree's id. `files` is a `Map` from a `Tree.Path` to a `File`, a `Tree.Mode` and its bytes, which are kept exactly and
+never read as text. `MemoryRepository.commit` takes that `tree` among its fields.
+
+```ts
+const files = new Map([
+  [path("a.b"), { mode: mode("100644"), content: utf8("x\n") }],
+  [path("a/c"), { mode: mode("100644"), content: utf8("y\n") }],
+  [path("a0"), { mode: mode("120000"), content: utf8("a.b") }], // a link: its content is its target
+]);
+const { store, id: tree } = yield* MemoryRepository.tree(MemoryRepository.empty, files); // Effect<..., BadStore, Digest>
+const made = yield* MemoryRepository.commit({ tree, parents: [], author, committer, message });
+```
+
+`Tree.Path` refuses what git refuses: an empty part, `.` and `..`, and every name git's `fsck` reads as `.git` (any
+letter case, trailing spaces and dots, a `:` stream, the characters an HFS volume ignores, `git~1`). `tree` fails
+`BadStore` with `path-conflict` when one path is a folder of another, and `add` fails with `missing-tree` when the
+store lacks a commit's tree. `empty` already holds git's empty tree.
 
 ## Settings
 
@@ -74,12 +97,13 @@ call always ends.
 
 `@kalfa/git/test` holds `RepositoryTest.suite`, the laws every adapter passes, with its `Subject`, `Seeded` and
 `SuiteOptions` types and `settings`. `@kalfa/git/test/History` holds the `History` and `Node` types and the `textureArb`
-and `shapes` that draw the histories. A new adapter writes a `Subject` that seeds a history into its own kind of store, and runs
+and `shapes` that draw the histories. A new adapter writes a `Subject` that seeds a history into its own kind of store,
+with each node's `files` in each commit's tree, answers each commit's tree id in `Seeded.trees`, and runs
 `RepositoryTest.suite("name", subject, { runs, timeout })` in its own test file. `@effect/vitest` and `vitest` are
 optional peers, needed only by `/test`.
 
 ## What it never does
 
 It has no working copy and no HEAD. It imports no Node module and no package of its repo. It puts no message, name,
-email or repository path in a span. Diffs, trees, writing a commit, moving a ref, fetch and push belong to other
-packages.
+email or repository path in a span. Diffs, writing a commit, moving a ref, reading a file, fetch and push come in
+later tickets of this package.
