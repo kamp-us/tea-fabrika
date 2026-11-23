@@ -340,8 +340,10 @@ try:
     # that passes lint and tests can still fail it. Run that same script, with CHECK's incremental flags,
     # in each package that owns a committed .ts file, so the package list stays the packages' own
     # `typecheck` scripts and there is no second copy. A box's commit (STEPCOMMIT_BOX) skips it: drive's
-    # host part checks there. No .ts file, or no package with a typecheck script above it: nothing runs.
-    if not named_box:
+    # host part checks there. A tests commit skips it too: its laws name exports the build has not
+    # written yet, so it is red on types by design, and the build's commit is the first that must pass.
+    # No .ts file, or no package with a typecheck script above it: nothing runs.
+    if not named_box and step != "tests":
         owners_seen = {}
         for p in staged:
             if not re.search(r"\.(ts|tsx|mts|cts)\Z", p) or not (root / p).exists(): continue
