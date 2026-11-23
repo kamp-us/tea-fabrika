@@ -435,4 +435,29 @@ it("P17 vector: parse.patch reads every section of each diff-tree -p -U0 output 
 
   expect(unreadable(Parse.files([[entryWith("040000"), empty]])), "hand-made: a tree's mode is no file").toBe(true);
   expect(Result.isSuccess(Parse.files([[entryWith("100644"), empty]])), "hand-made: a file's mode reads").toBe(true);
+
+  // An entry that lacks a side its status needs is unreadable, and never a throw: a new file with no new side, a deleted file with
+  // no old side, a changed file with no old side, and a type change with no new side.
+  const bare = (status: Parse.Change["status"], side: "before" | "after" | "both"): Parse.Change => ({
+    status,
+    path: "a",
+    ...(side === "after" || side === "both" ? { after: { mode: "100644", id: after } } : {}),
+    ...(side === "before" || side === "both" ? { before: { mode: "100644", id: before } } : {}),
+    gitlink: false,
+  });
+
+  for (const [note, lacking, kept] of [
+    ["a new file with no new side", "A", "before"],
+    ["a deleted file with no old side", "D", "after"],
+    ["a changed file with no old side", "M", "after"],
+    ["a changed file with no new side", "M", "before"],
+    ["a type change with no old side", "T", "after"],
+  ] as const) {
+    expect(unreadable(Parse.files([[bare(lacking, kept), empty]])), `hand-made: ${note} is unreadable`).toBe(true);
+  }
+
+  expect(
+    Result.isSuccess(Parse.files([[bare("M", "both"), empty]])),
+    "hand-made: a changed file with both sides reads",
+  ).toBe(true);
 });

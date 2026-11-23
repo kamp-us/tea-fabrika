@@ -974,6 +974,18 @@ it.effect.prop(
         [...OPENING, CHECK, RAW].map((rest) => [...START, ...rest]),
       );
 
+      // A raw list of submodules only holds no blob: git is asked no size, and the patch goes on to `patch-id`.
+      const linked = yield* Effect.gen(function* () {
+        const { repo, stand } = yield* open(patchScript({ ...script, entries: [GITLINK] }), { files, diff: bytes });
+
+        return { result: yield* Effect.result(repo.patchId(first, second)), seen: yield* stand.calls };
+      });
+
+      expect(Result.isSuccess(linked.result), "a list of submodules answers").toBe(true);
+      expect(commandsSeen(linked.seen), "no size is asked of a list with no blob").toEqual(
+        [...OPENING, CHECK, RAW, PATCH, PATCH_ID].map((rest) => [...START, ...rest]),
+      );
+
       // A raw list with entries and a `patch-id` that prints nothing is no answer, never none.
       const silent = yield* ask({ files, diff: bytes }, (call) =>
         call.verb === "patch-id" ? { code: 0, stdout: "" } : undefined,
