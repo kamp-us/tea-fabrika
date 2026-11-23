@@ -34,8 +34,10 @@ A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not 
 step where they come from. A run once printed a token to a local log that way. Name the setting
 and say where it is set; never echo its value. `pnpm config list` and `env` stay out of briefs.
 
-An agent's own worktree gets its own install: `pnpm install --offline
---frozen-lockfile` in it, about 3 s from the warm store, with no network and no lockfile change.
+An agent's own worktree is made with `worktree.ts <name> <branch>`: it cuts the branch from `origin/main`,
+sets its upstream to `origin/<branch>` (a bare `git worktree add ... origin/main` makes it track main, and a
+helper's `git pull` then pulls main in), and runs the install. The install is `pnpm install --offline
+--frozen-lockfile` in the worktree, about 3 s from the warm store, with no network and no lockfile change.
 Never link `node_modules` to the main checkout's: pnpm 12 refuses a linked one in `pnpm -r`
 (`ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH`), and a pnpm run in the worktree, an install included,
 rewrites the main checkout's install state through the link. `pnpm typecheck` removes such a link
@@ -103,7 +105,7 @@ After two such resumes on the same step, treat it as stuck and read why.
 
 ```text
 Use the plan skill for ticket <id or "to be filed">, <title>, <today's tooling or next/>.
-Worktree: ../tf-<name>, made with: <the git worktree add command, or "exists">
+Worktree: ../tf-<name>, made with: `node .agents/skills/lead/scripts/worktree.ts <name> <branch>`, or "exists"
 Branch: fabrikalfa/<name>, from <origin/main or the parent branch>
 Plan file: .kalfa/quests/<quest>-PLAN.md
 Read also: <tier rows, notes and code the plan must start from>
@@ -343,11 +345,12 @@ Read the header before you run one; this table only says what each is for.
 | `mutbox.ts` | the mutation run's Stryker sample in a container |
 | `runplan.sh` | a read-only plan writer in the main checkout |
 | `botpush.mjs` | push a branch and its step notes as the bot, in one atomic push |
-| `publish.ts <branch> [--title <t>] [--body-file <f>]` | leak-check, push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it, and after `--commit-only` you run it, giving a new draft its title and its body (written with the pr skill) in place of the placeholder |
+| `worktree.ts <name> <branch>` | make `../tf-<name>` on a new branch from `origin/main`, upstream `origin/<branch>`, packages installed |
+| `publish.ts <branch> [--title <t>] [--body-file <f>]` | leak-check, push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it, and after `--commit-only` you run it, giving a new draft its title and its body (written with the pr skill) in place of the placeholder; on a branch whose PR is open, the same flags set that PR's title and body (draft state unchanged), so never `gh api -X PATCH` by hand |
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
-| `land.ts check <pr>` | the body checks `queue` runs, alone: run it after the body is written and before `queue`; it changes nothing and exits 1 on any missing name or leak |
+| `land.ts check <pr>` | the body checks `queue` runs, alone: run it after the body is written and before `queue`; it changes nothing and exits 1 on any missing name, leak, or `fabrika close ticket` line whose number is no open tracker ticket (an open GitHub issue is closed with `Closes #N`) |
 | `sizecap.ts` | a diff's or a plan's size, as advice only; run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
 
@@ -784,7 +787,8 @@ these caps. Each one came from a laptop that became unusable. This list is their
 
 ## Tool facts that cost us time
 
-- `gh pr edit` fails here with a classic Projects error. Use `gh api -X PATCH`.
+- `gh pr edit` fails here with a classic Projects error. To change an open PR's title and body, run
+  `publish.ts <branch> --title <t> --body-file <f>`; it patches through the API and leaves the draft state alone.
 - On a draft pull request the required check is named `ci-required (draft)` on purpose
   (`.github/workflows/check.yaml`), so `gh pr checks <pr> --required` finds nothing. Use
   `gh pr checks <pr>` without the flag, or mark the pull request ready first. Right after that,

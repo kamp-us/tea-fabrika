@@ -87,7 +87,7 @@ const row = fc.record({
   endColumn: fc.integer({ min: 0, max: 9 }),
   mutator: fc.constantFrom("BooleanLiteral", "EqualityOperator"),
   replacement: fc.constantFrom("true", "false", ""),
-  status: fc.constantFrom("Killed", "Survived", "Timeout", "NoCoverage", "CompileError"),
+  status: fc.constantFrom("Killed", "Survived", "Timeout", "NoCoverage", "Ignored", "CompileError"),
 });
 
 describe("mutbox, the pure parts", () => {
@@ -123,6 +123,7 @@ describe("mutbox, the pure parts", () => {
           lock: fc.string(),
           // The marker CI hands in, or none (testing, linting and formatting live in @kalfa/quality, slice 2): Q18 holds what it does.
           ci: fc.constant(null),
+          cap: fc.constant(null),
         }),
         (ask) => {
           const args = runArgs(ask);
@@ -170,6 +171,7 @@ describe("mutbox, the pure parts", () => {
   });
 
   // Plant: let a comma through, so `--mount` reads the rest of the path as its own options.
+  // Plant: pass CAP_SECONDS when no cap was asked, or leave it out when one was.
   // Q18, slice 2 of .kalfa/quests/kalfa-quality-stryker-PLAN.md (testing, linting and formatting live in @kalfa/quality): `CI` crosses into the container only
   // from CI. The hourly run on GitHub's runner sets `CI`, and the container's host guard (vitest.hostrun.ts)
   // lets `.integration.` laws start there; on the laptop mutbox has no `CI`, passes none, and the guard still
@@ -187,6 +189,7 @@ describe("mutbox, the pure parts", () => {
           related: fc.array(testPath, { minLength: 1, maxLength: 3 }),
           lock: fc.string(),
           ci: fc.option(fc.stringMatching(/^[A-Za-z0-9._-]{1,12}$/), { nil: null }),
+          cap: fc.option(fc.integer({ min: 1, max: 3600 }), { nil: null }),
         }),
         (ask) => {
           const args = runArgs(ask);
@@ -197,6 +200,7 @@ describe("mutbox, the pure parts", () => {
             `BUILD=${ask.build}`,
             `RELATED=${ask.related.join(",")}`,
             ...(ask.ci === null ? [] : [`CI=${ask.ci}`]),
+            ...(ask.cap === null ? [] : [`CAP_SECONDS=${ask.cap}`]),
           ]);
         },
       ),
@@ -281,9 +285,14 @@ describe("mutbox, the pure parts", () => {
     ]);
     expect(entry).toContain("pnpm install --offline --frozen-lockfile");
     expect(secondsFor(true)).toBeGreaterThan(secondsFor(false));
+    // The default cap keeps the measured limits, and a longer cap gives the container that much more time.
+    expect([secondsFor(false), secondsFor(true)]).toEqual([480, 900]);
+    expect(secondsFor(false, 600) - secondsFor(false)).toBe(300);
+    expect(secondsFor(true, 600) - secondsFor(true)).toBe(600);
   });
 
-  // Plants: count NoCoverage as tested; report a mutant arm a also lets live as narrowing.
+  // Plants: count NoCoverage as tested; report a mutant arm a also lets live as narrowing; list a
+  // Survived mutant as uncovered, or a Killed one as ignored.
   it("an arm's counts add up, and narrowing is exactly what arm a kills and arm b lets live", () => {
     fc.assert(
       fc.property(
@@ -295,6 +304,8 @@ describe("mutbox, the pure parts", () => {
           expect(Arr.reduce(Rec.values(arm.counts), 0, (x, y) => x + y)).toBe(b.length);
           expect(arm.tested).toBe(Arr.filter(b, (r) => ["Killed", "Survived", "Timeout"].includes(r.status)).length);
           expect(arm.survivors).toEqual(Arr.filter(b, (r) => r.status === "Survived"));
+          expect(arm.uncovered).toEqual(Arr.filter(b, (r) => r.status === "NoCoverage"));
+          expect(arm.ignored).toEqual(Arr.filter(b, (r) => r.status === "Ignored"));
           expect(arm.unreached).toBe(Math.max(0, selected - b.length));
 
           const same = (x: object, y: object) =>
@@ -1254,6 +1265,7 @@ const server = net.createServer((s) => s.end("hello")).listen(() => {
       related: [],
       lock: "probe",
       ci: null,
+      cap: null,
     });
 
     const from = /^FROM (\S+)$/m.exec(dockerfile)?.[1] ?? "";

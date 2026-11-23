@@ -34,7 +34,7 @@ if (args[0]?.endsWith("/limit.ts")) {
 if (args[0]?.endsWith("/core/bin/stryker.js")) {
   const config = JSON.parse(fs.readFileSync(args[2], "utf8"));
   const vitest = fs.readFileSync(path.join(dir, config.vitest.configFile), "utf8");
-  fs.writeFileSync(path.join(dir, "invoked.json"), JSON.stringify({args, config, vitest, limit: process.env.TEST_LIMIT}));
+  fs.writeFileSync(path.join(dir, "invoked.json"), JSON.stringify({args, config, vitest, limit: process.env.TEST_LIMIT, cap: process.env.CAP_SECONDS}));
   if (setup.orphan) {
     const left = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio:"ignore"});
     fs.writeFileSync(path.join(dir, "pids.json"), JSON.stringify([left.pid]));
@@ -58,7 +58,14 @@ type Setup = {
 
 const defaults: Setup = { ranges: ['"src/math.ts:1:0-1:30"'], sampleExit: 0, exit: 0, hold: false };
 
-type Inputs = { T?: string; BUILD?: string; RELATED?: string; IN_PLACE?: string; BASELINE?: string };
+type Inputs = {
+  T?: string;
+  BUILD?: string;
+  RELATED?: string;
+  IN_PLACE?: string;
+  BASELINE?: string;
+  CAP_SECONDS?: string;
+};
 
 const fixture = (setup: Setup, inputs: Inputs) => {
   expect(existsSync(script), "build must extract the executable run.sh").toBe(true);
@@ -99,6 +106,7 @@ const fixture = (setup: Setup, inputs: Inputs) => {
     env: {
       ...process.env,
       BASELINE: undefined,
+      CAP_SECONDS: undefined,
       ...inputs,
       PATH: `${bin}:/usr/bin:/bin`,
       TMPDIR: temp,
@@ -126,6 +134,8 @@ type Invocation = {
   vitest: string;
   /** TEST_LIMIT as Stryker, and so the config it loads, sees it. */
   limit?: string;
+  /** CAP_SECONDS as Stryker's wrapper sees it: the time cap it stops Stryker at. */
+  cap?: string;
 };
 
 const invoked = (dir: string): Invocation | undefined =>
@@ -454,6 +464,28 @@ console.log(JSON.stringify(resolved.test));
         },
       ),
       { ...options, numRuns: 12 },
+    );
+  });
+
+  // Plants: accept 0, an empty value, a sign or a unit; drop CAP_SECONDS, so the cap is the old fixed five minutes.
+  it("T2026 CAP_SECONDS is a whole number of seconds, 1 or more, or run.sh stops before Stryker; unset is 300", () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.integer({ min: 1, max: 86_400 }).map(String),
+          fc.constantFrom(undefined, "0", "00", "012", "-5", "+5", "5s", "1.5", " 5", "5 "),
+          fc.stringMatching(/^[a-z .-]{1,4}$/),
+        ),
+        (cap) => {
+          const got = run(defaults, { T: "2026", BUILD: "abc1234", RELATED: "math.test.ts", CAP_SECONDS: cap });
+          const want = cap === undefined ? "300" : /^[1-9][0-9]*$/.test(cap) ? cap : undefined;
+
+          expect(got.code === 0, got.text).toBe(want !== undefined);
+          expect(got.invocation?.cap).toBe(want);
+          expect(got.configLeft).toBe(false);
+        },
+      ),
+      { ...options, numRuns: 16 },
     );
   });
 

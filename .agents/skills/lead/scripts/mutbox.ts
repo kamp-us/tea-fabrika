@@ -2,7 +2,7 @@
 // nothing is opened in the laptop sandbox (a step that needs ports or its own processes and network isolation runs in a container). Today's lead tooling, not product.
 //
 //   node mutbox.ts run --checkout <repo> --ticket <n> --build <commit> --related <a.test.ts,b.test.ts>
-//                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>] [--plan <file>]
+//                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>] [--cap <n>] [--plan <file>]
 //   node mutbox.ts gc --lock <file>
 //
 // `run` prints one JSON line and writes the same value to <out>/mutbox.json: outcome `done` (exit
@@ -103,8 +103,14 @@ export const PLATFORM = "linux/arm64";
  */
 export const LIMITS = { cpus: 4, memory: "4g", pids: 512 } as const;
 
-/** One arm is run.sh's own 300 s cap plus the install and the baseline; two arms with a base. */
-export const secondsFor = (base: boolean) => (base ? 900 : 480);
+/** run.sh's own time cap on Stryker, in seconds, when `--cap` gives none: the fast check's five minutes. */
+const CAP = 300;
+
+/**
+ * The container's time limit: one arm is run.sh's cap plus 180 s for the install and the baseline;
+ * with a base, two arms and 300 s. The default cap gives the measured 480 s and 900 s.
+ */
+export const secondsFor = (base: boolean, cap: number = CAP) => (base ? 2 * cap + 300 : cap + 180);
 
 /**
  * How long one Docker call may take before it is stopped. On 2026-11-10 a `docker ps` in gc never
@@ -166,7 +172,7 @@ const WINDOWS = new Set(["electron", "playwright", "@playwright/test"]);
  * `import("x")` and `require("x")` with a literal name. A type-only import loads nothing, and an
  * import inside a string (a lint rule's planted source) is not one (ticket 655).
  */
-const loads = (file: string, source: string): ReadonlySet<string> => {
+export const loads = (file: string, source: string): ReadonlySet<string> => {
   const names = new Set<string>();
 
   const add = (node: { readonly type: string; readonly value?: unknown } | null | undefined) => {
@@ -218,6 +224,8 @@ export const runArgs = (ask: {
   readonly lock: string;
   /** The host's own `CI` marker, or `null` when it has none: the only host variable that crosses. */
   readonly ci: string | null;
+  /** run.sh's time cap on Stryker, in seconds, or `null` for run.sh's own default. */
+  readonly cap: number | null;
 }): Array<string> => [
   "run",
   "--rm",
@@ -257,6 +265,7 @@ export const runArgs = (ask: {
   "--env",
   `RELATED=${Arr.join(ask.related, ",")}`,
   ...(ask.ci === null ? [] : ["--env", `CI=${ask.ci}`]),
+  ...(ask.cap === null ? [] : ["--env", `CAP_SECONDS=${ask.cap}`]),
   ask.image,
   "nice",
   "-n",
@@ -364,7 +373,7 @@ const Row = Schema.Struct({
 type Row = typeof Row.Type;
 
 const Arm = Schema.Struct({
-  /** run.sh's exit code: 0, or 124 when its five minutes ran out. */
+  /** run.sh's exit code: 0, or 124 when its time cap ran out. */
   exit: Schema.Finite,
   /** `report`: Stryker finished. `events`: the cap stopped it, and this is what it kept. */
   from: Schema.Literals(["report", "events", "nothing"]),
@@ -373,13 +382,17 @@ const Arm = Schema.Struct({
   /** Selected mutants the cap stopped before they were tested. */
   unreached: Schema.Finite,
   survivors: Schema.Array(Row),
+  /** Selected mutants that no related test ran (`NoCoverage`): no law reaches their line. */
+  uncovered: Schema.Array(Row),
+  /** Selected mutants Stryker ignored: static ones, which run once as the module loads (`ignoreStatic`). */
+  ignored: Schema.Array(Row),
 });
 
 type Arm = typeof Arm.Type;
 
 const Named = Schema.Struct({ path: Schema.String, reason: Schema.String });
 
-const Summary = Schema.Struct({
+export const Summary = Schema.Struct({
   outcome: Schema.Literals(["done", "skip", "stuck"]),
   reason: Schema.String,
   detail: Schema.String,
@@ -418,7 +431,7 @@ const Summary = Schema.Struct({
   armA: Schema.NullOr(Schema.Struct({ dropped: Schema.Array(Named) })),
 });
 
-type Summary = typeof Summary.Type;
+export type Summary = typeof Summary.Type;
 
 const TESTED = new Set(["Killed", "Survived", "Timeout"]);
 
@@ -457,6 +470,8 @@ export const tally = (exit: number, from: Arm["from"], rows: ReadonlyArray<Row>,
     tested: Arr.filter(rows, (r) => TESTED.has(r.status)).length,
     unreached: Math.max(0, selected - rows.length),
     survivors: Arr.filter(rows, (r) => r.status === "Survived"),
+    uncovered: Arr.filter(rows, (r) => r.status === "NoCoverage"),
+    ignored: Arr.filter(rows, (r) => r.status === "Ignored"),
   };
 };
 
@@ -615,7 +630,7 @@ export const judge = (seen: {
       ? [
           {
             reason: "capped",
-            detail: `the five minutes ran out: ${seen.b.unreached} selected mutants were not reached`,
+            detail: `the time cap ran out: ${seen.b.unreached} selected mutants were not reached`,
           },
         ]
       : []),
@@ -899,6 +914,8 @@ interface Ask {
   readonly lock: string;
   readonly base: string | undefined;
   readonly seconds: number | undefined;
+  /** run.sh's time cap on Stryker, in seconds; none is run.sh's own default, CAP. */
+  readonly cap: number | undefined;
   /** The approved plan, from the current folder, as drive reads it; its build-owned files must get a mutant. */
   readonly plan: string | undefined;
 }
@@ -913,7 +930,7 @@ const stuckSummary = (ask: Ask, started: number, ended: number, reason: string, 
   base: ask.base ?? null,
   image: null,
   network: "none",
-  limits: { ...LIMITS, seconds: ask.seconds ?? secondsFor(ask.base !== undefined) },
+  limits: { ...LIMITS, seconds: ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap) },
   seconds: Math.round((ended - started) / 1000),
   usage: null,
   related: [],
@@ -932,7 +949,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const here = import.meta.dirname;
-  const limit = ask.seconds ?? secondsFor(ask.base !== undefined);
+  const limit = ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap);
   const all = parseRelated(ask.related);
 
   if (all === null || !/^\d+$/.test(ask.ticket)) {
@@ -1159,6 +1176,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
       related,
       lock: ask.lock,
       ci: process.env.CI === undefined || process.env.CI === "" ? null : process.env.CI,
+      cap: ask.cap ?? null,
     }),
   ).pipe(Effect.timeoutOption(`${limit} seconds`));
 
@@ -1243,6 +1261,7 @@ const run = Command.make(
     lock: Flag.String("lock"),
     base: Flag.String("base").pipe(Flag.withDefault(undefined)),
     seconds: Flag.Int("seconds").pipe(Flag.withDefault(undefined)),
+    cap: Flag.Int("cap").pipe(Flag.withDefault(undefined)),
     plan: Flag.String("plan").pipe(Flag.withDefault(undefined)),
   },
   Effect.fn("mutbox.run")(function* (ask) {
