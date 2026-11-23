@@ -954,7 +954,8 @@ const onceByBytes = (paths: ReadonlyArray<string>): ReadonlyArray<string> => [..
 // vector: git 2.40.1's `merge-tree -z` printed the exit code and the bytes of each row below, and the reader gives the tree
 // of a clean merge and the paths of a conflict, each once, sorted by bytes, from the recorded bytes and from the same paths
 // listed in another order with one of them twice.
-// Plant: split the output on line breaks, so the path with a line break is cut; read exit 1 with no paths as a clean
+// Plant: delete the check that the output ends in a NUL, so a path with no ending NUL is a path; skip the check of each
+// path, so an empty path, `.git` or `a/../b` is a path; split the output on line breaks, so the path with a line break is cut; read exit 1 with no paths as a clean
 // merge; keep the paths in the order git printed them, or twice; read any other code as a merge; skip the check that the
 // three are commits, so `merge-tree` runs on a commit the repository lacks.
 it.effect.prop(
@@ -1026,6 +1027,11 @@ it.effect.prop(
         ["text that is no tree, exit 0", 0, `not a tree ${junk}\0`],
         ["no output, exit 1", 1, ""],
         ["text that is no tree, exit 1", 1, `not a tree ${junk}\0path\0`],
+        ["a tree and no ending NUL, exit 0", 0, tree],
+        ["a path with no ending NUL, exit 1", 1, `${tree}\0ab`],
+        ["an empty path, exit 1", 1, `${tree}\0\0`],
+        ["a path that names .git, exit 1", 1, `${tree}\0.git\0`],
+        ["a path with a part `..`, exit 1", 1, `${tree}\0a/../b\0`],
       ] as const) {
         const { answer } = yield* ask({ code, stdout });
 

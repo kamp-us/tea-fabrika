@@ -912,7 +912,8 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
               Effect.gen(function* () {
                 const secrets = [CANARY, ...seeded.hidden];
                 const clean = merging.cases.find((each) => each.expected.kind === "clean");
-                const conflicting = merging.cases.find((each) => each.expected.kind === "conflict");
+                // The class with the most paths, so a count that is always one is seen.
+                const conflicting = merging.cases.find((each) => each.label === MERGE_CLASSES.at(-1));
 
                 if (clean === undefined || conflicting === undefined) {
                   return yield* Effect.die("the carrier holds no clean merge or no conflict");
