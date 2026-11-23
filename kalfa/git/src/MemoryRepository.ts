@@ -128,6 +128,18 @@ const treeId = (folder: Folder): Effect.Effect<Tree.TreeId, never, Digest.Digest
     return Schema.decodeSync(Tree.TreeId)(yield* digest.digestHex(Digest.sha1, hashed("tree", treeBytes(lines))));
   });
 
+// A tree's id from the entries it holds, with each folder hashed first. The one place the folders of a tree are built.
+const entriesTree = (entries: ReadonlyMap<Tree.Path, Tree.Entry>): Effect.Effect<Tree.TreeId, never, Digest.Digest> => {
+  const root: Folder = { files: new Map(), folders: new Map() };
+
+  for (const [path, entry] of entries) {
+    const names = path.split("/");
+    folderAt(root, names.slice(0, -1)).files.set(names.at(-1) ?? path, entry);
+  }
+
+  return treeId(root);
+};
+
 /**
  * Puts files and their blobs in a store and gives the id of the tree they make, as git computes it.
  *
@@ -147,21 +159,17 @@ export const tree = (
     }
 
     const digest = yield* Digest.Digest;
-    const root: Folder = { files: new Map(), folders: new Map() };
     const entries = new Map<Tree.Path, Tree.Entry>();
     const blobs = new Map(store.blobs);
 
     for (const [path, file] of files) {
-      const names = path.split("/");
       const id = Schema.decodeSync(Tree.BlobId)(yield* digest.digestHex(Digest.sha1, hashed("blob", file.content)));
-      const entry = new Tree.Entry({ mode: file.mode, blob: id });
 
-      folderAt(root, names.slice(0, -1)).files.set(names.at(-1) ?? path, entry);
-      entries.set(path, entry);
+      entries.set(path, new Tree.Entry({ mode: file.mode, blob: id }));
       blobs.set(id, file.content.slice());
     }
 
-    const id = yield* treeId(root);
+    const id = yield* entriesTree(entries);
 
     return { store: { ...store, trees: new Map(store.trees).set(id, entries), blobs }, id };
   });
@@ -410,18 +418,6 @@ const withRef = (
   }
 
   return [Result.succeed(undefined), { ...store, refs: new Map(store.refs).set(move.ref, move.to) }];
-};
-
-// A tree's id from the entries it holds, with each folder hashed first as `tree` does. The blobs are in the store already.
-const entriesTree = (entries: ReadonlyMap<Tree.Path, Tree.Entry>): Effect.Effect<Tree.TreeId, never, Digest.Digest> => {
-  const root: Folder = { files: new Map(), folders: new Map() };
-
-  for (const [path, entry] of entries) {
-    const names = path.split("/");
-    folderAt(root, names.slice(0, -1)).files.set(names.at(-1) ?? path, entry);
-  }
-
-  return treeId(root);
 };
 
 // The files of a commit, by path.
