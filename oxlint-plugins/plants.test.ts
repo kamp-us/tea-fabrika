@@ -254,6 +254,19 @@ const PLANTS: readonly Plant[] = [
   },
   DATA_TAGGEDERROR,
   {
+    code: "fabrika(no-declare-in-tests)",
+    file: "planted.test.ts",
+    prelude: [],
+    lines: [
+      ["declare const a: number;", true],
+      ["declare let b: number;", true],
+      ["declare var c: number;", true],
+      ["export declare const d: number;", true],
+      ["declare function e(): number;", false],
+      ["export const f = 1;", false],
+    ],
+  },
+  {
     code: "fabrika(no-effect-promise)",
     prelude: [EFFECT, "declare const p: () => Promise<number>;", "declare const c: () => string;"],
     lines: [
@@ -573,6 +586,10 @@ describe("each rule refuses what it is there to refuse", () => {
     ];
 
     expect(new Set(codes).size).toBe(codes.length);
+  });
+
+  it("a test file is the only place no-declare-in-tests looks", () => {
+    expect(firesInPlanted(notATest, "fabrika(no-declare-in-tests)")).toEqual([]);
   });
 
   it("a test file is the only place no-expect-in-if looks", () => {
