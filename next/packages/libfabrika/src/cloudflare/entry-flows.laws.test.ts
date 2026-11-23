@@ -7,6 +7,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer, Match, Predicate, Schema, Scope } from "effect";
 
 import * as Digest from "effect/crypto/Digest";
@@ -73,7 +74,8 @@ const settingsExec =
   };
 
 // The suite owns the moves and assertions; this caller owns SQLite and the platform handles.
-SettingsTest.suite((recipe, secret) =>
+// 100 runs of a walk of up to 40 moves took 24.5 s of CI's 60 s limit for one path; each run still draws every move, so 40.
+SettingsTest.suite(runsFor({ fast: 25, full: 40 }), (recipe, secret) =>
   Effect.gen(function* () {
     const Starts = yield* Effect.promise(() => import("../settings/Starts.ts"));
     const SettingsStartsLedger = yield* Effect.promise(() => import("./SettingsStartsLedger.ts"));

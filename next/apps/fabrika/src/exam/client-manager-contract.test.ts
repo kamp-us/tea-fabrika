@@ -57,5 +57,6 @@ it.effect.prop(
 
       yield* inspect(["ClientManager", ...new Set(names)]);
     }).pipe(Effect.scoped),
-  { timeout: 60_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
+  // 100 runs took 15.5 s of CI's 60 s limit, so 40.
+  { timeout: 60_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 40 }) } },
 );

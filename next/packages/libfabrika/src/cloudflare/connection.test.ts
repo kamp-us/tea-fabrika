@@ -1282,7 +1282,8 @@ it.effect.prop(
         ).toEqual([false]);
       }
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 50 }) } },
+  // Each run tells every broken value of News to a fresh Connection; 50 runs took 20.9 s of CI's 60 s limit, so 20.
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 20 }) } },
 );
 
 /**

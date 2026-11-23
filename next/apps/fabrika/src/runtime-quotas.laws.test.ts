@@ -861,7 +861,8 @@ describe("P34c live wiring, both object stores", () => {
     "Q12 every entry a live call commits is charged to the account of its cause, and each step to its name's own store",
     { tape: Narrow },
     ({ tape }) => charged(tape),
-    options,
+    // 40 runs took 17.4 s of CI's 60 s limit for this law alone, so 15.
+    { arbitrary: { ...options.arbitrary, runs: runsFor({ fast: 3, full: 15 }) } },
   );
 
   it.effect("pinned: Q12 charges a tape of 10 cells", () => charged(WIDE_TAPE));

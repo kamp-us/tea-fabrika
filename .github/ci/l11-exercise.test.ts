@@ -408,7 +408,8 @@ it.prop(
     expect(Result.isFailure(Exercise.equality(input, stdout(after)))).toBe(true);
     expect(Result.isFailure(Exercise.equality(input, ""))).toBe(true);
   },
-  options,
+  // 100 runs took 16.6 s of CI's 60 s limit, so 40.
+  { arbitrary: { ...options.arbitrary, runs: 40 } },
 );
 
 it.prop(

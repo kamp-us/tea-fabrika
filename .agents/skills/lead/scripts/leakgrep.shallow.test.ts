@@ -85,7 +85,9 @@ const build = ({ before, steps, leak }: History): Built => {
     const isLeak = leak !== null && leak === made;
     made += 1;
     const file = blob(isLeak ? `says ${word}\n` : `says plain\n`);
-    const id = commit(ref, label, tip[ref], [...(ref === "main" ? mainFiles : workFiles), file], null);
+    // A commit that names its parent (`from`) keeps the parent's tree, so it lists only the file it adds. Listing every earlier file too made the
+    // stream grow with the square of the history: the 2600-commit law below took 21.7 s of CI's 60 s limit for it.
+    const id = commit(ref, label, tip[ref], [file], null);
 
     (ref === "main" ? mainFiles : workFiles).push(file);
 

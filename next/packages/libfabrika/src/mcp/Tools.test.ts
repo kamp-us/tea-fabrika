@@ -14,7 +14,9 @@ import * as Programs from "../runtime/Program.ts";
 import * as Wire from "../runtime/WireTest.ts";
 import * as Tools from "./Tools.ts";
 
-const options = (runs: number) => ({ arbitrary: { seed: 119120, runs, size: 4096 } });
+// T2 and P4 took 16.6 s each of CI's 60 s limit at size 4096 (the size bounds each drawn string and collection): the two take a smaller
+// size, 1024, and T2 takes 200 runs.
+const options = (runs: number, size = 4096) => ({ arbitrary: { seed: 119120, runs, size } });
 
 const text = Schema.String.check(Schema.isMaxLength(80));
 
@@ -345,7 +347,7 @@ it.prop(
       }
     }
   },
-  options(300),
+  options(200, 1024),
 );
 
 it.prop(
@@ -945,7 +947,7 @@ it.prop(
       expect(listed).toBe(accepted);
     }
   },
-  options(300),
+  options(300, 1024),
 );
 
 const references = (value: unknown): ReadonlyArray<string> => {

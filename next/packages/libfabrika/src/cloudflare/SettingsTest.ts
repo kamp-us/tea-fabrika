@@ -55,7 +55,8 @@ export type Open = (recipe: StartsTest.Recipe, secret: string) => Effect.Effect<
 const pick = <A>(items: ReadonlyArray<A>, choice: number) =>
   Option.getOrThrow(Option.fromUndefinedOr(items[choice % items.length]));
 
-export const suite = (open: Open) =>
+/** `runs` is the case count of each path's L16 walk, which its caller sets from `runsFor`. */
+export const suite = (runs: number, open: Open) =>
   describe("L10 L16 entry flows, next/", () => {
     for (const path of paths) {
       StartsTest.law(
@@ -152,6 +153,7 @@ export const suite = (open: Open) =>
               }
             }
           }),
+        { runs },
       );
     }
 
