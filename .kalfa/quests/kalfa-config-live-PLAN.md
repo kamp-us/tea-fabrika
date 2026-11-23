@@ -1,4 +1,4 @@
-Approved by the lead agent, builds issues 1749, 1806, 1841, 0063, 0089; body f317dfd34840
+Approved by the lead agent, builds issues 1749, 1806, 1841, 0063, 0089; body c96def6ef506
 Plancheck-Version: 3
 
 # Plan: live settings, where a running program sees a file change without a restart (ticket 1841)
@@ -508,3 +508,13 @@ window a `Context.Reference` that only code can change, so it breaks that rule. 
 About 15 more product lines in `SettingGroup.ts` and `internal/start.ts`. 80% sure. The doubt: a setting the package
 adds to an app's group is new; the fallback, if review finds it surprising, is an option on `SettingGroup.make`
 naming the window's default, still read as a setting.
+
+## Amendment 2 (2026-11-22): the window is text, as decision 0089 says
+
+The tests step found that Amendment 1's wording breaks decision 0089: a `Duration` is not plain data, so a setting
+whose schema decodes to one is refused at `Setting.make`. Decision 0089 says a duration is declared as text, checked
+with `Schema.DurationFromString` when the file is read, and decoded with the same schema where the package reads it.
+So `config.watch.debounce` is a text setting (default `"100 millis"`) whose schema checks it reads as a duration, and
+the follower decodes it to a `Duration` where it builds the window. The added setting is part of the group's type, so
+`SettingGroup.flags` gives its flag and `FlagValues` holds it like any declared setting. A live field's `changes` is
+frozen or made fresh for each reader, so no reader's writes reach another (V16). No other change.
