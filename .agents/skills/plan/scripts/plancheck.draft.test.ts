@@ -15,7 +15,9 @@ import {
   estimateLine,
   handoff,
   laws,
+  parts,
   script,
+  slice,
   table,
   word,
   wrap,
@@ -91,7 +93,7 @@ describe("T686 size advice in the draft check, today's tooling", () => {
 
 describe("T321 K11 sections and K2 approval, today's tooling", () => {
   // Plant: count required content inside fences. Each deletion is tried alone.
-  it("K11 requires each section outside fences and a whole opening code block", () => {
+  parts(3, "K11 requires each section outside fences and a whole opening code block", (slot) => {
     fc.assert(
       fc.property(word, fc.constantFrom("```", "~~~"), (title, fence) => {
         const body = complete(`\n${title}\n`);
@@ -119,12 +121,12 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
           expect(bad.text).not.toMatch(/usage:|Traceback|cannot read installed/);
         }
       }),
-      { seed: 321, numRuns: 3 },
+      slice({ seed: 321, numRuns: 3 }, slot, 3),
     );
   });
 
   // Plant: accept one lean for several open questions, or a size with no percent.
-  it("K11 checks each question's lean and percent, and the size confidence", () => {
+  parts(3, "K11 checks each question's lean and percent, and the size confidence", (slot) => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 99 }), word, (percent, text) => {
         for (const questions of [
@@ -151,7 +153,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
           expect(bad.code, bad.text).toBe(1);
         }
       }),
-      { seed: 321, numRuns: 3 },
+      slice({ seed: 321, numRuns: 3 }, slot, 3),
     );
   });
 
@@ -188,7 +190,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
   // Plants: let an anchored path, a bare anchor or a note word through as an owner key, or refuse
   // a plain path, a root file or a folder. stepcommit matches keys to staged paths exactly
   // (ticket 425, quest t411: `serve.test.ts:162`, `:537` and `new` became keys).
-  it("property: --draft fails a files-table path that is no repo path, naming its row", () => {
+  parts(3, "property: --draft fails a files-table path that is no repo path, naming its row", (slot) => {
     fc.assert(
       fc.property(word, fc.integer({ min: 1, max: 999 }), (name, line) => {
         const path = `src/${name}.test.ts`;
@@ -211,12 +213,12 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
           expect(good.code, `${cell}\n${good.text}`).toBe(0);
         }
       }),
-      { seed: 425, numRuns: 3 },
+      slice({ seed: 425, numRuns: 3 }, slot, 3),
     );
   });
 
   // Plants: hash line one; omit appended amendments; normalize CRLF, UTF-8 or the final LF.
-  it("K2/K11 binds approval to exact bytes after the second LF, including amendments", () => {
+  parts(3, "K2/K11 binds approval to exact bytes after the second LF, including amendments", (slot) => {
     fc.assert(
       fc.property(
         fc.record({
@@ -247,7 +249,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
           }
         },
       ),
-      { seed: 321, numRuns: 3 },
+      slice({ seed: 321, numRuns: 3 }, slot, 3),
     );
   });
 
@@ -362,7 +364,7 @@ describe("plan estimate, today's tooling", () => {
   });
 
   // Plant: drop any one fault's check; count a fenced line as the estimate; take the first of two.
-  it("a missing, doubled, fenced, misplaced or malformed Estimate line fails with one message", () => {
+  parts(4, "a missing, doubled, fenced, misplaced or malformed Estimate line fails with one message", (slot) => {
     fc.assert(
       fc.property(
         // SAFETY: `Object.keys` of the literal `estimateFaults` lists exactly its own keys, the EstimateFault type.
@@ -379,7 +381,7 @@ describe("plan estimate, today's tooling", () => {
           expect(approvedAt3.text).toMatch(/^plan estimate: /m);
         },
       ),
-      { seed: 76, numRuns: 22 },
+      slice({ seed: 76, numRuns: 22 }, slot, 4),
     );
   });
 
@@ -615,7 +617,7 @@ describe("0587 an Existing tools line for each new helper, today's tooling", () 
       .replace("| src/plain.ts | build |", `| src/plain.ts | build |\n${row}`)
       .replace(KNOWN, `${KNOWN}\n${line}`);
 
-  it("property: a new code file needs a line that names it and says what was searched", () => {
+  parts(4, "property: a new code file needs a line that names it and says what was searched", (slot) => {
     fc.assert(
       fc.property(word, fc.constantFrom(".ts", ".tsx", ".mjs", ".js"), word, (name, ext, other) => {
         const path = `src/helpers/${name}${ext}`;
@@ -633,7 +635,7 @@ describe("0587 an Existing tools line for each new helper, today's tooling", () 
         expect(draft(`- \`src/helpers/${other}x${ext}\`: searched npm; none fits.`).code).toBe(1);
         expect(draft(`\`\`\`text\n${path}: searched npm\n\`\`\``).code).toBe(1);
       }),
-      { seed: 586, numRuns: 4 },
+      slice({ seed: 586, numRuns: 4 }, slot, 4),
     );
   });
 

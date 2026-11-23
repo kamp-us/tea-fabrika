@@ -2,13 +2,26 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { allowed, cell, check, complete, handoff, laws, options, table, word, wrap } from "./plancheck.test-support.ts";
+import {
+  allowed,
+  cell,
+  check,
+  complete,
+  handoff,
+  laws,
+  options,
+  parts,
+  slice,
+  table,
+  word,
+  wrap,
+} from "./plancheck.test-support.ts";
 
 // Today's tooling: plancheck.sh's table grammar and exam paths. Its mode checks are in
 // plancheck.draft.test.ts.
 describe("plancheck, today's tooling", () => {
   // Plants: accept a filled slot; accept a displaced marker. Fenced approvals are examples.
-  it("T300 draft handoffs reserve line one and put the marker on line two", () => {
+  parts(4, "T300 draft handoffs reserve line one and put the marker on line two", (slot) => {
     fc.assert(
       fc.property(
         fc.record({
@@ -32,25 +45,29 @@ describe("plancheck, today's tooling", () => {
           expect(got.code, got.text).toBe(pass ? 0 : 1);
         },
       ),
-      {
-        ...options,
-        seed: 300,
-        examples: [
-          [{ first: "", position: 1, approval: false, fenced: false, fence: "```md" }],
-          [
-            {
-              first: "Approved by the lead agent, builds ticket 300.",
-              position: 1,
-              approval: false,
-              fenced: false,
-              fence: "```md",
-            },
+      slice(
+        {
+          ...options,
+          seed: 300,
+          examples: [
+            [{ first: "", position: 1, approval: false, fenced: false, fence: "```md" }],
+            [
+              {
+                first: "Approved by the lead agent, builds ticket 300.",
+                position: 1,
+                approval: false,
+                fenced: false,
+                fence: "```md",
+              },
+            ],
+            [{ first: "", position: 2, approval: false, fenced: false, fence: "```md" }],
+            [{ first: "", position: 1, approval: true, fenced: false, fence: "```md" }],
+            [{ first: "", position: 1, approval: true, fenced: true, fence: "~~~md" }],
           ],
-          [{ first: "", position: 2, approval: false, fenced: false, fence: "```md" }],
-          [{ first: "", position: 1, approval: true, fenced: false, fence: "```md" }],
-          [{ first: "", position: 1, approval: true, fenced: true, fence: "~~~md" }],
-        ],
-      },
+        },
+        slot,
+        4,
+      ),
     );
   });
 
@@ -75,7 +92,7 @@ describe("plancheck, today's tooling", () => {
   });
 
   // Plant: accept a marked scenario-only row. Keep the parent's generator grammar intact.
-  it("T300 secrets markers require a generated family in the same row", () => {
+  parts(4, "T300 secrets markers require a generated family in the same row", (slot) => {
     fc.assert(
       fc.property(
         fc.record({
@@ -108,20 +125,24 @@ describe("plancheck, today's tooling", () => {
           }
         },
       ),
-      {
-        ...options,
-        seed: 300,
-        examples: [
-          [
-            {
-              marked: true,
-              heads: ["Law", "Generator", "Plant"],
-              generated: "fc.record: flows",
-              label: "scenario",
-            },
+      slice(
+        {
+          ...options,
+          seed: 300,
+          examples: [
+            [
+              {
+                marked: true,
+                heads: ["Law", "Generator", "Plant"],
+                generated: "fc.record: flows",
+                label: "scenario",
+              },
+            ],
           ],
-        ],
-      },
+        },
+        slot,
+        4,
+      ),
     );
   });
 
@@ -300,7 +321,7 @@ describe("plancheck, today's tooling", () => {
   // strip a leading `./`, leading `_`/`-` and trailing `_`/`-`/`.`; a leading `.` stays for dotfiles,
   // and a word also matches with its leading dots removed. Plant: split on a named list of marks, as
   // f9f57901 does, or strip a dotfile's leading `.`.
-  it("every exam path anywhere in the plan is listed, in any context and any wrapping", () => {
+  parts(6, "every exam path anywhere in the plan is listed, in any context and any wrapping", (slot) => {
     // SAFETY: exam-paths.json is the repo's list of exam rows, each an object with a `glob` string.
     const globs = (
       JSON.parse(readFileSync(join(import.meta.dirname, "../../../../exam-paths.json"), "utf8")) as { glob: string }[]
@@ -422,68 +443,72 @@ describe("plancheck, today's tooling", () => {
           expect(got.text, `${body}\n${got.text}`).toContain(`exam path named: ${path}\t`);
         },
       ),
-      {
-        ...options,
-        numRuns: 96,
-        examples: [
-          // pinned: ticket 520 review round 6, a link title. The build-owned cell
-          // [package.json](package.json "manifest") was missed by both checks at bb7d5a09.
-          [{ ...bare, path: "package.json", form: "linkSelfTitle", location: "fileCell" }],
-          // pinned: ticket 520 review round 6, a fenced block holding package.json was never
-          // listed at bb7d5a09.
-          [{ ...bare, path: "package.json", form: "plain", location: "fence", lang: "sh" }],
-          // pinned: ticket 520 amendment A11, underscore emphasis around a path with an inner
-          // underscore. _allowed_signers_ was not listed at bb7d5a09.
-          [{ ...bare, path: "allowed_signers", form: "underscore", location: "prose" }],
-          // pinned: ticket 520 review round 5, [`package.json`](package.json) in a build-owned
-          // cell printed "no exam paths named" at 2e25c4e7.
-          [
-            {
-              ...bare,
-              path: "package.json",
-              ticks: true,
-              before: "[",
-              after: "](package.json)",
-              form: "plain",
-              location: "fileCell",
-            },
+      slice(
+        {
+          ...options,
+          numRuns: 96,
+          examples: [
+            // pinned: ticket 520 review round 6, a link title. The build-owned cell
+            // [package.json](package.json "manifest") was missed by both checks at bb7d5a09.
+            [{ ...bare, path: "package.json", form: "linkSelfTitle", location: "fileCell" }],
+            // pinned: ticket 520 review round 6, a fenced block holding package.json was never
+            // listed at bb7d5a09.
+            [{ ...bare, path: "package.json", form: "plain", location: "fence", lang: "sh" }],
+            // pinned: ticket 520 amendment A11, underscore emphasis around a path with an inner
+            // underscore. _allowed_signers_ was not listed at bb7d5a09.
+            [{ ...bare, path: "allowed_signers", form: "underscore", location: "prose" }],
+            // pinned: ticket 520 review round 5, [`package.json`](package.json) in a build-owned
+            // cell printed "no exam paths named" at 2e25c4e7.
+            [
+              {
+                ...bare,
+                path: "package.json",
+                ticks: true,
+                before: "[",
+                after: "](package.json)",
+                form: "plain",
+                location: "fileCell",
+              },
+            ],
+            // pinned: ticket 520 review round 7, three cells that printed "no exam paths named" at
+            // f9f57901: ~~package.json~~, “package.json” and <!--package.json-->.
+            [
+              {
+                ...bare,
+                path: "package.json",
+                before: "~~",
+                after: "~~",
+                form: "plain",
+                location: "fileCell",
+              },
+            ],
+            [
+              {
+                ...bare,
+                path: "package.json",
+                before: "“",
+                after: "”",
+                form: "plain",
+                location: "fileCell",
+              },
+            ],
+            [
+              {
+                ...bare,
+                path: "package.json",
+                before: "<!",
+                lead: "--",
+                trail: "--",
+                after: ">",
+                form: "plain",
+                location: "fileCell",
+              },
+            ],
           ],
-          // pinned: ticket 520 review round 7, three cells that printed "no exam paths named" at
-          // f9f57901: ~~package.json~~, “package.json” and <!--package.json-->.
-          [
-            {
-              ...bare,
-              path: "package.json",
-              before: "~~",
-              after: "~~",
-              form: "plain",
-              location: "fileCell",
-            },
-          ],
-          [
-            {
-              ...bare,
-              path: "package.json",
-              before: "“",
-              after: "”",
-              form: "plain",
-              location: "fileCell",
-            },
-          ],
-          [
-            {
-              ...bare,
-              path: "package.json",
-              before: "<!",
-              lead: "--",
-              trail: "--",
-              after: ">",
-              form: "plain",
-              location: "fileCell",
-            },
-          ],
-        ],
-      },
+        },
+        slot,
+        6,
+      ),
     );
   });
 
@@ -739,7 +764,7 @@ describe("plancheck, today's tooling", () => {
   });
 
   // Plant: return early for legacy plans, skipping the owner check too.
-  it("file-owner checks survive every plan version", () => {
+  parts(4, "file-owner checks survive every plan version", (slot) => {
     fc.assert(
       fc.property(
         fc.array(
@@ -780,7 +805,7 @@ describe("plancheck, today's tooling", () => {
           }
         },
       ),
-      options,
+      slice(options, slot, 4),
     );
   });
 });

@@ -1011,12 +1011,10 @@ describe("T321 K2 box start, today's tooling", () => {
   // ticket. Main and this box's branch are allowed; another branch blocks only while it is live,
   // and an older branch whose links the base already holds never does. Plant: walk from main.
   // Plant: block on an open branch whose only change is field/*.jsonl rows, or row files (each field row is its own file).
-  // Twelve places, each a fixture, over 3 runs: 36 fixtures, 37 s of CI's 60 s limit as one law. It is two laws of six places, each with the same 3 runs.
-  for (const [half, from] of [
-    ["first", 0],
-    ["second", 6],
-  ] as const) {
-    it(`K2 refuses a shared ticket only when another live branch carries its links, the ${half} six places`, () => {
+  // Twelve places, each a fixture, over 3 runs: 36 fixtures, 37 s of CI's 60 s limit as one law, and 30 s as two laws of six places. It is a law for each place,
+  // each with the same 3 runs: 3 fixtures, a twelfth of the work.
+  for (const from of Array.from({ length: 12 }, (_, at) => at)) {
+    it(`K2 refuses a shared ticket only when another live branch carries its links, place ${from + 1} of 12`, () => {
       const everywhere = [
         "main",
         "this",
@@ -1032,7 +1030,7 @@ describe("T321 K2 box start, today's tooling", () => {
         "field-files",
       ] as const;
 
-      const places = everywhere.slice(from, from + 6);
+      const places = everywhere.slice(from, from + 1);
       const blocks = new Set(["open-pr", "running-box", "running-old-box", "gh-down"]);
       fc.assert(
         fc.property(word, (text) => {

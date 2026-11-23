@@ -6,12 +6,36 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import fc from "fast-check";
-import { expect } from "vitest";
+import { expect, it } from "vitest";
 
 // Today's tooling. Run each plant in a disposable copy of the script beside this test.
 export const script = join(import.meta.dirname, "plancheck.sh");
 
 export const options = { seed: 520, numRuns: 24 };
+
+/**
+ * A law as `count` laws, one for each part of its runs. Each draft call of plancheck costs 0.3 s, and a law of many calls took 25 to 35 s of CI's 60 s limit,
+ * so a law is its runs divided by `count`, each part with its own seed (the seed moves by one for each part), and the examples are the first part's.
+ */
+export const parts = (count: number, title: string, body: (part: number) => void) => {
+  for (const part of Array.from({ length: count }, (_, at) => at)) {
+    it(`${title}, part ${part + 1} of ${count}`, () => body(part));
+  }
+};
+
+/** The options of one part of a law's runs: the runs divided by `count`, rounded up, the seed moved by `part`, and the examples in the first part alone. */
+export const slice = <
+  A extends { readonly seed?: number; readonly numRuns?: number; readonly examples?: ReadonlyArray<unknown> },
+>(
+  base: A,
+  part: number,
+  count: number,
+) => ({
+  ...base,
+  seed: (base.seed ?? 0) + part,
+  numRuns: Math.ceil((base.numRuns ?? 100) / count),
+  examples: part === 0 ? base.examples : [],
+});
 
 export const table = (heads: string[], rows: string[][]) =>
   [heads, heads.map(() => "---"), ...rows].map((row) => `| ${row.join(" | ")} |`).join("\n");

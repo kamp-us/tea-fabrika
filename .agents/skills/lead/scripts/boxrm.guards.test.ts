@@ -135,7 +135,12 @@ describe("box rm, today's tooling", () => {
 
   // Plants: follow a symlink/escaping name, or delete one half before validating the other.
   for (const kind of [
-    "name",
+    // The ten names are five laws of two names each: each name is a script run, and the one law of ten took 36 s of CI's 60 s limit.
+    "name 0",
+    "name 1",
+    "name 2",
+    "name 3",
+    "name 4",
     "missing-data",
     "missing-work",
     "metadata",
@@ -151,7 +156,7 @@ describe("box rm, today's tooling", () => {
             mkdirSync(outside);
             writeFileSync(join(outside, "keep"), v.value);
 
-            if (kind === "name") {
+            if (kind.startsWith("name")) {
               for (const name of [
                 "",
                 ".",
@@ -163,7 +168,7 @@ describe("box rm, today's tooling", () => {
                 `${v.name}\t`,
                 `${v.name}\u0001`,
                 outside,
-              ]) {
+              ].slice(Number(kind.slice(5)) * 2, Number(kind.slice(5)) * 2 + 2)) {
                 const got = f.run(name);
                 expect(got.code, got.text).toBe(2);
                 expect(existsSync(f.work)).toBe(true);
@@ -211,20 +216,21 @@ describe("box rm, today's tooling", () => {
 
   // Plant (mutation, seed 119120): skip the keep on a malformed gitdir pointer, which ends in a
   // traceback. Missing refs or objects must keep too; a later guard also catches those.
-  it("T318 a malformed pointer or missing refs or objects keeps the pair with one result line", () => {
-    const word = fc.stringMatching(/^[a-z]{1,12}$/);
+  // A law for each kind: 6 runs of a fixture each, 12 s locally for the three.
+  for (const kind of ["pointer", "refs", "objects"]) {
+    it(`T318 a malformed pointer or missing refs or objects keeps the pair with one result line, ${kind}`, () => {
+      const word = fc.stringMatching(/^[a-z]{1,12}$/);
 
-    const pointer = fc.oneof(
-      fc.constant(""),
-      word,
-      word.map((s) => `gitdir:${s}`),
-      word.map((s) => `gitdir: ${s}\n\n`),
-      word.map((s) => `gitdir: a\0${s}`),
-    );
+      const pointer = fc.oneof(
+        fc.constant(""),
+        word,
+        word.map((s) => `gitdir:${s}`),
+        word.map((s) => `gitdir: ${s}\n\n`),
+        word.map((s) => `gitdir: a\0${s}`),
+      );
 
-    fc.assert(
-      fc.property(input, pointer, (v, text) => {
-        for (const kind of ["pointer", "refs", "objects"]) {
+      fc.assert(
+        fc.property(input, pointer, (v, text) => {
           fixture(v, (f) => {
             if (kind === "pointer") {
               writeFileSync(join(f.work, ".git"), text);
@@ -234,72 +240,73 @@ describe("box rm, today's tooling", () => {
 
             kept(f);
           });
-        }
-      }),
-      { seed: 3194, numRuns: 6 },
-    );
-  });
+        }),
+        { seed: 3194, numRuns: 6 },
+      );
+    });
+  }
 
   // Plant: use the box's original gitdir/config and observe its fsmonitor/filter/include marker run.
-  for (const kind of ["hook", "fsmonitor", "filter", "include", "inherited"]) {
-    it(`T318 inspection never executes box or inherited Git programs or writes its index, ${kind}`, () => {
+  for (const [kind, dirty] of ["hook", "fsmonitor", "filter", "include", "inherited"].flatMap((each) => [
+    [each, false] as const,
+    [each, true] as const,
+  ])) {
+    it(`T318 inspection never executes box or inherited Git programs or writes its index, ${kind}, ${dirty ? "dirty" : "clean"}`, () => {
       fc.assert(
         fc.property(input, (v) => {
-          for (const dirty of [false, true]) {
-            fixture(v, (f) => {
-              const marker = join(f.dir, "executed"),
-                program = join(f.dir, "program");
+          fixture(v, (f) => {
+            const marker = join(f.dir, "executed"),
+              program = join(f.dir, "program");
 
-              writeFileSync(program, `#!/bin/sh\nprintf bad >> '${marker}'\ncat\n`, { mode: 0o755 });
-              const include = join(f.dir, "included-config");
-              writeFileSync(include, `[core]\nfsmonitor = ${program}\n`);
+            writeFileSync(program, `#!/bin/sh\nprintf bad >> '${marker}'\ncat\n`, { mode: 0o755 });
+            const include = join(f.dir, "included-config");
+            writeFileSync(include, `[core]\nfsmonitor = ${program}\n`);
 
-              if (kind === "fsmonitor") {
-                f.git(f.work, "config", "core.fsmonitor", program);
-              }
+            if (kind === "fsmonitor") {
+              f.git(f.work, "config", "core.fsmonitor", program);
+            }
 
-              if (kind === "hook") {
-                f.git(f.work, "config", "core.hooksPath", f.dir);
-              }
+            if (kind === "hook") {
+              f.git(f.work, "config", "core.hooksPath", f.dir);
+            }
 
-              if (kind === "include") {
-                f.git(f.work, "config", "include.path", include);
-              }
+            if (kind === "include") {
+              f.git(f.work, "config", "include.path", include);
+            }
 
-              if (kind === "filter") {
-                f.git(f.work, "config", "filter.fixture.clean", program);
-                writeFileSync(join(f.work, ".gitattributes"), "tracked filter=fixture\n");
-              }
+            if (kind === "filter") {
+              f.git(f.work, "config", "filter.fixture.clean", program);
+              writeFileSync(join(f.work, ".gitattributes"), "tracked filter=fixture\n");
+            }
 
-              writeFileSync(join(f.work, "tracked"), readFileSync(join(f.work, "tracked")));
+            writeFileSync(join(f.work, "tracked"), readFileSync(join(f.work, "tracked")));
 
-              if (dirty) {
-                writeFileSync(join(f.work, "tracked"), `dirty ${v.value}`);
-              }
+            if (dirty) {
+              writeFileSync(join(f.work, "tracked"), `dirty ${v.value}`);
+            }
 
-              writeFileSync(join(f.dir, "post-index-change"), readFileSync(program), { mode: 0o755 });
-              const index = readFileSync(join(f.data, "index"));
+            writeFileSync(join(f.dir, "post-index-change"), readFileSync(program), { mode: 0o755 });
+            const index = readFileSync(join(f.data, "index"));
 
-              const got = f.run(
-                f.name,
-                kind === "inherited"
-                  ? {
-                      GIT_CONFIG_COUNT: "1",
-                      GIT_CONFIG_KEY_0: "core.fsmonitor",
-                      GIT_CONFIG_VALUE_0: program,
-                    }
-                  : {},
-              );
+            const got = f.run(
+              f.name,
+              kind === "inherited"
+                ? {
+                    GIT_CONFIG_COUNT: "1",
+                    GIT_CONFIG_KEY_0: "core.fsmonitor",
+                    GIT_CONFIG_VALUE_0: program,
+                  }
+                : {},
+            );
 
-              expect(got.code, got.text).toBe(dirty ? 1 : 0);
-              expect(got.text).toMatch(dirty ? /^kept box / : /^removed box /);
-              expect(existsSync(marker)).toBe(false);
+            expect(got.code, got.text).toBe(dirty ? 1 : 0);
+            expect(got.text).toMatch(dirty ? /^kept box / : /^removed box /);
+            expect(existsSync(marker)).toBe(false);
 
-              if (dirty) {
-                expect(readFileSync(join(f.data, "index"))).toEqual(index);
-              }
-            });
-          }
+            if (dirty) {
+              expect(readFileSync(join(f.data, "index"))).toEqual(index);
+            }
+          });
         }),
         { seed: 3190, numRuns: 4 },
       );
