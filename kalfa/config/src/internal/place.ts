@@ -37,15 +37,17 @@ export const shown = (app: string, format: Format): Names => {
   return { repo: `${folder}/${file}`, user: `~/${folder}/${file}` };
 };
 
-/** Where the repo configuration is, inside the folder that holds `.<app>/`. */
+/** Where the repo configuration is, inside the folder that holds `.<app>/`, and that `.<app>/` folder, which a set may make. */
 export const repoPlace = Effect.fnUntraced(function* (app: string, format: Format, repo: string) {
   const path = yield* Path.Path;
   const { folder, file } = parts(app, format);
 
-  return { path: path.join(repo, folder, file), name: shown(app, format).repo };
+  return { path: path.join(repo, folder, file), name: shown(app, format).repo, folder: path.join(repo, folder) };
 });
 
-/** Where the user configuration is: `$<APP>_HOME/<app>.<extension>`, else `$HOME/.<app>/<app>.<extension>`, else nowhere. */
+/**
+ * Where the user configuration is: `$<APP>_HOME/<app>.<extension>`, else `$HOME/.<app>/<app>.<extension>`, else nowhere. With no home it has no path. Its folder is the `.<app>/` under `HOME`, which a set may make, and never the folder `$<APP>_HOME` names: a person chose that one, and a typo in it must not make a new folder.
+ */
 export const userPlace = Effect.fnUntraced(function* (
   app: string,
   format: Format,
@@ -58,10 +60,11 @@ export const userPlace = Effect.fnUntraced(function* (
   const { folder, file } = parts(app, format);
 
   return moved !== undefined
-    ? { path: path.join(moved, file), name: `$${app.toUpperCase()}_HOME/${file}` }
+    ? { path: path.join(moved, file), name: `$${app.toUpperCase()}_HOME/${file}`, folder: undefined }
     : {
         path: home === undefined ? undefined : path.join(home, folder, file),
         name: shown(app, format).user,
+        folder: home === undefined ? undefined : path.join(home, folder),
       };
 });
 
@@ -82,19 +85,24 @@ export const parse = (app: string, format: Format, name: string, text: string, c
       ),
   });
 
-/** Reads and parses one file. A missing file counts as empty, any other failure to read it fails as `read`. */
-export const load = Effect.fnUntraced(function* (app: string, format: Format, place: Place) {
+/** The text of one file. A missing file counts as empty, any other failure to read it fails as `read`. The message ends with `closing`, the start's own sentence when none is given. */
+export const contents = Effect.fnUntraced(function* (app: string, place: Place, closing?: string) {
   const fs = yield* FileSystem.FileSystem;
 
-  const text = yield* fs
+  return yield* fs
     .readFileString(place.path)
     .pipe(
       Effect.catchTag("PlatformError", (cause) =>
         cause.reason._tag === "NotFound"
           ? Effect.succeed("")
-          : Effect.fail(stop(app, "read", "could not be read.", { file: place.name }, cause)),
+          : Effect.fail(stop(app, "read", "could not be read.", { file: place.name }, cause, closing)),
       ),
     );
+});
+
+/** Reads and parses one file. A missing file counts as empty, any other failure to read it fails as `read`. */
+export const load = Effect.fnUntraced(function* (app: string, format: Format, place: Place) {
+  const text = yield* contents(app, place);
 
   return yield* Effect.fromResult(parse(app, format, place.name, text));
 });
