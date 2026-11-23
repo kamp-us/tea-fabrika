@@ -1,10 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-// The git-binary adapter on the real git binary (I1 to I5). Real git runs in temp folders, so this file runs
+// The git-binary adapter on the real git binary (I1 to I6). Real git runs in temp folders, so this file runs
 // only in CI's full run and in a cloud box, never on the laptop (the host's test config refuses it by name).
 // A stand-in cannot do this job: these laws are the proof that `/process` answers what `/memory` answers and
 // that the parser reads what real git writes.
 import { expect, it } from "@effect/vitest";
-import { Effect, Predicate, Schema, Tracer } from "effect";
+import { Effect, Option, Predicate, Schema, Tracer } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as FileSystem from "effect/FileSystem";
 import * as Commit from "./Commit.ts";
@@ -50,7 +50,7 @@ const bytes = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
 
 const ADA = "Ada <ada@example.test> 1700000000 +0000";
 
-// I1 runs the shared laws S1 to S11 on real git, 10 runs each, over bare repositories the seeder fills with files.
+// I1 runs the shared laws S1 to S13 on real git, 10 runs each, over bare repositories the seeder fills with files.
 // Plant: each S law's plant, run once on `/process`.
 RepositoryTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
 
@@ -242,5 +242,39 @@ it.effect(
         {},
         "an empty folder inside a repository",
       );
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+// Plant (I6): drop `--no-deref` from `update-ref`, so git follows the symbolic ref and moves its target.
+it.effect(
+  "I6 scenario: moveRef of a symbolic ref whose target is at `from` makes it a plain ref at `to` and leaves the target where it was",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bareRepository;
+
+      const [first, second] = yield* fastImport(
+        dir,
+        bytes(
+          "commit refs/heads/main\nmark :1\n",
+          `author ${ADA}\ncommitter ${ADA}\n`,
+          "data 3\nhi\n\n",
+          "commit refs/heads/other\nmark :2\n",
+          `author ${ADA}\ncommitter ${ADA}\n`,
+          "data 3\nyo\n\n",
+        ),
+      );
+
+      yield* git(dir, ["symbolic-ref", "refs/heads/alias", "refs/heads/main"]);
+      const repo = yield* openRepository(dir, settings);
+      const [x, y] = [commitIdFrom(first ?? ""), commitIdFrom(second ?? "")];
+
+      yield* repo.moveRef({ ref: refNameFrom("refs/heads/alias"), from: Option.some(x), to: y });
+
+      const listed = yield* git(dir, ["for-each-ref", "--format=%(refname)|%(objectname)|%(symref)"]);
+
+      expect(
+        listed.trim().split("\n").toSorted(),
+        "the alias is a plain ref at `to`, the target is where it was",
+      ).toEqual([`refs/heads/alias|${y}|`, `refs/heads/main|${x}|`, `refs/heads/other|${y}|`]);
     }).pipe(Effect.provide(NodeServices.layer)),
 );

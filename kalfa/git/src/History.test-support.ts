@@ -1285,3 +1285,188 @@ export const drawPairs = (shape: Shape, texture: Texture, k: number): ReadonlyAr
 
   return pairs;
 };
+
+// ---------------------------------------------------------------------------------------------------------
+// Writing a commit and moving a ref
+// ---------------------------------------------------------------------------------------------------------
+
+/** The committer setting: a name and an email, plain data. */
+export interface Committer {
+  readonly name: string;
+  readonly email: string;
+}
+
+export const committerFrom = (flat: FlatSignature): Committer => ({ name: flat.name, email: flat.email });
+
+/** What a committer's name and email take: what a signature's takes, so every name and email class of a signature but not its time. */
+export const COMMITTER_ACCEPT_CLASSES: ReadonlyArray<string> = SIGNATURE_CLASSES.filter(
+  (label) => !label.startsWith("seconds") && !label.startsWith("the offset"),
+);
+
+export const committerAccepted = (base: FlatSignature): ReadonlyArray<readonly [label: string, person: Committer]> =>
+  signatureVariants(base)
+    .filter(([label]) => COMMITTER_ACCEPT_CLASSES.includes(label))
+    .map(([label, flat]) => [label, committerFrom(flat)]);
+
+export const COMMITTER_REFUSE_CLASSES = [
+  "a name with <",
+  "a name with >",
+  "a name with a line break",
+  "a name with a NUL",
+  "an email with >",
+  "an email with a line break",
+  "an email with a NUL",
+] as const;
+
+/** Each name and email a commit's format cannot hold, one break of a good committer at a time. */
+export const committerRefused = (base: Committer): ReadonlyArray<readonly [label: string, person: Committer]> => [
+  ["a name with <", { ...base, name: `${base.name}<x` }],
+  ["a name with >", { ...base, name: `${base.name}>x` }],
+  ["a name with a line break", { ...base, name: `${base.name}\nx` }],
+  ["a name with a NUL", { ...base, name: `${base.name}\u0000x` }],
+  ["an email with >", { ...base, email: `${base.email}>x` }],
+  ["an email with a line break", { ...base, email: `${base.email}\nx` }],
+  ["an email with a NUL", { ...base, email: `${base.email}\u0000x` }],
+];
+
+/** Settings as a drawn value: limits, and a committer that is a good name and a good email. */
+export const settingsArb = Arbitrary.all({
+  limits: limitsArb,
+  committer: flatSignatureArb.pipe(Arbitrary.map(committerFrom)),
+});
+
+/** The same history with every committer the settings' one, at offset +0000: what a commit written with those settings holds. */
+export const asWritten = (history: History, committer: Committer): History => ({
+  ...history,
+  nodes: history.nodes.map((node) => ({
+    ...node,
+    committer: { ...node.committer, name: committer.name, email: committer.email, offset: "+0000" },
+  })),
+});
+
+/** A commit to write: the files of commit `tree` (or git's empty tree) with the commits `parents`, in this order. */
+export interface WriteSpec {
+  readonly label: string;
+  readonly tree: number | "empty";
+  readonly parents: ReadonlyArray<number>;
+}
+
+export const WRITE_SHAPE_CLASSES = [
+  "a root",
+  "one parent",
+  "a drawn tree and a drawn parent",
+  "the empty tree",
+  "two parents",
+  "two parents, the other way round",
+  "three parents",
+] as const;
+
+/** Commits to write for a history, one for each class it can reach: a history of one commit has no two parents. */
+export const writeSpecs = (history: History, texture: Texture): ReadonlyArray<WriteSpec> => {
+  const n = history.nodes.length;
+
+  if (n === 0) {
+    return [];
+  }
+
+  const draw = new Draw(texture);
+  const a = draw.int(n);
+
+  const specs: Array<WriteSpec> = [
+    { label: "a root", tree: a, parents: [] },
+    { label: "one parent", tree: n - 1, parents: [a] },
+    { label: "a drawn tree and a drawn parent", tree: draw.int(n), parents: [draw.int(n)] },
+    { label: "the empty tree", tree: "empty", parents: [] },
+  ];
+
+  if (n >= 2) {
+    const b = (a + 1 + draw.int(n - 1)) % n;
+    specs.push(
+      { label: "two parents", tree: draw.int(n), parents: [a, b] },
+      { label: "two parents, the other way round", tree: draw.int(n), parents: [b, a] },
+    );
+
+    if (n >= 3) {
+      const c = Array.from({ length: n }, (_, i) => i).find((i) => i !== a && i !== b) ?? a;
+      specs.push({ label: "three parents", tree: draw.int(n), parents: [c, a, b] });
+    }
+  }
+
+  return specs;
+};
+
+/** The bytes of a commit object as the format says, from plain fields: the model of what a written commit weighs. */
+export const writtenSize = (fields: {
+  readonly tree: string;
+  readonly parents: ReadonlyArray<string>;
+  readonly author: FlatSignature;
+  readonly committer: Committer;
+  readonly seconds: number;
+  readonly message: string;
+}): number => {
+  const head = [
+    `tree ${fields.tree}`,
+    ...fields.parents.map((id) => `parent ${id}`),
+    `author ${fields.author.name} <${fields.author.email}> ${fields.author.seconds} ${fields.author.offset}`,
+    `committer ${fields.committer.name} <${fields.committer.email}> ${fields.seconds} +0000`,
+  ].join("\n");
+
+  return utf8(`${head}\n\n${fields.message}`).length;
+};
+
+/** A message that ends in a character of one byte, of three and of four, so a size counted in characters is seen. */
+export const EDGE_CLASSES = [
+  "an ASCII character at the edge",
+  "a character past U+024F at the edge",
+  "a character outside the Basic Multilingual Plane at the edge",
+] as const;
+
+export const edgeMessages = (word: string): ReadonlyArray<readonly [label: string, message: string]> => [
+  ["an ASCII character at the edge", `${word}\n`],
+  ["a character past U+024F at the edge", `${word}设`],
+  ["a character outside the Basic Multilingual Plane at the edge", `${word}\u{1F600}`],
+];
+
+/** A message with a NUL byte at its start, in its middle and at its end. */
+export const NUL_CLASSES = ["a NUL at the start", "a NUL in the middle", "a NUL at the end"] as const;
+
+export const nulMessages = (word: string): ReadonlyArray<readonly [label: string, message: string]> => [
+  ["a NUL at the start", `\u0000${word}\n`],
+  ["a NUL in the middle", `${word}\u0000${word}\n`],
+  ["a NUL at the end", `${word}\n\u0000`],
+];
+
+/** The commits of the move carrier by index. `three` and `side` each have `one` as a parent, `merge` joins them. */
+export const MOVE = { root: 0, one: 1, main: 2, three: 3, side: 4, merge: 5 } as const;
+
+/** A history made to move refs in: a line to commit 3, a side branch from commit 1, a merge, and refs that each have a reason. */
+export const moveCarrier = (
+  texture: Texture,
+): {
+  readonly history: History;
+  readonly names: Record<"main" | "side" | "candidate" | "fresh" | "remote" | "gone" | "branch", string>;
+} => {
+  const draw = new Draw(texture);
+  const part = draw.part();
+  const built = build(draw, [[], [0], [1], [2], [1], [3, 4]], "forward");
+
+  return {
+    history: {
+      ...built,
+      refs: [
+        { name: "refs/heads/main", commit: MOVE.main },
+        { name: "refs/heads/side", commit: MOVE.side },
+        { name: `refs/kalfa/candidates/e${part}`, commit: MOVE.three },
+      ],
+    },
+    names: {
+      main: "refs/heads/main",
+      side: "refs/heads/side",
+      candidate: `refs/kalfa/candidates/e${part}`,
+      fresh: `refs/kalfa/candidates/n${part}`,
+      remote: `refs/remotes/origin/n${part}`,
+      gone: `refs/heads/g${part}`,
+      branch: `refs/heads/b${part}`,
+    },
+  };
+};
