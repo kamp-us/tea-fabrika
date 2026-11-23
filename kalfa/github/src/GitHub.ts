@@ -557,3 +557,10 @@ export const call = run as <Op extends AnyRoute>(
   input: Input<Op>,
   options?: CallOptions<Op>,
 ) => Effect.Effect<Success<Op>, GitHubError | RateLimited, GitHub | Services<Op>>;
+
+/**
+ * What the live Layer logs in as: `Login.Token` holds a plain token.
+ *
+ * @category models
+ */
+export * as Login from "./Login.ts";

@@ -743,6 +743,10 @@ importers:
         version: 5.0.5(patch_hash=a6bb69c3bcb136e22a97f79cea68a82a9d95f9fffeb606d2f216dc44c1536d59)(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
 
   kalfa/github:
+    dependencies:
+      '@kalfa/config':
+        specifier: workspace:*
+        version: link:../config
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'

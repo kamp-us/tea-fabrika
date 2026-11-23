@@ -61,7 +61,7 @@
       "pure": false
     },
     "kalfa-github": {
-      "imports": [],
+      "imports": ["kalfa-config"],
       "pure": false
     }
   },

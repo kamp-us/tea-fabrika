@@ -1,6 +1,6 @@
 // P1, P2 and R1's README half: what the package's own files say. It stands alone (decision on small libraries usable alone):
-// it names no other package of this repository, it has no dependencies, it reads GitHub's types from one pinned package, and
-// no file in it names the repository. They read the package's own files and the workspace file at head, so they run in memory
+// it names one other package of this repository, the settings engine, and no other, it reads GitHub's types from one pinned
+// package, and no file in it names the repository. They read the package's own files and the workspace file at head, so they run in memory
 // on every pull request. The words P2 looks for are written in pieces, so this file does not hold them whole.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -32,10 +32,11 @@ const catalogVersion = (): string | undefined =>
 
 const part = (...pieces: ReadonlyArray<string>): string => pieces.join("");
 
-// P1, slice 1, widened in slice 3 to the `./test` export. Plant: leave `./test` out of `publishConfig.exports`, and its dist
-// pair line fails; add the shared test package to the dev dependencies, and it is named in the failure; write a range mark
-// before the catalog's version, and the exact-version line fails.
-it("P1 scenario: the manifest has no dependencies and one peer, takes GitHub's types from the catalog, names no repo package, exports the root and its test module", () => {
+// P1, slice 1, widened in slice 3 to the `./test` export and in 1945's second slice to `@kalfa/config` and the `./Settings` and
+// `./live` exports. Plant: leave `./live` out of `publishConfig.exports`, and its dist pair line fails; add the shared test
+// package to the dev dependencies, and it is named in the failure; move `@kalfa/config` to the peer dependencies; write a
+// range mark before the catalog's version, and the exact-version line fails.
+it("P1 scenario: the manifest has one dependency, the settings engine, and one peer, takes GitHub's types from the catalog, names no other repo package, exports the root, the settings, the live Layer and its test module", () => {
   // scenario: the package's own manifest, the workspace file and the README at head; no generated input says what a manifest holds.
   const found = manifest();
 
@@ -47,21 +48,45 @@ it("P1 scenario: the manifest has no dependencies and one peer, takes GitHub's t
   ];
 
   expect(
-    named.filter((name) => [part("@kal", "fa/"), part("@kam", "pus/")].some((scope) => name.startsWith(scope))),
-    "no package of this repository",
+    named.filter(
+      (name) =>
+        name !== part("@kal", "fa/config") &&
+        [part("@kal", "fa/"), part("@kam", "pus/")].some((scope) => name.startsWith(scope)),
+    ),
+    "no other package of this repository",
   ).toEqual([]);
-  expect(found.dependencies, "no dependencies").toBeUndefined();
+  expect(found.dependencies, "the settings engine is the one dependency").toEqual({
+    [part("@kal", "fa/config")]: "workspace:*",
+  });
+  expect(
+    [found.devDependencies, found.peerDependencies, found.optionalDependencies ?? {}].flatMap((each) =>
+      Object.keys(each).filter((name) => name === part("@kal", "fa/config")),
+    ),
+    "and only a dependency",
+  ).toEqual([]);
   expect(Object.keys(found.peerDependencies), "effect is the one peer").toEqual(["effect"]);
   expect(found.devDependencies["@octokit/openapi-types"], "the types come through the catalog").toBe("catalog:");
-  expect(Object.keys(found.exports).toSorted()).toEqual([".", "./package.json", "./test"]);
+  expect(Object.keys(found.exports).toSorted()).toEqual([".", "./Settings", "./live", "./package.json", "./test"]);
   expect(found.exports["./test"], "the test module is its own export").toBe("./src/TestGitHub.ts");
+  expect(found.exports["./Settings"], "the settings are their own export").toBe("./src/Settings.ts");
+  expect(found.exports["./live"], "the live Layer is its own export").toBe("./src/GitHubLive.ts");
   expect(found.publishConfig.exports["."]).toEqual({ types: "./dist/GitHub.d.ts", default: "./dist/GitHub.js" });
+  expect(found.publishConfig.exports["./Settings"], "the settings have their own dist pair").toEqual({
+    types: "./dist/Settings.d.ts",
+    default: "./dist/Settings.js",
+  });
+  expect(found.publishConfig.exports["./live"], "and so has the live Layer").toEqual({
+    types: "./dist/GitHubLive.d.ts",
+    default: "./dist/GitHubLive.js",
+  });
   expect(found.publishConfig.exports["./test"], "and has its own dist pair").toEqual({
     types: "./dist/TestGitHub.d.ts",
     default: "./dist/TestGitHub.js",
   });
   expect(Object.keys(found.publishConfig.exports).toSorted(), "the published exports match").toEqual([
     ".",
+    "./Settings",
+    "./live",
     "./package.json",
     "./test",
   ]);
