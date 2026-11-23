@@ -35,7 +35,7 @@ import { Context, Effect, type FileSystem, Option, type Path, Schema } from "eff
 import type * as Digest from "effect/crypto/Digest";
 import type * as Duration from "effect/Duration";
 import type * as Layer from "effect/Layer";
-import type * as Stream from "effect/Stream";
+import * as Stream from "effect/Stream";
 import { Setting, SettingGroup } from "./index.ts";
 import { Update } from "./internal/apply.ts";
 
@@ -308,9 +308,10 @@ it("SN11 type: `snapshots(group)` is exactly a stream of snapshots that cannot f
 // holds no value, so a running process cannot set a restart value from one.
 class Carrier extends Context.Service<Carrier, { readonly name: string }>()("Carrier") {}
 
-declare const carried: Stream.Stream<unknown, never, Carrier>;
+// Real streams, so the file runs as well as compiles: the module builds `received` when Vitest loads it.
+const carried: Stream.Stream<unknown, never, Carrier> = Stream.empty;
 
-declare const failing: Stream.Stream<unknown, Error, Carrier>;
+const failing: Stream.Stream<unknown, Error, Carrier> = Stream.fail(new Error("the carrier failed"));
 
 const received = SettingGroup.layerFromSnapshots(group, carried);
 
