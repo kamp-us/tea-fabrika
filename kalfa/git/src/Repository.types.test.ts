@@ -1,5 +1,5 @@
-// T2 and T3: the calls' types and the layers' types. T5 and T6: the types of the write calls and the layer that needs a
-// `Digest`. Compile the exact expressions, never execute them.
+// T2 and T3: the calls' types and the layers' types. T5 and T6: the types of the write and merge calls and the layer that
+// needs a `Digest`. Compile the exact expressions, never execute them.
 import { expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema, type Context, type Effect, type Layer, type Option } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
@@ -8,10 +8,11 @@ import type { ChildProcessSpawner } from "effect/process";
 import type { Commit, Signature } from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
 import type * as MemoryRepository from "./MemoryRepository.ts";
+import type * as MergeCommit from "./MergeCommit.ts";
 import type * as ProcessRepository from "./ProcessRepository.ts";
 import type { Ref, RefName } from "./Ref.ts";
 import * as Repository from "./Repository.ts";
-import type { TreeId } from "./Tree.ts";
+import type { Path, TreeId } from "./Tree.ts";
 
 type Fails = Repository.GitUnavailable | Repository.TimedOut;
 
@@ -137,6 +138,67 @@ const writeErrors = (text: string, ref: RefName, tree: TreeId) => {
   return [movedText, treeText, new Repository.RefMoved({ ref }), new Repository.NoSuchTree({ id: tree })];
 };
 
+// Plant (T5): add `Conflict` to nothing, so the answer's errors differ; make `paths` of `Conflict` a plain array, so the
+// empty list compiles and its `@ts-expect-error` is unused; leave `needs` out of `GitTooOld`; drop `GitTooOld` from the
+// reasons of `GitUnavailable`.
+const merges = (repo: Repository.Repository["Service"], commit: CommitId, text: string) => {
+  expectTypeOf<Repository.Repository["Service"]["mergeTrees"]>().toEqualTypeOf<
+    (merge: {
+      readonly mergeBase: CommitId;
+      readonly ours: CommitId;
+      readonly theirs: CommitId;
+    }) => Effect.Effect<TreeId, Repository.NoSuchCommit | Repository.Conflict | Fails>
+  >();
+  expectTypeOf<Parameters<Repository.Raw["mergeTrees"]>[0]>().toEqualTypeOf<
+    Parameters<Repository.Repository["Service"]["mergeTrees"]>[0]
+  >();
+  expectTypeOf<ConstructorParameters<typeof Repository.Conflict>[0]["paths"]>().toEqualTypeOf<
+    readonly [Path, ...Array<Path>]
+  >();
+  expectTypeOf<ConstructorParameters<typeof Repository.GitTooOld>[0]["found"]>().toEqualTypeOf<string>();
+  expectTypeOf<ConstructorParameters<typeof Repository.GitTooOld>[0]["needs"]>().toEqualTypeOf<string>();
+  expectTypeOf<Repository.GitUnavailable["reason"]>().toEqualTypeOf<
+    Repository.NotStarted | Repository.Exited | Repository.Unreadable | Repository.GitTooOld
+  >();
+  // @ts-expect-error A conflict names at least one path.
+  const nobody = new Repository.Conflict({ paths: [] });
+  // @ts-expect-error A plain string is no path of a tree.
+  const named = new Repository.Conflict({ paths: [text] });
+  // @ts-expect-error A merge names its merge base: the call reads no history to find it.
+  const noBase = repo.mergeTrees({ ours: commit, theirs: commit });
+
+  return [nobody, named, noBase];
+};
+
+// Plant (T5): make the helper need `FileSystem`, so its requirement differs; leave `UnrelatedHistories` out of its errors.
+const mergeCommits = () => {
+  expectTypeOf<Parameters<typeof MergeCommit.mergeCommit>[0]>().toEqualTypeOf<{
+    readonly ours: CommitId;
+    readonly theirs: CommitId;
+    readonly author: Signature;
+    readonly message: string;
+  }>();
+  expectTypeOf<ReturnType<typeof MergeCommit.mergeCommit>>().toEqualTypeOf<
+    Effect.Effect<
+      Commit,
+      | MergeCommit.UnrelatedHistories
+      | MergeCommit.SeveralMergeBases
+      | Repository.Conflict
+      | Repository.NoSuchCommit
+      | Repository.NoSuchTree
+      | Repository.TooMany
+      | Repository.HistoryTooShort
+      | Repository.NulInMessage
+      | Repository.TooLargeToWrite
+      | Fails,
+      Repository.Repository
+    >
+  >();
+  expectTypeOf<ConstructorParameters<typeof MergeCommit.SeveralMergeBases>[0]["bases"]>().toEqualTypeOf<
+    ReadonlyArray<CommitId>
+  >();
+};
+
 // Plant (T4): type `ref` of `RefNotCommit` as `Schema.String`: the `@ts-expect-error` is unused and the equality fails.
 const refNotCommit = (text: string, ref: RefName) => {
   expectTypeOf<ConstructorParameters<typeof Repository.RefNotCommit>[0]["ref"]>().toEqualTypeOf<RefName>();
@@ -153,6 +215,8 @@ it("type: each call has the answer and errors the plan gives, and each layer the
   expectTypeOf(layersWithDigest).toBeFunction();
   expectTypeOf(writes).toBeFunction();
   expectTypeOf(writeErrors).toBeFunction();
+  expectTypeOf(merges).toBeFunction();
+  expectTypeOf(mergeCommits).toBeFunction();
   expectTypeOf(refNotCommit).toBeFunction();
 });
 
