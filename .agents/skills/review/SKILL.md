@@ -77,7 +77,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      commits' bodies: read them with `git log --format=%B <base>..HEAD`, since the tests step's
      answer never reaches you. A law with no recorded plant run is not done. A committed plant test is a defect; a lint rule's own planted lines are not
      one. Plant a break yourself where a law looks weak, and in at least three laws you pick: in
-     your head or in a scratch copy, never in the branch. In a read-only box a command that writes
+     your head or in a scratch copy of the tree, never in the branch or its worktree. In a read-only box a command that writes
      ends your turn with no answer, so plant by reading there.
    - Delete at least one guarding check (a scope, a re-read, an equality, a schema, an own-key read)
      and report whether a law went red. A guarding check whose deletion turns no law red is a finding.
@@ -123,7 +123,7 @@ whole diff.
 
 - Check the fix for the faults you named: read each line it changed and what calls it.
 - Check that the new law reaches the fix. Plant a break, by reading or by running it in a scratch
-  copy where your box lets you write, never in the branch. The fix agent wrote this law itself, so
+  copy of the tree where your box lets you write, never in the branch or its worktree. The fix agent wrote this law itself, so
   yours is the read that guards it.
 - You may withdraw a finding of yours that was wrong. Say which, and why.
 - A new fault you notice outside the fix is a finding, or ticket text for the lead. It does

@@ -5,10 +5,10 @@ import { compact, map, type Rule, steps, uses } from "./shared.ts";
 const FILES = "fromJSON(needs.select.outputs.files)[matrix.shard]";
 
 const INTEGRATION =
-  'pnpm exec vitest run --project next-integration $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"';
+  'pnpm exec vitest run --project next-integration $FILES --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/related.json"';
 
 const TOOLING =
-  'pnpm exec vitest run --project tooling $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"';
+  'pnpm exec vitest run --project tooling $FILES --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/related.json"';
 
 /** No job-level group at all, in any form: the scheduled-groups rule takes the merge line out of the scheduled groups. */
 const ungrouped = (job: Record<string, unknown>) => job["concurrency"] === undefined;

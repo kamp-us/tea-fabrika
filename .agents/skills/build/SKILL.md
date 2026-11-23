@@ -41,7 +41,12 @@ for the product code.
    percentage. Under that, build the plan's reading and name the doubt.
 6. **Run** every law the test writer wrote and the laws that read the files you changed, one file
    at a time, until each is green.
-7. **Commit, push and report** by the standing rules below.
+7. **Time the laws at full depth.** Run each law file of step 6 once at full depth, by
+   [the tests skill's step](../tests/SKILL.md#steps) (`FABRIKA_TEST_DEPTH=full` with the slow-law
+   reporter), and put each law's time in your report. Your product code can slow a law the test
+   writer timed, and CI runs at full depth. Fix a law the reporter fails in the product code; a law
+   that is itself slow goes back to the tests step by report, since you never edit one.
+8. **Commit, push and report** by the standing rules below.
 
 ## Outside your task
 
@@ -108,7 +113,7 @@ These hold in every build round, so the brief does not repeat them.
 - **Public repo:** no secrets, no absolute paths from anyone's machine, no personal names in
   committed text.
 - **Report** for a reader who saw none of the work, the answer first: every law green, yes or no,
-  file by file. Then what changed, a line a file; every call you took with its percentage; any law
+  file by file, with each law's full-depth time. Then what changed, a line a file; every call you took with its percentage; any law
   you think is wrong (untouched) and why; any file you needed but may not touch; what the lead's
   own run must show (Electron, screenshots, a host-only law); each check's result; and the new
   head. If every law was already green at the start and you changed nothing, do not commit: put

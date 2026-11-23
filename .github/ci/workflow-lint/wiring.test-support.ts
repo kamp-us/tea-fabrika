@@ -107,11 +107,11 @@ const name = fc.string({ maxLength: 20 });
 // N is E4's, in vitest.shards.test.ts, so the generated workflows below vary it.
 export const onE2e = "startsWith(matrix.shard, 'e2e-')";
 
-export const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+export const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/next.json"`;
 
 // A test that needs a real resource runs only in main's full run: the vitest step tests the `next` project alone, on every event.
 const vitestCommand =
-  'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+  'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/next.json"';
 
 // A test that needs a real resource runs only in main's full run: a pull request that asked for its visual tests.
 export const visualLabel = "contains(github.event.pull_request.labels.*.name, 'visual')";

@@ -302,6 +302,7 @@ const plants: Plant[] = [
     " --reporter=verbose",
     " --reporter=json",
     " --reporter=github-actions",
+    " --reporter=./.github/ci/slow-test-reporter.ts",
     ' --outputFile.json="$RUNNER_TEMP/next.json"',
   ].map((flag): [string, (w: Workflow) => void] => [
     `next end-to-end step loses ${flag}`,
@@ -449,6 +450,7 @@ const plants: Plant[] = [
     " --reporter=verbose",
     " --reporter=json",
     " --reporter=github-actions",
+    " --reporter=./.github/ci/slow-test-reporter.ts",
     ' --outputFile.json="$RUNNER_TEMP/next.json"',
   ].map((flag): [string, (w: Workflow) => void] => [
     `next loses ${flag}`,

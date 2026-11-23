@@ -71,7 +71,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // would drop the readers again. Else the plan for CI paths, slice 2: `filter` from changes, the
   // reader tests or `next/`, and a missing filter runs all of next/.
   const nextCommand =
-    'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+    'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/next.json"';
 
   // E11 (a test that needs a real resource runs only in main's full run). The vitest step tests the `next` project alone, on every event: the merge line runs
   // the in-memory layer, and the schedule runs the real-resource one. A path filter alone finds a
@@ -81,7 +81,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the visual files, the
   // `next-visual` project. It takes no filter, so under the reader filter the e2e legs still run every
   // visual file the change reaches.
-  const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+  const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --reporter=./.github/ci/slow-test-reporter.ts --outputFile.json="$RUNNER_TEMP/next.json"`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
 
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
