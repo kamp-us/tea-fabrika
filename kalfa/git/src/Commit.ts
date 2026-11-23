@@ -30,10 +30,23 @@ export const Time = Schema.Struct({
   offset: Offset,
 });
 
-// What git's commit format can hold: a name has no "<", ">" or line break, an email has no ">" or line break.
-const Name = Schema.String.check(Schema.isPattern(/^[^<>\n]*$/));
+/**
+ * Schema for a name in a signature: what git's commit format can hold, so no "<", ">", line break or NUL.
+ *
+ * **Details**
+ *
+ * It may be empty, and it keeps a space at either end.
+ *
+ * @category models
+ */
+export const Name = Schema.String.check(Schema.isPattern(/^[^<>\n\0]*$/));
 
-const Email = Schema.String.check(Schema.isPattern(/^[^>\n]*$/));
+/**
+ * Schema for an email in a signature: what git's commit format can hold, so no ">", line break or NUL.
+ *
+ * @category models
+ */
+export const Email = Schema.String.check(Schema.isPattern(/^[^>\n\0]*$/));
 
 /**
  * Who wrote a commit, or who made it, with a time: a name, an email and the time with its offset.
