@@ -371,7 +371,12 @@ const reference = (draw: TextDraw): ReadonlyArray<Spec> => {
   ];
 };
 
-// Plants: (g) drop `escape`: a `*word*` description parses as emphasis, red; (i) write every default in single backticks:
+// Every description holds each line that changes a block's meaning, at the start and under a text line: a setext
+// underline (`=`, `===`, `---`), a list marker of each kind, `1)` and `2)` as well as `1.`, a heading, a quote, a fence,
+// a table row and its delimiter row, a rule, a link definition, an HTML block and a task. On the plan's `escape` (the old
+// one, moved) `=`, `===`, `1)` and `2)` swallow the section's table, so the build's `escape` must read them too.
+// Plants: (g) leave `=` out of `escape`: a `=` line under text makes a heading, red; (g) leave `)` out of the ordered-list
+// rule: a first line `1) x` makes a list, red; (g) drop `escape`: a `*word*` description parses as emphasis, red; (i) write every default in single backticks:
 // a default with a backtick breaks its cell, red; (i) leave `\|` unescaped: the row gains a cell, red; (e) write the
 // variable for a file-only setting: red; (c) write each description with `\n` in place of its own breaks: a CRLF
 // description changes, red; (f) keep the group's order: red.

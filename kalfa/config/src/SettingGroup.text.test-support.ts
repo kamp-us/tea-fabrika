@@ -47,7 +47,7 @@ const Count = Schema.Int.check(Schema.isBetween({ minimum: 1000, maximum: 60000 
 /** A line of a description: every character Markdown reads, a tab and `雪` inside, never a space or a tab at either end. */
 const Line = Schema.String.check(
   Schema.isPattern(
-    /^[A-Za-z0-9*_[\]<>#|&~+!\\.:`雪-](?:[A-Za-z0-9*_[\]<>#|&~+!\\.:`雪 \t-]{0,10}[A-Za-z0-9*_[\]<>#|&~+!\\.:`雪-])?$/u,
+    /^[A-Za-z0-9*_[\]<>#|&~+!\\.:`雪=()@-](?:[A-Za-z0-9*_[\]<>#|&~+!\\.:`雪=()@ \t-]{0,10}[A-Za-z0-9*_[\]<>#|&~+!\\.:`雪=()@-])?$/u,
   ),
 );
 
@@ -108,14 +108,52 @@ type Break = "\n" | "\r\n" | "\r";
 
 export const BREAKS: ReadonlyArray<Break> = ["\n", "\r\n", "\r"];
 
-/** What every class needs in at least one description: each character Markdown reads, a line that starts `1.`, a bar, a tab, `雪` and a backtick. */
-const MARKS = ["1. a|b *c* _d_ [e] <f> #g &h ~i +j !k -l `m", "10.5 x\\y\\\\z:w", "雪\ttab"];
+/** The first line of a description: each character Markdown reads inside a line, a line that starts `1.`, a bar, a tab, `雪` and a backtick. */
+const MARKS = ["1. a|b *c* _d_ [e] <f> #g &h ~i +j !k -l `m =n (o) @p", "10.5 x\\y\\\\z:w", "雪\ttab"];
 
-/** One description: some drawn lines joined by a break (the seeds' unless one is given), one line of the marks, and a final break when asked. */
+/**
+ * Every line that, at the start of a line or under a text line, changes what a block means in Markdown: an underline that
+ * turns the line above into a heading, a list of each marker, an ordered list with a dot and with a bracket, a heading, a
+ * quote, a fence, a table row and its delimiter row, a rule, a link definition, an HTML block and a task.
+ */
+const CONSTRUCTS: ReadonlyArray<string> = [
+  "=",
+  "===",
+  "---",
+  "***",
+  "___",
+  "- x",
+  "* x",
+  "+ x",
+  "1) x",
+  "2) x",
+  "1. x",
+  "# x",
+  "## x",
+  "> x",
+  "```",
+  "```js",
+  "~~~",
+  "| a | b |",
+  "|---|---|",
+  ":---:",
+  "[x]: y",
+  "<div>",
+  "- [ ] t",
+];
+
+/**
+ * One description: a line of marks, then each construct under a drawn text line (the construct is the line below a text
+ * line, and the first of the description is the marks), joined by a break (the seeds' unless one is given), and a final
+ * break when asked. The order of the constructs turns with the seeds, and every one is in every description.
+ */
 export const describe = (draw: TextDraw, n: number, options: { final?: boolean; br?: Break } = {}): string => {
   const br = options.br ?? BREAKS[pick(draw, n + 1) % BREAKS.length] ?? "\n";
-  const own = [draw.lines[n % draw.lines.length] ?? "x", draw.lines[(n + 2) % draw.lines.length] ?? "y"];
-  const body = [MARKS[n % MARKS.length] ?? "z", ...own].join(br);
+  const turn = pick(draw, n + 3) % CONSTRUCTS.length;
+  const order = [...CONSTRUCTS.slice(turn), ...CONSTRUCTS.slice(0, turn)];
+
+  const lines = order.flatMap((construct, i) => [draw.lines[(n + i) % draw.lines.length] ?? "x", construct]);
+  const body = [MARKS[n % MARKS.length] ?? "z", ...lines].join(br);
 
   return options.final === true ? `${body}${br}` : body;
 };
