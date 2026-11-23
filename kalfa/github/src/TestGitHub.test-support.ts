@@ -19,6 +19,9 @@ export const EchoIssue = GitHub.route(CREATE_ISSUE, {
   success: Schema.Struct({ title: Schema.String }),
 });
 
+/** The logs of a run: a route with no 2xx status, since GitHub answers it with a redirect. */
+export const RunLogs = GitHub.route("GET /repos/{owner}/{repo}/actions/runs/{run_id}/logs");
+
 /** What one run of C10 is made of. */
 interface FakeCall {
   readonly owner: string;

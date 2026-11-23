@@ -3,9 +3,9 @@
 // holds one law's lines, and its `it` only names the helper.
 import { expectTypeOf, it } from "@effect/vitest";
 import type { Layer } from "effect";
-import { CancelRun, ListCheckRuns } from "./GitHub.test-support.ts";
+import { CancelRun, Dispatch, ListCheckRuns } from "./GitHub.test-support.ts";
 import type * as GitHub from "./GitHub.ts";
-import { CreatedIssue, EchoIssue } from "./TestGitHub.test-support.ts";
+import { CreatedIssue, EchoIssue, RunLogs } from "./TestGitHub.test-support.ts";
 import * as GitHubTest from "./TestGitHub.ts";
 
 // T9, the answer. Plant: type `Answered<Op>` as `unknown`, and every `@ts-expect-error` of a key the description lacks is
@@ -37,10 +37,12 @@ const answers = () => {
   const besideDeep = GitHubTest.answer(ListCheckRuns, () => ({ check_runs: [{ id: 1, idd: 2 }] }));
   // @ts-expect-error a key the description's answer lacks, beside one it has, two objects down
   const besideDeeper = GitHubTest.answer(ListCheckRuns, () => ({ check_runs: [{ app: { slug: "x", slugg: "x" } }] }));
+  // @ts-expect-error `undefined` is an answer only beside a status with no body, and the check runs route has none
+  const nothing = GitHubTest.answer(ListCheckRuns, () => undefined);
   // @ts-expect-error the payload is the encoded text, not the decoded number
   const decoded = GitHubTest.answer(EchoIssue, (asked) => ({ title: asked.payload.title.toFixed(0) }), { status: 201 });
 
-  expectTypeOf([ok, top, deep, deeper, beside, besideDeep, besideDeeper, wrong, decoded]).toBeArray();
+  expectTypeOf([ok, top, deep, deeper, beside, besideDeep, besideDeeper, wrong, nothing, decoded]).toBeArray();
 };
 
 // T11, the status. Plant: type the status as any 2xx, and the cancel `200` line compiles.
@@ -63,6 +65,30 @@ const statuses = () => {
   // @ts-expect-error 202 is not one of the check runs route's statuses
   const listed = GitHubTest.answer(ListCheckRuns, () => ({}), { status: 202 });
 
+  // The dispatch route answers 200 with a body, or 204 with none: `undefined` goes with the status that has no body, and only with it.
+  const dispatched = [
+    GitHubTest.answer(Dispatch, () => undefined, { status: 204 }),
+    GitHubTest.answer(Dispatch, () => ({ workflow_run_id: 1, run_url: "u" })),
+    GitHubTest.answer(Dispatch, () => ({ workflow_run_id: 1 }), { status: 200 }),
+  ];
+
+  // @ts-expect-error `undefined` with no status would send a 200 with an empty body, which GitHub never does
+  const emptyOk = GitHubTest.answer(Dispatch, () => undefined);
+  // @ts-expect-error `undefined` with the status that has a body
+  const emptyOkGiven = GitHubTest.answer(Dispatch, () => undefined, { status: 200 });
+  // @ts-expect-error a value with the status that has no body
+  const bodyOnEmpty = GitHubTest.answer(Dispatch, () => ({ workflow_run_id: 1 }), { status: 204 });
+  // A route with no 2xx status at all answers only through `refuse`: GitHub redirects, and `call` reads that as unreadable.
+  // @ts-expect-error the logs route has no 2xx, so it has no answer
+  const logs = GitHubTest.answer(RunLogs, () => "the log");
+  // @ts-expect-error nor an empty one
+  const logsEmpty = GitHubTest.answer(RunLogs, () => undefined);
+  // @ts-expect-error nor with a status given
+  const logsOk = GitHubTest.answer(RunLogs, () => "the log", { status: 200 });
+  // @ts-expect-error nor with a redirect status
+  const logsMoved = GitHubTest.answer(RunLogs, () => undefined, { status: 302 });
+
+  expectTypeOf([dispatched, emptyOk, emptyOkGiven, bodyOnEmpty, logs, logsEmpty, logsOk, logsMoved]).toBeArray();
   expectTypeOf([ok, missing, other, created, listed]).toBeArray();
 };
 
@@ -73,6 +99,8 @@ const refusals = () => {
     GitHubTest.refuse(ListCheckRuns, { status: 400, message: "m", documentation_url: "https://docs.github.com/x" }),
     GitHubTest.refuse(CreatedIssue, { status: 422, errors: [{ resource: "Issue", field: "title", code: "missing" }] }),
     GitHubTest.refuse(ListCheckRuns, { status: 499 }),
+    // A route with no 2xx is refused, since that is all a fake can say for it.
+    GitHubTest.refuse(RunLogs, { status: 404 }),
   ];
 
   // @ts-expect-error a 5xx is not a refusal GitHub's 4xx body describes
