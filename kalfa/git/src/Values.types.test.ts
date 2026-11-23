@@ -1,6 +1,7 @@
 // T1: the brands. Compile the exact bad expressions, never execute them.
 import { expectTypeOf, it } from "@effect/vitest";
 import type * as CommitId from "./CommitId.ts";
+import type * as Diff from "./Diff.ts";
 import type * as Ref from "./Ref.ts";
 import type * as Tree from "./Tree.ts";
 
@@ -77,4 +78,38 @@ const treeBrands = (text: string, tree: Tree.TreeId, blob: Tree.BlobId, commit: 
 it("type: a plain string is no TreeId, BlobId or Path, and a TreeId, a BlobId and a CommitId are none of each other", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(treeBrands).toBeFunction();
+});
+
+// Plant: drop the brand on `PatchId`, so the `@ts-expect-error` lines below go unused.
+const patchBrands = (
+  text: string,
+  patch: Diff.PatchId,
+  commit: CommitId.CommitId,
+  tree: Tree.TreeId,
+  blob: Tree.BlobId,
+) => {
+  // @ts-expect-error A plain string is not a patch id.
+  const patchFromText: Diff.PatchId = text;
+  // @ts-expect-error A commit id is not a patch id.
+  const patchFromCommit: Diff.PatchId = commit;
+  // @ts-expect-error A tree id is not a patch id.
+  const patchFromTree: Diff.PatchId = tree;
+  // @ts-expect-error A blob id is not a patch id.
+  const patchFromBlob: Diff.PatchId = blob;
+  // @ts-expect-error A patch id is not a commit id.
+  const commitFromPatch: CommitId.CommitId = patch;
+  // @ts-expect-error A patch id is not a tree id.
+  const treeFromPatch: Tree.TreeId = patch;
+  // @ts-expect-error A patch id is not a blob id.
+  const blobFromPatch: Tree.BlobId = patch;
+  expectTypeOf<Diff.PatchId>().toExtend<string>();
+  expectTypeOf<Diff.PatchId>().not.toEqualTypeOf<string>();
+  expectTypeOf<Diff.PatchId>().not.toEqualTypeOf<CommitId.CommitId>();
+
+  return [patchFromText, patchFromCommit, patchFromTree, patchFromBlob, commitFromPatch, treeFromPatch, blobFromPatch];
+};
+
+it("type: a plain string, a CommitId, a TreeId and a BlobId are no PatchId, and a PatchId is none of them", () => {
+  // These compile-time laws need tsc, which the lead runs after build.
+  expectTypeOf(patchBrands).toBeFunction();
 });

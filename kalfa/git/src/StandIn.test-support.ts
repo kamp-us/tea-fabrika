@@ -1,6 +1,6 @@
 // A stand-in for the process spawner: it answers each git command from a script, records every command
-// with its environment, and counts how many child scopes have ended, so a law can see a child was ended
-// without a real signal.
+// with its environment and the bytes it was given on stdin, and counts how many child scopes have ended, so a law can
+// see a child was ended without a real signal. A piped command (`ChildProcess.pipeTo`) is recorded as one command.
 import { Duration, Effect, Layer, Option, PlatformError, Predicate, Ref, Sink, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Command } from "effect/process/ChildProcess";
@@ -14,6 +14,10 @@ export interface Call {
   /** How long the command's scope waits after the first signal before it kills the child outright, if it says. */
   readonly forceKillAfter: Duration.Duration | undefined;
   readonly env: Readonly<Record<string, string>>;
+  /** Every byte the command was given on stdin: none at all when it was given nothing. */
+  readonly input: Uint8Array;
+  /** The command is a pipe of two commands, which the stand-in does not run apart. Its `verb` is `<piped>`. */
+  readonly piped: boolean;
 }
 
 /**
@@ -24,7 +28,11 @@ export interface Call {
  * command's `forceKillAfter` and never without one, as Effect's Node spawner does.
  */
 export type Reply =
-  | { readonly code: number; readonly stdout?: string; readonly stderr?: string | ReadonlyArray<string> }
+  | {
+      readonly code: number;
+      readonly stdout?: string | Uint8Array;
+      readonly stderr?: string | ReadonlyArray<string>;
+    }
   | "hang"
   | "hang, ignores the first signal"
   | "cannot start";
@@ -52,7 +60,40 @@ const split = (args: ReadonlyArray<string>): Pick<Call, "verb" | "rest"> => {
   return { verb: "", rest: [] };
 };
 
-const commandFrom = (command: Command): Call | undefined => {
+// The stream a command was given as its stdin, if it was given one.
+const stdinStream = (stdin: ChildProcess.CommandOptions["stdin"]) => {
+  if (stdin === undefined || Predicate.isString(stdin)) {
+    return undefined;
+  }
+
+  if (Stream.isStream(stdin)) {
+    return stdin;
+  }
+
+  return Predicate.isString(stdin.stream) ? undefined : stdin.stream;
+};
+
+// The bytes a standard command was given on stdin, whole: none at all when it has no stream.
+const stdinBytes = (command: Command): Effect.Effect<Uint8Array> => {
+  const stream = ChildProcess.isStandardCommand(command) ? stdinStream(command.options.stdin) : undefined;
+
+  return Effect.orDie(Stream.mkUint8Array(stream ?? Stream.empty));
+};
+
+const commandFrom = (command: Command, input: Uint8Array): Call | undefined => {
+  if (ChildProcess.isPipedCommand(command)) {
+    return {
+      args: [],
+      verb: "<piped>",
+      rest: [],
+      extendEnv: undefined,
+      forceKillAfter: undefined,
+      env: {},
+      input: new Uint8Array(),
+      piped: true,
+    };
+  }
+
   if (!ChildProcess.isStandardCommand(command)) {
     return undefined;
   }
@@ -71,7 +112,7 @@ const commandFrom = (command: Command): Call | undefined => {
       ? undefined
       : Option.getOrUndefined(Duration.fromInput(command.options.forceKillAfter));
 
-  return { args, ...split(args), extendEnv: command.options.extendEnv, forceKillAfter, env };
+  return { args, ...split(args), extendEnv: command.options.extendEnv, forceKillAfter, env, input, piped: false };
 };
 
 /** A spawner that answers from `script`, which sees every command and says what it does. */
@@ -82,10 +123,10 @@ export const standIn = (script: (call: Call) => Reply): Effect.Effect<StandIn> =
 
     const spawn: ChildProcessSpawner.ChildProcessSpawner["Service"]["spawn"] = (command) =>
       Effect.gen(function* () {
-        const call = commandFrom(command);
+        const call = commandFrom(command, yield* stdinBytes(command));
 
         if (call === undefined) {
-          return yield* Effect.die("the stand-in runs standard commands only");
+          return yield* Effect.die("the stand-in runs standard and piped commands only");
         }
 
         yield* Ref.update(calls, (all) => [...all, call]);
@@ -110,10 +151,12 @@ export const standIn = (script: (call: Call) => Reply): Effect.Effect<StandIn> =
 
         const stuck = reply === "hang" || reply === "hang, ignores the first signal";
 
-        const chunks = (text: string | ReadonlyArray<string> | undefined) =>
-          Stream.fromIterable(Predicate.isString(text) ? [text] : (text ?? [""])).pipe(
-            Stream.map((chunk) => encoder.encode(chunk)),
-          );
+        const chunks = (text: string | Uint8Array | ReadonlyArray<string> | undefined) =>
+          text instanceof Uint8Array
+            ? Stream.make(text)
+            : Stream.fromIterable(Predicate.isString(text) ? [text] : (text ?? [""])).pipe(
+                Stream.map((chunk) => encoder.encode(chunk)),
+              );
 
         const out = stuck ? Stream.never : chunks(reply.stdout);
         const err = stuck ? Stream.never : chunks(reply.stderr);

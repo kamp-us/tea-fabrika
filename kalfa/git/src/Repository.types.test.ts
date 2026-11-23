@@ -1,10 +1,11 @@
 // T2 and T3: the calls' types and the layers' types. Compile the exact expressions, never execute them.
 import { expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema, type Context, type Effect, type Layer } from "effect";
+import { Result, Schema, type Context, type Effect, type Layer, type Option } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
 import type { ChildProcessSpawner } from "effect/process";
 import type { Commit } from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
+import type { PatchId } from "./Diff.ts";
 import type * as MemoryRepository from "./MemoryRepository.ts";
 import type * as ProcessRepository from "./ProcessRepository.ts";
 import type { Ref, RefName } from "./Ref.ts";
@@ -12,7 +13,9 @@ import * as Repository from "./Repository.ts";
 
 type Fails = Repository.GitUnavailable | Repository.TimedOut;
 
-// Plant (T2): add `R = Scope` to `walk`; type `include` as `ReadonlyArray`, so the empty-include line compiles.
+// Plant (T2): add `R = Scope` to `walk`; type `include` as `ReadonlyArray`, so the empty-include line compiles. Plant (T5, ticket
+// 1933): add `HistoryTooShort` to `patchId`'s errors; make `patchId` answer a `PatchId` and not an `Option` of one; give it a
+// requirement `Scope`.
 const calls = (repo: Repository.Repository["Service"]) => {
   expectTypeOf<Context.Service.Shape<typeof Repository.Repository>>().toEqualTypeOf<{
     readonly readCommit: (
@@ -44,6 +47,13 @@ const calls = (repo: Repository.Repository["Service"]) => {
       ancestor: CommitId,
       of: CommitId,
     ) => Effect.Effect<boolean, Repository.NoSuchCommit | Repository.HistoryTooShort | Fails>;
+    readonly patchId: (
+      from: CommitId,
+      to: CommitId,
+    ) => Effect.Effect<
+      Option.Option<PatchId>,
+      Repository.NoSuchCommit | Repository.TooMany | Repository.DiffTooLarge | Fails
+    >;
   }>();
 
   // @ts-expect-error A walk names at least one commit to include.

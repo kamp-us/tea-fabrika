@@ -7,7 +7,7 @@
 //
 // A generator's reach is part of its law: every list named `*_CLASSES` below is a class the laws check in
 // every run, each one applied to the run's drawn value, so a missing class fails a law loudly.
-import { Arbitrary, Schema } from "effect";
+import { Arbitrary, Predicate, Schema } from "effect";
 
 // ---------------------------------------------------------------------------------------------------------
 // Pieces
@@ -512,6 +512,8 @@ export const limitsArb = Arbitrary.all({
   commits: intBetween(1, 1_000_000_000),
   refs: intBetween(1, 1_000_000_000),
   bytes: intBetween(1, 1_000_000_000),
+  files: intBetween(1, 1_000_000_000),
+  diff: intBetween(1, 1_000_000_000),
   time: durationTextArb,
 });
 
@@ -1066,6 +1068,9 @@ export const withCanary = (history: History): History => ({
   ...history,
   nodes: history.nodes.map((node, i) => ({
     ...node,
+    // A path and a line of every commit carry the canary, so a call that puts either in a span is seen. Every commit holds
+    // other files, so two different commits always differ in a changed file.
+    files: [textFile(`${CANARY}-path-${i}`, `${CANARY}-line-${i}\n`)],
     message: `${CANARY}-message-${i}`,
     author: { ...node.author, name: `${CANARY}-author-${i}`, email: `${CANARY}-author-${i}@example.test` },
     committer: { ...node.committer, name: `${CANARY}-committer-${i}`, email: `${CANARY}-committer-${i}@example.test` },
@@ -1284,4 +1289,596 @@ export const drawPairs = (shape: Shape, texture: Texture, k: number): ReadonlyAr
   }
 
   return pairs;
+};
+
+// ---------------------------------------------------------------------------------------------------------
+// Edits: the files of two commits, and the change between them as the model names it (ticket 1933)
+// ---------------------------------------------------------------------------------------------------------
+
+const NO_BYTES = new Uint8Array();
+
+/** One character for each byte, so a text of bytes compares and prints exactly. */
+const latin1 = (octets: Uint8Array): string => Array.from(octets, (octet) => String.fromCharCode(octet)).join("");
+
+const joined = (...parts: ReadonlyArray<string | ReadonlyArray<number>>): Uint8Array =>
+  Uint8Array.from(parts.flatMap((part) => (Predicate.isString(part) ? [...utf8(part)] : [...part])));
+
+/** git's own rule for a file it does not split into lines: a NUL byte among the first 8000. */
+const hasNul = (octets: Uint8Array): boolean => octets.subarray(0, 8000).includes(0);
+
+/** The lines of a file, each with its own end. A last line with no newline has none. */
+const splitLines = (octets: Uint8Array): ReadonlyArray<string> => {
+  const text = latin1(octets);
+  const found: Array<string> = [];
+  let start = 0;
+
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\n") {
+      found.push(text.slice(start, i + 1));
+      start = i + 1;
+    }
+  }
+
+  return start < text.length ? [...found, text.slice(start)] : found;
+};
+
+/**
+ * The lines removed and added from one smallest diff, each block with its removed lines first. A file the generator draws
+ * has one smallest diff, so any smallest diff is the one git prints.
+ */
+const lineChanges = (before: ReadonlyArray<string>, after: ReadonlyArray<string>): ReadonlyArray<string> => {
+  const n = before.length;
+  const m = after.length;
+  // `longest.get(i, j)` is the length of the longest common run of `before` from i and `after` from j.
+  const table = new Map<number, number>();
+  const longest = (i: number, j: number): number => (i >= n || j >= m ? 0 : (table.get(i * (m + 1) + j) ?? 0));
+
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      table.set(
+        i * (m + 1) + j,
+        before[i] === after[j] ? longest(i + 1, j + 1) + 1 : Math.max(longest(i + 1, j), longest(i, j + 1)),
+      );
+    }
+  }
+
+  const changes: Array<string> = [];
+  let i = 0;
+  let j = 0;
+
+  while (i < n || j < m) {
+    if (i < n && j < m && before[i] === after[j]) {
+      i += 1;
+      j += 1;
+    } else if (j >= m || (i < n && longest(i + 1, j) >= longest(i, j + 1))) {
+      changes.push(`-${before[i]}`);
+      i += 1;
+    } else {
+      changes.push(`+${after[j]}`);
+      j += 1;
+    }
+  }
+
+  return changes;
+};
+
+const isLink = (mode: FileSpec["mode"]): boolean => mode === "120000";
+
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.length === b.length && a.every((octet, i) => octet === b[i]);
+
+// What a changed file adds to the key: a binary file by the bytes on both sides (git names it by its two blobs), a text file by
+// its removed and added lines in order. `all` is a file that changed kind, whose every old line is removed and every new one added.
+const body = (before: Uint8Array | undefined, after: Uint8Array | undefined, all: boolean): ReadonlyArray<string> => {
+  if (hasNul(before ?? NO_BYTES) || hasNul(after ?? NO_BYTES)) {
+    return ["binary", before === undefined ? "-" : latin1(before), after === undefined ? "-" : latin1(after)];
+  }
+
+  const old = splitLines(before ?? NO_BYTES);
+  const next = splitLines(after ?? NO_BYTES);
+
+  return all ? [...old.map((line) => `-${line}`), ...next.map((line) => `+${line}`)] : lineChanges(old, next);
+};
+
+const section = (path: string, before: FileSpec | undefined, after: FileSpec | undefined): ReadonlyArray<string> => {
+  if (before === undefined && after !== undefined) {
+    return ["new", path, after.mode, ...body(undefined, after.content, false)];
+  }
+
+  if (before !== undefined && after === undefined) {
+    return ["deleted", path, before.mode, ...body(before.content, undefined, false)];
+  }
+
+  if (before === undefined || after === undefined) {
+    return [];
+  }
+
+  if (isLink(before.mode) !== isLink(after.mode)) {
+    return ["kind", path, before.mode, after.mode, ...body(before.content, after.content, true)];
+  }
+
+  const modes = before.mode === after.mode ? [] : [`mode ${before.mode} ${after.mode}`];
+
+  return sameBytes(before.content, after.content)
+    ? ["modified", path, ...modes]
+    : ["modified", path, ...modes, ...body(before.content, after.content, false)];
+};
+
+const changedSections = (
+  before: ReadonlyArray<FileSpec>,
+  after: ReadonlyArray<FileSpec>,
+): ReadonlyArray<{ readonly path: string; readonly from: FileSpec | undefined; readonly to: FileSpec | undefined }> => {
+  const was = new Map(before.map((each) => [each.path, each]));
+  const now = new Map(after.map((each) => [each.path, each]));
+
+  return [...new Set([...was.keys(), ...now.keys()])]
+    .sort(byBytes)
+    .map((path) => ({ path, from: was.get(path), to: now.get(path) }))
+    .filter(
+      ({ from, to }) =>
+        from === undefined || to === undefined || from.mode !== to.mode || !sameBytes(from.content, to.content),
+    );
+};
+
+/**
+ * The model's name for the change from one set of files to another: what a patch id must be equal for. It holds each changed
+ * file in path byte order, with its path, a mode only where it is new, gone or changed, and its removed and added lines with
+ * their own ends, or both sides' bytes for a binary file. It holds no blob id of a text file and no line number. Two changes
+ * have one patch id exactly when their keys are equal, and `undefined` is no change.
+ */
+export const changeKey = (before: ReadonlyArray<FileSpec>, after: ReadonlyArray<FileSpec>): string | undefined => {
+  const sections = changedSections(before, after).map(({ path, from, to }) => section(path, from, to));
+
+  return sections.length === 0 ? undefined : JSON.stringify(sections);
+};
+
+/** How many files two sets of files differ in: a file that changes kind counts once. */
+export const changedFiles = (before: ReadonlyArray<FileSpec>, after: ReadonlyArray<FileSpec>): number =>
+  changedSections(before, after).length;
+
+/** The bytes of content a diff compares: each changed file's bytes before and after, none for a side the file lacks. */
+export const comparedBytes = (before: ReadonlyArray<FileSpec>, after: ReadonlyArray<FileSpec>): number =>
+  changedSections(before, after).reduce(
+    (total, { from, to }) => total + (from?.content.length ?? 0) + (to?.content.length ?? 0),
+    0,
+  );
+
+/** One edit the generator draws: the commits it goes from and to, the files of both, and the model's key of the change. */
+export interface EditCase {
+  readonly label: string;
+  /** The classes of the plan this case reaches. */
+  readonly classes: ReadonlyArray<string>;
+  /** Indexes into the carrier's history. */
+  readonly from: number;
+  readonly to: number;
+  readonly before: ReadonlyArray<FileSpec>;
+  readonly after: ReadonlyArray<FileSpec>;
+  readonly key: string | undefined;
+}
+
+export interface EditCarrier {
+  readonly history: History;
+  readonly cases: ReadonlyArray<EditCase>;
+  /** Each group is the cases that are one edit on bases that differ: their keys, and so their ids, are equal. */
+  readonly same: ReadonlyArray<ReadonlyArray<number>>;
+  /** The drawn edit every `variants` case is one change away from. */
+  readonly drawn: number;
+  readonly variants: ReadonlyArray<number>;
+}
+
+export const EDIT_CLASSES = [
+  "(a) a new file",
+  "(a) a deleted file",
+  "(a) a changed file",
+  "(a) a file made a link",
+  "(a) a link made a file",
+  "(b) a mode-only change",
+  "(c) a NUL in the first 8000 bytes on one side",
+  "(c) a NUL at byte 8000, binary",
+  "(c) a NUL at byte 8001, text",
+  "(d) a last line that loses its newline",
+  "(d) a last line that gains its newline",
+  "(d) CRLF lines",
+  "(d) a change of whitespace only",
+  "(e) a text file in latin-1 bytes",
+  "(f) no change",
+  "(f) an empty file added",
+  "(g) change blocks at the first line and at the last",
+  "(k) the sort traps in the changed paths",
+  "(k) characters past U+024F, from U+E000 to U+FFFF, and __proto__",
+  "(l) the same edit on a base that differs in another file",
+  "(l) the same edit on a base that differs on the line next to it",
+  "(l) the same edit where the edited file is executable on the base",
+  "(l) the same edit lower in the file",
+  "(m) one line changed from the drawn edit: other text",
+  "(m) one line changed from the drawn edit: a trailing space",
+  "(m) one line changed from the drawn edit: its line end only",
+  "(m) the drawn edit at another path",
+  "(m) the drawn edit on another line",
+  "(m) the drawn edit reversed",
+  "(n) a binary edit with other bytes",
+  "(n) the same binary edit on a base that differs in another file",
+  "(n) the drawn edit with a mode change added",
+] as const;
+
+const numbered = (tag: string, count: number, end = "\n"): ReadonlyArray<string> =>
+  Array.from({ length: count }, (_, i) => `${tag}:${i}${end}`);
+
+const replaceAt = (lines: ReadonlyArray<string>, index: number, line: string): ReadonlyArray<string> =>
+  lines.map((each, i) => (i === index ? line : each));
+
+const withoutLastEnd = (lines: ReadonlyArray<string>): ReadonlyArray<string> =>
+  lines.map((each, i) => (i === lines.length - 1 ? each.replace(/\n$/, "") : each));
+
+/**
+ * A history of one line of commits, and the edits between pairs of them. Every file is lines no other line of its file
+ * repeats, and every inserted line is new to its file, so an edit has one smallest diff and git and the memory adapter
+ * print the same lines. A case holds its two commits; a reversed case reuses them the other way round.
+ */
+export const editCarrier = (texture: Texture): EditCarrier => {
+  const p = at(texture.parts, 0);
+  const q = at(texture.parts, 1);
+  const r = at(texture.parts, 2);
+  const src = `s${p}/f${q}`;
+
+  const text = (path: string, lines: ReadonlyArray<string>, mode: FileSpec["mode"] = "100644"): FileSpec =>
+    textFile(path, lines.join(""), mode);
+
+  const base = numbered(p, 5);
+  const drawn = replaceAt(base, 2, `${p}:new2\n`);
+  const other = text(`o${q}`, [`${p}-o:${q}\n`]);
+  const alike = text(`o${q}`, [`${r}-x:${q}\n`, "y\n"]);
+
+  const seed = at(texture.signatures, 0);
+  const nodes: Array<Node> = [];
+
+  const commit = (files: ReadonlyArray<FileSpec>): number => {
+    const i = nodes.length;
+
+    nodes.push({
+      parents: i === 0 ? [] : [i - 1],
+      author: { ...seed, seconds: BASE_SECONDS + i, offset: "+0000" },
+      committer: { ...seed, seconds: BASE_SECONDS + i, offset: "+0000" },
+      message: `edit ${i}`,
+      files,
+    });
+
+    return i;
+  };
+
+  const cases: Array<EditCase> = [];
+
+  const made = (
+    label: string,
+    classes: ReadonlyArray<string>,
+    before: ReadonlyArray<FileSpec>,
+    after: ReadonlyArray<FileSpec>,
+  ): EditCase => {
+    const edit: EditCase = {
+      label,
+      classes,
+      from: commit(before),
+      to: commit(after),
+      before,
+      after,
+      key: changeKey(before, after),
+    };
+
+    cases.push(edit);
+
+    return edit;
+  };
+
+  const reversed = (label: string, classes: ReadonlyArray<string>, source: EditCase): EditCase => {
+    const edit: EditCase = {
+      label,
+      classes,
+      from: source.to,
+      to: source.from,
+      before: source.after,
+      after: source.before,
+      key: changeKey(source.after, source.before),
+    };
+
+    cases.push(edit);
+
+    return edit;
+  };
+
+  // The drawn edit, and the same edit on bases that differ.
+  const first = made("the drawn edit", ["(a) a changed file"], [other, text(src, base)], [other, text(src, drawn)]);
+
+  const same = [
+    first,
+    made(
+      "the same edit, another file differs",
+      ["(l) the same edit on a base that differs in another file"],
+      [alike, text(src, base)],
+      [alike, text(src, drawn)],
+    ),
+    made(
+      "the same edit, the line next to it differs",
+      ["(l) the same edit on a base that differs on the line next to it"],
+      [other, text(src, replaceAt(base, 1, `${p}:next1\n`))],
+      [other, text(src, replaceAt(replaceAt(base, 1, `${p}:next1\n`), 2, `${p}:new2\n`))],
+    ),
+    made(
+      "the same edit, the file is executable on the base",
+      ["(l) the same edit where the edited file is executable on the base"],
+      [other, text(src, base, "100755")],
+      [other, text(src, drawn, "100755")],
+    ),
+    made(
+      "the same edit, lower in the file",
+      ["(l) the same edit lower in the file"],
+      [other, text(src, [`${p}:top0\n`, `${p}:top1\n`, ...base])],
+      [other, text(src, [`${p}:top0\n`, `${p}:top1\n`, ...drawn])],
+    ),
+  ];
+
+  // One change away from the drawn edit.
+  const variants = [
+    made(
+      "other text",
+      ["(m) one line changed from the drawn edit: other text"],
+      [other, text(src, base)],
+      [other, text(src, replaceAt(base, 2, `${p}:other2\n`))],
+    ),
+    made(
+      "a trailing space",
+      ["(m) one line changed from the drawn edit: a trailing space"],
+      [other, text(src, base)],
+      [other, text(src, replaceAt(base, 2, `${p}:new2 \n`))],
+    ),
+    made(
+      "its line end only",
+      ["(m) one line changed from the drawn edit: its line end only"],
+      [other, text(src, base)],
+      [other, text(src, replaceAt(base, 2, `${p}:new2\r\n`))],
+    ),
+    made(
+      "the drawn edit at another path",
+      ["(m) the drawn edit at another path"],
+      [other, text(`s${p}/g${q}`, base)],
+      [other, text(`s${p}/g${q}`, drawn)],
+    ),
+    made(
+      "the drawn edit on another line",
+      ["(m) the drawn edit on another line"],
+      [other, text(src, base)],
+      [other, text(src, replaceAt(base, 3, `${p}:new2\n`))],
+    ),
+    reversed("the drawn edit reversed", ["(m) the drawn edit reversed"], first),
+    made(
+      "the drawn edit with a mode change added",
+      ["(n) the drawn edit with a mode change added"],
+      [other, text(src, base)],
+      [other, text(src, drawn, "100755")],
+    ),
+  ];
+
+  // Binary files: named by their two blobs.
+  const binary = (path: string, last: number): ReadonlyArray<FileSpec> => [
+    file(path, joined("a", [0], String.fromCharCode(last))),
+  ];
+
+  const bin = `b${p}`;
+
+  const binaryEdit = made(
+    "a binary edit",
+    ["(n) a binary edit with other bytes"],
+    binary(bin, 0x62),
+    binary(bin, 0x63),
+  );
+
+  made("a binary edit with other bytes", ["(n) a binary edit with other bytes"], binary(bin, 0x62), binary(bin, 0x64));
+
+  const sameBinary = made(
+    "the same binary edit beside another file",
+    ["(n) the same binary edit on a base that differs in another file"],
+    [other, ...binary(bin, 0x62)],
+    [other, ...binary(bin, 0x63)],
+  );
+
+  // A file that turns binary on one side: two bases that differ only in an unchanged line, so a decision that reads it as
+  // text would give both one id.
+  const turns = (first: string): ReadonlyArray<FileSpec> => [file(`x${p}`, joined(first, "x\n"))];
+  const turned = (first: string): ReadonlyArray<FileSpec> => [file(`x${p}`, joined(first, "x", [0], "\n"))];
+  made("text becomes binary", ["(c) a NUL in the first 8000 bytes on one side"], turns("q\n"), turned("q\n"));
+  made(
+    "text becomes binary, another base",
+    ["(c) a NUL in the first 8000 bytes on one side"],
+    turns("r\n"),
+    turned("r\n"),
+  );
+
+  // A NUL at index 8000 is the 8001st byte, which git does not look at; at index 7999 it does. Each pair is one edit (the first
+  // letter of the long line) on two bases that differ in the line above it.
+  const nul = (above: string, first: string, index: number): Uint8Array =>
+    joined(above, first, "x".repeat(index - above.length - 1), [0], "t\n");
+
+  const long =
+    (above: string, index: number) =>
+    (first: string): ReadonlyArray<FileSpec> => [file(`n${p}`, nul(above, first, index))];
+
+  const text8001 = [
+    made("a NUL at byte 8001", ["(c) a NUL at byte 8001, text"], long("q\n", 8000)("a"), long("q\n", 8000)("b")),
+    made(
+      "a NUL at byte 8001, another base",
+      ["(c) a NUL at byte 8001, text"],
+      long("r\n", 8000)("a"),
+      long("r\n", 8000)("b"),
+    ),
+  ];
+
+  made("a NUL at byte 8000", ["(c) a NUL at byte 8000, binary"], long("q\n", 7999)("a"), long("q\n", 7999)("b"));
+  made(
+    "a NUL at byte 8000, another base",
+    ["(c) a NUL at byte 8000, binary"],
+    long("r\n", 7999)("a"),
+    long("r\n", 7999)("b"),
+  );
+
+  // Kinds of file: new, gone, links.
+  made("a new file", ["(a) a new file"], [other], [other, text(src, base)]);
+  made("a deleted file", ["(a) a deleted file"], [other, text(src, base)], [other]);
+  made("a file made a link", ["(a) a file made a link"], [text(src, base)], [text(src, [`t${q}`], "120000")]);
+  made("a link made a file", ["(a) a link made a file"], [text(src, [`t${q}`], "120000")], [text(src, base)]);
+
+  // Modes.
+  made("a mode-only change", ["(b) a mode-only change"], [text(src, base)], [text(src, base, "100755")]);
+  made("a mode-only change of a binary file", ["(b) a mode-only change"], binary(bin, 0x62), [
+    file(bin, joined("a", [0], "b"), "100755"),
+  ]);
+
+  // Line ends.
+  made(
+    "the last line loses its newline",
+    ["(d) a last line that loses its newline"],
+    [text(src, base)],
+    [text(src, withoutLastEnd(base))],
+  );
+  made(
+    "the last line gains its newline",
+    ["(d) a last line that gains its newline"],
+    [text(src, withoutLastEnd(base))],
+    [text(src, base)],
+  );
+
+  const crlf = numbered(p, 4, "\r\n");
+  made("CRLF lines", ["(d) CRLF lines"], [text(src, crlf)], [text(src, replaceAt(crlf, 2, `${p}:new2\r\n`))]);
+  made(
+    "a change of whitespace only",
+    ["(d) a change of whitespace only"],
+    [text(src, base)],
+    [text(src, replaceAt(base, 2, ` ${p}:2\n`))],
+  );
+
+  // Bytes that are not UTF-8, and no NUL.
+  const latin = (lines: ReadonlyArray<string>): Uint8Array =>
+    joined(...lines.flatMap((line): ReadonlyArray<string | ReadonlyArray<number>> => [[0xe9], line]));
+
+  made("latin-1 lines", ["(e) a text file in latin-1 bytes"], [file(src, latin(base))], [file(src, latin(drawn))]);
+
+  // Nothing changed, and an empty file.
+  made("no change", ["(f) no change"], [other, text(src, base)], [other, text(src, base)]);
+  made("an empty file added", ["(f) an empty file added"], [other], [other, file(`e${p}`, NO_BYTES)]);
+
+  // Several blocks.
+  made(
+    "blocks at the first line and at the last",
+    ["(g) change blocks at the first line and at the last"],
+    [text(src, base)],
+    [text(src, replaceAt(replaceAt(base, 0, `${p}:new0\n`), 4, `${p}:new4\n`))],
+  );
+  made(
+    "blocks at the first line and at the last but one",
+    ["(g) change blocks at the first line and at the last"],
+    [text(src, base)],
+    [text(src, replaceAt(replaceAt(base, 0, `${p}:new0\n`), 3, `${p}:new3\n`))],
+  );
+
+  // Paths: names that sort in traps, and wide characters.
+  const trap = [`f${p}/c`, `f${p}-b`, `f${p}.b`, `f${p}0`];
+  const pair = [`${p}:a\n`, `${p}:b\n`];
+
+  made(
+    "the sort traps",
+    ["(k) the sort traps in the changed paths"],
+    trap.map((path) => text(path, pair)),
+    trap.map((path) => text(path, replaceAt(pair, 1, `${p}:new\n`))),
+  );
+
+  // The same edit at paths one character apart: a hash that folds punctuation or non-ASCII characters together would give two of
+  // these one id.
+  for (const path of [`k${p}-b`, `k${p}.b`]) {
+    made(
+      `the drawn edit at ${path}`,
+      ["(k) the sort traps in the changed paths"],
+      [other, text(path, base)],
+      [other, text(path, drawn)],
+    );
+  }
+
+  for (const mark of ["\u8BBE", "\uFF5A", "\u{1F600}"]) {
+    made(
+      `the drawn edit at ${mark}${p}`,
+      ["(k) characters past U+024F, from U+E000 to U+FFFF, and __proto__"],
+      [other, text(`${mark}${p}`, base)],
+      [other, text(`${mark}${p}`, drawn)],
+    );
+  }
+
+  const wide = ["\u8BBE", "\uFF5A", "\u{1F600}", "\u0250", "\uE000"].map((mark) => `${mark}${p}`).concat("__proto__");
+
+  made(
+    "wide characters and __proto__",
+    ["(k) characters past U+024F, from U+E000 to U+FFFF, and __proto__"],
+    wide.map((path) => text(path, pair)),
+    wide.map((path) => text(path, replaceAt(pair, 0, `${p}:new\n`))),
+  );
+
+  return {
+    history: { nodes, refs: [], shallow: [] },
+    cases,
+    same: [same, [binaryEdit, sameBinary], text8001].map((group) => group.map((each) => cases.indexOf(each))),
+    drawn: cases.indexOf(first),
+    variants: variants.map((each) => cases.indexOf(each)),
+  };
+};
+
+/** The classes of `EDIT_CLASSES` the carrier's cases reach, in the list's order. */
+export const reachedEditClasses = (carrier: EditCarrier): ReadonlyArray<string> => {
+  const reached = new Set(carrier.cases.flatMap((each) => each.classes));
+
+  return EDIT_CLASSES.filter((label) => reached.has(label));
+};
+
+export const LIMIT_CLASSES = [
+  "exactly the files limit",
+  "one file more than the limit",
+  "exactly the diff limit",
+  "one byte more than the limit",
+  "over both limits",
+] as const;
+
+/**
+ * Two commits that differ in four files (one changed, one new, one gone, one whose mode only changes) beside two files that
+ * do not change and are larger than the changed ones together, so a count that includes them is seen.
+ */
+export const limitCarrier = (
+  texture: Texture,
+): { readonly history: History; readonly before: ReadonlyArray<FileSpec>; readonly after: ReadonlyArray<FileSpec> } => {
+  const [a, b, c, d] = [at(texture.blobs, 0), at(texture.blobs, 1), at(texture.blobs, 2), at(texture.blobs, 3)];
+  const p = at(texture.parts, 0);
+  const big = (k: number): Uint8Array => Uint8Array.from({ length: 4000 }, (_, i) => (i * 7 + k) & 255);
+  const longer = Uint8Array.from([...a, 0x41]);
+
+  const before = [
+    file(`u${p}1`, big(1)),
+    file(`u${p}2`, big(2)),
+    file(`c${p}`, a),
+    file(`g${p}`, b),
+    file(`m${p}`, d, "100644"),
+  ];
+
+  const after = [
+    file(`u${p}1`, big(1)),
+    file(`u${p}2`, big(2)),
+    file(`c${p}`, longer),
+    file(`n${p}`, c),
+    file(`m${p}`, d, "100755"),
+  ];
+
+  const seedSignature = at(texture.signatures, 0);
+
+  const nodes = [before, after].map((files, i): Node => ({
+    parents: i === 0 ? [] : [0],
+    author: { ...seedSignature, seconds: BASE_SECONDS + i, offset: "+0000" },
+    committer: { ...seedSignature, seconds: BASE_SECONDS + i, offset: "+0000" },
+    message: `limit ${i}`,
+    files,
+  }));
+
+  return { history: { nodes, refs: [], shallow: [] }, before, after };
 };

@@ -25,6 +25,7 @@ const EXPORTS = [
   "./Ref",
   "./Commit",
   "./Tree",
+  "./Diff",
   "./Settings",
   "./Repository",
   "./memory",
@@ -34,7 +35,8 @@ const EXPORTS = [
   "./package.json",
 ];
 
-// Plant: add a package of the repository (the shared test package) to the dev dependencies.
+// Plant: add a package of the repository (the shared test package) to the dev dependencies; add the npm package `diff` to
+// `dependencies`; leave `./Diff` out of the exports.
 it("K1 scenario: the manifest names no workspace package, has no dependencies, and exports exactly the plan's list", () => {
   const parsed = Schema.decodeUnknownSync(Manifest)(manifest);
 

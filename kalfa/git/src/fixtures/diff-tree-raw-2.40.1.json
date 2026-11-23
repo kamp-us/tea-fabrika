@@ -1,0 +1,425 @@
+{
+  "git": "git version 2.40.1",
+  "command": "git diff-tree -r -z --no-renames <from> <to>, on two commits made with hash-object, update-index and commit-tree in a bare repository",
+  "rows": [
+    {
+      "note": "nothing changed: git prints nothing",
+      "output": "",
+      "expect": []
+    },
+    {
+      "note": "an added file: status A, the first side is mode 000000 and an all-zero id",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCA1NjI2YWJmMGY3MmU1OGQ3YTE1MzM2OGJhNTdkYjRjNjczYzBlMTcxIEEAYQA=",
+      "expect": [
+        {
+          "status": "A",
+          "path": "a",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "5626abf0f72e58d7a153368ba57db4c673c0e171"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a deleted file: status D, the second side is mode 000000 and an all-zero id",
+      "output": "OjEwMDY0NCAwMDAwMDAgNTYyNmFiZjBmNzJlNThkN2ExNTMzNjhiYTU3ZGI0YzY3M2MwZTE3MSAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIEQAYQA=",
+      "expect": [
+        {
+          "status": "D",
+          "path": "a",
+          "before": {
+            "mode": "100644",
+            "id": "5626abf0f72e58d7a153368ba57db4c673c0e171"
+          },
+          "after": null,
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a modified file: status M",
+      "output": "OjEwMDY0NCAxMDA2NDQgNTYyNmFiZjBmNzJlNThkN2ExNTMzNjhiYTU3ZGI0YzY3M2MwZTE3MSBmNzE5ZWZkNDMwZDUyYmNmYzg1NjZhNDNiMmViNjU1Njg4ZDM4ODcxIE0AYQA=",
+      "expect": [
+        {
+          "status": "M",
+          "path": "a",
+          "before": {
+            "mode": "100644",
+            "id": "5626abf0f72e58d7a153368ba57db4c673c0e171"
+          },
+          "after": {
+            "mode": "100644",
+            "id": "f719efd430d52bcfc8566a43b2eb655688d38871"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a mode-only change: status M, one blob, two modes",
+      "output": "OjEwMDY0NCAxMDA3NTUgNTYyNmFiZjBmNzJlNThkN2ExNTMzNjhiYTU3ZGI0YzY3M2MwZTE3MSA1NjI2YWJmMGY3MmU1OGQ3YTE1MzM2OGJhNTdkYjRjNjczYzBlMTcxIE0AYQA=",
+      "expect": [
+        {
+          "status": "M",
+          "path": "a",
+          "before": {
+            "mode": "100644",
+            "id": "5626abf0f72e58d7a153368ba57db4c673c0e171"
+          },
+          "after": {
+            "mode": "100755",
+            "id": "5626abf0f72e58d7a153368ba57db4c673c0e171"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a new empty file: status A, the empty blob",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCBlNjlkZTI5YmIyZDFkNjQzNGI4YjI5YWU3NzVhZDhjMmU0OGM1MzkxIEEAZQA=",
+      "expect": [
+        {
+          "status": "A",
+          "path": "e",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a file made a link: one entry, status T",
+      "output": "OjEwMDY0NCAxMjAwMDAgNTYyNmFiZjBmNzJlNThkN2ExNTMzNjhiYTU3ZGI0YzY3M2MwZTE3MSAxZGU1NjU5MzNiMDVmNzRjNzVmZjlhNjUyMGFmNWY5ZjhhNWEyZjFkIFQAYQA=",
+      "expect": [
+        {
+          "status": "T",
+          "path": "a",
+          "before": {
+            "mode": "100644",
+            "id": "5626abf0f72e58d7a153368ba57db4c673c0e171"
+          },
+          "after": {
+            "mode": "120000",
+            "id": "1de565933b05f74c75ff9a6520af5f9f8a5a2f1d"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a link made a file: one entry, status T",
+      "output": "OjEyMDAwMCAxMDA2NDQgMWRlNTY1OTMzYjA1Zjc0Yzc1ZmY5YTY1MjBhZjVmOWY4YTVhMmYxZCA1NjI2YWJmMGY3MmU1OGQ3YTE1MzM2OGJhNTdkYjRjNjczYzBlMTcxIFQAYQA=",
+      "expect": [
+        {
+          "status": "T",
+          "path": "a",
+          "before": {
+            "mode": "120000",
+            "id": "1de565933b05f74c75ff9a6520af5f9f8a5a2f1d"
+          },
+          "after": {
+            "mode": "100644",
+            "id": "5626abf0f72e58d7a153368ba57db4c673c0e171"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "an added executable file",
+      "output": "OjAwMDAwMCAxMDA3NTUgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCA1NjI2YWJmMGY3MmU1OGQ3YTE1MzM2OGJhNTdkYjRjNjczYzBlMTcxIEEAYQA=",
+      "expect": [
+        {
+          "status": "A",
+          "path": "a",
+          "before": null,
+          "after": {
+            "mode": "100755",
+            "id": "5626abf0f72e58d7a153368ba57db4c673c0e171"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a path with a space, which is no field separator",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCA1ODdiZTZiNGMzZjkzZjkzYzQ4OWMwMTExYmJhNTU5NjE0N2EyNmNiIEEAYSBiAA==",
+      "expect": [
+        {
+          "status": "A",
+          "path": "a b",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "587be6b4c3f93f93c489c0111bba5596147a26cb"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a path with a tab",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCA1ODdiZTZiNGMzZjkzZjkzYzQ4OWMwMTExYmJhNTU5NjE0N2EyNmNiIEEAYQliAA==",
+      "expect": [
+        {
+          "status": "A",
+          "path": "a\tb",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "587be6b4c3f93f93c489c0111bba5596147a26cb"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a path with é, in UTF-8 bytes and not quoted",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCA1ODdiZTZiNGMzZjkzZjkzYzQ4OWMwMTExYmJhNTU5NjE0N2EyNmNiIEEAw6l0w6kA",
+      "expect": [
+        {
+          "status": "A",
+          "path": "été",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "587be6b4c3f93f93c489c0111bba5596147a26cb"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a path with a double quote and a backslash, as they are",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCA1ODdiZTZiNGMzZjkzZjkzYzQ4OWMwMTExYmJhNTU5NjE0N2EyNmNiIEEAcSJ1XG8A",
+      "expect": [
+        {
+          "status": "A",
+          "path": "q\"u\\o",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "587be6b4c3f93f93c489c0111bba5596147a26cb"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a path with a line break, as it is",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCA1ODdiZTZiNGMzZjkzZjkzYzQ4OWMwMTExYmJhNTU5NjE0N2EyNmNiIEEAbApiAA==",
+      "expect": [
+        {
+          "status": "A",
+          "path": "l\nb",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "587be6b4c3f93f93c489c0111bba5596147a26cb"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a file in folders: the path is whole, from the root",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCA1ODdiZTZiNGMzZjkzZjkzYzQ4OWMwMTExYmJhNTU5NjE0N2EyNmNiIEEAZC9lL2YA",
+      "expect": [
+        {
+          "status": "A",
+          "path": "d/e/f",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "587be6b4c3f93f93c489c0111bba5596147a26cb"
+          },
+          "gitlink": false
+        }
+      ]
+    },
+    {
+      "note": "a submodule added: mode 160000, the id of a commit that is not in this repository",
+      "output": "OjAwMDAwMCAxNjAwMDAgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIEEAc3ViAA==",
+      "expect": [
+        {
+          "status": "A",
+          "path": "sub",
+          "before": null,
+          "after": {
+            "mode": "160000",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "gitlink": true
+        }
+      ]
+    },
+    {
+      "note": "a submodule moved to another commit: status M, both sides 160000",
+      "output": "OjE2MDAwMCAxNjAwMDAgYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSBiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIE0Ac3ViAA==",
+      "expect": [
+        {
+          "status": "M",
+          "path": "sub",
+          "before": {
+            "mode": "160000",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "after": {
+            "mode": "160000",
+            "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "gitlink": true
+        }
+      ]
+    },
+    {
+      "note": "a submodule removed: status D",
+      "output": "OjE2MDAwMCAwMDAwMDAgYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIEQAc3ViAA==",
+      "expect": [
+        {
+          "status": "D",
+          "path": "sub",
+          "before": {
+            "mode": "160000",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "after": null,
+          "gitlink": true
+        }
+      ]
+    },
+    {
+      "note": "a file made a submodule: status T",
+      "output": "OjEwMDY0NCAxNjAwMDAgM2Y4OTllYTdhYjUxZGE4MDFkYmFjYmY2MzNjMTY4YjA1OTFkNzc2NSBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIFQAc3ViAA==",
+      "expect": [
+        {
+          "status": "T",
+          "path": "sub",
+          "before": {
+            "mode": "100644",
+            "id": "3f899ea7ab51da801dbacbf633c168b0591d7765"
+          },
+          "after": {
+            "mode": "160000",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "gitlink": true
+        }
+      ]
+    },
+    {
+      "note": "five entries in path order: an addition, a deletion, a change, a type change and a submodule",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCA1NjI2YWJmMGY3MmU1OGQ3YTE1MzM2OGJhNTdkYjRjNjczYzBlMTcxIEEAYQA6MTAwNjQ0IDAwMDAwMCBjOWM2YWY3Zjc4YmM0NzQ5MGRiZjNlODIyY2YyZjNjMjRkNGI5MDYxIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAgRABiADoxMDA2NDQgMTAwNjQ0IGFlOTMwNDU3NmE2ZWMzNDE5YjIzMWIyYjljOGUzM2EwNmY5N2Y5ZmIgMTZmOWVjMDA5ZTU1NjhjNDM1ZjQ3M2JhM2ExZGY3MzJkNDljZThjMyBNAGMAOjEwMDY0NCAxMjAwMDAgNmYxODUyOTc1YjkzMDZhZTVkOGRmZGYwZDRjYjFmNWNiMzZhYzIyOSAxZGU1NjU5MzNiMDVmNzRjNzVmZjlhNjUyMGFmNWY5ZjhhNWEyZjFkIFQAZAA6MDAwMDAwIDE2MDAwMCAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEgQQBzdWIA",
+      "expect": [
+        {
+          "status": "A",
+          "path": "a",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "5626abf0f72e58d7a153368ba57db4c673c0e171"
+          },
+          "gitlink": false
+        },
+        {
+          "status": "D",
+          "path": "b",
+          "before": {
+            "mode": "100644",
+            "id": "c9c6af7f78bc47490dbf3e822cf2f3c24d4b9061"
+          },
+          "after": null,
+          "gitlink": false
+        },
+        {
+          "status": "M",
+          "path": "c",
+          "before": {
+            "mode": "100644",
+            "id": "ae9304576a6ec3419b231b2b9c8e33a06f97f9fb"
+          },
+          "after": {
+            "mode": "100644",
+            "id": "16f9ec009e5568c435f473ba3a1df732d49ce8c3"
+          },
+          "gitlink": false
+        },
+        {
+          "status": "T",
+          "path": "d",
+          "before": {
+            "mode": "100644",
+            "id": "6f1852975b9306ae5d8dfdf0d4cb1f5cb36ac229"
+          },
+          "after": {
+            "mode": "120000",
+            "id": "1de565933b05f74c75ff9a6520af5f9f8a5a2f1d"
+          },
+          "gitlink": false
+        },
+        {
+          "status": "A",
+          "path": "sub",
+          "before": null,
+          "after": {
+            "mode": "160000",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "gitlink": true
+        }
+      ]
+    },
+    {
+      "note": "paths that sort in traps, in the order git lists them: a-b, a.b, a/c, a0",
+      "output": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCBkMDA0OTFmZDdlNWJiNmZhMjhjNTE3YTBiYjMyYjhiNTA2NTM5ZDRkIEEAZi1iADowMDAwMDAgMTAwNjQ0IDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAgZDAwNDkxZmQ3ZTViYjZmYTI4YzUxN2EwYmIzMmI4YjUwNjUzOWQ0ZCBBAGYuYgA6MDAwMDAwIDEwMDY0NCAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIGQwMDQ5MWZkN2U1YmI2ZmEyOGM1MTdhMGJiMzJiOGI1MDY1MzlkNGQgQQBmL2MAOjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCBkMDA0OTFmZDdlNWJiNmZhMjhjNTE3YTBiYjMyYjhiNTA2NTM5ZDRkIEEAZjAA",
+      "expect": [
+        {
+          "status": "A",
+          "path": "f-b",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d"
+          },
+          "gitlink": false
+        },
+        {
+          "status": "A",
+          "path": "f.b",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d"
+          },
+          "gitlink": false
+        },
+        {
+          "status": "A",
+          "path": "f/c",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d"
+          },
+          "gitlink": false
+        },
+        {
+          "status": "A",
+          "path": "f0",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "id": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d"
+          },
+          "gitlink": false
+        }
+      ]
+    }
+  ]
+}
