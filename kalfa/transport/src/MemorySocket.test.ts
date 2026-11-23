@@ -1,6 +1,7 @@
 // M1: the memory pair keeps Effect's reader contract, the one every socket Layer keeps: a pull waiting on an end fails when the end's
 // reader scope closes, the far end reads every frame written before and then fails with the close, a CloseEvent write closes with its
-// code and reason, and a write to a closed end fails and is never dropped in silence.
+// code and reason, and a write to a closed end fails and is never dropped in silence. A WebSocket whose peer closed with 1000 drops
+// the writes it is still given and fails none of them, and so does the pair.
 import { assert, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Exit, Fiber, Option, Predicate, Schema, Scope } from "effect";
 import { Socket } from "effect/socket";
@@ -91,10 +92,37 @@ const closedByEvent = (
     return { refused, read: yield* drained(far) };
   }).pipe(Effect.scoped);
 
+/** The far end closes with 1000: the near end's frames written before are read at the far end, its later writes are dropped. */
+const closedByFar = (
+  before: ReadonlyArray<string | Uint8Array>,
+  frames: ReadonlyArray<string | Uint8Array>,
+  more: string | Uint8Array,
+) =>
+  Effect.gen(function* () {
+    const [near, far] = yield* MemorySocket.pair;
+    const nearWriter = yield* near.writer;
+    const farWriter = yield* far.writer;
+
+    for (const frame of before) {
+      yield* nearWriter.write(frame);
+    }
+
+    for (const frame of frames) {
+      yield* farWriter.write(frame);
+    }
+
+    yield* farWriter.write(new Socket.CloseEvent(1000));
+
+    const written = yield* Effect.exit(nearWriter.write(more));
+    const writtenAll = yield* Effect.exit(nearWriter.writeAll([more]));
+
+    return { written, writtenAll, readByNear: yield* drained(near), readByFar: yield* drained(far) };
+  }).pipe(Effect.scoped);
+
 // M1. Plant: let a write after close succeed and drop the frame; leave a waiting pull blocked when its scope closes; give the far end
 // code 1006 for a closed scope; hand an end's own writes to its own reader; drop the frames waiting when the close came.
 it.effect.prop(
-  "M1 the memory pair keeps Effect's reader contract: a closed reader scope fails a waiting pull and gives the far end close 1000 after its waiting frames, a CloseEvent gives its code and reason, and a write to a closed end fails",
+  "M1 the memory pair keeps Effect's reader contract: a closed reader scope fails a waiting pull and gives the far end close 1000 after its waiting frames, a CloseEvent gives its code and reason, a write to an end that closed itself fails, and a write to an end whose far end closed with 1000 is dropped and fails nothing",
   {
     frames: Arbitrary.array(chunk, { maxLength: 20 }),
     more: chunk,
@@ -117,6 +145,25 @@ it.effect.prop(
       );
       expect(exitClose(byScope.read.exit), "a closed scope: then close 1000").toEqual(
         Option.some({ code: 1000, reason: undefined }),
+      );
+
+      // The far end closed with 1000: the writes the near end is still given are dropped, no frame it wrote before is lost.
+      const byFar = finished(yield* settled(closedByFar(frames, frames, more)), "a far end that closed");
+
+      expect(Exit.isSuccess(byFar.written), "a far end that closed: a write is dropped, and fails nothing").toBe(true);
+      expect(Exit.isSuccess(byFar.writtenAll), "a far end that closed: so is a writeAll").toBe(true);
+      assert.deepStrictEqual(
+        byFar.readByNear.frames,
+        frames,
+        "a far end that closed: the near end reads what the far end sent",
+      );
+      expect(exitClose(byFar.readByNear.exit), "a far end that closed: then close 1000").toEqual(
+        Option.some({ code: 1000, reason: undefined }),
+      );
+      assert.deepStrictEqual(
+        byFar.readByFar.frames,
+        frames,
+        "a far end that closed: the far end reads what the near end wrote before, and not the dropped write",
       );
 
       // A CloseEvent: the far end reads what was waiting, then the code and the reason.

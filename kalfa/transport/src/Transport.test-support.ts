@@ -82,7 +82,7 @@ const piece: Arbitrary.Arbitrary<string> = Arbitrary.all({
 }).pipe(Arbitrary.map((each) => Arr.getUnsafe([each.mark, String.fromCharCode(each.control), each.word], each.kind)));
 
 /** A text with quotes, backslashes, line breaks, control characters, letters past ASCII, an emoji and a lone surrogate in it. */
-const awkwardText: Arbitrary.Arbitrary<string> = Arbitrary.all({
+export const awkwardText: Arbitrary.Arbitrary<string> = Arbitrary.all({
   pieces: Arbitrary.array(piece, { minLength: 1, maxLength: 8 }),
   mark: pick(MARKS),
 }).pipe(Arbitrary.map(({ pieces, mark }) => `${pieces.join("")}${mark}`));

@@ -21,6 +21,7 @@ import {
   seed,
   sends,
   settled,
+  awkwardText,
   textMessage,
   through,
   valueClasses,
@@ -100,7 +101,12 @@ it.effect.prop(
 const CODES = (extra: number): ReadonlyArray<number> => [1000, 1001, 1006, 1011, 4000 + extra];
 
 /** The far end writes `frames`, then closes; the near end's `socket` stream is read to its end. */
-const closedBy = (frames: ReadonlyArray<string | Uint8Array>, close: Socket.CloseEvent, later: boolean) =>
+const closedBy = <R = never>(
+  frames: ReadonlyArray<string | Uint8Array>,
+  close: Socket.CloseEvent,
+  later: boolean,
+  sending: Stream.Stream<string, never, R> = Stream.empty,
+) =>
   Effect.gen(function* () {
     const [near, far] = yield* MemorySocket.pair;
     const writer = yield* far.writer;
@@ -110,7 +116,7 @@ const closedBy = (frames: ReadonlyArray<string | Uint8Array>, close: Socket.Clos
       Effect.andThen(writer.write(close)),
     );
 
-    const nearReads = Stream.empty.pipe(
+    const nearReads = sending.pipe(
       Transport.socket,
       Stream.runForEach((frame) => Effect.sync(() => seen.push(frame))),
       Effect.provideService(Socket.Socket, near),
@@ -335,17 +341,33 @@ it.effect.prop(
 );
 
 // C5. Plant: build `socket` on `Socket.toChannel` and turn each chunk into text with `String()`; decode the chunks with one streaming
-// decoder, so half a character of a frame waits for the next frame.
+// decoder, so half a character of a frame waits for the next frame; encode each text frame to bytes and decode it again (a leading
+// U+FEFF is dropped and a lone surrogate becomes U+FFFD).
 it.effect.prop(
-  "C5 bytes from the far end: frames written as UTF-8 bytes arrive as the same text, one frame each, and a frame that ends in half a character is no part of the frame after it",
+  "C5 frames from the far end: a frame written as text arrives as the same string, a BOM and lone surrogates included, frames written as UTF-8 bytes arrive as the same text, one frame each, and a frame that ends in half a character is no part of the frame after it",
   {
     texts: Arbitrary.array(wellFormedText, { minLength: 1, maxLength: 5 }),
+    raw: Arbitrary.array(awkwardText, { minLength: 1, maxLength: 5 }),
     cut: between(0, 1_000_000),
     later: Arbitrary.schema(Schema.Boolean),
   },
-  ({ texts, cut, later }) =>
+  ({ texts, raw, cut, later }) =>
     Effect.gen(function* () {
       const encoder = new TextEncoder();
+
+      // A frame written as text arrives as the same string: a leading U+FEFF and a lone surrogate are no part of a decoder's work.
+      const sent = [
+        ...raw,
+        `${String.fromCharCode(0xfeff)}${raw[0]}`,
+        `${raw[0]}${String.fromCharCode(0xd800)}`,
+        `${String.fromCharCode(0xdc00)}${raw[0]}`,
+        String.fromCharCode(0xfeff),
+        String.fromCharCode(0xd83d),
+      ];
+
+      const asText = finished(yield* settled(closedBy(sent, new Socket.CloseEvent(1000), later)), "text frames");
+
+      assert.deepStrictEqual(asText.seen, sent, "text frames: the same strings, a BOM and lone surrogates included");
 
       const whole = finished(
         yield* settled(
@@ -417,6 +439,30 @@ it.effect.prop(
         values,
         "the other end read every value sent, in order, and its chain ended cleanly",
       );
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 200 } },
+);
+
+// C7. Plant: let a write to an end whose far end closed with 1000 fail with the write error; end the chain with that failure.
+it.effect.prop(
+  "C7 a write after the far end's clean close is dropped: when the far end closes with 1000 while the near end is still writing, the near chain ends cleanly with every frame the far end sent, whichever came first",
+  {
+    sentBefore: Arbitrary.array(word, { maxLength: 10 }),
+    values: Arbitrary.array(message, { minLength: 1, maxLength: 10 }),
+    later: Arbitrary.schema(Schema.Boolean),
+  },
+  ({ sentBefore, values, later }) =>
+    Effect.gen(function* () {
+      const writing = Stream.fromIterable(values).pipe(Transport.encode(Message), Stream.orDie);
+
+      const { exit, seen } = finished(
+        yield* settled(closedBy(sentBefore, new Socket.CloseEvent(1000), later, writing)),
+        "a near end that writes on",
+      );
+
+      expect(failureFrom(exit).defect, "never a defect").toBe(false);
+      expect(Exit.isSuccess(exit), "the near chain ends cleanly, and never with the write error").toBe(true);
+      assert.deepStrictEqual(seen, sentBefore, "every frame the far end sent before its close is read, in order");
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 200 } },
 );
