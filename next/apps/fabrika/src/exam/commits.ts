@@ -618,13 +618,48 @@ const personVerifier = Effect.gen(function* () {
   });
 });
 
-/** Every note on one notes ref, decoded; one that does not decode is left out. */
+/**
+ * Every note on one notes ref, decoded; one that does not decode is left out. The blobs come from one
+ * `git cat-file --batch`: a process per note took minutes once the ref held thousands.
+ */
 const notesOn = Effect.fnUntraced(function* (ref: string) {
   const found: Array<{ commit: string; note: Note }> = [];
+  const listed = Arr.map(words(yield* git(["notes", `--ref=${ref}`, "list"])), (line) => Str.split(line, " "));
 
-  for (const line of words(yield* git(["notes", `--ref=${ref}`, "list"]))) {
-    const [blob = "", commit = ""] = Str.split(line, " ");
-    const note = decodeNote(Str.trim(yield* git(["cat-file", "blob", blob])));
+  if (listed.length === 0) {
+    return found;
+  }
+
+  const out = new TextEncoder().encode(
+    yield* git(
+      ["cat-file", "--batch"],
+      `${Arr.join(
+        Arr.map(listed, ([blob = ""]) => blob),
+        "\n",
+      )}\n`,
+    ),
+  );
+
+  const decoder = new TextDecoder();
+  let at = 0;
+
+  // Each answer is `<oid> <type> <size>\n<size bytes>\n`; a missing object is `<oid> missing\n`.
+  for (const [, commit = ""] of listed) {
+    const end = out.indexOf(10, at);
+
+    if (end < 0) {
+      break;
+    }
+
+    const size = Number(decoder.decode(out.subarray(at, end)).split(" ")[2]);
+
+    if (Number.isNaN(size)) {
+      at = end + 1;
+      continue;
+    }
+
+    const note = decodeNote(Str.trim(decoder.decode(out.subarray(end + 1, end + 1 + size))));
+    at = end + 1 + size + 1;
 
     if (Option.isSome(note)) {
       found.push({ commit, note: note.value });

@@ -602,3 +602,18 @@ describe("historical exam lists: a build commit is judged by the exam list in it
     );
   });
 });
+
+describe("reading the notes ref in one pass", () => {
+  // scenario: sign reads every note on the ref (one batch read); each new link takes the next version.
+  it("scenario: three signs of one step and ticket are versions 1, 2 and 3, among notes of other tickets", () => {
+    const r = new Repo();
+    r.change("a.ts");
+    r.signWith("build", "300");
+    r.change("b.ts");
+    expect(r.signWith("build").version).toBe(1);
+    r.change("c.ts");
+    expect(r.signWith("build").version).toBe(2);
+    r.change("d.ts");
+    expect(r.signWith("build").version).toBe(3);
+  });
+});
