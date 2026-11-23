@@ -65,7 +65,7 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one r
 
 ## When it fails
 
-stepcommit.sh checks named paths, owners, exam paths and staged formatting.
+stepcommit.sh checks named paths, owners, exam paths and staged formatting. For every step but tests (its laws are red on types until the build), it also runs the typecheck of each package that owns a committed .ts file.
 fetch --sign checks owners and signs missing notes in MAIN.
 A step that `drive.ts` runs in a box does not call this script: drive commits its tree and signs it.
 `--commit-only` runs the same checks and leaves signing to fetch.
