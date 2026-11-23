@@ -10,6 +10,12 @@ One thing a package reports: a code, a severity, a message, a place and a hint. 
 on. A typed error may carry its own diagnostic.
 _Avoid_: finding, issue, problem, result
 
+**Carried diagnostic**:
+A diagnostic a typed error holds: its declared code and the message, place and hint beside it, kept as given and
+checked only when the code that handles the error reports it. It is always an error, never a warning, since the
+subcommand stopped.
+_Avoid_: attached diagnostic, error diagnostic, embedded diagnostic, payload
+
 **Code**:
 A diagnostic's stable name, such as `config/unknown-setting`, that starts with its subcommand's root name and stays the
 same when the message's words change. A package declares each code once, with its long text, and reports only

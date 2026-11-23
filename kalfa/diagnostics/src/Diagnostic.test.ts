@@ -1,13 +1,16 @@
 // The laws of what a diagnostic is (Diagnostic.ts): the code's form, the four kinds of place, the text of a place,
 // a reported diagnostic and a declared code. They are laws D1 to D4 and D18 to D23.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Effect, Exit, Result, Schema } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Option, Result, Schema } from "effect";
 import {
   type Break,
   blank,
   CODE_BREAKS,
   codeParts,
   blanksFrom,
+  carriedSets,
+  carriers,
+  carryHeld,
   environmentBreaks,
   environmentPlaces,
   fieldVariants,
@@ -18,16 +21,23 @@ import {
   goodPlaces,
   goodText,
   homeBreaks,
+  type Failure,
   homePlaces,
+  leftBehind,
+  between,
+  nonCarriers,
   observed,
   otherSeverity,
   placeParts,
   repoBreaks,
+  reached,
   repoPlaces,
   rootedAtLogin,
   SEED,
+  schemaErrorIn,
   shapeBreaks,
   TEXT_KINDS,
+  throwing,
   toCode,
 } from "./Diagnostic.test-support.ts";
 import * as Diagnostic from "./Diagnostic.ts";
@@ -174,20 +184,6 @@ describe("D22, the text form", () => {
     { arbitrary: { seed: SEED, runs: 200 } },
   );
 });
-
-// Every text a refused place may leave behind: the message of a SchemaError, its own JSON form, and the issue
-// tree under it, which a log that walks the error carries (`JSON.stringify` of the error alone leaves the issue out).
-const leftBehind = (error: Schema.SchemaError | undefined): ReadonlyArray<string> =>
-  error === undefined ? [] : [error.message, JSON.stringify(error), JSON.stringify(error.issue)];
-
-// The SchemaError an exit died of, if it died of one.
-const schemaErrorIn = (exit: Exit.Exit<void>): Schema.SchemaError | undefined =>
-  Exit.isFailure(exit)
-    ? Result.match(Cause.findDefect(exit.cause), {
-        onSuccess: (defect) => (Schema.isSchemaError(defect) ? defect : undefined),
-        onFailure: () => undefined,
-      })
-    : undefined;
 
 // D23 [secrets]. A login holds a digit, so no fixed word of a message can hold it by chance. Every root is
 // refused as a home place and as a repo place in every run, the Windows drive with forward slashes included
@@ -342,5 +338,129 @@ describe("D4, make declares", () => {
       }
     },
     { arbitrary: { seed: SEED, runs: 100 } },
+  );
+});
+
+const declare = (code: string): Diagnostic.Declared => Diagnostic.make(code, { explain: "A long text." });
+
+// What `fromError` finds in a value, or nothing.
+const readCarried = (value: Failure): Diagnostic.Carried | undefined =>
+  Option.getOrUndefined(Diagnostic.fromError(value));
+
+// Every class of value in every run: each draw is made into a value of each class (a) to (k), so no run passes on less,
+// and a generator that missed a class would let its plant through.
+
+// D26. Plant: (a) read only an own key, `Object.hasOwn(error, "diagnostic")`, and the class's getter is not seen;
+// (b) answer none unless `Predicate.isError(error)`, and the plain object is missed; (c) answer none unless the
+// value has a `_tag`, and the native error is missed.
+describe("D26, fromError finds what is carried", () => {
+  it.prop(
+    "a value that carries carry(declared, fields) gives some Carried with that Declared and the fields as given, always an error, and for a held key the very value it holds",
+    { code: goodCode, drawn: goodFieldsAndParts },
+    ({ code, drawn }) => {
+      const declared = declare(code);
+
+      // The drawn fields, and the fields made into each kind of odd good text and place.
+      for (const spread of [drawn.fields, ...fieldVariants(drawn)]) {
+        const found = carriers(declared, spread);
+
+        // Each class (a), (b) and (c) is reached, or the law fails loudly.
+        expect(reached(found)).toEqual(["a", "b", "c"]);
+
+        for (const { name, value, held } of found) {
+          const carried = readCarried(value);
+
+          expect(carried, name).toBeDefined();
+          expect(carried?.declared, name).toBe(declared);
+          expect(carried?.fields, name).toEqual({
+            severity: "error",
+            message: spread.message,
+            place: spread.place,
+            hint: spread.hint,
+          });
+
+          if (held !== undefined) {
+            expect(carried, name).toBe(held);
+          }
+        }
+      }
+    },
+    { arbitrary: { seed: SEED, runs: 200 } },
+  );
+});
+
+// D27. Plant: (d) test `"diagnostic" in error` with no object check, and a string or null throws; (e) answer
+// `Option.some(error.diagnostic)` for every object, and `{}` gives some(undefined); (f) check for `declared` and
+// `fields` keys in place of the symbol, and the look-alike is found; and check only that `diagnostic` is not null,
+// and the plain reported diagnostic is found; (e) follow `cause` and `cause.cause` and answer what they carry, and
+// an error wrapping a carrier is found.
+describe("D27, fromError finds nothing and never throws", () => {
+  it.prop(
+    "a value that is no object, an object with no diagnostic key, or a diagnostic that carry did not make gives none",
+    { code: goodCode, drawn: goodFieldsAndParts, text: goodText, count: between(-100000, 100000) },
+    ({ code, drawn, text, count }) => {
+      const found = nonCarriers(declare(code), drawn.fields, { text, count });
+
+      // Each class (d), (e) and (f) is reached, or the law fails loudly.
+      expect(reached(found)).toEqual(["d", "e", "f"]);
+
+      for (const { name, value } of found) {
+        expect(Option.isNone(Diagnostic.fromError(value)), name).toBe(true);
+      }
+    },
+    { arbitrary: { seed: SEED, runs: 200 } },
+  );
+});
+
+// D28. Plant: (g) wrap the read in `try` and answer none on a throw, and nothing is thrown.
+describe("D28, a getter that throws is not caught", () => {
+  it.effect.prop(
+    "a diagnostic getter that throws a drawn error makes fromError throw that same error",
+    { message: goodText },
+    ({ message }) =>
+      Effect.gen(function* () {
+        const boom = new Error(message);
+        const shaped = throwing(boom);
+
+        // A read that throws is a defect of the run, and one that does not is a success.
+        const exit = yield* Effect.exit(Effect.sync(() => Diagnostic.fromError(shaped.value)));
+        const defect = Exit.isFailure(exit) ? Result.getOrUndefined(Cause.findDefect(exit.cause)) : undefined;
+
+        expect(reached([shaped])).toEqual(["g"]);
+        expect(defect).toBe(boom);
+      }),
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
+});
+
+// D29. Plant: (h) trim the message in `carry`, and a text kind with a space in front comes back changed; and decode
+// the place in `carry` and keep the decoded copy, and `toBe` fails; (i) decode the fields with `Reported` in `carry`
+// and throw on a bad one, and a blank hint throws; (j) build the fields as `{ severity: "error", ...fields }`, and a
+// smuggled "warning" wins.
+describe("D29, carry keeps what it is given, unchecked", () => {
+  it.prop(
+    "good fields of every kind, bad fields of every kind and a smuggled severity are all kept as given, and the severity is error",
+    { code: goodCode, drawn: goodFieldsAndParts, blanks: blank, other: otherSeverity },
+    ({ code, drawn, blanks, other }) => {
+      const declared = declare(code);
+      const sets = carriedSets({ drawn, blanks, other });
+
+      // The odd good fields (h), the bad ones (i) and a smuggled severity (j) are all in the run.
+      expect(sets.length).toBeGreaterThan(fieldVariants(drawn).length);
+
+      for (const { name, spread } of sets) {
+        // A spread is a variable typed wider than `carry`'s parameter, as a caller's would be.
+        const carried = carryHeld(declared, spread);
+
+        expect(carried.declared, name).toBe(declared);
+        expect(carried.fields.message, name).toBe(spread.message);
+        expect(carried.fields.hint, name).toBe(spread.hint);
+        expect(carried.fields.place, name).toBe(spread.place);
+        expect(carried.fields.severity, name).toBe("error");
+        // Nothing else rides along.
+        expect(Object.keys(carried.fields).toSorted(), name).toEqual(["hint", "message", "place", "severity"]);
+      }
+    },
+    { arbitrary: { seed: SEED, runs: 200 } },
   );
 });

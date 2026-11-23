@@ -36,6 +36,7 @@ import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
+import type * as Queue from "./Queue.ts";
 
 const oid = "0123456789abcdef0123456789abcdef01234567";
 
@@ -555,6 +556,157 @@ describe("merge: land.ts admin never merges ahead of ci-required, a can/ branch 
 
       expect(fiber.reason).toContain(`its head moved from ${oid} to ${moved}`);
       expect(m.github.calls).toEqual([]);
+    }),
+  );
+});
+
+/** An entry of the merge queue, as GitHub lists it. */
+const entry = (number: number, state = "AWAITING_CHECKS") => ({ number, state });
+
+describe("merge: an admin merge waits for the merge queue to empty (2026-11-22: three restarts of one entry's build in six minutes)", () => {
+  const Role = Schema.Literals(["other", "fix", "ready"]);
+
+  const routeAs = (role: typeof Role.Type) =>
+    role === "fix" ? admin([], branch) : role === "ready" ? admin([branch]) : admin();
+
+  /** One admin merge on a queue that answers these reads, with or without a queue wait, and 61 minutes for it to finish. */
+  const queued = (
+    m: ReturnType<typeof memory>,
+    reads: ReadonlyArray<ReadonlyArray<ReturnType<typeof entry>>>,
+    role: typeof Role.Type,
+    queueWait: Queue.Wait | undefined,
+    extra: Layer.Layer<never> = Layer.empty,
+  ) =>
+    Effect.gen(function* () {
+      m.github.queue.push(...reads);
+
+      const fiber = yield* Merge.merge({
+        dir: ".",
+        pr: 1415,
+        route: routeAs(role),
+        wait: { minutes: 5, every: 10 },
+        ...(queueWait ? { queueWait } : {}),
+      }).pipe(Effect.provide(Layer.merge(m.layer, extra)), Effect.result, Effect.forkChild);
+
+      yield* TestClock.adjust("61 minutes");
+
+      return yield* Fiber.join(fiber);
+    });
+
+  const everyMinute: Queue.Wait = { minutes: 60, every: 60 };
+
+  // Plants: admin-merge with an entry in the queue; give a sev fix or a sev0's ready pull request the wait (it is never
+  // slowed); read the queue once with a wait; count the pull request's own entry; read a queue that failed to read as empty;
+  // drop the wait's limit.
+  it.effect.prop(
+    "property: an admin merge of a pull request that is no fix and no sev0 ready one is asked only once the queue holds no other entry (read again with a wait, once without one); a fix or a sev0's ready one never waits on it",
+    {
+      role: Role,
+      busy: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
+      end: Schema.Literals(["empty", "never"]),
+      waits: Schema.Boolean,
+      own: Schema.Boolean,
+    },
+    ({ role, busy, end, waits, own }) =>
+      Effect.gen(function* () {
+        const m = memory({ head: branch });
+        const mine = own ? [entry(1415, "QUEUED")] : [];
+
+        const reads = [
+          ...Array.from({ length: busy }, () => [entry(1922), ...mine]),
+          end === "empty" ? mine : [entry(1922), ...mine],
+        ];
+
+        const answer = yield* queued(m, reads, role, waits ? everyMinute : undefined);
+
+        const clear = role !== "other" || (waits ? end === "empty" : busy === 0 && end === "empty");
+
+        expect(answer._tag).toBe(clear ? "Success" : "Failure");
+        expect(m.github.calls).toEqual(clear ? [{ _tag: "admin", number: 1415, oid }] : []);
+
+        if (!clear && answer._tag === "Failure") {
+          expect(String(answer.failure.reason)).toContain("pr 1922 is in the merge queue (AWAITING_CHECKS)");
+          expect(String(answer.failure.reason)).toContain("restarts its build");
+        }
+      }),
+    { arbitrary: { seed: 1122, runs: runsFor({ fast: 60, full: 200 }) } },
+  );
+
+  // Plants: mark the draft ready before the queue is empty (the ready run is thrown away when the entry restarts it); mark it
+  // ready while no run has started at its head (a ready event seconds after a push starts a second run on one commit, and the
+  // required check stays expected); read the head's run once.
+  it.effect(
+    "scenario: a draft is marked ready neither while the queue holds an entry nor before a run has started at its head",
+    () =>
+      Effect.gen(function* () {
+        const crowded = memory({ draft: true });
+        const held = yield* queued(crowded, [[entry(1922)]], "other", everyMinute);
+        expect(held._tag).toBe("Failure");
+        expect(crowded.github.calls).toEqual([]);
+
+        const later = memory({ draft: true });
+
+        const eventually = yield* queued(
+          later,
+          [[entry(1922)], []],
+          "other",
+          everyMinute,
+          ChecksTest.layer([Option.some({ id: 1, status: "completed", conclusion: "success" })], "", [
+            false,
+            false,
+            true,
+          ]),
+        );
+
+        expect(eventually._tag).toBe("Success");
+
+        expect(later.github.calls).toEqual([
+          { _tag: "ready", number: 1415 },
+          { _tag: "admin", number: 1415, oid },
+        ]);
+
+        const unstarted = memory({ draft: true });
+
+        const stuck = yield* queued(
+          unstarted,
+          [],
+          "other",
+          undefined,
+          ChecksTest.layer([Option.some({ id: 1, status: "completed", conclusion: "success" })], "", [false]),
+        );
+
+        expect(stuck._tag === "Failure" ? String(stuck.failure.reason) : "").toContain(
+          `no CI run has started at ${oid}`,
+        );
+        expect(unstarted.github.calls).toEqual([]);
+      }),
+  );
+
+  // Plant: a queue that cannot be read reads as an empty one.
+  it.effect("scenario: a queue that cannot be read refuses, with or without a wait, and nothing is merged", () =>
+    Effect.gen(function* () {
+      for (const queueWait of [undefined, everyMinute]) {
+        const m = memory();
+
+        const answer = yield* queued(
+          m,
+          [],
+          "other",
+          queueWait,
+          PullRequestsTest.layer(m.github, { queue: "gh: offline" }),
+        );
+
+        expect(answer._tag === "Failure" ? String(answer.failure.reason) : "").toContain("gh: offline");
+        expect(m.github.calls).toEqual([]);
+      }
+    }),
+  );
+
+  it.effect("scenario: without a wait the refusal says how to wait", () =>
+    Effect.gen(function* () {
+      const m = memory();
+      const answer = yield* queued(m, [[entry(1922, "LOCKED")]], "other", undefined);
+      expect(answer._tag === "Failure" ? String(answer.failure.reason) : "").toContain("--wait");
     }),
   );
 });

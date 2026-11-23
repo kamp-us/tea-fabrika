@@ -4,7 +4,15 @@
 import { Effect, Layer, Option, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { type Given, lastLine, run } from "./command.ts";
-import { type Detail, Patch, type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
+import {
+  type Detail,
+  Patch,
+  type PullRequest,
+  PullRequests,
+  PullRequestsError,
+  type QueueEntry,
+  type Text,
+} from "./PullRequests.ts";
 
 /** The most pull requests one `all` read takes; a repo with this many fails it, never cuts it. */
 export const LIMIT = 5000;
@@ -72,6 +80,35 @@ export const ARM = `mutation($id: ID!, $oid: GitObjectID!) {
     clientMutationId
   }
 }`;
+
+/** The merge queue for main: each entry's pull request and state, first in line first. `mergeQueue` is null where main has none. */
+const QUEUE = `query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    mergeQueue(branch: "main") {
+      entries(first: 100) {
+        nodes { state pullRequest { number } }
+      }
+    }
+  }
+}`;
+
+const Queued = Schema.fromJsonString(
+  Schema.Struct({
+    data: Schema.Struct({
+      repository: Schema.Struct({
+        mergeQueue: Schema.NullOr(
+          Schema.Struct({
+            entries: Schema.Struct({
+              nodes: Schema.Array(
+                Schema.Struct({ state: Schema.String, pullRequest: Schema.Struct({ number: Schema.Finite }) }),
+              ),
+            }),
+          }),
+        ),
+      }),
+    }),
+  }),
+);
 
 /** `owner/name` from an origin URL GitHub serves, https or ssh; `null` for any other. */
 export const repoFromUrl = (url: string): string | null =>
@@ -261,6 +298,20 @@ export const make = (
       yield* gh(["api", "graphql", "-f", `query=${ARM}`, "-f", `id=${id}`, "-f", `oid=${oid}`]);
     });
 
+    const queue = Effect.fn("PullRequestsGh.queue")(function* () {
+      const [owner = "", name = ""] = repo.split("/");
+      const out = yield* gh(["api", "graphql", "-f", `query=${QUEUE}`, "-F", `owner=${owner}`, "-F", `name=${name}`]);
+
+      const read = yield* Schema.decodeEffect(Queued)(out).pipe(
+        Effect.mapError(() => PullRequestsError.make({ reason: "gh api graphql answered a shape we do not read" })),
+      );
+
+      return (read.data.repository.mergeQueue?.entries.nodes ?? []).map((n): QueueEntry => ({
+        number: n.pullRequest.number,
+        state: n.state,
+      }));
+    });
+
     const admin = (number: number, oid: string) => Effect.asVoid(gh(adminArgs(repo, number, oid)));
 
     return PullRequests.of({
@@ -271,6 +322,7 @@ export const make = (
       ready,
       view,
       enqueue,
+      queue: queue(),
       files,
       patches,
       arm,

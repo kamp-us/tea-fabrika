@@ -1,3 +1,4 @@
+import { it as effectIt } from "@effect/vitest";
 // Today's lead tooling. ChecksGh's polls are conditional requests; no test here reaches GitHub: a
 // spawner in memory stands in for `gh`.
 import { Effect, Layer, Option, type Result, Sink, Stream } from "effect";
@@ -200,4 +201,46 @@ describe("a poll of a job is a conditional request, today's tooling", () => {
         expect(sent(calls)).toEqual([null, null]);
       },
     ));
+});
+
+describe("whether a head has started a run, today's tooling", () => {
+  /** One `started` read at the head on a `gh` that gives this answer: what it found, and the arguments `gh` got. */
+  const started = (answer: Ran) => {
+    const fake = gh([answer]);
+
+    return Effect.gen(function* () {
+      const found = yield* Effect.result((yield* Checks).started(head));
+
+      return { found, calls: fake.calls };
+    }).pipe(Effect.provide(Layer.provide(ChecksGh.layer("example/repo"), fake.layer)));
+  };
+
+  // Plants: name a check in the read, so a draft's `ci-required (draft)` is the only run that counts; count another app's run.
+  effectIt.effect("scenario: it asks for the latest runs of any name, and only a GitHub Actions run counts", () =>
+    Effect.gen(function* () {
+      const none = yield* started(ok('W/"a"', []));
+      expect(none.found).toMatchObject({ _tag: "Success", success: false });
+      const other = yield* started(ok('W/"a"', [run(4, "completed", "success", "some-other-app")]));
+      expect(other.found).toMatchObject({ _tag: "Success", success: false });
+      const queued = yield* started(ok('W/"b"', [run(5, "queued", null)]));
+      expect(queued.found).toMatchObject({ _tag: "Success", success: true });
+
+      expect(queued.calls[0]).toEqual([
+        "api",
+        "-i",
+        `repos/example/repo/commits/${head}/check-runs`,
+        "-X",
+        "GET",
+        "-f",
+        "filter=latest",
+      ]);
+    }),
+  );
+
+  effectIt.effect("scenario: a failed read is a failure, never a head with no run", () =>
+    Effect.gen(function* () {
+      const down = yield* started({ out: "", err: "gh: HTTP 502", code: 1 });
+      expect(down.found._tag).toBe("Failure");
+    }),
+  );
 });
