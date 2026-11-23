@@ -767,6 +767,23 @@ export interface Item {
   readonly fields: Parameters<typeof Diagnostics.report>[1];
 }
 
+// A tracer that keeps every span it hands out, over the one the test runs under.
+const watching = Effect.gen(function* () {
+  const delegate = yield* Tracer.Tracer;
+  const spans: Array<Tracer.Span> = [];
+
+  const tracer = Tracer.make({
+    span(options) {
+      const span = delegate.span(options);
+      spans.push(span);
+
+      return span;
+    },
+  });
+
+  return { spans, tracer };
+});
+
 /**
  * What a run of reports did: how it ended, what a fresh test Layer then held, and every span it made. The `before`
  * items are good and reported first; the last report takes any object as its fields, so a law can report one that
@@ -774,17 +791,7 @@ export interface Item {
  */
 export const observed = (code: string, fields: object, before: ReadonlyArray<Item> = []) =>
   Effect.gen(function* () {
-    const delegate = yield* Tracer.Tracer;
-    const spans: Array<Tracer.Span> = [];
-
-    const tracer = Tracer.make({
-      span(options) {
-        const span = delegate.span(options);
-        spans.push(span);
-
-        return span;
-      },
-    });
+    const { spans, tracer } = yield* watching;
 
     const declared = Diagnostic.make(code, { explain: "A long text." });
     // @ts-expect-error `fields` is any object, not `Fields`: this helper reports good fields and bad ones alike
@@ -875,6 +882,11 @@ export class CarryingError extends Schema.TaggedError<CarryingError, { readonly 
     return carryHeld(this.declared, this);
   }
 }
+
+/** A typed error with a `cause` field and no getter: whatever its cause carries, it carries nothing itself. */
+class CausedError extends Schema.TaggedError<CausedError, { readonly brand: unique symbol }>()("CausedError", {
+  cause: AnObject,
+}) {}
 
 /** A typed error with no getter: it carries nothing. */
 class PlainError extends Schema.TaggedError<PlainError, { readonly brand: unique symbol }>()("PlainError", {
@@ -1005,6 +1017,19 @@ export const nonCarriers = (
     ["an array", [text]],
     ["an object with no prototype", Object.create(null)],
     ["a function", () => text],
+    // No `cause` is followed: an error that wraps another says itself which diagnostic it is.
+    ...carriers(declared, spread).flatMap(({ id, value }): ReadonlyArray<[string, Failure]> =>
+      Predicate.isObjectKeyword(value)
+        ? [
+            [`a native Error whose cause is a carrier (${id})`, new Error(text, { cause: value })],
+            [`a TaggedError with a cause field holding a carrier (${id})`, new CausedError({ cause: value })],
+            [
+              `a native Error two causes deep from a carrier (${id})`,
+              new Error(text, { cause: new Error(text, { cause: value }) }),
+            ],
+          ]
+        : [],
+    ),
   ];
 
   const impostors: ReadonlyArray<[string, Impostor]> = [
@@ -1088,23 +1113,6 @@ export const carriedSets = ({
 ];
 
 // ---- a handler that reads what an error carries and reports it, watched
-
-// A tracer that keeps every span it hands out, over the one the test runs under.
-const watching = Effect.gen(function* () {
-  const delegate = yield* Tracer.Tracer;
-  const spans: Array<Tracer.Span> = [];
-
-  const tracer = Tracer.make({
-    span(options) {
-      const span = delegate.span(options);
-      spans.push(span);
-
-      return span;
-    },
-  });
-
-  return { spans, tracer };
-});
 
 /**
  * What the one handler does with each value of a list: read it with `fromError`, and report a carried diagnostic

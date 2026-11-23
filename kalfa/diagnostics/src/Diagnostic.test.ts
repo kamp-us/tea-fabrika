@@ -392,7 +392,8 @@ describe("D26, fromError finds what is carried", () => {
 // D27. Plant: (d) test `"diagnostic" in error` with no object check, and a string or null throws; (e) answer
 // `Option.some(error.diagnostic)` for every object, and `{}` gives some(undefined); (f) check for `declared` and
 // `fields` keys in place of the symbol, and the look-alike is found; and check only that `diagnostic` is not null,
-// and the plain reported diagnostic is found.
+// and the plain reported diagnostic is found; (e) follow `cause` and `cause.cause` and answer what they carry, and
+// an error wrapping a carrier is found.
 describe("D27, fromError finds nothing and never throws", () => {
   it.prop(
     "a value that is no object, an object with no diagnostic key, or a diagnostic that carry did not make gives none",
