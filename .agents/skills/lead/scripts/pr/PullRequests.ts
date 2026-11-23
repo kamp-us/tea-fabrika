@@ -50,6 +50,15 @@ export const Patch = Schema.Struct({ path: Schema.String, patch: Schema.NullOr(S
 
 export type Patch = typeof Patch.Type;
 
+/**
+ * One entry of the merge queue for main, as GitHub's `mergeQueue` lists it: the pull request in it
+ * and how it stands there (`AWAITING_CHECKS`, `QUEUED`, `LOCKED`, `MERGEABLE`, `UNMERGEABLE`). Any
+ * entry has a build running or about to, which an admin merge to main restarts.
+ */
+export const QueueEntry = Schema.Struct({ number: Schema.Finite, state: Schema.String });
+
+export type QueueEntry = typeof QueueEntry.Type;
+
 /** What a new or edited pull request says: its title and its description. */
 export type Text = { readonly title: string; readonly body: string };
 
@@ -73,6 +82,8 @@ export class PullRequests extends Context.Service<
      * a merge queue this adds it to the queue: GitHub tests it on newest main and merges it later.
      */
     readonly enqueue: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
+    /** Every entry of the merge queue for main now, first in line first; none when the queue is empty or main has no queue. */
+    readonly queue: Effect.Effect<ReadonlyArray<QueueEntry>, PullRequestsError>;
     /** The path of every file pull request `number` changes. */
     readonly files: (number: number) => Effect.Effect<ReadonlyArray<string>, PullRequestsError>;
     /** Each file pull request `number` changes, with its diff hunks (pr/Names.ts reads them, a new helper names the tools it searched, and a new name cites the industry's word). */
