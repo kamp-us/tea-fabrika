@@ -209,7 +209,7 @@ const first = await Effect.runPromise(
     Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
   ),
 );
-// [{ app: "demo", values: { "instance.port": 18800 }, origins: { "instance.port": { _tag: "default" } }, hash: "0083..." }]
+// [{ app: "demo", values: { "instance.port": 18800 }, origins: { "instance.port": { _tag: "default" } }, hash: "008d9371f1e4..." }]
 ```
 
 `snapshots(group)` gives the snapshot of the files now, then one more each time a change to a file is taken and the
