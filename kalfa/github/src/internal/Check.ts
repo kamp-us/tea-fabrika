@@ -241,7 +241,7 @@ type Declaration<
   PayloadPart<R, P> &
   SuccessPart<R, S, B> &
   BodilessPart<R> &
-  BodyPart<R, B> & { readonly auth?: A; readonly accept?: string };
+  BodyPart<R, B> & { readonly auth?: A extends "none" ? A : never; readonly accept?: string };
 
 type Needs<R extends RouteName> =
   IsTextOnly<R> extends true
