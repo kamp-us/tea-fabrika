@@ -11,15 +11,15 @@ import type { Watched } from "./window.ts";
 /** One optional text flag: none when the person did not give it. */
 type Text = Flag.Flag<Option.Option<string>>;
 
-/** One flag per setting a flag may set, by setting name, and the quiet window's for a group with a live setting. A file-only setting has none, so each named key is optional. Names that are only `string` make a plain record. */
+/** One flag per setting a flag may set, by setting name, and the quiet window's for a group with a live setting. A file-only setting has none, so its key is left out and each other key is optional. Names that are only `string` make a plain record. */
 export type Flags<R extends ReadonlyArray<Setting.Any>> = string extends R[number]["name"]
   ? Readonly<Record<string, Text>>
-  : { readonly [S in Watched<R>[number] as S["name"]]?: Text };
+  : { readonly [S in Watched<R>[number] as S["fileOnly"] extends true ? never : S["name"]]?: Text };
 
 /** What a command's handler gets for those flags: each flag's text, or none when the person did not give it. */
 export type FlagValues<R extends ReadonlyArray<Setting.Any>> = string extends R[number]["name"]
   ? Readonly<Record<string, Option.Option<string>>>
-  : { readonly [S in Watched<R>[number] as S["name"]]?: Option.Option<string> };
+  : { readonly [S in Watched<R>[number] as S["fileOnly"] extends true ? never : S["name"]]?: Option.Option<string> };
 
 // The names and aliases Effect's runner reads before a command's own flags, from its default built-ins.
 const kept: ReadonlySet<string> = new Set(

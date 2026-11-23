@@ -16,6 +16,10 @@
 //   `@ts-expect-error` for another group's setting is unused.
 // - T9 (ticket 1843, slice 3): type the disk `set`'s value as `unknown`, so the `@ts-expect-error` for a wrong value is
 //   unused.
+// - FO6 (ticket 1842, the file-only mark in the type): (a) type `Setting.fileOnly` as `<S extends Any>(self: S) => S`, so
+//   the `true` mark is lost and `fileOnly` twice compiles; (b) key `Flags` and `FlagValues` by every setting's name, so
+//   the record that names a file-only setting compiles; (c) type `Setting.live` as returning `Setting<N, A, true>`, so a
+//   file-only setting that is made live loses its mark.
 // - T6, one at a time, each on `Declaration.ts`: (a) type `make`'s schema as `C` again; (b) drop the brand line of
 //   `NotPlain`; (c) drop its "met before" check; (d) compare with "assignable one way" in place of `Same`; (e) answer
 //   `T` whole at the record line.
@@ -87,6 +91,34 @@ const liveLast = base.pipe(
   Setting.live,
 );
 
+// FO6 (ticket 1842): file-only is a mark in the type, as `live` is. The same combinators, with `fileOnly` and `live` in
+// each order and among the others.
+const fileOnlyAlone = base.pipe(Setting.withDescription("Who carries a rule over."), Setting.fileOnly);
+
+const fileOnlyFirst = base.pipe(
+  Setting.fileOnly,
+  Setting.withDefault("people"),
+  Setting.withDescription("Who carries a rule over."),
+  Setting.live,
+  Setting.files(["repo"]),
+);
+
+const fileOnlyLast = base.pipe(
+  Setting.live,
+  Setting.files(["repo"]),
+  Setting.withDefault("robots"),
+  Setting.fileOnly,
+  Setting.withDescription("Who carries a rule over."),
+);
+
+const fileOnlyMiddle = base.pipe(
+  Setting.withDescription("Who carries a rule over."),
+  Setting.fileOnly,
+  Setting.files(["repo", "user"]),
+  Setting.live,
+  Setting.withDefault("people"),
+);
+
 // T2, T3, T5: one group with a restart setting, a live setting, and a name with a hyphen and a digit.
 const port = Setting.make("instance.port", Port).pipe(
   Setting.withDefault(18800),
@@ -106,6 +138,15 @@ const tries = Setting.make("quality.max-2-tries", Schema.Int).pipe(
 );
 
 const group = SettingGroup.make("demo", port, carry, tries);
+
+// FO6: a group with a live file-only setting and a restart setting that a flag may set.
+const fileOnlyGroup = SettingGroup.make("demo", fileOnlyLast, port);
+
+type FileOnlySettings = typeof fileOnlyGroup.settings;
+
+type FileOnlyValues = Effect.Success<typeof fileOnlyGroup>;
+
+const fileOnlyFlags = SettingGroup.flags(fileOnlyGroup);
 
 type Values = Effect.Success<typeof group>;
 
@@ -134,6 +175,15 @@ const refusals = () => [
   // @ts-expect-error T4: a live setting is not made live twice
   carry.pipe(Setting.live),
 
+  // @ts-expect-error FO6: a file-only setting is not made file-only twice
+  fileOnlyAlone.pipe(Setting.fileOnly),
+
+  // @ts-expect-error FO6: a live file-only setting is not made file-only twice
+  fileOnlyFirst.pipe(Setting.fileOnly),
+
+  // @ts-expect-error FO6: a file-only setting has no flag, so a hand-written record that names it does not compile
+  SettingGroup.layer(fileOnlyGroup, { version: "1.2.3", flags: { "delivery.carry-rule": Option.none<string>() } }),
+
   Effect.gen(function* () {
     // @ts-expect-error T4: a setting is not an Effect, it is read only through its group
     const value = yield* port;
@@ -142,17 +192,46 @@ const refusals = () => [
   }),
 ];
 
-it("T1 type: a setting piped through any of the four combinators, in any order, keeps its name, its type and its mark", () => {
-  expectTypeOf(restartA).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false>>();
-  expectTypeOf(restartB).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false>>();
-  expectTypeOf(restartC).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false>>();
-  expectTypeOf(restartD).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false>>();
+it("T1 type: a setting piped through any of the four combinators, in any order, keeps its name, its type and its marks", () => {
+  expectTypeOf(restartA).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false, true>>();
+  expectTypeOf(restartB).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false, true>>();
+  expectTypeOf(restartC).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false, true>>();
+  expectTypeOf(restartD).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false, true>>();
   expectTypeOf(base).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false>>();
-  expectTypeOf(liveFirst).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true>>();
-  expectTypeOf(liveMiddle).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true>>();
-  expectTypeOf(liveLast).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true>>();
+  expectTypeOf(liveFirst).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
+  expectTypeOf(liveMiddle).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
+  expectTypeOf(liveLast).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
   expectTypeOf(liveLast.live).toEqualTypeOf<true>();
+  expectTypeOf(liveLast.fileOnly).toEqualTypeOf<true>();
   expectTypeOf(restartA.live).toEqualTypeOf<false>();
+  expectTypeOf(restartA.fileOnly).toEqualTypeOf<true>();
+  expectTypeOf(base.fileOnly).toEqualTypeOf<false>();
+});
+
+it("FO6 type: a setting piped through `fileOnly` and `live` with the others, in any order, carries both marks, a group reads a live file-only setting as `Live`, and a file-only setting has no flag", () => {
+  expectTypeOf(fileOnlyAlone).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, false, true>>();
+  expectTypeOf(fileOnlyFirst).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
+  expectTypeOf(fileOnlyLast).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
+  expectTypeOf(fileOnlyMiddle).toEqualTypeOf<Setting.Setting<"delivery.carry-rule", Rule, true, true>>();
+  expectTypeOf(fileOnlyAlone.fileOnly).toEqualTypeOf<true>();
+  expectTypeOf(fileOnlyAlone.live).toEqualTypeOf<false>();
+  expectTypeOf(fileOnlyLast.fileOnly).toEqualTypeOf<true>();
+  expectTypeOf(fileOnlyLast.live).toEqualTypeOf<true>();
+
+  // The file-only mark changes nothing about the value a group reads.
+  expectTypeOf<FileOnlyValues>().toEqualTypeOf<{
+    readonly carryRule: SettingGroup.Live<Rule>;
+    readonly port: number;
+  }>();
+
+  // The flags and the flag values have a key for each setting a flag may set, the quiet window beside them, and none for
+  // a file-only one.
+  type Keys = "instance.port" | "config.watch.debounce";
+
+  expectTypeOf<keyof typeof fileOnlyFlags>().toEqualTypeOf<Keys>();
+  expectTypeOf<keyof SettingGroup.FlagValues<FileOnlySettings>>().toEqualTypeOf<Keys>();
+  expectTypeOf<"delivery.carry-rule">().not.toExtend<keyof typeof fileOnlyFlags>();
+  expectTypeOf(refusals).toBeFunction();
 });
 
 it("T2 type: a restart setting reads as its plain value, a live setting as a different type, and the field is the last word of the name", () => {

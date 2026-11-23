@@ -995,7 +995,8 @@ const FILES: Readonly<Record<typeof Scopes.Type, Setting.Files>> = {
   user: ["user"],
 };
 
-// Plant: (e) read the flag of a file-only setting like any other, so the start takes its value.
+// Plants: (e) read the flag of a file-only setting like any other, so the start takes its value; (k, ticket 1842) check the
+// variable before the flag, so the stop names the variable, not the flag.
 it.effect.prop(
   "F8 a flag handed to a file-only setting stops the start with `scope` that names the flag and the files and never the variable, and with no flag it reads from its files or its default",
   { input: FileOnlyFlag },
@@ -1025,8 +1026,10 @@ it.effect.prop(
         },
       };
 
-      // The variable is never read for a file-only setting, so a good one changes nothing.
-      const env = environment(held.env ? { [variable(app, target)]: String(target.seed + 1) } : {});
+      // A variable that names the file-only setting is there with the flag: the flag stops the start first, as a flag
+      // comes before a variable in precedence. The half with no flag has no such variable, which would stop the start (FO1).
+      const env = environment({ [variable(app, target)]: String(target.seed + 1) });
+      const unset = environment();
 
       const other: Record<string, Option.Option<string>> = {};
 
@@ -1048,8 +1051,8 @@ it.effect.prop(
       );
       expect(given.message.includes(userFile(app).name)).toBe(files.includes("user"));
 
-      // With no flag, as B10 says: the first of the repo file and the user file that holds it, else the default.
-      const loaded = mustStart((yield* start(group, { disk, env, flags: other })).exit);
+      // With no flag and no variable, as B10 says: the first of the repo file and the user file that holds it, else the default.
+      const loaded = mustStart((yield* start(group, { disk, env: unset, flags: other })).exit);
 
       const lineHolding = (text: string) =>
         text.split("\n").findIndex((line) => line.startsWith(`${target.key} =`)) + 1;
