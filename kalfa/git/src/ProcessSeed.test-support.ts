@@ -125,7 +125,7 @@ const importStream = (history: History): Uint8Array =>
   );
 
 /** One entry of a tree a law writes with fast-import: a mode, a path as bytes (that need not be UTF-8) and a file's content or a gitlink's commit. */
-export interface RawEntry {
+interface RawEntry {
   readonly mode: "100644" | "100755" | "120000" | "160000";
   readonly path: Uint8Array;
   readonly content: Uint8Array | { readonly commit: string };
