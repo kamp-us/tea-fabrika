@@ -1,7 +1,9 @@
 // A slow law fails the full-depth run before it times out. Plants (each run once, restored):
 // `>` to `>=` in `slow` (red: a test exactly at its bar is flagged); the `depth` check dropped from
 // `onTestRunEnd` (red: a fast run fails); the `limit > 0` check dropped (red: a test with no limit is
-// flagged); the default `fail` made a no-op (red: the exit code stays 0); the share ignored for
+// flagged); the test's own timeout ignored for the project's (red: a test with a longer timeout is
+// flagged); the project's timeout ignored when a test has none (red: its share reads 0 or undefined);
+// the default `fail` made a no-op (red: the exit code stays 0); the share ignored for
 // `DEFAULT_SHARE` (red: a set share changes nothing); the mode ignored (red: report mode fails the run).
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
@@ -63,6 +65,7 @@ const fakeModule = (tests: readonly Timed[]) => ({
       tests.map((test) => ({
         fullName: test.name,
         module: { moduleId: `/repo/${test.file}` },
+        options: { timeout: undefined },
         project: { config: { root: "/repo", testTimeout: test.limit } },
         diagnostic: () => ({ duration: test.ms }),
       })),
@@ -143,6 +146,69 @@ it("a full-depth run lists its slowest tests, slowest first, six at most, whethe
     }),
     options,
   );
+});
+
+/** One test under a project whose `testTimeout` is `project`, with an `own` timeout or none, that ran for `ms`. */
+const underOwnTimeout = (project: number, own: number | undefined, ms: number) => ({
+  children: {
+    allTests: () => [
+      {
+        fullName: "law",
+        module: { moduleId: "/repo/a.test.ts" },
+        options: { timeout: own },
+        project: { config: { root: "/repo", testTimeout: project } },
+        diagnostic: () => ({ duration: ms }),
+      },
+    ],
+  },
+});
+
+const share = (module: ReturnType<typeof underOwnTimeout>) => {
+  const said: string[] = [];
+  let failed = 0;
+
+  new SlowTestReporter(undefined, {
+    depth: "full",
+    env: { FABRIKA_SLOW_TEST_SHARE: "0.5" },
+    out: (text) => said.push(text),
+    fail: () => {
+      failed += 1;
+    },
+  }).onTestRunEnd([module]);
+
+  return { said, failed };
+};
+
+it("a test with its own longer timeout is measured against it, and one without uses the project's", () => {
+  fc.assert(
+    fc.property(Limit, fc.integer({ min: 2, max: 60 }), Percent, (project, factor, percent) => {
+      const own = project * factor;
+
+      // Used `percent` of its own timeout: flagged exactly when that is over half, however long it ran.
+      const withOwn = share(underOwnTimeout(project, own, (own * percent) / 100));
+
+      expect(withOwn.failed).toBe(percent > 50 ? 1 : 0);
+      expect(withOwn.said.filter((text) => text.startsWith("slowest law:"))).toEqual([
+        `slowest law: ${((own * percent) / 100 / 1000).toFixed(1)} s of ${(own / 1000).toFixed(1)} s, a.test.ts > law`,
+      ]);
+
+      // The same time without an own timeout is measured against the project's: over half of it exactly
+      // when `factor * percent` is over 50.
+      const withoutOwn = share(underOwnTimeout(project, undefined, (own * percent) / 100));
+      const over = factor * percent > 50;
+
+      expect(withoutOwn.failed).toBe(over ? 1 : 0);
+      expect(withoutOwn.said.filter((text) => text.startsWith("slow law:"))).toEqual(
+        over ? [line({ file: "a.test.ts", name: "law", ms: (own * percent) / 100, limit: project }, 0.5)] : [],
+      );
+    }),
+    options,
+  );
+});
+
+it("pinned: 345.4 s under a 3600 s timeout of its own passes though the project's limit is 120 s", () => {
+  expect(share(underOwnTimeout(120_000, 3_600_000, 345_400)).failed).toBe(0);
+  expect(share(underOwnTimeout(120_000, undefined, 345_400)).failed).toBe(1);
 });
 
 it("a fast run never fails and never speaks, whatever its tests took", () => {
