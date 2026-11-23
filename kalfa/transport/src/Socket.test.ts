@@ -21,6 +21,7 @@ import {
   seed,
   sends,
   settled,
+  textMessage,
   through,
   valueClasses,
   wellFormedText,
@@ -234,11 +235,32 @@ it.effect.prop(
   { arbitrary: { seed: SEED, runs: 100 } },
 );
 
-// C4. Plant: skip a value equal to the one before it.
+/** A frame of bytes a far end writes: a message in UTF-8 with a multi-byte character in it, whole or cut where a character begins. */
+const byteFrame = Arbitrary.all({
+  text: wellFormedText,
+  cut: Arbitrary.schema(Schema.Boolean),
+  wanted: between(0, 1_000_000),
+}).pipe(Arbitrary.map(({ text, cut, wanted }) => ({ body: textMessage(`${text}é设😀`), cut, wanted })));
+
+/** The index of a UTF-8 continuation byte, where a write can cut a character in two. */
+const cutPoint = (bytes: Uint8Array, wanted: number): number => {
+  const inside = Array.from(bytes, (byte, index) => [byte, index] as const)
+    .filter(([byte, index]) => index > 0 && (byte & 0b1100_0000) === 0b1000_0000)
+    .map(([, index]) => index);
+
+  return inside[wanted % inside.length] ?? 1;
+};
+
+// C4. Plant: skip a value equal to the one before it; keep the byte decoder's state from one frame to the next.
 it.effect.prop(
-  "C4 no state between frames: decoding a run of frames in one stream gives the same values as decoding each frame in a stream of its own, repeats included",
-  { seeds: Arbitrary.array(seed, { minLength: 1, maxLength: 3 }), repeats: between(2, 6) },
-  ({ seeds, repeats }) =>
+  "C4 no state between frames: decoding a run of frames in one stream gives the same values as decoding each frame in a stream of its own, repeats included, and a frame of bytes that ends in half a character changes nothing in the next frame",
+  {
+    seeds: Arbitrary.array(seed, { minLength: 1, maxLength: 3 }),
+    repeats: between(2, 6),
+    byteFrames: Arbitrary.array(byteFrame, { minLength: 2, maxLength: 6 }),
+    later: Arbitrary.schema(Schema.Boolean),
+  },
+  ({ seeds, repeats, byteFrames, later }) =>
     Effect.gen(function* () {
       for (const { name, schema, values } of valueClasses(seeds)) {
         // Each value, then the first one repeated: runs of one value are among the frames.
@@ -256,22 +278,66 @@ it.effect.prop(
         assert.deepStrictEqual(together, apart, `${name}: one stream or many`);
         assert.deepStrictEqual(together, run, `${name}: the values, repeats included`);
       }
+
+      // Frames of bytes: each is read on its own, whole or ending in half a character, whatever the frame before it was.
+      const chunks = yield* Effect.forEach(
+        byteFrames,
+        ({ body, cut, wanted }) =>
+          Stream.make(body).pipe(
+            Transport.encode(Message),
+            Stream.runCollect,
+            Effect.map((frames) => {
+              const bytes = new TextEncoder().encode(frames[0] ?? "");
+
+              return cut ? bytes.slice(0, cutPoint(bytes, wanted)) : bytes;
+            }),
+          ),
+        { concurrency: 1 },
+      );
+
+      const { exit, seen } = finished(
+        yield* settled(closedBy(chunks, new Socket.CloseEvent(1000), later)),
+        "frames of bytes",
+      );
+
+      expect(Exit.isSuccess(exit), "frames of bytes: a clean close").toBe(true);
+      expect(seen.length, "frames of bytes: one frame for each write").toBe(chunks.length);
+
+      for (const [index, chunk] of chunks.entries()) {
+        const { body, cut } = byteFrames[index] ?? byteFrames[0]!;
+        const alone = new TextDecoder().decode(chunk);
+
+        expect(seen[index], `frames of bytes ${index}: the text of its own bytes and nothing of the frame before`).toBe(
+          alone,
+        );
+
+        const read = yield* Stream.make(seen[index] ?? "").pipe(
+          Transport.decode(Message),
+          Stream.runCollect,
+          Effect.exit,
+        );
+
+        if (cut) {
+          expect(
+            Option.map(failureFrom(read).error, (each) => each.reason),
+            `frames of bytes ${index}: a frame cut in half a character fails on its own with text`,
+          ).toEqual(Option.some("text"));
+        } else {
+          assert.deepStrictEqual(
+            Exit.isSuccess(read) ? read.value : [],
+            [body],
+            `frames of bytes ${index}: a whole frame gives its value`,
+          );
+        }
+      }
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 200 } },
 );
 
-/** The index of a UTF-8 continuation byte, where a write can cut a character in two. */
-const cutPoint = (bytes: Uint8Array, wanted: number): number => {
-  const inside = Array.from(bytes, (byte, index) => [byte, index] as const)
-    .filter(([byte, index]) => index > 0 && (byte & 0b1100_0000) === 0b1000_0000)
-    .map(([, index]) => index);
-
-  return inside[wanted % inside.length] ?? 1;
-};
-
-// C5. Plant: build `socket` on `Socket.toChannel` and turn each chunk into text with `String()`.
+// C5. Plant: build `socket` on `Socket.toChannel` and turn each chunk into text with `String()`; decode the chunks with one streaming
+// decoder, so half a character of a frame waits for the next frame.
 it.effect.prop(
-  "C5 bytes from the far end: frames written as UTF-8 bytes arrive as the same text, one frame each, and a character cut across two writes is whole in the text",
+  "C5 bytes from the far end: frames written as UTF-8 bytes arrive as the same text, one frame each, and a frame that ends in half a character is no part of the frame after it",
   {
     texts: Arbitrary.array(wellFormedText, { minLength: 1, maxLength: 5 }),
     cut: between(0, 1_000_000),
@@ -294,19 +360,63 @@ it.effect.prop(
 
       assert.deepStrictEqual(whole.seen, texts, "whole frames: the same text, one frame each");
 
-      // A character cut across two writes: the two writes read as the whole text, with no mark of the cut.
+      // A frame that ends in half a character, then a good frame: the second is its own text, with no mark left by the first.
       const text = `${texts.join("")}é设😀`;
       const bytes = encoder.encode(text);
       const point = cutPoint(bytes, cut);
+      const next = encoder.encode(texts[0] ?? "");
 
       const cutOff = finished(
-        yield* settled(closedBy([bytes.slice(0, point), bytes.slice(point)], new Socket.CloseEvent(1000), !later)),
-        "a cut character",
+        yield* settled(closedBy([bytes.slice(0, point), next], new Socket.CloseEvent(1000), !later)),
+        "a frame cut in half a character",
       );
 
-      expect(Exit.isSuccess(cutOff.exit), "a cut character: a clean close").toBe(true);
-      expect(cutOff.seen.length, "a cut character: one frame for each write").toBe(2);
-      expect(cutOff.seen.join(""), "a cut character: the text, whole").toBe(text);
+      expect(Exit.isSuccess(cutOff.exit), "a frame cut in half a character: a clean close").toBe(true);
+      expect(cutOff.seen.length, "a frame cut in half a character: one frame for each write").toBe(2);
+      expect(cutOff.seen[0], "a frame cut in half a character: the text of its own bytes").toBe(
+        new TextDecoder().decode(bytes.slice(0, point)),
+      );
+      expect(cutOff.seen[1], "the frame after it: its own text, whole").toBe(texts[0]);
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 100 } },
+);
+
+// C6. Plant: let the end that ends first leave the socket open (a waiting pull stays blocked); close it with 1006.
+it.effect.prop(
+  "C6 the end of a chain closes the socket: when the chain of one end ends first, the chain of the other end ends cleanly after every value sent before, whichever end ends first",
+  {
+    values: Arbitrary.array(message, { maxLength: 10 }),
+    nearFirst: Arbitrary.schema(Schema.Boolean),
+  },
+  ({ values, nearFirst }) =>
+    Effect.gen(function* () {
+      const read = finished(
+        yield* settled(
+          Effect.gen(function* () {
+            const [near, far] = yield* MemorySocket.pair;
+            const [first, second] = nearFirst ? [near, far] : [far, near];
+
+            // The first end sends its values and expects none, so its chain ends as soon as it has sent them; the second expects one
+            // more than it is sent, so only the close can end its chain.
+            const [, waited] = yield* Effect.all(
+              [
+                end({ socket: first, send: Stream.fromIterable(values), expected: 0, chain: through(Message) }),
+                end({ socket: second, send: Stream.empty, expected: values.length + 1, chain: through(Message) }),
+              ],
+              { concurrency: "unbounded" },
+            );
+
+            return waited;
+          }).pipe(Effect.scoped),
+        ),
+        nearFirst ? "the near end first" : "the far end first",
+      );
+
+      assert.deepStrictEqual(
+        read,
+        values,
+        "the other end read every value sent, in order, and its chain ended cleanly",
+      );
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 200 } },
 );
