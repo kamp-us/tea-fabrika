@@ -277,8 +277,9 @@ const page = SettingGroup.reference(Demo); // the Markdown page
 
 Both are made from the declarations alone, so a package can check a committed copy against them in a test.
 `jsonSchema` throws for a setting whose schema JSON Schema cannot hold exactly, as a bare `Schema.makeFilter` cannot:
-write a check as a pattern or a bound. The version pattern cannot say that a number is no larger than the largest safe
-integer, which a start refuses. The quiet window of a group with a live setting is in both.
+write a check as a pattern or a bound. A text's length check is exact only for a minimum of one character, because
+Effect counts UTF-16 units and JSON Schema counts code points. The `<app>-version` pattern reads a version as a start
+does, a number up to the largest safe integer included. The quiet window of a group with a live setting is in both.
 
 ## Public modules
 

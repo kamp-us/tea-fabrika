@@ -7,9 +7,29 @@ import type * as Setting from "../Declaration.ts";
 import * as JsonSchema from "../JsonSchema.ts";
 import { fields, type Group } from "./check.ts";
 
-/** Strict Semantic Versioning 2.0.0 as Effect's `SemVer.ts` parses it: no leading zeros, no empty identifier. It cannot say Effect's last rule, that no number is above the largest safe integer. */
-const SEMVER =
-  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+/** The text of every whole number from 0 to `limit`, with no leading zero, as a pattern: the shorter ones by length, the ones of the limit's length digit by digit. */
+const upTo = (limit: string): string => {
+  const same = [...limit].flatMap((digit, at) => {
+    const first = at === 0 ? 1 : 0;
+    const last = Number(digit) - 1;
+
+    return last < first ? [] : [`${limit.slice(0, at)}[${first}-${last}]\\d{${limit.length - at - 1}}`];
+  });
+
+  return `(?:0|[1-9]\\d{0,${limit.length - 2}}|${[...same, limit].join("|")})`;
+};
+
+// Effect's `SemVer.ts` reads a number as a safe integer, and an identifier of only digits as one too, so both are
+// held to the largest safe integer, 9007199254740991.
+const NUMBER = upTo(`${Number.MAX_SAFE_INTEGER}`);
+
+const PRERELEASE = `(?:${NUMBER}|\\d*[A-Za-z-][0-9A-Za-z-]*)`;
+
+/** Strict Semantic Versioning 2.0.0 as Effect's `SemVer.ts` parses it: no leading zeros, no empty identifier, no number above the largest safe integer. */
+const SEMVER = new RegExp(
+  `^${NUMBER}\\.${NUMBER}\\.${NUMBER}(?:-${PRERELEASE}(?:\\.${PRERELEASE})*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`,
+  "u",
+);
 
 /** The repo configuration's minimum version, as the editor reads it. */
 const Version = (app: string) =>

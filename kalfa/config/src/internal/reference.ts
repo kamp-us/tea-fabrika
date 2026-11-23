@@ -13,12 +13,15 @@ import { toml } from "./toml.ts";
 export const escape = (text: string) =>
   Function.pipe(text, Str.replace(/[\\`*_[\]<>#|&~+!=-]/g, "\\$&"), Str.replace(/^(\s*\d+)([.)])/gm, "$1\\$2"));
 
-/** A code span: a fence one backtick longer than the longest run inside it, a space inside when the text starts or ends with a backtick, and each `|` written `\|`, as a table cell asks. */
+// Markdown drops the spaces at the end of a line or a paragraph, and reads two of them before a break as a hard break.
+// The last space of a run is written as its character reference, so a description keeps the spaces it was written with.
+const spaced = (text: string) => Str.replace(/ (?=\r\n|\r|\n|$)/g, "&#32;")(text);
+
+/** A code span: a fence one backtick longer than the longest run inside it, and each `|` written `\|`, as a table cell asks. A name or a default as JSON never starts or ends with a backtick, so the text needs no padding. */
 export const code = (text: string) => {
   const fence = "`".repeat(Math.max(0, ...Array.from(text.matchAll(/`+/g), (run) => run[0].length)) + 1);
-  const pad = Str.startsWith("`")(text) || Str.endsWith("`")(text) ? " " : "";
 
-  return Str.replaceAll("|", "\\|")(`${fence}${pad}${text}${pad}${fence}`);
+  return Str.replaceAll("|", "\\|")(`${fence}${text}${fence}`);
 };
 
 const none = (reason: string) => `none: ${reason}`;
@@ -33,7 +36,7 @@ export const text = (group: Group): string => {
       [
         `### ${code(s.name)}`,
         "",
-        escape(s.description ?? ""),
+        spaced(escape(s.description)),
         "",
         "| Field | Value |",
         "|---|---|",

@@ -144,7 +144,7 @@ const refusal = (app: string, settings: ReadonlyArray<Setting.Any>) => {
       return `${name} is not a setting name: each word is lowercase letters and digits, with single hyphens between`;
     }
 
-    if (setting.description === undefined) {
+    if (setting.description === "") {
       return `${name} has no description`;
     }
 
@@ -315,7 +315,7 @@ export type {
  *
  * **Gotchas**
  *
- * Throws an `Error` when a setting's schema cannot be written as JSON Schema without loosening it, as a bare `Schema.makeFilter` cannot. The version pattern cannot say that a number is no larger than the largest safe integer, which the start refuses.
+ * Throws an `Error` when a setting's schema cannot be written as JSON Schema without loosening it, as a bare `Schema.makeFilter` cannot.
  *
  * @category combinators
  */

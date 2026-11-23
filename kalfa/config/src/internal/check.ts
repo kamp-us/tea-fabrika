@@ -64,7 +64,7 @@ export const fields = (
             ? Schema.Struct(fields(below, depth + 1))
             : Schema.toCodecJson(own.schema).pipe(
                 Schema.annotateEncoded({
-                  ...(own.description === undefined ? {} : { description: own.description }),
+                  description: own.description,
                   ...Option.match(encodedDefault(own), { onNone: () => ({}), onSome: (value) => ({ default: value }) }),
                 }),
               ),
