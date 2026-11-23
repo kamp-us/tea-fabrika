@@ -11,9 +11,7 @@ import { expect } from "vitest";
 // Today's tooling. Run each plant in a disposable copy of the script beside this test.
 export const script = join(import.meta.dirname, "plancheck.sh");
 
-// 12 runs, not 24: each case starts plancheck.sh, which in draft mode also starts node for the size advice (about 0.8 s on CI), and at 24 runs
-// its laws took 16 to 23 s of CI's 60 s limit. Every law keeps its pinned examples.
-export const options = { seed: 520, numRuns: 12 };
+export const options = { seed: 520, numRuns: 24 };
 
 export const table = (heads: string[], rows: string[][]) =>
   [heads, heads.map(() => "---"), ...rows].map((row) => `| ${row.join(" | ")} |`).join("\n");
