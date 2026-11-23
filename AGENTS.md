@@ -72,8 +72,8 @@ rules for a design.
 ```sh
 pnpm format                                                            # first: formats and applies safe fixes, in place
 pnpm lint                                                              # changes nothing; a warning fails it too
-nice -n 15 pnpm exec vitest run --maxWorkers=3 <path>                  # a narrow path while you work
-nice -n 15 pnpm exec vitest run --maxWorkers=3 --changed origin/main   # once at the end
+nice -n 15 pnpm exec vitest run <test file> ...                        # test files by path while you work; a folder or pattern is refused
+nice -n 15 pnpm exec vitest run --changed origin/main                  # once at the end; refused when a trigger file changed, see below
 pnpm typecheck                                                         # once, last: an Effect made and dropped fails it
 ```
 
@@ -85,7 +85,10 @@ no local `pnpm typecheck`, and on no local run of more than about five minutes t
 |---|---|
 | Markdown that no program reads, or skill prose | `pnpm lint`, which runs `skillscheck.sh`, skill prose's one reader |
 | Code, a skill script, or Markdown that a program or skill reads | the block above |
-| A dependency's version | the block above, with narrow paths in place of `--changed`, which a lockfile change makes the full suite |
+| A dependency's version, a tsconfig, `layer-rules.json` or `oxlint-plugins/**` | the block above, with the test files of what you touched in place of `--changed`: these select every test, so the laptop refuses it |
+
+`--maxWorkers` defaults to 3, the most the laptop allows. The refusal names the rule that fired and what to run
+instead ([`vitest.hostrun.ts`](./vitest.hostrun.ts) holds the rules).
 
 A lint finding is fixed in the code, never by switching its rule off:
 [the build skill's Lint findings](./.agents/skills/build/SKILL.md#lint-findings) says what to do with each.

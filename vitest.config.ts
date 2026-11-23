@@ -2,13 +2,13 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
-import { basename, isAbsolute, join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { configDefaults, defineConfig, type Plugin } from "vitest/config";
 import { parseCLI } from "vitest/node";
 import { isScript, isTest, load, reached } from "./oxlint-plugins/script-reads.mjs";
 import packageJson from "./package.json" with { type: "json" };
 import { changedFiles } from "./vitest.changed.ts";
-import { hostFiles } from "./vitest.hostrun.ts";
+import { broadRefusal, hostFiles } from "./vitest.hostrun.ts";
 import { Shards } from "./vitest.shards.ts";
 
 // Today's version's tests. It is frozen (today's version takes no new work), and no CI job runs them; they run on the laptop.
@@ -135,12 +135,8 @@ const localLimits = () => {
   }
 
   const cli = parseCLI(["vitest", ...process.argv.slice(2)], { allowUnknownOptions: true });
-  const narrow = (filter: string) => {
-    const path = isAbsolute(filter) ? relative(process.cwd(), filter) : filter.replace(/^\.\//, "");
-    return !/[*?[\]{}]/.test(path) && /(?:^|\/)[^/]+\.test\.[cm]?[jt]sx?(?::[\d-]+)?$/.test(path);
-  };
 
-  if ((process.env.CI ?? "") === "" && !(cli.filter.length > 0 && cli.filter.every(narrow))) {
+  if ((process.env.CI ?? "") === "") {
     const changed = cli.options.changed;
     // The same three sets as Vitest 5.0.5's GitVCSProvider. A net diff loses staged
     // changes canceled in the worktree; two endpoints lose divergent branch changes.
@@ -150,14 +146,17 @@ const localLimits = () => {
       ["ls-files", "-z", "--other", "--modified", "--exclude-standard"],
     ];
     const diffs = changed === undefined ? [] : commands.map((args) => spawnSync("git", args, { encoding: "utf8" }));
-    const forced = diffs.some((diff) =>
-      diff.stdout
-        .split("\0")
-        .some((path) => path && match.isMatch(path, testConfig.test.forceRerunTriggers, { dot: true })),
+    const files = diffs.some((diff) => diff.status !== 0)
+      ? null
+      : diffs.flatMap((diff) => diff.stdout.split("\0").filter((path) => path));
+    const refusal = broadRefusal(
+      { filters: cli.filter, changed: changed === undefined ? undefined : files },
+      process.cwd(),
+      (path) => match.isMatch(path, testConfig.test.forceRerunTriggers, { dot: true }),
     );
 
-    if (changed === undefined || diffs.some((diff) => diff.status !== 0) || forced) {
-      throw new Error("Local broad test run refused. Use: pnpm exec vitest run --maxWorkers=1 <narrow path>");
+    if (refusal !== undefined) {
+      throw new Error(refusal);
     }
   }
 
