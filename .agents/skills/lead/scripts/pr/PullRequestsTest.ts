@@ -1,7 +1,14 @@
 import { Array as Arr, Effect, Layer, Option, Schema } from "effect";
 // PullRequestsTest.layer: the PullRequests service in memory, on one list of pull requests that its
 // writes change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
-import { type Detail, type Patch, type PullRequest, PullRequests, PullRequestsError } from "./PullRequests.ts";
+import {
+  type Detail,
+  type Patch,
+  type PullRequest,
+  PullRequests,
+  PullRequestsError,
+  type QueueEntry,
+} from "./PullRequests.ts";
 
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
@@ -18,7 +25,18 @@ export type Call = typeof Call.Type;
 /** The calls that fail with a reason, by name. */
 export type Failing = Partial<
   Record<
-    "openOn" | "all" | "draft" | "edit" | "ready" | "view" | "enqueue" | "files" | "patches" | "arm" | "admin",
+    | "openOn"
+    | "all"
+    | "draft"
+    | "edit"
+    | "ready"
+    | "view"
+    | "enqueue"
+    | "queue"
+    | "files"
+    | "patches"
+    | "arm"
+    | "admin",
     string
   >
 >;
@@ -31,6 +49,8 @@ export type World = {
   readonly calls: Array<Call>;
   /** What `view` says beyond the list, by number: base `main`, no words and not merged when absent. */
   readonly more: Map<number, More>;
+  /** What each read of the merge queue answers, in order; the last answer repeats. Empty, the default, is an empty queue. */
+  readonly queue: Array<ReadonlyArray<QueueEntry>>;
   /** The files each pull request changes, by number: none when absent. */
   readonly files: Map<number, ReadonlyArray<string>>;
   /** The diff hunks of each file a pull request changes, by number: none when absent. */
@@ -42,6 +62,7 @@ export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({
   prs: [...prs],
   calls: [],
   more: new Map(),
+  queue: [],
   files: new Map(),
   patches: new Map(),
 });
@@ -101,6 +122,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
         Effect.map(fails("enqueue"), () => {
           w.calls.push(Call.cases.enqueue.make({ number, oid }));
         }),
+      queue: Effect.map(fails("queue"), () => (w.queue.length > 1 ? w.queue.shift() : w.queue[0]) ?? []),
       files: (number) => Effect.map(fails("files"), () => w.files.get(number) ?? []),
       patches: (number) => Effect.map(fails("patches"), () => w.patches.get(number) ?? []),
       arm: (number, oid) =>

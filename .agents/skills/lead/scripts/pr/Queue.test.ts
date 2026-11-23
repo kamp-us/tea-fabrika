@@ -239,6 +239,50 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
       }),
   );
 
+  // Plants: mark a draft ready while no run has started at its head (the ready event seconds after a push starts a second run on one commit,
+  // and the required check stays expected); read the run once with a wait; drop the wait's limit.
+  it.effect(
+    "scenario: a draft is marked ready only once a CI run has started at its head; with a wait it is given time to start, without one it is refused",
+    () =>
+      Effect.gen(function* () {
+        const waited = (starts: ReadonlyArray<boolean>, wait: Queue.Wait | undefined) =>
+          Effect.gen(function* () {
+            const m = memory({ draft: true });
+            const layer = Layer.merge(m.layer, ChecksTest.layer([job("success")], "", starts));
+
+            const fiber = yield* Queue.add({ dir: ".", pr: 900, ...(wait ? { wait } : {}) }).pipe(
+              Effect.provide(layer),
+              Effect.result,
+              Effect.forkChild,
+            );
+
+            yield* TestClock.adjust("6 minutes");
+
+            return { answer: yield* Fiber.join(fiber), calls: m.github.calls };
+          });
+
+        const later = yield* waited([false, false, true], { minutes: 5, every: 60 });
+        expect(later.answer._tag).toBe("Success");
+        expect(later.calls).toEqual([
+          { _tag: "ready", number: 900 },
+          { _tag: "enqueue", number: 900, oid },
+        ]);
+
+        const never = yield* waited([false], { minutes: 5, every: 60 });
+        expect(never.answer._tag === "Failure" ? String(never.answer.failure.reason) : "").toContain(
+          `no CI run has started at ${oid}`,
+        );
+        expect(never.calls).toEqual([]);
+
+        const once = yield* waited([false, true], undefined);
+        expect(once.answer._tag).toBe("Failure");
+        expect(once.calls).toEqual([]);
+
+        const started = yield* waited([true], undefined);
+        expect(started.answer._tag).toBe("Success");
+      }),
+  );
+
   // Plants: add --admin or --auto; merge with another method; drop the head pin.
   it.prop(
     "property: the one merge call is a squash pinned to the head, with no --admin, no --auto and no other method",
