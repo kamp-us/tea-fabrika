@@ -7,7 +7,7 @@ import type * as Digest from "effect/crypto/Digest";
 import type { ChildProcessSpawner } from "effect/process";
 import type { Commit, Signature } from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
-import type { PatchId } from "./Diff.ts";
+import type { Diff, PatchId } from "./Diff.ts";
 import type * as MemoryRepository from "./MemoryRepository.ts";
 import type * as MergeCommit from "./MergeCommit.ts";
 import type * as ProcessRepository from "./ProcessRepository.ts";
@@ -67,6 +67,61 @@ const calls = (repo: Repository.Repository["Service"]) => {
 
   // @ts-expect-error A walk names at least one commit to include.
   return repo.walk({ include: [], exclude: [] });
+};
+
+// Plant (T5, ticket 1933 slice 2): add `NotUtf8` to `rangePatchId`'s errors; leave `NotAFile` out of `diff`'s; add `UnclearBase` to
+// `diff`; make `rangePatchId` need `Scope`; make `diff` answer a mutable array; give `Raw` a `rangePatchId`, so its helper is a
+// call an adapter writes and the `@ts-expect-error` below is unused; type the `bases` of `UnclearBase` as plain text.
+const rangesAndDiffs = (
+  repo: Repository.Repository["Service"],
+  raw: Repository.Raw,
+  commit: CommitId,
+  text: string,
+) => {
+  expectTypeOf<Repository.Repository["Service"]["rangePatchId"]>().toEqualTypeOf<
+    (range: {
+      readonly upstream: CommitId;
+      readonly commit: CommitId;
+    }) => Effect.Effect<
+      Option.Option<PatchId>,
+      | Repository.UnclearBase
+      | Repository.HistoryTooShort
+      | Repository.NoSuchCommit
+      | Repository.TooMany
+      | Repository.DiffTooLarge
+      | Fails,
+      never
+    >
+  >();
+  expectTypeOf<Repository.Repository["Service"]["diff"]>().toEqualTypeOf<
+    (
+      from: CommitId,
+      to: CommitId,
+    ) => Effect.Effect<
+      Diff,
+      | Repository.NotUtf8
+      | Repository.NotAFile
+      | Repository.NoSuchCommit
+      | Repository.TooMany
+      | Repository.DiffTooLarge
+      | Fails,
+      never
+    >
+  >();
+  expectTypeOf<Repository.Raw["diff"]>().toEqualTypeOf<Repository.Repository["Service"]["diff"]>();
+  expectTypeOf<ConstructorParameters<typeof Repository.UnclearBase>[0]["bases"]>().toEqualTypeOf<
+    ReadonlyArray<CommitId>
+  >();
+  expectTypeOf<ConstructorParameters<typeof Repository.NotUtf8>[0]["path"]>().toEqualTypeOf<Path>();
+  expectTypeOf<ConstructorParameters<typeof Repository.NotAFile>[0]["path"]>().toEqualTypeOf<string>();
+  // @ts-expect-error The range is a helper `make` writes once for every adapter: an adapter's calls have none.
+  const written = raw.rangePatchId;
+  // @ts-expect-error The bases of an unclear base are commit ids, not plain text.
+  const named = new Repository.UnclearBase({ bases: [text] });
+  // @ts-expect-error A range names its upstream and its tip, as two ids in an object, never as two arguments.
+  const spread = repo.rangePatchId(commit, commit);
+
+  return [written, named, spread];
 };
 
 // Plant (T3): require `FileSystem` in `/process`.
@@ -221,6 +276,7 @@ const refNotCommit = (text: string, ref: RefName) => {
 it("type: each call has the answer and errors the plan gives, and each layer the plan's types", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(calls).toBeFunction();
+  expectTypeOf(rangesAndDiffs).toBeFunction();
   expectTypeOf(layers).toBeFunction();
   expectTypeOf(layersWithDigest).toBeFunction();
   expectTypeOf(writes).toBeFunction();

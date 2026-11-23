@@ -1,0 +1,581 @@
+{
+  "git": "git version 2.40.1",
+  "command": "git diff-tree -r -z --no-renames <from> <to> for `raw` and git diff-tree -r -p -U0 --no-renames --no-ext-diff --no-textconv --full-index <from> <to> for `output`, on two commits made with hash-object, update-index and commit-tree in a bare repository.",
+  "rows": [
+    {
+      "note": "nothing changed: no entry and no section",
+      "raw": "",
+      "output": "",
+      "expect": []
+    },
+    {
+      "note": "one line changed in the middle: a hunk with one line on each side",
+      "raw": "OjEwMDY0NCAxMDA2NDQgZGU5ODA0NDFjM2FiMDNhOGMwN2RkYTFhZDI3YjhhMTFmMzlkZWIxZSA3YmU3M2NlM2MxYjFjZGFlYTg2ZTgxNjhkZmVlODU3NTE3NTk1M2JmIE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IGRlOTgwNDQxYzNhYjAzYThjMDdkZGExYWQyN2I4YTExZjM5ZGViMWUuLjdiZTczY2UzYzFiMWNkYWVhODZlODE2OGRmZWU4NTc1MTc1OTUzYmYgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMiArMiBAQCBhCi1iCitCCg==",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 2,
+              "text": "b\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 2,
+              "text": "B\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "text after the second @@ of a hunk header is no line",
+      "raw": "OjEwMDY0NCAxMDA2NDQgNDIyYzJiN2FiM2IzYzY2ODAzOGRhOTc3ZTRlOTNhNWZjNjIzMTY5YyA3ODk4MTkyMjYxM2IyYWZiNjAyNTA0MmZmNmJkODc4YWMxOTk0ZTg1IE0AZgA=",
+      "output": "ZGlmZiAtLWdpdCBhL2YgYi9mCmluZGV4IDQyMmMyYjdhYjNiM2M2NjgwMzhkYTk3N2U0ZTkzYTVmYzYyMzE2OWMuLjc4OTgxOTIyNjEzYjJhZmI2MDI1MDQyZmY2YmQ4NzhhYzE5OTRlODUgMTAwNjQ0Ci0tLSBhL2YKKysrIGIvZgpAQCAtMiArMSwwIEBAIGEKLWIK",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 2,
+              "text": "b\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "the last line loses its newline: the marker belongs to the line before it",
+      "raw": "OjEwMDY0NCAxMDA2NDQgNDIyYzJiN2FiM2IzYzY2ODAzOGRhOTc3ZTRlOTNhNWZjNjIzMTY5YyAwYTIwN2MwNjBlNjFmM2I4OGVhZWUwYThjZDA2OTZmNDZmYjE1NWViIE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IDQyMmMyYjdhYjNiM2M2NjgwMzhkYTk3N2U0ZTkzYTVmYzYyMzE2OWMuLjBhMjA3YzA2MGU2MWYzYjg4ZWFlZTBhOGNkMDY5NmY0NmZiMTU1ZWIgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMiArMiBAQCBhCi1iCitiClwgTm8gbmV3bGluZSBhdCBlbmQgb2YgZmlsZQo=",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 2,
+              "text": "b\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 2,
+              "text": "b"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "the last line gains its newline: the removed line has no end",
+      "raw": "OjEwMDY0NCAxMDA2NDQgMGEyMDdjMDYwZTYxZjNiODhlYWVlMGE4Y2QwNjk2ZjQ2ZmIxNTVlYiA0MjJjMmI3YWIzYjNjNjY4MDM4ZGE5NzdlNGU5M2E1ZmM2MjMxNjljIE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IDBhMjA3YzA2MGU2MWYzYjg4ZWFlZTBhOGNkMDY5NmY0NmZiMTU1ZWIuLjQyMmMyYjdhYjNiM2M2NjgwMzhkYTk3N2U0ZTkzYTVmYzYyMzE2OWMgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMiArMiBAQCBhCi1iClwgTm8gbmV3bGluZSBhdCBlbmQgb2YgZmlsZQorYgo=",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 2,
+              "text": "b"
+            },
+            {
+              "_tag": "Added",
+              "at": 2,
+              "text": "b\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "a new binary file: git names it and prints no line",
+      "raw": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCAyMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlIEEAYmluAA==",
+      "output": "ZGlmZiAtLWdpdCBhL2JpbiBiL2JpbgpuZXcgZmlsZSBtb2RlIDEwMDY0NAppbmRleCAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwLi4yMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlCkJpbmFyeSBmaWxlcyAvZGV2L251bGwgYW5kIGIvYmluIGRpZmZlcgo=",
+      "expect": [
+        {
+          "_tag": "Binary"
+        }
+      ]
+    },
+    {
+      "note": "a binary file changed",
+      "raw": "OjEwMDY0NCAxMDA2NDQgMjBiNWJlOTE4ODZkMGI2ZjI2ZGM5OGEyMjVjMGRhYzA1ZmUyYzg2ZSA4OGYzNzAwMWNlYzM2NjU1ZGVjZjg5MWQ0MjQ0ODUzYWFhNTFhMDBhIE0AYmluAA==",
+      "output": "ZGlmZiAtLWdpdCBhL2JpbiBiL2JpbgppbmRleCAyMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlLi44OGYzNzAwMWNlYzM2NjU1ZGVjZjg5MWQ0MjQ0ODUzYWFhNTFhMDBhIDEwMDY0NApCaW5hcnkgZmlsZXMgYS9iaW4gYW5kIGIvYmluIGRpZmZlcgo=",
+      "expect": [
+        {
+          "_tag": "Binary"
+        }
+      ]
+    },
+    {
+      "note": "a binary file deleted",
+      "raw": "OjEwMDY0NCAwMDAwMDAgMjBiNWJlOTE4ODZkMGI2ZjI2ZGM5OGEyMjVjMGRhYzA1ZmUyYzg2ZSAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIEQAYmluAA==",
+      "output": "ZGlmZiAtLWdpdCBhL2JpbiBiL2JpbgpkZWxldGVkIGZpbGUgbW9kZSAxMDA2NDQKaW5kZXggMjBiNWJlOTE4ODZkMGI2ZjI2ZGM5OGEyMjVjMGRhYzA1ZmUyYzg2ZS4uMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMApCaW5hcnkgZmlsZXMgYS9iaW4gYW5kIC9kZXYvbnVsbCBkaWZmZXIK",
+      "expect": [
+        {
+          "_tag": "Binary"
+        }
+      ]
+    },
+    {
+      "note": "a file made a link: one raw entry, two sections, every old line removed and every new line added",
+      "raw": "OjEwMDY0NCAxMjAwMDAgYjc3YjRlYjFkOTQ2ZjkyM2Y2MTc4NTUzNmRhOWNhNWFmNjkwOWYwNiBjMWIwNzMwZTAxMzM0NDdiYWRjZmQ0N2ZkMTQ0ZTI1NDgwN2IwNmUxIFQAZgA=",
+      "output": "ZGlmZiAtLWdpdCBhL2YgYi9mCmRlbGV0ZWQgZmlsZSBtb2RlIDEwMDY0NAppbmRleCBiNzdiNGViMWQ5NDZmOTIzZjYxNzg1NTM2ZGE5Y2E1YWY2OTA5ZjA2Li4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCi0tLSBhL2YKKysrIC9kZXYvbnVsbApAQCAtMSwyICswLDAgQEAKLXgKLXkKZGlmZiAtLWdpdCBhL2YgYi9mCm5ldyBmaWxlIG1vZGUgMTIwMDAwCmluZGV4IDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAuLmMxYjA3MzBlMDEzMzQ0N2JhZGNmZDQ3ZmQxNDRlMjU0ODA3YjA2ZTEKLS0tIC9kZXYvbnVsbAorKysgYi9mCkBAIC0wLDAgKzEgQEAKK3gKXCBObyBuZXdsaW5lIGF0IGVuZCBvZiBmaWxlCg==",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 1,
+              "text": "x\n"
+            },
+            {
+              "_tag": "Removed",
+              "at": 2,
+              "text": "y\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "x"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "a link made a file: one raw entry, two sections",
+      "raw": "OjEyMDAwMCAxMDA2NDQgYzFiMDczMGUwMTMzNDQ3YmFkY2ZkNDdmZDE0NGUyNTQ4MDdiMDZlMSBiNzdiNGViMWQ5NDZmOTIzZjYxNzg1NTM2ZGE5Y2E1YWY2OTA5ZjA2IFQAZgA=",
+      "output": "ZGlmZiAtLWdpdCBhL2YgYi9mCmRlbGV0ZWQgZmlsZSBtb2RlIDEyMDAwMAppbmRleCBjMWIwNzMwZTAxMzM0NDdiYWRjZmQ0N2ZkMTQ0ZTI1NDgwN2IwNmUxLi4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCi0tLSBhL2YKKysrIC9kZXYvbnVsbApAQCAtMSArMCwwIEBACi14ClwgTm8gbmV3bGluZSBhdCBlbmQgb2YgZmlsZQpkaWZmIC0tZ2l0IGEvZiBiL2YKbmV3IGZpbGUgbW9kZSAxMDA2NDQKaW5kZXggMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMC4uYjc3YjRlYjFkOTQ2ZjkyM2Y2MTc4NTUzNmRhOWNhNWFmNjkwOWYwNgotLS0gL2Rldi9udWxsCisrKyBiL2YKQEAgLTAsMCArMSwyIEBACit4Cit5Cg==",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 1,
+              "text": "x"
+            },
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "x\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 2,
+              "text": "y\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "an empty new file: a section with no hunk",
+      "raw": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCBlNjlkZTI5YmIyZDFkNjQzNGI4YjI5YWU3NzVhZDhjMmU0OGM1MzkxIEEAZQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2UgYi9lCm5ldyBmaWxlIG1vZGUgMTAwNjQ0CmluZGV4IDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAuLmU2OWRlMjliYjJkMWQ2NDM0YjhiMjlhZTc3NWFkOGMyZTQ4YzUzOTEK",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": []
+        }
+      ]
+    },
+    {
+      "note": "an empty file deleted: a section with no hunk",
+      "raw": "OjEwMDY0NCAwMDAwMDAgZTY5ZGUyOWJiMmQxZDY0MzRiOGIyOWFlNzc1YWQ4YzJlNDhjNTM5MSAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIEQAZQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2UgYi9lCmRlbGV0ZWQgZmlsZSBtb2RlIDEwMDY0NAppbmRleCBlNjlkZTI5YmIyZDFkNjQzNGI4YjI5YWU3NzVhZDhjMmU0OGM1MzkxLi4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCg==",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": []
+        }
+      ]
+    },
+    {
+      "note": "a mode-only change: a section with no hunk",
+      "raw": "OjEwMDY0NCAxMDA3NTUgNTg3YmU2YjRjM2Y5M2Y5M2M0ODljMDExMWJiYTU1OTYxNDdhMjZjYiA1ODdiZTZiNGMzZjkzZjkzYzQ4OWMwMTExYmJhNTU5NjE0N2EyNmNiIE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCm9sZCBtb2RlIDEwMDY0NApuZXcgbW9kZSAxMDA3NTUK",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": []
+        }
+      ]
+    },
+    {
+      "note": "a mode-only change of a binary file has no line and no binary marker",
+      "raw": "OjEwMDY0NCAxMDA3NTUgMjBiNWJlOTE4ODZkMGI2ZjI2ZGM5OGEyMjVjMGRhYzA1ZmUyYzg2ZSAyMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlIE0AYmluAA==",
+      "output": "ZGlmZiAtLWdpdCBhL2JpbiBiL2JpbgpvbGQgbW9kZSAxMDA2NDQKbmV3IG1vZGUgMTAwNzU1Cg==",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": []
+        }
+      ]
+    },
+    {
+      "note": "a mode change and a line change together",
+      "raw": "OjEwMDY0NCAxMDA3NTUgYjc3YjRlYjFkOTQ2ZjkyM2Y2MTc4NTUzNmRhOWNhNWFmNjkwOWYwNiA3MDYxYzU3ZmRiNzQ2NzZlZWZlNDczMDgyNzBjNzBjODM1MTIxZWZkIE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCm9sZCBtb2RlIDEwMDY0NApuZXcgbW9kZSAxMDA3NTUKaW5kZXggYjc3YjRlYjFkOTQ2ZjkyM2Y2MTc4NTUzNmRhOWNhNWFmNjkwOWYwNi4uNzA2MWM1N2ZkYjc0Njc2ZWVmZTQ3MzA4MjcwYzcwYzgzNTEyMWVmZAotLS0gYS9hCisrKyBiL2EKQEAgLTIgKzIgQEAgeAoteQorWQo=",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 2,
+              "text": "y\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 2,
+              "text": "Y\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "several files in path order, a path with a space, a tab and an accent: paths come from the raw list, never from the quoted header",
+      "raw": "OjEwMDY0NCAxMDA2NDQgZDAwNDkxZmQ3ZTViYjZmYTI4YzUxN2EwYmIzMmI4YjUwNjUzOWQ0ZCA1NjI2YWJmMGY3MmU1OGQ3YTE1MzM2OGJhNTdkYjRjNjczYzBlMTcxIE0AYSBiADoxMDA2NDQgMTAwNjQ0IDBjZmJmMDg4ODZmY2E5YTkxY2I3NTNlYzg3MzRjODRmY2JlNTJjOWYgZjcxOWVmZDQzMGQ1MmJjZmM4NTY2YTQzYjJlYjY1NTY4OGQzODg3MSBNAHQJeAA6MTAwNjQ0IDEwMDY0NCAwMDc1MGVkYzA3ZDY0MTVkY2MwN2FlMDM1MWU5Mzk3YjAyMjJiN2JhIDJiZGY2N2FiYjE2M2E0ZmZiMmQ3ZjNmMDg4MGM5ZmU1MDY4Y2U3ODIgTQDDqXTDqQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYiBiL2EgYgppbmRleCBkMDA0OTFmZDdlNWJiNmZhMjhjNTE3YTBiYjMyYjhiNTA2NTM5ZDRkLi41NjI2YWJmMGY3MmU1OGQ3YTE1MzM2OGJhNTdkYjRjNjczYzBlMTcxIDEwMDY0NAotLS0gYS9hIGIJCisrKyBiL2EgYgkKQEAgLTEgKzEgQEAKLTEKK29uZQpkaWZmIC0tZ2l0ICJhL3RcdHgiICJiL3RcdHgiCmluZGV4IDBjZmJmMDg4ODZmY2E5YTkxY2I3NTNlYzg3MzRjODRmY2JlNTJjOWYuLmY3MTllZmQ0MzBkNTJiY2ZjODU2NmE0M2IyZWI2NTU2ODhkMzg4NzEgMTAwNjQ0Ci0tLSAiYS90XHR4IgorKysgImIvdFx0eCIKQEAgLTEgKzEgQEAKLTIKK3R3bwpkaWZmIC0tZ2l0ICJhL1wzMDNcMjUxdFwzMDNcMjUxIiAiYi9cMzAzXDI1MXRcMzAzXDI1MSIKaW5kZXggMDA3NTBlZGMwN2Q2NDE1ZGNjMDdhZTAzNTFlOTM5N2IwMjIyYjdiYS4uMmJkZjY3YWJiMTYzYTRmZmIyZDdmM2YwODgwYzlmZTUwNjhjZTc4MiAxMDA2NDQKLS0tICJhL1wzMDNcMjUxdFwzMDNcMjUxIgorKysgImIvXDMwM1wyNTF0XDMwM1wyNTEiCkBAIC0xICsxIEBACi0zCit0aHJlZQo=",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 1,
+              "text": "1\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "one\n"
+            }
+          ]
+        },
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 1,
+              "text": "2\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "two\n"
+            }
+          ]
+        },
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 1,
+              "text": "3\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "three\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "several hunks: a line changed, a line removed, two lines inserted and the last line changed; each line sits where its own side has it",
+      "raw": "OjEwMDY0NCAxMDA2NDQgYTZlMGUyNGU0MThhM2I1OWFjNTAyMmU1ZjY1NDE1MmMzMzZmODYxNCBiMGJhMjUyNTNhYTVjMDIzZTQwZWIwNTA4ZjQ3NzBmZDgwMDgzYmNjIE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IGE2ZTBlMjRlNDE4YTNiNTlhYzUwMjJlNWY2NTQxNTJjMzM2Zjg2MTQuLmIwYmEyNTI1M2FhNWMwMjNlNDBlYjA1MDhmNDc3MGZkODAwODNiY2MgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMSArMSBAQAotbDEKK0wxCkBAIC0zICsyLDAgQEAgbDIKLWwzCkBAIC01LDAgKzUsMiBAQCBsNQorbjEKK24yCkBAIC03ICs4IEBAIGw2Ci1sNworTDcK",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 1,
+              "text": "l1\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "L1\n"
+            },
+            {
+              "_tag": "Removed",
+              "at": 3,
+              "text": "l3\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 5,
+              "text": "n1\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 6,
+              "text": "n2\n"
+            },
+            {
+              "_tag": "Removed",
+              "at": 7,
+              "text": "l7\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 8,
+              "text": "L7\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "lines only inserted before the first line",
+      "raw": "OjEwMDY0NCAxMDA2NDQgNTg3YmU2YjRjM2Y5M2Y5M2M0ODljMDExMWJiYTU1OTYxNDdhMjZjYiA3NTg3MjBhZDI3MGExNjBhN2I0NGNkY2IzMDliNDU2MTQzMTMyOGRlIE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IDU4N2JlNmI0YzNmOTNmOTNjNDg5YzAxMTFiYmE1NTk2MTQ3YTI2Y2IuLjc1ODcyMGFkMjcwYTE2MGE3YjQ0Y2RjYjMwOWI0NTYxNDMxMzI4ZGUgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMCwwICsxLDIgQEAKK3AKK3EK",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "p\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 2,
+              "text": "q\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "CRLF lines keep their carriage return",
+      "raw": "OjEwMDY0NCAxMDA2NDQgYzMwZGVhOGEzNjQxZWE5OWIxMjVkMDRkNTk5ZDg0MzcxMjI5Mjc1OSA1NzIxM2ViODNlZjNmMWU0MTUzNzcwNjgxNzRkZjcxNjNiZGU2YTI3IE0AYQA=",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IGMzMGRlYThhMzY0MWVhOTliMTI1ZDA0ZDU5OWQ4NDM3MTIyOTI3NTkuLjU3MjEzZWI4M2VmM2YxZTQxNTM3NzA2ODE3NGRmNzE2M2JkZTZhMjcgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMiArMiBAQCBhCi1iDQorQg0K",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 2,
+              "text": "b\r\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 2,
+              "text": "B\r\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "lines that look like diff headers are lines",
+      "raw": "OjEwMDY0NCAxMDA2NDQgNTg3YmU2YjRjM2Y5M2Y5M2M0ODljMDExMWJiYTU1OTYxNDdhMjZjYiBhZTIxOWFlMTExNGMzZDU2YjA0MTU4MmRkOWJiYzIzNmVhYzM4YjU2IE0AYQA6MTAwNjQ0IDEwMDY0NCBhNzViYjdlYWQ5OGRmMzQ1MTAwZDI4YTcwNDE0M2RmYjFhZmIyNTVmIGU2OWRlMjliYjJkMWQ2NDM0YjhiMjlhZTc3NWFkOGMyZTQ4YzUzOTEgTQBtAA==",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IDU4N2JlNmI0YzNmOTNmOTNjNDg5YzAxMTFiYmE1NTk2MTQ3YTI2Y2IuLmFlMjE5YWUxMTE0YzNkNTZiMDQxNTgyZGQ5YmJjMjM2ZWFjMzhiNTYgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMSwwICsyLDUgQEAgeAorLS0tIHkKKysrKyB6CitAQCAtMSArMSBAQAorZGlmZiAtLWdpdCBhL3EgYi9xCitcIE5vIG5ld2xpbmUgYXQgZW5kIG9mIGZpbGUKZGlmZiAtLWdpdCBhL20gYi9tCmluZGV4IGE3NWJiN2VhZDk4ZGYzNDUxMDBkMjhhNzA0MTQzZGZiMWFmYjI1NWYuLmU2OWRlMjliYjJkMWQ2NDM0YjhiMjlhZTc3NWFkOGMyZTQ4YzUzOTEgMTAwNjQ0Ci0tLSBhL20KKysrIGIvbQpAQCAtMSwyICswLDAgQEAKLS0tIGEKLSsrIGIK",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Added",
+              "at": 2,
+              "text": "--- y\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 3,
+              "text": "+++ z\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 4,
+              "text": "@@ -1 +1 @@\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 5,
+              "text": "diff --git a/q b/q\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 6,
+              "text": "\\ No newline at end of file\n"
+            }
+          ]
+        },
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 1,
+              "text": "-- a\n"
+            },
+            {
+              "_tag": "Removed",
+              "at": 2,
+              "text": "++ b\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "text and binary files side by side: every raw entry takes the next section",
+      "raw": "OjEwMDY0NCAxMDA2NDQgZDAwNDkxZmQ3ZTViYjZmYTI4YzUxN2EwYmIzMmI4YjUwNjUzOWQ0ZCAwY2ZiZjA4ODg2ZmNhOWE5MWNiNzUzZWM4NzM0Yzg0ZmNiZTUyYzlmIE0AYQA6MTAwNjQ0IDEwMDY0NCBkNWQwYjhiNGM0YzllOTM2ODkwODcwZjY3OTljZmJiNWJhOTg0NDcwIDRhMjcwMzE4MzU5ZDhjMmE5NjAxMzY0OTViY2VlYWU5ZWVlMjI0MjQgTQBiADowMDAwMDAgMTAwNjQ0IDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAgM2U3NTc2NTZjZjM2ZWNhNTMzMzhlNTIwZDEzNDk2M2E0NGY3OTNmOCBBAGQA",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IGQwMDQ5MWZkN2U1YmI2ZmEyOGM1MTdhMGJiMzJiOGI1MDY1MzlkNGQuLjBjZmJmMDg4ODZmY2E5YTkxY2I3NTNlYzg3MzRjODRmY2JlNTJjOWYgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMSArMSBAQAotMQorMgpkaWZmIC0tZ2l0IGEvYiBiL2IKaW5kZXggZDVkMGI4YjRjNGM5ZTkzNjg5MDg3MGY2Nzk5Y2ZiYjViYTk4NDQ3MC4uNGEyNzAzMTgzNTlkOGMyYTk2MDEzNjQ5NWJjZWVhZTllZWUyMjQyNCAxMDA2NDQKQmluYXJ5IGZpbGVzIGEvYiBhbmQgYi9iIGRpZmZlcgpkaWZmIC0tZ2l0IGEvZCBiL2QKbmV3IGZpbGUgbW9kZSAxMDA2NDQKaW5kZXggMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMC4uM2U3NTc2NTZjZjM2ZWNhNTMzMzhlNTIwZDEzNDk2M2E0NGY3OTNmOAotLS0gL2Rldi9udWxsCisrKyBiL2QKQEAgLTAsMCArMSBAQAorbmV3Cg==",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 1,
+              "text": "1\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "2\n"
+            }
+          ]
+        },
+        {
+          "_tag": "Binary"
+        },
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "new\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "a deleted file with several lines",
+      "raw": "OjEwMDY0NCAwMDAwMDAgMDFlNzljMzJhOGM5OWM1NTdmMDc1N2RhN2NiNmQ2NWIzNDE0NDY2ZCAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIEQAZAA=",
+      "output": "ZGlmZiAtLWdpdCBhL2QgYi9kCmRlbGV0ZWQgZmlsZSBtb2RlIDEwMDY0NAppbmRleCAwMWU3OWMzMmE4Yzk5YzU1N2YwNzU3ZGE3Y2I2ZDY1YjM0MTQ0NjZkLi4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCi0tLSBhL2QKKysrIC9kZXYvbnVsbApAQCAtMSwzICswLDAgQEAKLTEKLTIKLTMK",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Removed",
+              "at": 1,
+              "text": "1\n"
+            },
+            {
+              "_tag": "Removed",
+              "at": 2,
+              "text": "2\n"
+            },
+            {
+              "_tag": "Removed",
+              "at": 3,
+              "text": "3\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "a new file with several lines",
+      "raw": "OjAwMDAwMCAxMDA2NDQgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCAxMTkxMjQ3YjZkOWEyMDZmNmJhM2Q4YWM3OWUyNmQwNDFkZDg2OTQxIEEAbgA=",
+      "output": "ZGlmZiAtLWdpdCBhL24gYi9uCm5ldyBmaWxlIG1vZGUgMTAwNjQ0CmluZGV4IDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAuLjExOTEyNDdiNmQ5YTIwNmY2YmEzZDhhYzc5ZTI2ZDA0MWRkODY5NDEKLS0tIC9kZXYvbnVsbAorKysgYi9uCkBAIC0wLDAgKzEsMiBAQAorMQorMgo=",
+      "expect": [
+        {
+          "_tag": "Text",
+          "lines": [
+            {
+              "_tag": "Added",
+              "at": 1,
+              "text": "1\n"
+            },
+            {
+              "_tag": "Added",
+              "at": 2,
+              "text": "2\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "note": "a line that is not UTF-8 fails the diff and names its file",
+      "raw": "OjEwMDY0NCAxMDA2NDQgNzg5ODE5MjI2MTNiMmFmYjYwMjUwNDJmZjZiZDg3OGFjMTk5NGU4NSBhYjE0NWVkZjhmMTQ4ZjVhOGQ3MmVlYTM1ZWNhZTcyMjk3OThhMjMwIE0AZgA=",
+      "output": "ZGlmZiAtLWdpdCBhL2YgYi9mCmluZGV4IDc4OTgxOTIyNjEzYjJhZmI2MDI1MDQyZmY2YmQ4NzhhYzE5OTRlODUuLmFiMTQ1ZWRmOGYxNDhmNWE4ZDcyZWVhMzVlY2FlNzIyOTc5OGEyMzAgMTAwNjQ0Ci0tLSBhL2YKKysrIGIvZgpAQCAtMSArMSBAQAotYQor6Qo=",
+      "expect": {
+        "failure": "NotUtf8",
+        "path": "f"
+      }
+    },
+    {
+      "note": "two files whose lines are not UTF-8: the first in path order is named, whatever a later file holds",
+      "raw": "OjEwMDY0NCAxMDA2NDQgOTc2NjQ3NWE0MTg1YTE1MWRjOWQ1NmQ2MTRmZmI5YWFlYTNiZmQ0MiA4NjgxNWNhNzUwNTM3YjI1MWU2ZjNiZTNiYzQxOGEzZmYxZGY4ODNkIE0AYQA6MTAwNjQ0IDEwMDY0NCBkMDA0OTFmZDdlNWJiNmZhMjhjNTE3YTBiYjMyYjhiNTA2NTM5ZDRkIDM4MWQ3NDUyZmYwZDI3OTkxNTEyOTc4ZWYwNmFhZDYzYWFhYTRjYTggTQBiADoxMDA2NDQgMTAwNjQ0IDBjZmJmMDg4ODZmY2E5YTkxY2I3NTNlYzg3MzRjODRmY2JlNTJjOWYgYWIxNDVlZGY4ZjE0OGY1YThkNzJlZWEzNWVjYWU3MjI5Nzk4YTIzMCBNAGMA",
+      "output": "ZGlmZiAtLWdpdCBhL2EgYi9hCmluZGV4IDk3NjY0NzVhNDE4NWExNTFkYzlkNTZkNjE0ZmZiOWFhZWEzYmZkNDIuLjg2ODE1Y2E3NTA1MzdiMjUxZTZmM2JlM2JjNDE4YTNmZjFkZjg4M2QgMTAwNjQ0Ci0tLSBhL2EKKysrIGIvYQpAQCAtMSArMSBAQAotb2sKK2ZpbmUKZGlmZiAtLWdpdCBhL2IgYi9iCmluZGV4IGQwMDQ5MWZkN2U1YmI2ZmEyOGM1MTdhMGJiMzJiOGI1MDY1MzlkNGQuLjM4MWQ3NDUyZmYwZDI3OTkxNTEyOTc4ZWYwNmFhZDYzYWFhYTRjYTggMTAwNjQ0Ci0tLSBhL2IKKysrIGIvYgpAQCAtMSArMSBAQAotMQoreOkKZGlmZiAtLWdpdCBhL2MgYi9jCmluZGV4IDBjZmJmMDg4ODZmY2E5YTkxY2I3NTNlYzg3MzRjODRmY2JlNTJjOWYuLmFiMTQ1ZWRmOGYxNDhmNWE4ZDcyZWVhMzVlY2FlNzIyOTc5OGEyMzAgMTAwNjQ0Ci0tLSBhL2MKKysrIGIvYwpAQCAtMSArMSBAQAotMgor6Qo=",
+      "expect": {
+        "failure": "NotUtf8",
+        "path": "b"
+      }
+    },
+    {
+      "note": "a file with an accent and a space in its path, whose line is not UTF-8: the failure names the path as the raw list has it",
+      "raw": "OjEwMDY0NCAxMDA2NDQgNzg5ODE5MjI2MTNiMmFmYjYwMjUwNDJmZjZiZDg3OGFjMTk5NGU4NSBhYjE0NWVkZjhmMTQ4ZjVhOGQ3MmVlYTM1ZWNhZTcyMjk3OThhMjMwIE0Aw6kgeAA=",
+      "output": "ZGlmZiAtLWdpdCAiYS9cMzAzXDI1MSB4IiAiYi9cMzAzXDI1MSB4IgppbmRleCA3ODk4MTkyMjYxM2IyYWZiNjAyNTA0MmZmNmJkODc4YWMxOTk0ZTg1Li5hYjE0NWVkZjhmMTQ4ZjVhOGQ3MmVlYTM1ZWNhZTcyMjk3OThhMjMwIDEwMDY0NAotLS0gImEvXDMwM1wyNTEgeCIJCisrKyAiYi9cMzAzXDI1MSB4IgkKQEAgLTEgKzEgQEAKLWEKK+kK",
+      "expect": {
+        "failure": "NotUtf8",
+        "path": "\u00e9 x"
+      }
+    },
+    {
+      "note": "a binary file whose bytes are not UTF-8 is no failure",
+      "raw": "OjEwMDY0NCAxMDA2NDQgN2Q0Mzg1OGI0NzZhMjhkMGZkODcwNDE5MTE5MmRmNWRiMTZjMjIzNSA5YTZmNTNkZWY1Mjc0ZTJmM2IwOWEyYjRiMTcxYTBkNjIxZDAzMzRkIE0AYmluAA==",
+      "output": "ZGlmZiAtLWdpdCBhL2JpbiBiL2JpbgppbmRleCA3ZDQzODU4YjQ3NmEyOGQwZmQ4NzA0MTkxMTkyZGY1ZGIxNmMyMjM1Li45YTZmNTNkZWY1Mjc0ZTJmM2IwOWEyYjRiMTcxYTBkNjIxZDAzMzRkIDEwMDY0NApCaW5hcnkgZmlsZXMgYS9iaW4gYW5kIGIvYmluIGRpZmZlcgo=",
+      "expect": [
+        {
+          "_tag": "Binary"
+        }
+      ]
+    },
+    {
+      "note": "a binary file made a link: one raw entry, two sections, the first binary and the second text",
+      "raw": "OjEwMDY0NCAxMjAwMDAgMjBiNWJlOTE4ODZkMGI2ZjI2ZGM5OGEyMjVjMGRhYzA1ZmUyYzg2ZSAxZGU1NjU5MzNiMDVmNzRjNzVmZjlhNjUyMGFmNWY5ZjhhNWEyZjFkIFQAZgA=",
+      "output": "ZGlmZiAtLWdpdCBhL2YgYi9mCmRlbGV0ZWQgZmlsZSBtb2RlIDEwMDY0NAppbmRleCAyMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlLi4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCkJpbmFyeSBmaWxlcyBhL2YgYW5kIC9kZXYvbnVsbCBkaWZmZXIKZGlmZiAtLWdpdCBhL2YgYi9mCm5ldyBmaWxlIG1vZGUgMTIwMDAwCmluZGV4IDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAuLjFkZTU2NTkzM2IwNWY3NGM3NWZmOWE2NTIwYWY1ZjlmOGE1YTJmMWQKLS0tIC9kZXYvbnVsbAorKysgYi9mCkBAIC0wLDAgKzEgQEAKK3RhcmdldApcIE5vIG5ld2xpbmUgYXQgZW5kIG9mIGZpbGUK",
+      "expect": [
+        {
+          "_tag": "Binary"
+        }
+      ]
+    },
+    {
+      "note": "a link made a binary file: one raw entry, two sections, the first text and the second binary",
+      "raw": "OjEyMDAwMCAxMDA2NDQgMWRlNTY1OTMzYjA1Zjc0Yzc1ZmY5YTY1MjBhZjVmOWY4YTVhMmYxZCAyMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlIFQAZgA=",
+      "output": "ZGlmZiAtLWdpdCBhL2YgYi9mCmRlbGV0ZWQgZmlsZSBtb2RlIDEyMDAwMAppbmRleCAxZGU1NjU5MzNiMDVmNzRjNzVmZjlhNjUyMGFmNWY5ZjhhNWEyZjFkLi4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCi0tLSBhL2YKKysrIC9kZXYvbnVsbApAQCAtMSArMCwwIEBACi10YXJnZXQKXCBObyBuZXdsaW5lIGF0IGVuZCBvZiBmaWxlCmRpZmYgLS1naXQgYS9mIGIvZgpuZXcgZmlsZSBtb2RlIDEwMDY0NAppbmRleCAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwLi4yMGI1YmU5MTg4NmQwYjZmMjZkYzk4YTIyNWMwZGFjMDVmZTJjODZlCkJpbmFyeSBmaWxlcyAvZGV2L251bGwgYW5kIGIvZiBkaWZmZXIK",
+      "expect": [
+        {
+          "_tag": "Binary"
+        }
+      ]
+    }
+  ]
+}

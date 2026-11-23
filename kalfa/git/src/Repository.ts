@@ -5,11 +5,11 @@
  *
  * This file holds the contract and the one wrap every adapter gets, and nothing that runs git. A call never reads HEAD and never changes the files of a working copy. `writeCommit` adds one commit and `moveRef` moves one ref, and no other call writes. Each adapter is its own entry point, `memory` and `process`, and `test` holds the laws they all pass.
  */
-import { Clock, Context, Effect, Option, Schema } from "effect";
+import { Clock, Context, Effect, Option, Predicate, Schema } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
-import type { PatchId } from "./Diff.ts";
+import type { Diff, PatchId } from "./Diff.ts";
 import { bytes } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
 import * as Settings from "./Settings.ts";
@@ -101,6 +101,45 @@ export class DiffTooLarge extends Schema.TaggedError<DiffTooLarge, { readonly br
   "DiffTooLarge",
   { most: Schema.Int },
 ) {}
+
+/**
+ * A range has no one merge base to measure from: `bases` holds none (the two share no history) or more than one (a criss-cross).
+ *
+ * **Details**
+ *
+ * It names the merge bases, sorted by id, and never picks one.
+ *
+ * @category errors
+ */
+export class UnclearBase extends Schema.TaggedError<UnclearBase, { readonly brand: unique symbol }>()("UnclearBase", {
+  bases: Schema.Array(CommitId),
+}) {}
+
+/**
+ * A changed text file has a line that is not UTF-8, so a diff cannot give its lines as text.
+ *
+ * **Details**
+ *
+ * `path` is the first such file in path order. `patchId` needs no text and answers for the same change.
+ *
+ * @category errors
+ */
+export class NotUtf8 extends Schema.TaggedError<NotUtf8, { readonly brand: unique symbol }>()("NotUtf8", {
+  path: Path,
+}) {}
+
+/**
+ * A diff holds a submodule, which has a commit and no file, so it has no lines.
+ *
+ * **Details**
+ *
+ * `path` is the first such entry in path order, as git prints it.
+ *
+ * @category errors
+ */
+export class NotAFile extends Schema.TaggedError<NotAFile, { readonly brand: unique symbol }>()("NotAFile", {
+  path: Schema.String,
+}) {}
 
 /**
  * A commit object is larger than `limits.bytes`.
@@ -268,6 +307,8 @@ type NewCommit = {
  * - `mergeBases` answers the best common ancestors of two commits, sorted by id. `[]` means the two share no history.
  * - `isAncestor` answers whether `descendant` reaches `ancestor`. A commit is its own ancestor.
  * - `patchId` answers the name of the changes from the files of `from` to the files of `to`, or none when the two hold the same files. It reads no history, so it answers in a shallow repository. It fails with `NoSuchCommit` for an id the repository lacks, then with `TooMany` (`files`) and `DiffTooLarge`, each before any content is read.
+ * - `rangePatchId` answers the patch id of a branch's own changes: from the one merge base of `commit` and `upstream` to `commit`, or none when there are none. It fails with `UnclearBase` naming the merge bases when there is none or more than one, and with `HistoryTooShort` in a shallow repository, as `mergeBases` does. It is one call of the service, with one span and one time limit.
+ * - `diff` answers every file the files of `from` and `to` differ in, sorted by path, with the lines added and removed, or `[]` when the two hold the same files. It fails as `patchId` does, with `NotAFile` for a submodule after the files limit and `NotUtf8` for a text file whose lines are not UTF-8 after the size limit.
  *
  * - `writeCommit` writes one commit and answers it. Its committer is the settings' one, at the clock's second and offset `+0000`. It fails when the message holds a NUL byte, when the object would pass `limits.bytes`, and when the tree is no tree or a parent is no commit. It moves no ref.
  * - `mergeTrees` merges the trees of `ours` and `theirs` over the tree of `mergeBase`, file by file, and answers the id of the merged tree, which the repository then holds. It fails `Conflict` naming each path that cannot be combined. It reads no history, so a shallow repository answers, and it moves no ref. Merging needs git 2.40 in the git adapter.
@@ -303,6 +344,17 @@ export class Repository extends Context.Service<
       from: CommitId,
       to: CommitId,
     ) => Effect.Effect<Option.Option<PatchId>, NoSuchCommit | TooMany | DiffTooLarge | Fails>;
+    readonly diff: (
+      from: CommitId,
+      to: CommitId,
+    ) => Effect.Effect<Diff, NotUtf8 | NotAFile | NoSuchCommit | TooMany | DiffTooLarge | Fails>;
+    readonly rangePatchId: (range: {
+      readonly upstream: CommitId;
+      readonly commit: CommitId;
+    }) => Effect.Effect<
+      Option.Option<PatchId>,
+      UnclearBase | HistoryTooShort | NoSuchCommit | TooMany | DiffTooLarge | Fails
+    >;
     readonly writeCommit: (
       commit: NewCommit,
     ) => Effect.Effect<Commit.Commit, NoSuchTree | NoSuchCommit | NulInMessage | TooLargeToWrite | Fails>;
@@ -320,18 +372,18 @@ export class Repository extends Context.Service<
 >()("@kalfa/git/Repository") {}
 
 /**
- * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets.
+ * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets, and `rangePatchId`, which `make` writes once from `mergeBases` and `patchId`.
  *
  * @category models
  */
-export type Raw = Omit<Repository["Service"], "writeCommit"> & {
+export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId"> & {
   readonly writeCommit: (
     commit: NewCommit & { readonly committer: Commit.Signature },
   ) => ReturnType<Repository["Service"]["writeCommit"]>;
 };
 
 /**
- * Wraps an adapter's eight calls with a span each and the time limit, and gives each commit written its committer.
+ * Wraps an adapter's ten calls with a span each and the time limit, writes `rangePatchId` from two of them, and gives each commit written its committer.
  *
  * **When to use**
  *
@@ -395,6 +447,51 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
       }
 
       return patch;
+    }),
+    rangePatchId: Effect.fn("git.rangePatchId")(function* (range: {
+      readonly upstream: CommitId;
+      readonly commit: CommitId;
+    }) {
+      yield* Effect.annotateCurrentSpan({
+        "vcs.ref.base.revision": range.upstream,
+        "vcs.ref.head.revision": range.commit,
+      });
+
+      // One time limit around both raw calls, so a slow helper still ends, and one span, so the raw calls are not wrapped again.
+      const patch = yield* limited(
+        Effect.gen(function* () {
+          const bases = yield* raw.mergeBases(range.commit, range.upstream);
+          const [base, ...others] = bases;
+
+          if (base === undefined || others.length > 0) {
+            return yield* new UnclearBase({ bases });
+          }
+
+          yield* Effect.annotateCurrentSpan({ "kalfa.git.base": base });
+
+          return yield* raw.patchId(base, range.commit);
+        }),
+      );
+
+      if (Option.isSome(patch)) {
+        yield* Effect.annotateCurrentSpan({ "kalfa.git.patch": patch.value });
+      }
+
+      return patch;
+    }),
+    diff: Effect.fn("git.diff")(function* (from: CommitId, to: CommitId) {
+      yield* Effect.annotateCurrentSpan({ "vcs.ref.base.revision": from, "vcs.ref.head.revision": to });
+      const files = yield* limited(raw.diff(from, to));
+
+      yield* Effect.annotateCurrentSpan({
+        "kalfa.git.files": files.length,
+        "kalfa.git.lines": files.reduce(
+          (total, file) => total + (Predicate.isTagged(file.content, "Text") ? file.content.lines.length : 0),
+          0,
+        ),
+      });
+
+      return files;
     }),
     writeCommit: Effect.fn("git.writeCommit")(function* (commit: NewCommit) {
       yield* Effect.annotateCurrentSpan({ "kalfa.git.tree": commit.tree, "kalfa.git.parents": commit.parents });

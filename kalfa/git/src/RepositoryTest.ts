@@ -1,12 +1,13 @@
-// The laws every adapter of `Repository` passes (S1 to S18), exported as `/test`. A runner gives a
+// The laws every adapter of `Repository` passes (S1 to S24), exported as `/test`. A runner gives a
 // `Subject`: how to seed a history into its own kind of store. The suite draws a texture, makes one
 // history for each shape class from it, seeds each, and compares every answer with the model in
 // History.test-support.ts. A subject that passes these laws answers as every other one does.
 import { describe, expect, it } from "@effect/vitest";
 import type { Tracer } from "effect";
-import { Effect, Option, Result, Schema, type Scope } from "effect";
+import { Effect, Option, Predicate, Result, Schema, type Scope } from "effect";
 import * as Commit from "./Commit.ts";
 import type * as CommitId from "./CommitId.ts";
+import * as Diff from "./Diff.ts";
 import {
   CONFLICT_MERGE_CLASSES,
   MERGE_CLASSES,
@@ -28,6 +29,8 @@ import {
   writtenSize,
   changedFiles,
   comparedBytes,
+  diffLines,
+  diffModel,
   EDIT_CLASSES,
   editCarrier,
   LIMIT_CLASSES,
@@ -45,6 +48,8 @@ import {
   drawPairs,
   parentsFirst,
   RANGE_CLASSES,
+  RANGE_PATCH_CLASSES,
+  rangeCarrier,
   drawRanges,
   refsModel,
   CANARY,
@@ -60,7 +65,9 @@ import {
   refQueries,
   walkModel,
   CRISS,
+  type DiffModel,
   type EditCarrier,
+  type EditCase,
   type Committer,
   type History,
   type MergeCase,
@@ -262,6 +269,18 @@ const NOTHING_PATCHED: Extra = { present: {}, absent: ["kalfa.git.patch"] };
 const patched = (id: Option.Option<string>): Extra =>
   Option.isSome(id) ? { present: { "kalfa.git.patch": id.value }, absent: [] } : NOTHING_PATCHED;
 
+/** What a span of `diff` holds beyond its arguments: how many files and how many lines the answer has. */
+const counted = (files: ReadonlyArray<typeof Diff.FileChange.Type>): Extra => ({
+  present: {
+    "kalfa.git.files": files.length,
+    "kalfa.git.lines": files.reduce(
+      (total, each) => total + (Predicate.isTagged(each.content, "Text") ? each.content.lines.length : 0),
+      0,
+    ),
+  },
+  absent: [],
+});
+
 /** The failure of a call that must fail: a call that answers is a failed law, with `label` to say which. */
 const refused = <A, E>(effect: Effect.Effect<A, E>, label: string): Effect.Effect<E | undefined> =>
   Effect.map(Effect.result(effect), (result) => {
@@ -289,6 +308,40 @@ const patchIds = (seeded: Seeded, carrier: EditCarrier): Effect.Effect<ReadonlyA
       ),
     { concurrency: 1 },
   );
+
+// Each is built when it is called, so a suite that is loaded before the product names exist still loads.
+const encodeDiff = (files: Diff.Diff) => Schema.encodeSync(Schema.Array(Diff.FileChange))(files);
+
+const isNotUtf8 = (error: unknown): error is Repository.NotUtf8 => Schema.is(Repository.NotUtf8)(error);
+
+const isUnclear = (error: unknown): error is Repository.UnclearBase => Schema.is(Repository.UnclearBase)(error);
+
+/** What a `diff` call came to, as plain data a law compares whole: the files, or the failure and, for `NotUtf8`, the path it names. */
+type Outcome = { readonly files: ReadonlyArray<object> } | { readonly failure: string; readonly path?: string };
+
+const diffResult = <E>(result: Result.Result<Diff.Diff, E>): Outcome => {
+  if (Result.isSuccess(result)) {
+    return { files: encodeDiff(result.success) };
+  }
+
+  const error: unknown = result.failure;
+
+  return isNotUtf8(error) ? { failure: "NotUtf8", path: error.path } : { failure: "another failure" };
+};
+
+/** What the model says a `diff` call comes to. */
+const expectedOutcome = (model: DiffModel): Outcome =>
+  model.kind === "files" ? { files: model.files } : { failure: "NotUtf8", path: model.path };
+
+/** The `diff` of one case of an edit carrier, which must be the model's answer exactly. */
+const diffCase = (seeded: Seeded, each: EditCase): Effect.Effect<DiffModel> =>
+  Effect.gen(function* () {
+    const model = diffModel(each.before, each.after);
+    const result = yield* Effect.result(seeded.repository.diff(idAt(seeded.ids, each.from), idAt(seeded.ids, each.to)));
+    expect(diffResult(result), `${each.label}: the diff is the model's`).toEqual(expectedOutcome(model));
+
+    return model;
+  });
 
 const everyEditClass = (carrier: EditCarrier): EditCarrier => {
   expect(reachedEditClasses(carrier), "the generator reaches every edit class").toEqual(EDIT_CLASSES);
@@ -851,7 +904,9 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
 
     // Plant: name a span `Repository.walk`; annotate the author's name; put the walk's ids under a bare `include`; name
     // the span of `writeCommit` `Repository.writeCommit`; annotate the written message or the settings' committer;
-    // leave `kalfa.git.from` out of `moveRef`, or put it in when `from` is none.
+    // leave `kalfa.git.from` out of `moveRef`, or put it in when `from` is none. Slice 2: annotate a diffed path, or a line's text,
+    // (k) red; let `rangePatchId` call the wrapped calls, three spans: red; give `kalfa.git.files` the count of lines, or
+    // `kalfa.git.lines` the count of files, red; put `kalfa.git.base` on a range that has no one merge base: red.
     it.effect.prop(
       "S9 spans: each call, the write and merge calls too, ends one span named git.<call> with the attributes the plan gives, and leaks nothing",
       { texture: textureArb },
@@ -869,6 +924,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
               const ids = seeded.ids;
               const a = idAt(ids, 0);
               const b = idAt(ids, ids.length - 1);
+              const merged = basesModel(shape.history, ids.length - 1, 0).map((i) => idAt(ids, i));
 
               // What a span holds only when the call has an answer to hold: the patch id, and none for no change.
               const calls: ReadonlyArray<{
@@ -925,6 +981,39 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                   note: "no change",
                   run: Effect.as(seeded.repository.patchId(b, b), NOTHING_PATCHED),
                   expected: { "vcs.ref.base.revision": b, "vcs.ref.head.revision": b },
+                },
+                {
+                  call: "diff",
+                  note: "two commits",
+                  run: Effect.map(seeded.repository.diff(a, b), counted),
+                  expected: { "vcs.ref.base.revision": a, "vcs.ref.head.revision": b },
+                },
+                {
+                  call: "diff",
+                  note: "no change",
+                  run: Effect.map(seeded.repository.diff(b, b), counted),
+                  expected: { "vcs.ref.base.revision": b, "vcs.ref.head.revision": b },
+                },
+                {
+                  call: "rangePatchId",
+                  note: `${merged.length} merge bases`,
+                  run: Effect.map(
+                    Effect.result(seeded.repository.rangePatchId({ upstream: a, commit: b })),
+                    (result) => {
+                      expect(
+                        Result.isSuccess(result),
+                        `${shape.label}: a range with one merge base answers, any other fails`,
+                      ).toBe(merged.length === 1);
+
+                      return Result.isSuccess(result)
+                        ? {
+                            present: { ...patched(result.success).present, "kalfa.git.base": merged[0] },
+                            absent: patched(result.success).absent,
+                          }
+                        : { present: {}, absent: ["kalfa.git.base", "kalfa.git.patch"] };
+                    },
+                  ),
+                  expected: { "vcs.ref.base.revision": a, "vcs.ref.head.revision": b },
                 },
               ];
 
@@ -988,6 +1077,77 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             }),
           );
 
+          // The diff of edits whose every path and line holds the canary: the span says how many files and lines, and no path or line.
+          const marked = { ...texture, parts: texture.parts.map((part) => `${CANARY}${part}`) };
+          const editing = editCarrier(marked);
+
+          yield* seedEach(subject, [{ label: "edits", history: editing.history }], config, (seeded, shape) =>
+            Effect.gen(function* () {
+              const secrets = [CANARY, ...seeded.hidden];
+              let counts = 0;
+
+              for (const each of editing.cases) {
+                const model = diffModel(each.before, each.after);
+
+                if (model.kind === "files") {
+                  counts += 1;
+                  const from = idAt(seeded.ids, each.from);
+                  const to = idAt(seeded.ids, each.to);
+                  const made = yield* traced(seeded.repository.diff(from, to));
+
+                  expectSpan(
+                    `${shape.label}, diff of ${each.label}`,
+                    made.spans,
+                    "diff",
+                    {
+                      "vcs.ref.base.revision": from,
+                      "vcs.ref.head.revision": to,
+                      "kalfa.git.files": model.files.length,
+                      "kalfa.git.lines": diffLines(model.files),
+                    },
+                    secrets,
+                  );
+                }
+              }
+
+              expect(counts, "the generator reaches diffs that answer").toBeGreaterThan(20);
+
+              // A range is one span: the patch id it ends with and the merge base it measured from, and no path or line.
+              const ranged = rangeCarrier(marked);
+
+              yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const range = yield* subject.seed(ranged.history, config);
+
+                  for (const each of ranged.cases) {
+                    const args = { upstream: idAt(range.ids, each.upstream), commit: idAt(range.ids, each.commit) };
+                    const answer = yield* range.repository.patchId(idAt(range.ids, each.base), args.commit);
+                    const made = yield* traced(range.repository.rangePatchId(args));
+
+                    expect(made.answer, `${each.label}: the range's id is the one from its merge base`).toEqual(answer);
+
+                    const attributes = expectSpan(
+                      `${shape.label}, rangePatchId of ${each.label}`,
+                      made.spans,
+                      "rangePatchId",
+                      {
+                        "vcs.ref.base.revision": args.upstream,
+                        "vcs.ref.head.revision": args.commit,
+                        "kalfa.git.base": idAt(range.ids, each.base),
+                        ...patched(answer).present,
+                      },
+                      [CANARY, ...range.hidden],
+                    );
+
+                    for (const key of patched(answer).absent) {
+                      expect(Object.keys(attributes), `${each.label}: no ${key} attribute`).not.toContain(key);
+                    }
+                  }
+                }),
+              );
+            }),
+          );
+
           // The merge calls, on a history whose every path, message and name holds the canary: a merge that is clean ends with
           // the tree it made, one that conflicts with how many paths, and no span names a path.
           const merging = mergeCarrier(texture, CANARY);
@@ -1044,19 +1204,22 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     );
 
     // Plant: add a `head` key to the service; let `readRefs` pack refs, so the object count changes; let `writeCommit`
-    // point `refs/heads/main` at the commit it wrote.
+    // point `refs/heads/main` at the commit it wrote; leave `diff` or `rangePatchId` out of the service, or let `rangePatchId` be a
+    // call an adapter writes, so it is in `Raw` too.
     it.effect.prop(
-      "S10 no working copy: the service has the six read calls and the three write calls, no list of reads changes the store, and no list of writes or merges moves a ref",
+      "S10 no working copy: the service has the eight read calls and the three write calls, no list of reads changes the store, and no list of writes or merges moves a ref",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), DEFAULT, (seeded, shape) =>
           Effect.gen(function* () {
             expect(Object.keys(seeded.repository).sort(), `${shape.label}: the keys`).toEqual([
+              "diff",
               "isAncestor",
               "mergeBases",
               "mergeTrees",
               "moveRef",
               "patchId",
+              "rangePatchId",
               "readCommit",
               "readRefs",
               "walk",
@@ -1081,6 +1244,8 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 seeded.repository.mergeBases(x, y),
                 seeded.repository.isAncestor(x, y),
                 seeded.repository.patchId(x, y),
+                seeded.repository.diff(x, y),
+                seeded.repository.rangePatchId({ upstream: x, commit: y }),
               ];
 
               yield* Effect.exit(calls[(texture.nums[k + 48] ?? 0) % calls.length] ?? Effect.void);
@@ -1333,9 +1498,9 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     );
 
     // Plant: delete the files check, (h) red; delete the size check, (h) red; count `>=` for `>` on either limit: red; check the
-    // size before the files: red; count the files that do not change: red; count only one side's bytes: red.
+    // size before the files: red; count the files that do not change: red; count only one side's bytes: red; the same plants in `diff`.
     it.effect.prop(
-      "S17 limits never cut: at exactly limits.files files and limits.diff bytes patchId answers, one more fails with TooMany or DiffTooLarge, over both is TooMany",
+      "S17 limits never cut: at exactly limits.files files and limits.diff bytes patchId and diff answer, one more fails with TooMany or DiffTooLarge, over both is TooMany",
       { texture: textureArb },
       ({ texture }) =>
         Effect.gen(function* () {
@@ -1353,6 +1518,26 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             Effect.scoped(Effect.flatMap(subject.seed(carrier.history, settings(limits)), call));
 
           const patch = (seeded: Seeded) => seeded.repository.patchId(idAt(seeded.ids, 0), idAt(seeded.ids, 1));
+
+          // The diff of the same two commits: at exactly the limits it answers the model's files, or `NotUtf8` when the drawn
+          // bytes are not text, and one more is the same refusal `patchId` gives.
+          const diff = (seeded: Seeded) => seeded.repository.diff(idAt(seeded.ids, 0), idAt(seeded.ids, 1));
+          const model = expectedOutcome(diffModel(carrier.before, carrier.after));
+
+          const outcome = (limits: { readonly files: number; readonly diff: number }) =>
+            Effect.map(Effect.result(ask(limits, diff)), diffResult);
+
+          expect(yield* outcome({ files, diff: bytes }), "diff at exactly both limits").toEqual(model);
+          expect(yield* outcome({ files: files + 5, diff: bytes + 50 }), "diff with room to spare").toEqual(model);
+
+          const diffMany = yield* refused(ask({ files: files - 1, diff: bytes }, diff), "diff, one file too many");
+          expectFailure(diffMany, Repository.TooMany, { limit: "files", most: files - 1 }, "diff's files limit");
+
+          const diffLarge = yield* refused(ask({ files, diff: bytes - 1 }, diff), "diff, one byte too many");
+          expectFailure(diffLarge, Repository.DiffTooLarge, { most: bytes - 1 }, "diff's size limit");
+
+          const diffBoth = yield* refused(ask({ files: files - 1, diff: bytes - 1 }, diff), "diff, over both limits");
+          expectFailure(diffBoth, Repository.TooMany, { limit: "files", most: files - 1 }, "diff, over both is files");
 
           const exact = yield* answered(ask({ files, diff: bytes }, patch), "at exactly both limits");
           reached.add("exactly the files limit");
@@ -1380,9 +1565,10 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     );
 
     // Plant: answer none for an unknown `from`, (i) red; answer none for an unknown `to`, (i) red; check the limits before the
-    // ids, red.
+    // ids, red; answer `[]` from `diff` for an unknown id, (i) red; read a tree's id as a commit in `diff`, (i) red; answer none from
+    // `rangePatchId` for an unknown upstream or tip, (i) red.
     it.effect.prop(
-      "S18 unknown ids: an id the store lacks, or a tree's id, on either side fails patchId with NoSuchCommit naming it, never none, even when a limit would fail first",
+      "S18 unknown ids: an id the store lacks, or a tree's id, on either side fails patchId, diff and rangePatchId with NoSuchCommit naming it, never none or [], even when a limit would fail first",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), settings({ files: 1, diff: 1 }), (seeded, shape) =>
@@ -1397,10 +1583,16 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             const gone = seeded.ids.length === 0 ? missing : undefined;
 
             for (const absent of missing) {
-              for (const [side, call] of [
+              const calls: ReadonlyArray<readonly [string, Effect.Effect<unknown, unknown>]> = [
                 ["from", seeded.repository.patchId(absent, known)],
                 ["to", seeded.repository.patchId(known, absent)],
-              ] as const) {
+                ["from of a diff", seeded.repository.diff(absent, known)],
+                ["to of a diff", seeded.repository.diff(known, absent)],
+                ["upstream", seeded.repository.rangePatchId({ upstream: absent, commit: known })],
+                ["tip", seeded.repository.rangePatchId({ upstream: known, commit: absent })],
+              ];
+
+              for (const [side, call] of calls) {
                 const error = yield* refused(call, `${shape.label}: an unknown ${side}`);
                 expect(isMissing(error), `${shape.label}: an unknown ${side} fails with NoSuchCommit`).toBe(true);
 
@@ -1413,6 +1605,378 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             }
           }),
         ),
+      run,
+    );
+
+    // Slice 2 of ticket 1933: the range and the diff. The model is `diffModel` and `rangeCarrier` in History.test-support.ts.
+
+    // Plant: use `upstream` itself as the base, (o) red; take the first of two merge bases, (p) red; answer none for no merge base,
+    // (p) red; read the merge bases without the shallow check, (q) red; refuse a merge base equal to the commit, (r) red; refuse
+    // a commit equal to the upstream, (r) red.
+    it.effect.prop(
+      "S22 the range: rangePatchId is the patch id from the one merge base to the tip, the same for a rebased, merged or squashed branch, none when the tip is its merge base, UnclearBase naming the bases when there is none or two, HistoryTooShort in a shallow repository",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const reached = new Set<string>();
+          const carrier = rangeCarrier(texture);
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+              const ids: Array<string | undefined> = [];
+
+              for (const each of carrier.cases) {
+                for (const label of each.classes) {
+                  reached.add(label);
+                }
+
+                expect(
+                  basesModel(carrier.history, each.commit, each.upstream),
+                  `${each.label}: the model names one merge base`,
+                ).toEqual([each.base]);
+
+                const range = {
+                  upstream: idAt(seeded.ids, each.upstream),
+                  commit: idAt(seeded.ids, each.commit),
+                };
+
+                const answer = yield* answered(seeded.repository.rangePatchId(range), each.label);
+
+                const direct = yield* answered(
+                  seeded.repository.patchId(idAt(seeded.ids, each.base), range.commit),
+                  `${each.label}, from its merge base`,
+                );
+
+                expect(answer, `${each.label}: the patch id from its merge base to the tip`).toEqual(direct);
+
+                expect(
+                  answer !== undefined && Option.isSome(answer),
+                  `${each.label}: it has ${each.key === undefined ? "no" : "an"} id`,
+                ).toBe(each.key !== undefined);
+
+                ids.push(answer === undefined ? undefined : Option.getOrUndefined(answer));
+              }
+
+              let alike = 0;
+
+              for (const [i, a] of carrier.cases.entries()) {
+                for (const [j, b] of carrier.cases.entries()) {
+                  if (i < j && a.key !== undefined && b.key !== undefined) {
+                    alike += a.key === b.key ? 1 : 0;
+                    expect(
+                      ids[i] === ids[j],
+                      `${a.label} and ${b.label}: one edit has one id and two edits have two`,
+                    ).toBe(a.key === b.key);
+                  }
+                }
+              }
+
+              expect(alike, "the generator reaches ranges that make one edit").toBeGreaterThan(4);
+            }),
+          );
+
+          // Every shape of history, and the pairs of commits it draws: one merge base answers the patch id from it, any other count
+          // is `UnclearBase` naming exactly the merge bases.
+          yield* seedEach(subject, everyShape(texture), DEFAULT, (seeded, shape) =>
+            Effect.forEach(
+              [0, 1],
+              (k) =>
+                Effect.forEach(
+                  drawPairs(shape, texture, k),
+                  ({ kind, a, b }) =>
+                    Effect.gen(function* () {
+                      const place = `${shape.label}, ${kind} pair ${a} ${b}`;
+                      const range = { upstream: idAt(seeded.ids, b), commit: idAt(seeded.ids, a) };
+                      const bases = basesModel(shape.history, a, b).map((i) => idAt(seeded.ids, i));
+
+                      if (bases.length === 1) {
+                        const direct = yield* seeded.repository.patchId(bases[0] ?? range.commit, range.commit);
+
+                        expect(yield* seeded.repository.rangePatchId(range), `${place}: the one merge base`).toEqual(
+                          direct,
+                        );
+
+                        return;
+                      }
+
+                      const error = yield* refused(seeded.repository.rangePatchId(range), place);
+                      expect(error, `${place}: ${bases.length} merge bases`).toBeInstanceOf(Repository.UnclearBase);
+
+                      if (isUnclear(error)) {
+                        expect([...error.bases].sort(), `${place}: it names the merge bases`).toEqual(
+                          [...bases].sort(),
+                        );
+                      }
+
+                      reached.add(
+                        bases.length === 0 ? "(p) no common history" : "(p) a criss-cross with two merge bases",
+                      );
+                    }),
+                  { concurrency: 1 },
+                ),
+              { concurrency: 1 },
+            ),
+          );
+
+          // A shallow repository cannot know its merge bases, so it fails and never guesses.
+          const cut = everyShape(texture).flatMap((shape) => {
+            const history = cutShallow(shape.history);
+
+            return history === undefined ? [] : [{ label: `${shape.label}, shallow`, history }];
+          });
+
+          yield* seedEach(subject, cut, DEFAULT, (seeded, shape) =>
+            Effect.gen(function* () {
+              const tip = idAt(seeded.ids, shape.history.nodes.length - 1);
+
+              const error = yield* refused(
+                seeded.repository.rangePatchId({ upstream: idAt(seeded.ids, 0), commit: tip }),
+                shape.label,
+              );
+
+              expect(isTooShort(error), `${shape.label}: a range that reads history`).toBe(true);
+              reached.add("(q) a shallow repository");
+            }),
+          );
+
+          expect([...reached].sort(), "the generator reaches every range class").toEqual(
+            [...RANGE_PATCH_CLASSES].sort(),
+          );
+        }),
+      run,
+    );
+
+    // Plant: report a type change as two files, (a) red; drop mode-only changes, (b) red; strip each line's end, (d) red; fail on
+    // an empty new file, (f) red; join two change blocks into one, (g) red; sort paths with JavaScript's `<`, (k) red; number every
+    // line from the top of its block, or a removed line in the new file, (g) red; give a changed file its old entry on both sides, red.
+    it.effect.prop(
+      "S23 the diff: for every edit the classes draw, diff is the model's answer exactly: the files in path byte order, each tag, entries, blob ids and lines with their own ends and where they sit, and [] for no change",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyEditClass(editCarrier(texture));
+          const seen = new Set<string>();
+          let empty = 0;
+          let shifted = 0;
+          let withoutEnd = 0;
+          let crlf = 0;
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+
+              for (const each of carrier.cases) {
+                const model = yield* diffCase(seeded, each);
+
+                if (model.kind === "files") {
+                  for (const file of model.files) {
+                    seen.add(file._tag);
+                    seen.add(file.content._tag);
+
+                    if (Predicate.isTagged(file.content, "Text")) {
+                      const { lines } = file.content;
+                      empty += lines.length === 0 ? 1 : 0;
+                      withoutEnd += lines.some((line) => !line.text.endsWith("\n")) ? 1 : 0;
+                      crlf += lines.some((line) => line.text.endsWith("\r\n")) ? 1 : 0;
+
+                      // A line sits at its place in the old file when removed and in the new one when added: the two differ in a
+                      // block below lines that were inserted or removed.
+                      shifted += lines.some((line, i) => {
+                        const next = lines[i + 1];
+
+                        return (
+                          Predicate.isTagged(line, "Removed") &&
+                          next !== undefined &&
+                          Predicate.isTagged(next, "Added") &&
+                          next.at !== line.at
+                        );
+                      })
+                        ? 1
+                        : 0;
+                    }
+                  }
+
+                  if (each.key === undefined) {
+                    expect(model.files, `${each.label}: no change`).toEqual([]);
+                  }
+                }
+              }
+
+              for (const [k, id] of seeded.ids.entries()) {
+                expect(yield* seeded.repository.diff(id, id), `commit ${k} with itself: no change`).toEqual([]);
+              }
+            }),
+          );
+
+          expect([...seen].sort(), "the generator reaches every tag").toEqual(
+            ["Binary", "Deleted", "Modified", "New", "Text"].sort(),
+          );
+          expect(empty, "the generator reaches files with no line").toBeGreaterThan(1);
+          expect(withoutEnd, "the generator reaches a last line with no end").toBeGreaterThan(1);
+          expect(crlf, "the generator reaches lines that end in CRLF").toBeGreaterThan(0);
+          expect(shifted, "the generator reaches a changed block below an inserted line").toBeGreaterThan(0);
+        }),
+      run,
+    );
+
+    // Plant: drop the binary check, (c) red; look for a NUL in the whole file, (c) red; look in the first 8001 bytes or 7999, (c) red;
+    // look at the new side only, or at the old side only, (c) red; answer `Binary` for a file whose bytes did not change, (b) red.
+    it.effect.prop(
+      "S24 binary and text: a NUL in the first 8000 bytes of either side is Binary with both blob ids, a NUL only past them is Text, and a binary file whose bytes did not change has no line",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyEditClass(editCarrier(texture));
+
+          const binary = new Set([
+            "(c) a NUL in the first 8000 bytes on one side",
+            "(c) a NUL at byte 8000, binary",
+            "(n) a binary edit with other bytes",
+            "(n) the same binary edit on a base that differs in another file",
+            "(a) a binary file made a link",
+            "(a) a link made a binary file",
+          ]);
+
+          // What the class of a case says its content is, whatever the model says: a NUL among the first 8000 bytes is binary, a NUL
+          // later is a line like any other, and bytes that did not change hold no line.
+          const wantedContent = (each: EditCase): "Binary" | "Text" | undefined => {
+            if (each.classes.some((label) => binary.has(label))) {
+              return "Binary";
+            }
+
+            return each.classes.includes("(c) a NUL at byte 8001, text") ||
+              each.label.startsWith("a mode-only change of ")
+              ? "Text"
+              : undefined;
+          };
+
+          let checked = 0;
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+
+              for (const each of carrier.cases) {
+                const wanted = wantedContent(each);
+
+                if (wanted !== undefined) {
+                  checked += 1;
+
+                  const files = yield* answered(
+                    seeded.repository.diff(idAt(seeded.ids, each.from), idAt(seeded.ids, each.to)),
+                    each.label,
+                  );
+
+                  const [file, ...rest] = files === undefined ? [] : encodeDiff(files);
+                  expect(rest, `${each.label}: one changed file`).toEqual([]);
+                  expect(file?.content._tag, `${each.label}: ${wanted}`).toBe(wanted);
+
+                  if (
+                    file !== undefined &&
+                    Predicate.isTagged(file, "Modified") &&
+                    Predicate.isTagged(file.content, "Binary")
+                  ) {
+                    expect(file.before.blob, `${each.label}: the two blobs are named`).not.toBe(file.after.blob);
+                  }
+
+                  const lines =
+                    file !== undefined && Predicate.isTagged(file.content, "Text") ? file.content.lines : undefined;
+
+                  if (each.classes.includes("(c) a NUL at byte 8001, text")) {
+                    expect(
+                      lines?.length ?? 0,
+                      `${each.label}: a NUL past 8000 bytes is a line like any other`,
+                    ).toBeGreaterThan(0);
+                  }
+
+                  if (each.label.startsWith("a mode-only change of ")) {
+                    expect(lines, `${each.label}: bytes that did not change hold no line`).toEqual([]);
+                  }
+                }
+              }
+            }),
+          );
+
+          expect(checked, "the generator reaches binary files, text files and a binary file's mode").toBeGreaterThan(8);
+        }),
+      run,
+    );
+
+    // Plant: decode with replacement, (e) red; decode a binary file's bytes too, (c) red; name the last such file and not the
+    // first, (e) red; read the lines before the limits are checked, red; fail `patchId` on the same bytes, (e) red.
+    it.effect.prop(
+      "S19 not UTF-8: diff over a text file whose lines are not UTF-8 fails with NotUtf8 naming the first such file by path bytes, after the limits, while patchId over the same edit answers an id and a binary file's bytes never fail",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyEditClass(editCarrier(texture));
+          const p = texture.parts[0] ?? "";
+
+          const bad = carrier.cases.filter((each) => diffModel(each.before, each.after).kind === "not-utf8");
+          expect(bad.length, "the generator reaches files that are not UTF-8").toBeGreaterThan(1);
+
+          const two = carrier.cases.find((each) => each.label === "two latin-1 files, named by bytes");
+          const one = carrier.cases.find((each) => each.label === "latin-1 lines");
+          const binary = carrier.cases.find((each) => each.label === "a binary file whose bytes are not UTF-8");
+
+          if (two === undefined || one === undefined || binary === undefined) {
+            return yield* Effect.die("the carrier holds no such case");
+          }
+
+          const ask = <A, E>(
+            limits: { readonly files?: number; readonly diff?: number },
+            call: (seeded: Seeded) => Effect.Effect<A, E>,
+          ) => Effect.scoped(Effect.flatMap(subject.seed(carrier.history, settings(limits)), call));
+
+          const askDiff = (each: EditCase) => (seeded: Seeded) =>
+            seeded.repository.diff(idAt(seeded.ids, each.from), idAt(seeded.ids, each.to));
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+
+              for (const each of bad) {
+                const model = diffModel(each.before, each.after);
+                const error = yield* refused(askDiff(each)(seeded), each.label);
+                expectFailure(
+                  error,
+                  Repository.NotUtf8,
+                  { path: model.kind === "not-utf8" ? model.path : "" },
+                  each.label,
+                );
+
+                const id = yield* answered(
+                  seeded.repository.patchId(idAt(seeded.ids, each.from), idAt(seeded.ids, each.to)),
+                  `${each.label}: patchId`,
+                );
+
+                expect(id !== undefined && Option.isSome(id), `${each.label}: the same bytes have a patch id`).toBe(
+                  true,
+                );
+              }
+
+              // Two files that are not UTF-8: the one whose path sorts first by UTF-8 bytes, which JavaScript's `<` puts last.
+              const named = yield* refused(askDiff(two)(seeded), two.label);
+              expectFailure(named, Repository.NotUtf8, { path: `\uE000${p}` }, "the first path by bytes");
+
+              // Bytes that are not UTF-8 in a binary file are no lines, so nothing fails.
+              const files = yield* answered(askDiff(binary)(seeded), binary.label);
+              expect(files === undefined ? undefined : encodeDiff(files).map((file) => file.content._tag)).toEqual([
+                "Binary",
+              ]);
+            }),
+          );
+
+          // The limits are checked before the lines are read: a files limit under the two files, and a size limit one byte under the
+          // content, give their own failures and never `NotUtf8`.
+          const many = yield* refused(ask({ files: 1 }, askDiff(two)), "two files over a limit of one");
+          expectFailure(many, Repository.TooMany, { limit: "files", most: 1 }, "the files limit comes first");
+
+          const bytes = comparedBytes(one.before, one.after);
+          const large = yield* refused(ask({ diff: bytes - 1 }, askDiff(one)), "one byte over the limit");
+          expectFailure(large, Repository.DiffTooLarge, { most: bytes - 1 }, "the size limit comes first");
+        }),
       run,
     );
 
