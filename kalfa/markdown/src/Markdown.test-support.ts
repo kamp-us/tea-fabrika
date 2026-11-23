@@ -299,8 +299,8 @@ export const problems = (document: Root, body: string): ReadonlyArray<string> =>
           runStart = at;
         }
 
-        // mdast starts a setext heading at the first definition of the run right above it, so those siblings overlap (README, "Two parts
-        // that sit side by side can overlap"). Only that: a setext heading that starts where the run starts and ends below the part before it.
+        // mdast starts a setext heading at the first definition of the run right above it, so those siblings overlap (README: "Only one pair
+        // of siblings overlaps: a setext heading and the run of link definitions right above it"). Only that: a setext heading that starts where the run starts and ends below the part before it.
         const cutFromRun =
           child.type === "heading" &&
           previous === "definition" &&
