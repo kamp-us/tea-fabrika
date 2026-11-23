@@ -3,7 +3,10 @@
 // test run: each `@ts-expect-error` below is a typo the ticket names, and it must stay a compile error. The vectors are in
 // Octokit.test-support.ts. Each helper holds one law's lines, and its `it` only names the helper.
 import { expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import type { Context, Duration } from "effect";
+import { Data, DateTime, type Effect, type Option, Schema } from "effect";
+import type { ListCheckRuns, Shouter, ShoutedAnswer, ShoutedIssue, ShoutedQuery } from "./GitHub.test-support.ts";
+import { Dispatch, DispatchUnread, ShoutedRuns } from "./GitHub.test-support.ts";
 import * as GitHub from "./GitHub.ts";
 import type * as Check from "./internal/Check.ts";
 import type { VECTORS } from "./Octokit.test-support.ts";
@@ -327,4 +330,182 @@ it("T6 type: a success Schema names only fields and values the description's ans
 it("T10 type: a route with a body-less 2xx beside a body 2xx names it, and only route makes a Route", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
   expectTypeOf(bodilessAndBrand).toBeFunction();
+});
+
+// ---- T5, T7 and T8: `GitHub.call`
+
+type Needs<E> = E extends Effect.Effect<unknown, unknown, infer R> ? R : never;
+
+type Failed<E> = E extends Effect.Effect<unknown, infer F, unknown> ? F : never;
+
+type Done<E> = E extends Effect.Effect<infer A, unknown, unknown> ? A : never;
+
+type Failures = GitHub.GitHubError | GitHub.RateLimited;
+
+const RepoParams = { owner: "o", repo: "r" } as const;
+
+const cancel = GitHub.route(CANCEL);
+
+const zen = GitHub.route(ZEN);
+
+const issue = GitHub.route(CREATE_ISSUE, {
+  payload: Schema.Struct({ title: Schema.String, body: Schema.optionalKey(Schema.String) }),
+});
+
+const token = GitHub.route(INSTALLATION_TOKEN, {
+  payload: Schema.Struct({ repositories: Schema.optionalKey(Schema.Array(Schema.String)) }),
+});
+
+const search = GitHub.route(SEARCH_ISSUES, { query: { q: Schema.String } });
+
+const optionalQuery = GitHub.route(CHECK_RUNS, { query: { status: Schema.optionalKey(Schema.Literals(["queued"])) } });
+
+// The decoded type is not the encoded one: a date a caller holds as a DateTime, GitHub reads as text.
+const dated = GitHub.route(CREATE_ISSUE, { payload: Schema.Struct({ title: Schema.DateTimeUtcFromString }) });
+
+// T5. Plant: make every input key optional, and the lines that leave out `params`, `payload` or a required query key compile;
+// type `payload` as the Schema's encoded type, and the `dated` lines swap.
+const inputs = () => {
+  const ok = [
+    GitHub.call(cancel, { params: { ...RepoParams, run_id: 1 } }),
+    GitHub.call(issue, { params: RepoParams, payload: { title: "t" } }),
+    // The token's body is optional in the description, so the input takes `payload` or leaves it out.
+    GitHub.call(token, { params: { installation_id: 1 } }),
+    GitHub.call(token, { params: { installation_id: 1 }, payload: { repositories: ["a"] } }),
+    // A route with no path name has no `params`.
+    GitHub.call(zen, {}),
+    GitHub.call(search, { query: { q: "is:open" } }),
+    GitHub.call(optionalQuery, { params: { ...RepoParams, ref: "main" } }),
+    GitHub.call(dated, { params: RepoParams, payload: { title: DateTime.makeUnsafe(0) } }),
+  ];
+
+  // @ts-expect-error a payload literal with a key the Schema does not have
+  const refused1 = GitHub.call(issue, { params: RepoParams, payload: { title: "t", titel: "x" } });
+  // @ts-expect-error the issue route requires its payload
+  const refused2 = GitHub.call(issue, { params: RepoParams });
+  // @ts-expect-error a payload is the decoded type: a DateTime, not the text it is sent as
+  const refused3 = GitHub.call(dated, { params: RepoParams, payload: { title: "2026-01-01T00:00:00.000Z" } });
+  // @ts-expect-error a route with no path name has no `params` key
+  const refused4 = GitHub.call(zen, { params: {} });
+  // @ts-expect-error a route with path names requires `params`
+  const refused5 = GitHub.call(cancel, {});
+  // @ts-expect-error a path name left out
+  const refused6 = GitHub.call(cancel, { params: RepoParams });
+  // @ts-expect-error a route that declared no query takes none
+  const refused7 = GitHub.call(cancel, { params: { ...RepoParams, run_id: 1 }, query: {} });
+  // @ts-expect-error a query with a required key requires `query`
+  const refused8 = GitHub.call(search, {});
+  // @ts-expect-error a query key the route did not declare
+  const refused9 = GitHub.call(search, { query: { q: "x", page: 1 } });
+  // @ts-expect-error a route that declared no payload takes none
+  const refused10 = GitHub.call(cancel, { params: { ...RepoParams, run_id: 1 }, payload: {} });
+
+  // The input is exactly what the route declared: the path names, and nothing else for the cancel route.
+  expectTypeOf<GitHub.Input<typeof cancel>>().toExtend<{ readonly params: Check.Params<typeof CANCEL> }>();
+  expectTypeOf<{ readonly params: Check.Params<typeof CANCEL> }>().toExtend<GitHub.Input<typeof cancel>>();
+  expectTypeOf<GitHub.Input<typeof issue>["payload"]>().toEqualTypeOf<{
+    readonly title: string;
+    readonly body?: string;
+  }>();
+
+  expectTypeOf([
+    ok,
+    refused1,
+    refused2,
+    refused3,
+    refused4,
+    refused5,
+    refused6,
+    refused7,
+    refused8,
+    refused9,
+    refused10,
+  ]).toBeArray();
+};
+
+// T7. Plant: leave `Services<Op>` out of the requirements, and the service lines fail; answer the plain type on a route with a
+// body-less 2xx, and the `Option` line fails.
+const callType = () => {
+  const answered = Schema.Struct({ check_runs: Schema.Array(Schema.Struct({ id: Schema.Int })) });
+  const withSuccess = GitHub.route(CHECK_RUNS, { success: answered });
+  const params = { ...RepoParams, ref: "main" };
+
+  expectTypeOf(GitHub.call(withSuccess, { params })).toEqualTypeOf<
+    Effect.Effect<typeof answered.Type, Failures, GitHub.GitHub>
+  >();
+  // A route declared with no `success` answers `void`.
+  expectTypeOf(GitHub.call(cancel, { params: { ...RepoParams, run_id: 1 } })).toEqualTypeOf<
+    Effect.Effect<void, Failures, GitHub.GitHub>
+  >();
+  expectTypeOf(GitHub.call(zen, {})).toEqualTypeOf<Effect.Effect<void, Failures, GitHub.GitHub>>();
+  expectTypeOf(
+    GitHub.call(DispatchUnread, { params: { ...RepoParams, workflow_id: "w" }, payload: { ref: "main" } }),
+  ).toEqualTypeOf<Effect.Effect<void, Failures, GitHub.GitHub>>();
+  // A route with a 2xx that has no body, and a success declared: the answer is the success or none.
+  const dispatched = GitHub.call(Dispatch, { params: { ...RepoParams, workflow_id: "w" }, payload: { ref: "main" } });
+
+  expectTypeOf<Done<typeof dispatched>>().toEqualTypeOf<
+    Option.Option<{ readonly workflow_run_id: number; readonly run_url: string }>
+  >();
+  expectTypeOf<Failed<typeof dispatched>>().toEqualTypeOf<Failures>();
+
+  // A Schema whose work needs a service shows that service in what the call needs, and in `Services`.
+  const shouted = GitHub.call(ShoutedRuns, { params, query: { per_page: 1, check_name: "n" } });
+
+  expectTypeOf<Needs<typeof shouted>>().toEqualTypeOf<GitHub.GitHub | Shouter>();
+  expectTypeOf<GitHub.Services<typeof ShoutedRuns>>().toEqualTypeOf<Shouter>();
+  // The service sits in one part only: the query's encoding, the payload's encoding, or the success's decoding.
+  expectTypeOf<GitHub.Services<typeof ShoutedQuery>>().toEqualTypeOf<Shouter>();
+  expectTypeOf<GitHub.Services<typeof ShoutedIssue>>().toEqualTypeOf<Shouter>();
+  expectTypeOf<GitHub.Services<typeof ShoutedAnswer>>().toEqualTypeOf<Shouter>();
+  expectTypeOf<GitHub.Services<typeof cancel>>().toEqualTypeOf<never>();
+  expectTypeOf<Failed<typeof shouted>>().toEqualTypeOf<Failures>();
+  expectTypeOf<GitHub.Success<typeof cancel>>().toEqualTypeOf<void>();
+  expectTypeOf<GitHub.Success<typeof ListCheckRuns>>().toEqualTypeOf<{
+    readonly check_runs: ReadonlyArray<{
+      readonly id: number;
+      readonly name: string;
+      readonly status: "queued" | "in_progress" | "completed";
+      readonly conclusion: "success" | "failure" | "cancelled" | null;
+    }>;
+  }>();
+};
+
+// An object that has every key a route has but its brand, with the same tag.
+class Lookalike extends Data.TaggedClass("Route")<{
+  readonly route: typeof ZEN;
+  readonly method: "GET";
+  readonly path: "/zen";
+}> {}
+
+// T8. Plant: type `call`'s first parameter structurally, without the brand, and the literal line compiles.
+const onlyRoute = () => {
+  // @ts-expect-error an object with a route's visible keys is not a Route
+  const refused11 = GitHub.call(new Lookalike({ route: ZEN, method: "GET", path: "/zen" }), {});
+  // @ts-expect-error a route text is not a Route
+  const refused12 = GitHub.call(ZEN, {});
+
+  expectTypeOf([refused11, refused12]).toBeArray();
+
+  // The service is exactly its two members.
+  expectTypeOf<Context.Service.Shape<typeof GitHub.GitHub>>().toEqualTypeOf<{
+    readonly send: (request: GitHub.Request) => Effect.Effect<GitHub.Reply, Failures>;
+    readonly poll: Duration.Duration;
+  }>();
+  expectTypeOf<keyof Context.Service.Shape<typeof GitHub.GitHub>>().toEqualTypeOf<"send" | "poll">();
+};
+
+it("T5 type: the input of call is the route's parts, each present exactly when the route has it, and its payload is the decoded type", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(inputs).toBeFunction();
+});
+
+it("T7 type: call gives the success, or void, or an Option; fails with GitHubError or RateLimited; and needs GitHub and the Schemas' services", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(callType).toBeFunction();
+});
+
+it("T8 type: only a Route reaches call, and the GitHub service is exactly send and poll", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(onlyRoute).toBeFunction();
 });
