@@ -14,7 +14,10 @@ import * as Programs from "../runtime/Program.ts";
 import * as Wire from "../runtime/WireTest.ts";
 import * as Tools from "./Tools.ts";
 
-const options = (runs: number) => ({ arbitrary: { seed: 119120, runs, size: 4096 } });
+const options = (runs: number, part = 0) => ({ arbitrary: { seed: 119120 + part, runs, size: 4096 } });
+
+// T2, P3 and P4 run as PARTS laws of a third of their 300 runs each, so no one law is the whole cost: 300 runs took 13.6 to 16.6 s of CI's 60 s limit for each. The parts together run the full count.
+const PARTS = [1, 2, 3] as const;
 
 const text = Schema.String.check(Schema.isMaxLength(80));
 
@@ -277,76 +280,79 @@ it.prop(
   options(300),
 );
 
-it.prop(
-  "T2: any name and JSON return a Call; hidden and unknown tools refuse, invalid values refuse, good values keep the port type",
-  {
-    ports: Arbitrary.array(Arbitrary.schema(Port), { maxLength: 16 }),
-    input: Schema.Json,
-    name: Schema.String,
-    text,
-    n: Schema.Int,
-  },
-  ({ ports, input, name, text: s, n }) => {
-    const { program, entries } = declaration("pack/sample", ports);
-    const listed = Tools.list([program]);
-    expect(Result.isSuccess(listed)).toBe(true);
-    expect(Schema.is(Tools.Call)(Tools.read([program], name, input))).toBe(true);
-    expect(Tools.read([program], `missing/${name}`, input)).toEqual({ _tag: "refused", reason: "unknown_tool" });
-    expect(Tools.read([program], "ps", {})).toEqual({ _tag: "ps" });
+for (const part of PARTS) {
+  it.prop(
+    "T2: any name and JSON return a Call; hidden and unknown tools refuse, invalid values refuse, good values keep the port type" +
+      ` (part ${part} of ${PARTS.length})`,
+    {
+      ports: Arbitrary.array(Arbitrary.schema(Port), { maxLength: 16 }),
+      input: Schema.Json,
+      name: Schema.String,
+      text,
+      n: Schema.Int,
+    },
+    ({ ports, input, name, text: s, n }) => {
+      const { program, entries } = declaration("pack/sample", ports);
+      const listed = Tools.list([program]);
+      expect(Result.isSuccess(listed)).toBe(true);
+      expect(Schema.is(Tools.Call)(Tools.read([program], name, input))).toBe(true);
+      expect(Tools.read([program], `missing/${name}`, input)).toEqual({ _tag: "refused", reason: "unknown_tool" });
+      expect(Tools.read([program], "ps", {})).toEqual({ _tag: "ps" });
 
-    for (const { key, schema, port } of entries) {
-      const tool = `sample_${key}`;
-      const call = Tools.read([program], tool, input);
+      for (const { key, schema, port } of entries) {
+        const tool = `sample_${key}`;
+        const call = Tools.read([program], tool, input);
 
-      if (!port.read && port.hidden) {
-        expect(call).toEqual({ _tag: "refused", reason: "unknown_tool" });
-        expect(Tools.read([program], tool, { value: valueFor(port.shape, s, n) })).toEqual({
-          _tag: "refused",
-          reason: "unknown_tool",
-        });
-        continue;
-      }
+        if (!port.read && port.hidden) {
+          expect(call).toEqual({ _tag: "refused", reason: "unknown_tool" });
+          expect(Tools.read([program], tool, { value: valueFor(port.shape, s, n) })).toEqual({
+            _tag: "refused",
+            reason: "unknown_tool",
+          });
+          continue;
+        }
 
-      const decoded = Schema.decodeUnknownResult(Schema.toCodecJson(Schema.Struct({ value: schema })), closed)(input);
-      expect(call).toEqual(
-        Result.isFailure(decoded)
-          ? { _tag: "refused", reason: "bad_input" }
-          : port.read
-            ? { _tag: "query", program: program.name, name: key, query: decoded.success.value }
-            : { _tag: "write", program: program.name, m: { ...decoded.success.value, _tag: key } },
-      );
-      const invalid = port.read && port.shape === "text" ? false : null;
-      expect(Tools.read([program], tool, { value: invalid })).toEqual({ _tag: "refused", reason: "bad_input" });
-      const value = port.read && port.shape === "text" ? null : valueFor(port.shape, s, n);
-      expect(Tools.read([program], tool, { value })).toEqual(
-        port.read
-          ? { _tag: "query", program: program.name, name: key, query: value }
-          : { _tag: "write", program: program.name, m: { ...value, _tag: key } },
-      );
+        const decoded = Schema.decodeUnknownResult(Schema.toCodecJson(Schema.Struct({ value: schema })), closed)(input);
+        expect(call).toEqual(
+          Result.isFailure(decoded)
+            ? { _tag: "refused", reason: "bad_input" }
+            : port.read
+              ? { _tag: "query", program: program.name, name: key, query: decoded.success.value }
+              : { _tag: "write", program: program.name, m: { ...decoded.success.value, _tag: key } },
+        );
+        const invalid = port.read && port.shape === "text" ? false : null;
+        expect(Tools.read([program], tool, { value: invalid })).toEqual({ _tag: "refused", reason: "bad_input" });
+        const value = port.read && port.shape === "text" ? null : valueFor(port.shape, s, n);
+        expect(Tools.read([program], tool, { value })).toEqual(
+          port.read
+            ? { _tag: "query", program: program.name, name: key, query: value }
+            : { _tag: "write", program: program.name, m: { ...value, _tag: key } },
+        );
 
-      const alternate =
-        port.shape === "text" ? (port.read ? null : { name: s }) : port.shape === "union" ? { value: s } : value;
+        const alternate =
+          port.shape === "text" ? (port.read ? null : { name: s }) : port.shape === "union" ? { value: s } : value;
 
-      expect(Tools.read([program], tool, { value: alternate })).toEqual(
-        port.read
-          ? { _tag: "query", program: program.name, name: key, query: alternate }
-          : { _tag: "write", program: program.name, m: { ...alternate, _tag: key } },
-      );
-      expect(Tools.read([program], tool, { value, unexpected: input })).toEqual({
-        _tag: "refused",
-        reason: "bad_input",
-      });
-
-      if (!(port.read && port.shape === "text")) {
-        expect(Tools.read([program], tool, { value: { ...valueFor(port.shape, s, n), unexpected: input } })).toEqual({
+        expect(Tools.read([program], tool, { value: alternate })).toEqual(
+          port.read
+            ? { _tag: "query", program: program.name, name: key, query: alternate }
+            : { _tag: "write", program: program.name, m: { ...alternate, _tag: key } },
+        );
+        expect(Tools.read([program], tool, { value, unexpected: input })).toEqual({
           _tag: "refused",
           reason: "bad_input",
         });
+
+        if (!(port.read && port.shape === "text")) {
+          expect(Tools.read([program], tool, { value: { ...valueFor(port.shape, s, n), unexpected: input } })).toEqual({
+            _tag: "refused",
+            reason: "bad_input",
+          });
+        }
       }
-    }
-  },
-  options(300),
-);
+    },
+    options(100, part),
+  );
+}
 
 it.prop(
   "T2: ps accepts an empty object and refuses every other JSON argument",
@@ -910,43 +916,47 @@ const oracle = (form: Form, key: string, value: unknown) => {
   return Result.isSuccess(result) && result.success._tag === key;
 };
 
-it.prop(
-  "P3: only the Msg's own closed JSON codec decides a write",
-  { sample: Forms.Outside },
-  ({ sample: { description, key, value } }) => {
-    const form = makeForm(description);
-    const port = Programs.port(form.program, key);
-    expect(Option.isSome(port)).toBe(true);
+for (const part of PARTS) {
+  it.prop(
+    "P3: only the Msg's own closed JSON codec decides a write" + ` (part ${part} of ${PARTS.length})`,
+    { sample: Forms.Outside },
+    ({ sample: { description, key, value } }) => {
+      const form = makeForm(description);
+      const port = Programs.port(form.program, key);
+      expect(Option.isSome(port)).toBe(true);
 
-    if (Option.isSome(port)) {
-      expect(Result.isSuccess(Schema.decodeUnknownResult(port.value, closed)(value))).toBe(oracle(form, key, value));
-    }
+      if (Option.isSome(port)) {
+        expect(Result.isSuccess(Schema.decodeUnknownResult(port.value, closed)(value))).toBe(oracle(form, key, value));
+      }
 
-    const call = Tools.read([form.program], `drawn_${key}`, { value });
-    expect(Tools.Call.isAnyOf(["write"])(call)).toBe(oracle(form, key, value));
+      const call = Tools.read([form.program], `drawn_${key}`, { value });
+      expect(Tools.Call.isAnyOf(["write"])(call)).toBe(oracle(form, key, value));
 
-    if (!Tools.Call.isAnyOf(["write"])(call)) {
-      expect(call).toEqual({ _tag: "refused", reason: "bad_input" });
-    }
-  },
-  options(300),
-);
+      if (!Tools.Call.isAnyOf(["write"])(call)) {
+        expect(call).toEqual({ _tag: "refused", reason: "bad_input" });
+      }
+    },
+    options(100, part),
+  );
+}
 
-it.prop(
-  "P4: the listed schema agrees with the decoder within JSON Schema's checks",
-  { sample: Forms.Outside },
-  ({ sample: { description, key, value } }) => {
-    const form = makeForm(description);
-    const listed = validator(toolFor(form, key).inputSchema)({ value });
-    const accepted = Tools.Call.isAnyOf(["write"])(Tools.read([form.program], `drawn_${key}`, { value }));
-    expect(!accepted || listed).toBe(true);
+for (const part of PARTS) {
+  it.prop(
+    "P4: the listed schema agrees with the decoder within JSON Schema's checks" + ` (part ${part} of ${PARTS.length})`,
+    { sample: Forms.Outside },
+    ({ sample: { description, key, value } }) => {
+      const form = makeForm(description);
+      const listed = validator(toolFor(form, key).inputSchema)({ value });
+      const accepted = Tools.Call.isAnyOf(["write"])(Tools.read([form.program], `drawn_${key}`, { value }));
+      expect(!accepted || listed).toBe(true);
 
-    if (form.exact) {
-      expect(listed).toBe(accepted);
-    }
-  },
-  options(300),
-);
+      if (form.exact) {
+        expect(listed).toBe(accepted);
+      }
+    },
+    options(100, part),
+  );
+}
 
 const references = (value: unknown): ReadonlyArray<string> => {
   if (Array.isArray(value)) {

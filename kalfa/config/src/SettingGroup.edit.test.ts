@@ -71,6 +71,11 @@ import { Origin } from "./Sources.ts";
 
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
 
+// E3 runs as PARTS laws of a third of the full runs each (34 of 100 full, 9 of 25 fast): 100 runs took 21.9 s of CI's 60 s limit. The parts together run the full count.
+const PARTS = [1, 2, 3] as const;
+
+const third = { arbitrary: { runs: runsFor({ fast: 9, full: 34 }), size: 100 } };
+
 /** The places a key sits and the values each is set to, for one draw. */
 const cases = (draw: Draws) =>
   [...positions(draw), ...valued(draw)].flatMap((p) => valuesFor(draw, p).map((value) => ({ p, value })));
@@ -130,55 +135,58 @@ it.effect.prop(
 // no-change test, so `[1, 2]` set to `[3, 4]` stays `[1, 2]`: red; (l) write a record's keys bare, so `a.b` reads back
 // as a nested table: red; (y) take the table from the name's first word only, so `quality.stryker.runs` is written
 // under `[quality]` as `runs`: red; (y) refuse a file-only setting in the edit as the start refuses its variable: red.
-it.effect.prop(
-  "E3 it reads back: a start over the answer gives the set value, with the file and the key's line",
-  Draw.fields,
-  (draw) =>
-    Effect.gen(function* () {
-      const reach = new Reach(SET_IDS);
-      const cased = cases(draw);
+for (const part of PARTS) {
+  it.effect.prop(
+    "E3 it reads back: a start over the answer gives the set value, with the file and the key's line" +
+      ` (part ${part} of ${PARTS.length})`,
+    Draw.fields,
+    (draw) =>
+      Effect.gen(function* () {
+        const reach = new Reach(SET_IDS);
+        const cased = cases(draw);
 
-      for (const { p, value } of cased) {
-        const label = `${p.ids.join("")} ${p.names.path.join(".")} ${p.mode} in ${p.file}`;
-        const group = groupFor(p);
-        const answer = yield* doSet(group, p.located.text, p.file, targetSetting(p), value);
+        for (const { p, value } of cased) {
+          const label = `${p.ids.join("")} ${p.names.path.join(".")} ${p.mode} in ${p.file}`;
+          const group = groupFor(p);
+          const answer = yield* doSet(group, p.located.text, p.file, targetSetting(p), value);
 
-        expect(answer._tag, `${label}: ${answer._tag === "error" ? answer.message : ""}`).toBe("text");
-        const text = answer._tag === "text" ? answer.text : "";
-        const splice = spliceFor(p, value);
-        const name = p.names.path.join(".");
+          expect(answer._tag, `${label}: ${answer._tag === "error" ? answer.message : ""}`).toBe("text");
+          const text = answer._tag === "text" ? answer.text : "";
+          const splice = spliceFor(p, value);
+          const name = p.names.path.join(".");
 
-        const exit = yield* startOn(group, p.app, p.file === "repo" ? { repo: text } : { user: text });
+          const exit = yield* startOn(group, p.app, p.file === "repo" ? { repo: text } : { user: text });
 
-        expect(exit._tag, label).toBe("Success");
+          expect(exit._tag, label).toBe("Success");
 
-        if (exit._tag === "Success") {
-          // The start's values are untyped here: a live setting reads as an Effect to yield.
-          const read = exit.value.values[field(name)];
-          const live: SettingGroup.Live<unknown> = read;
-          const got = p.mode === "live" ? yield* live : read;
+          if (exit._tag === "Success") {
+            // The start's values are untyped here: a live setting reads as an Effect to yield.
+            const read = exit.value.values[field(name)];
+            const live: SettingGroup.Live<unknown> = read;
+            const got = p.mode === "live" ? yield* live : read;
 
-          // A start reads `-0.0` as `0` (the start's own reading, not the edit's): the data is compared as JSON.
-          expect(plain(got), `${label}: the value`).toEqual(plain(value));
-          expect(exit.value.origins[name], `${label}: where it came from`).toEqual(
-            Origin.cases.file.make({
-              file: fileName(p.app, p.file),
-              line: lineNumber(text, splice === "same" ? (p.located.key ?? 0) : splice.key),
-            }),
-          );
+            // A start reads `-0.0` as `0` (the start's own reading, not the edit's): the data is compared as JSON.
+            expect(plain(got), `${label}: the value`).toEqual(plain(value));
+            expect(exit.value.origins[name], `${label}: where it came from`).toEqual(
+              Origin.cases.file.make({
+                file: fileName(p.app, p.file),
+                line: lineNumber(text, splice === "same" ? (p.located.key ?? 0) : splice.key),
+              }),
+            );
+          }
+
+          reach.mark(...p.ids);
         }
 
-        reach.mark(...p.ids);
-      }
+        if (reachesY(cased.map(({ p }) => p))) {
+          reach.mark("y");
+        }
 
-      if (reachesY(cased.map(({ p }) => p))) {
-        reach.mark("y");
-      }
-
-      reach.done();
-    }),
-  check,
-);
+        reach.done();
+      }),
+    third,
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // E1, the ticket's file

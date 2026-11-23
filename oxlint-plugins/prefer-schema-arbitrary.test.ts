@@ -335,42 +335,45 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
 
   // T930 L8. Plant: leave the next/ tests override at "warn". Exercise lint.ts's real exit, including
   // a different warn: a fire in a folder at zero blocks (a lint rule blocks wherever its code is clean).
-  it("T930 L8 applies only to next tests and blocks in a clean folder, beside another warning too", () => {
-    fc.assert(
-      fc.property(fc.record({ alias: name, ext: fc.constantFrom("ts", "tsx") }), ({ alias, ext }) => {
-        const text = `import ${alias} from 'fast-check';\nimport {Schema} from 'effect';\n\nconst S = Schema.Struct({x: Schema.String});\n\nexport const data: ${alias}.Arbitrary<typeof S.Type> = ${alias}.record({x: ${alias}.string()});\n`;
+  // The law drew 4 runs over both extensions at random, each four real lint runs: 16.9 s of CI's 60 s limit. Each extension is a law of its own with 2 runs, so both are always checked.
+  for (const ext of ["ts", "tsx"] as const) {
+    it(`T930 L8 applies only to next tests and blocks in a clean folder, beside another warning too, .${ext}`, () => {
+      fc.assert(
+        fc.property(fc.record({ alias: name }), ({ alias }) => {
+          const text = `import ${alias} from 'fast-check';\nimport {Schema} from 'effect';\n\nconst S = Schema.Struct({x: Schema.String});\n\nexport const data: ${alias}.Arbitrary<typeof S.Type> = ${alias}.record({x: ${alias}.string()});\n`;
 
-        const { hits } = lint({
-          [`next/unit.test.${ext}`]: text,
-          "next/unit.ts": text,
-          "packages/unit.test.ts": text,
-        });
+          const { hits } = lint({
+            [`next/unit.test.${ext}`]: text,
+            "next/unit.ts": text,
+            "packages/unit.test.ts": text,
+          });
 
-        expect(hits).toHaveLength(1);
+          expect(hits).toHaveLength(1);
 
-        // The runner's law sits in a package that lists what it imports, so `fabrika/package-deps`
-        // (p65) has nothing to say and the count is this rule's own.
-        const unit = {
-          "next/apps/unit/package.json": JSON.stringify({
-            name: "@kampus/unit",
-            devDependencies: { effect: "catalog:", "fast-check": "catalog:" },
-          }),
-        };
+          // The runner's law sits in a package that lists what it imports, so `fabrika/package-deps`
+          // (p65) has nothing to say and the count is this rule's own.
+          const unit = {
+            "next/apps/unit/package.json": JSON.stringify({
+              name: "@kampus/unit",
+              devDependencies: { effect: "catalog:", "fast-check": "catalog:" },
+            }),
+          };
 
-        const blocked = lint({ ...unit, [`next/apps/unit/unit.test.${ext}`]: text }, true).ran;
-        expect(blocked.stdout).toContain(code);
-        expect(blocked.stdout).toContain("1 blocking, 0 advice");
-        expect(blocked.status, blocked.stdout + blocked.stderr).toBe(1);
+          const blocked = lint({ ...unit, [`next/apps/unit/unit.test.${ext}`]: text }, true).ran;
+          expect(blocked.stdout).toContain(code);
+          expect(blocked.stdout).toContain("1 blocking, 0 advice");
+          expect(blocked.status, blocked.stdout + blocked.stderr).toBe(1);
 
-        const warned = lint({ ...unit, [`next/apps/unit/unit.test.${ext}`]: `${text}\ndebugger;\n` }, true, [
-          "--warn=no-debugger",
-        ]).ran;
+          const warned = lint({ ...unit, [`next/apps/unit/unit.test.${ext}`]: `${text}\ndebugger;\n` }, true, [
+            "--warn=no-debugger",
+          ]).ran;
 
-        expect(warned.stdout).toContain("no-debugger");
-        expect(warned.stdout).toContain("2 blocking, 0 advice");
-        expect(warned.status).toBe(1);
-      }),
-      options,
-    );
-  });
+          expect(warned.stdout).toContain("no-debugger");
+          expect(warned.stdout).toContain("2 blocking, 0 advice");
+          expect(warned.status).toBe(1);
+        }),
+        { ...options, numRuns: 2 },
+      );
+    });
+  }
 });

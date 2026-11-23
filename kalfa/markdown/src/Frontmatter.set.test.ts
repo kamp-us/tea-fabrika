@@ -12,6 +12,10 @@ import * as Frontmatter from "./Frontmatter.ts";
 
 const runs = (count: number) => ({ arbitrary: { runs: count } });
 
+// The slow laws run as PARTS laws of a third of their runs each, so no one law is the whole cost: 300 runs took 17.3 s of CI's 60 s limit for E2's slowest group and 16.6 s for E4.
+// The parts together run the full count.
+const PARTS = [1, 2, 3] as const;
+
 type Failure = Frontmatter.NoFrontmatter | Frontmatter.BadFrontmatter;
 
 // The reason of a BadFrontmatter, or the tag of what else it was.
@@ -130,12 +134,14 @@ const keepsBytes = (cases: ReadonlyArray<Support.SetCase>, classes: ReadonlyArra
 // comment and blank lines go, (j) red. The other classes' plants are E3's.
 // Each group of classes is a law of its own with 300 runs (Support.CASE_GROUPS), so a law holds a third of a run's work.
 for (const group of Support.CASE_GROUPS) {
-  it.effect.prop(
-    `E2 every other byte kept: only each changed value's text is replaced and the new keys' lines are added at the end, for ${group.name}`,
-    { run: Base.run },
-    ({ run }) => keepsBytes(Support.groupCases(run, group), group.classes),
-    runs(300),
-  );
+  for (const part of PARTS) {
+    it.effect.prop(
+      `E2 every other byte kept: only each changed value's text is replaced and the new keys' lines are added at the end, for ${group.name}, part ${part} of ${PARTS.length}`,
+      { run: Base.run },
+      ({ run }) => keepsBytes(Support.groupCases(run, group), group.classes),
+      runs(100),
+    );
+  }
 }
 
 // E3's read-back of a list of cases, for the property's runs and for the pinned run.
@@ -172,12 +178,14 @@ const readsBack = (cases: ReadonlyArray<Support.SetCase>, classes: ReadonlyArray
 // pair and fail when there is none (not for a flow map), (p) red; write a new text plain when the old value was plain `old`, (q) red; skip a key the file lacks, (u) red; apply
 // the edits from the first offset to the last without moving later ones when two to five values change, (v) red.
 for (const group of Support.CASE_GROUPS) {
-  it.effect.prop(
-    `E3 it reads back: the answer reads as the old data with the set values over it, for ${group.name}`,
-    { run: Base.run },
-    ({ run }) => readsBack(Support.groupCases(run, group), group.classes),
-    runs(300),
-  );
+  for (const part of PARTS) {
+    it.effect.prop(
+      `E3 it reads back: the answer reads as the old data with the set values over it, for ${group.name}, part ${part} of ${PARTS.length}`,
+      { run: Base.run },
+      ({ run }) => readsBack(Support.groupCases(run, group), group.classes),
+      runs(100),
+    );
+  }
 }
 
 it.effect.prop(
@@ -209,30 +217,33 @@ it.effect("pinned: E2 and E3 over the wide cases, the whole grid and the first t
 );
 
 // E4. Plant: find the closing fence by the last fence line, not the next, (z) red.
-it.effect.prop(
-  "E4 the body for any body: the text after the closing fence is the body byte for byte, and both fence lines are the old ones",
-  { run: Base.run },
-  ({ run }) =>
-    Effect.gen(function* () {
-      const cases = Support.bodySets(run);
-      const seen = new Set<string>();
+for (const part of PARTS) {
+  it.effect.prop(
+    "E4 the body for any body: the text after the closing fence is the body byte for byte, and both fence lines are the old ones" +
+      ` (part ${part} of ${PARTS.length})`,
+    { run: Base.run },
+    ({ run }) =>
+      Effect.gen(function* () {
+        const cases = Support.bodySets(run);
+        const seen = new Set<string>();
 
-      for (const c of cases) {
-        const answer = yield* labeled(c.name, Frontmatter.set(Support.fileText(c.typed, c.body), c.values, Base.S1));
+        for (const c of cases) {
+          const answer = yield* labeled(c.name, Frontmatter.set(Support.fileText(c.typed, c.body), c.values, Base.S1));
 
-        strictEqual(answer.startsWith(c.typed.fence), true, `${c.name}: the opening fence`);
-        strictEqual(answer.endsWith(`${c.typed.fence}${c.body}`), true, `${c.name}: the closing fence and the body`);
-        strictEqual(Frontmatter.split(answer).body, c.body, `${c.name}: the body by the next fence`);
+          strictEqual(answer.startsWith(c.typed.fence), true, `${c.name}: the opening fence`);
+          strictEqual(answer.endsWith(`${c.typed.fence}${c.body}`), true, `${c.name}: the closing fence and the body`);
+          strictEqual(Frontmatter.split(answer).body, c.body, `${c.name}: the body by the next fence`);
 
-        for (const form of c.forms) {
-          seen.add(form);
+          for (const form of c.forms) {
+            seen.add(form);
+          }
         }
-      }
 
-      deepStrictEqual(Support.unreached(seen, ["z"]), [], "body groups never checked in this run");
-    }),
-  runs(300),
-);
+        deepStrictEqual(Support.unreached(seen, ["z"]), [], "body groups never checked in this run");
+      }),
+    runs(100),
+  );
+}
 
 // E5. Plant: edit every key in `values`, changed or not, so `'x'` becomes `x`, (t) red.
 it.effect.prop(
@@ -270,36 +281,39 @@ it.effect.prop(
 const hasLoneLineFeed = (text: string): boolean => /(?<!\r)\n/u.test(text);
 
 // E6. Plant: write `\n` in new lines whatever the file uses, (o) red.
-it.effect.prop(
-  "E6 line breaks: a CRLF file gets only CRLF, and an LF file's frontmatter gets no \\r",
-  { run: Base.run },
-  ({ run }) =>
-    Effect.gen(function* () {
-      const cases = Support.crlfSets(run);
-      const seen = new Set<string>();
+for (const part of PARTS) {
+  it.effect.prop(
+    "E6 line breaks: a CRLF file gets only CRLF, and an LF file's frontmatter gets no \\r" +
+      ` (part ${part} of ${PARTS.length})`,
+    { run: Base.run },
+    ({ run }) =>
+      Effect.gen(function* () {
+        const cases = Support.crlfSets(run);
+        const seen = new Set<string>();
 
-      for (const c of cases) {
-        const answer = yield* labeled(c.name, Frontmatter.set(Support.fileText(c.typed, c.body), c.values, Base.S1));
+        for (const c of cases) {
+          const answer = yield* labeled(c.name, Frontmatter.set(Support.fileText(c.typed, c.body), c.values, Base.S1));
 
-        if (c.typed.fence === "---\r\n") {
-          strictEqual(hasLoneLineFeed(answer), false, `${c.name}: a line feed with no carriage return before it`);
-        } else {
-          strictEqual(
-            answerFrontmatter(answer, c.name).includes("\r"),
-            false,
-            `${c.name}: a carriage return in an LF file`,
-          );
+          if (c.typed.fence === "---\r\n") {
+            strictEqual(hasLoneLineFeed(answer), false, `${c.name}: a line feed with no carriage return before it`);
+          } else {
+            strictEqual(
+              answerFrontmatter(answer, c.name).includes("\r"),
+              false,
+              `${c.name}: a carriage return in an LF file`,
+            );
+          }
+
+          for (const form of c.forms) {
+            seen.add(form);
+          }
         }
 
-        for (const form of c.forms) {
-          seen.add(form);
-        }
-      }
-
-      deepStrictEqual(Support.unreached(seen, ["o"]), [], "classes never checked in this run");
-    }),
-  runs(200),
-);
+        deepStrictEqual(Support.unreached(seen, ["o"]), [], "classes never checked in this run");
+      }),
+    runs(67),
+  );
+}
 
 // E7. Plants: encode after the edit, so a refused value still gives text, (w) red; merge onto the file's raw data without decoding it, so a file S2
 // refuses gets text, (w) red; drop the re-read in the check after the edit, so the anchor case answers a text that does not read, (x) red; drop the data check after it (`Equal.equals(reread, ...)`), so two anchors of one name with an alias after each answers a text that reads as other data, (x) red; treat a file with no

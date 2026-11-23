@@ -68,11 +68,12 @@ describe("box rm, today's tooling", () => {
   }
 
   // Plants: check HEAD alone; accept objects or remote-tracking refs without retained MAIN ancestry.
+  // One law per kind ran both cases, 6 fixtures, 7 to 10 s on a quiet CI machine and 45.6 s on a busy one, of its 60 s limit. Each kind and each case is a law of its own, 3 fixtures.
   for (const kind of ["branch", "detached", "stash", "notes", "remote-only", "objects-only"]) {
-    it(`T318 each local branch detached HEAD stash and step-note needs MAIN retention, ${kind}`, () => {
-      fc.assert(
-        fc.property(input, (v) => {
-          for (const retain of [false, true]) {
+    for (const retain of [false, true]) {
+      it(`T318 each local branch detached HEAD stash and step-note needs MAIN retention, ${kind}, ${retain ? "retained" : "not retained"}`, () => {
+        fc.assert(
+          fc.property(input, (v) => {
             fixture(v, (f) => {
               const base = f.git(f.work, "rev-parse", "HEAD");
 
@@ -126,11 +127,11 @@ describe("box rm, today's tooling", () => {
               expect(existsSync(f.work)).toBe(!retain);
               expect(existsSync(f.data)).toBe(!retain);
             });
-          }
-        }),
-        { seed: 3188, numRuns: 3 },
-      );
-    });
+          }),
+          { seed: 3188, numRuns: 3 },
+        );
+      });
+    }
   }
 
   // Plants: follow a symlink/escaping name, or delete one half before validating the other.
