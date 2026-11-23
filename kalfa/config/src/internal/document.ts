@@ -29,7 +29,7 @@ export const put = (value: Document["value"], path: Path, change: unknown): Docu
     : { ...value, [head]: rest.length === 0 ? change : put(table(value, head), rest, change) };
 };
 
-/** The tables above `path` without the key at it, every other key as it is. A path that is not there leaves them as they were. */
+/** The tables above `path` without the key at it, every other key as it is. A path that is not there, or that steps through a plain value, leaves them as they were. */
 export const drop = (value: Document["value"], path: Path): Document["value"] => {
   const [head, ...rest] = path;
 
@@ -37,7 +37,13 @@ export const drop = (value: Document["value"], path: Path): Document["value"] =>
     return value;
   }
 
-  return rest.length === 0 ? Rec.remove(value, head) : { ...value, [head]: drop(table(value, head), rest) };
+  if (rest.length === 0) {
+    return Rec.remove(value, head);
+  }
+
+  const below = Option.getOrUndefined(Rec.get(value, head));
+
+  return Predicate.isObject(below) ? { ...value, [head]: drop(below, rest) } : value;
 };
 
 /** The first key/value at or under `path`. */
