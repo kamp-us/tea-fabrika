@@ -593,22 +593,75 @@ const callOptions = () => {
   >();
 };
 
-// T17. Plant: let a route's type arguments name a `body` or an `auth` that its options leave out, and the four lines below compile.
-// The lines that name no type argument, and so let the types follow the options, are T14's.
+// T17. A route's type holds what its value holds, however the route was built. The value holds the options' `body` and `auth`,
+// and `"json"` and `"login"` where they say none, so the type must say exactly that where the options fix it, and both
+// values wherever the options leave them open. Judging a `{ token }`: a route that may be `"none"` drops a token, whatever
+// else it may be, and a token silently dropped is T15's hole, so a route whose `auth` type includes `"none"` refuses it.
+// Plant: read an optional `body` or `auth` key as the default, and the `viaTypeArgument`, `optional` and `fromParameter` lines
+// fail; let a route whose `auth` may be `"none"` take a token, and the `maybeNone` lines compile; make the options never
+// required, and the `bareText` line compiles.
 type None = Record<never, never>;
 
-const writtenTypes = () => {
-  // Type arguments that say more than the options do must fail, or the value would hold the defaults the type denies.
-  // @ts-expect-error the type says text, and the options leave `body` out
-  const bareText = GitHub.route<typeof GET_REPO, never, None, never, "text", "login">(GET_REPO);
-  // @ts-expect-error the type says none, and the options leave `auth` out, so the call would send the login
-  const bareNone = GitHub.route<typeof GET_REPO, never, None, never, "json", "none">(GET_REPO);
-  // @ts-expect-error the type says text and none, and the options say neither
-  const bareBoth = GitHub.route<typeof GET_REPO, never, None, never, "text", "none">(GET_REPO);
-  // @ts-expect-error the type says none, and the options leave `auth` out
-  const noAuth = GitHub.route<typeof ZEN, never, None, never, "text", "none">(ZEN, { body: "text" });
+type Open = { readonly body?: "text"; readonly auth?: "none" };
 
-  expectTypeOf([bareText, bareNone, bareBoth, noAuth]).toBeArray();
+type Params = { readonly owner: string; readonly repo: string };
+
+const input = { params: { owner: "o", repo: "r" } } satisfies { readonly params: Params };
+
+const everyWay = () => {
+  // No options, and literal options.
+  const bare = GitHub.route(GET_REPO);
+  const text = GitHub.route(GET_REPO, { body: "text" });
+  const none = GitHub.route(GET_REPO, { auth: "none" });
+  const both = GitHub.route(GET_REPO, { body: "text", auth: "none" });
+  const zen = GitHub.route(ZEN, { body: "text" });
+  expectTypeOf(bare.body).toEqualTypeOf<"json">();
+  expectTypeOf(bare.auth).toEqualTypeOf<"login">();
+  expectTypeOf(text.body).toEqualTypeOf<"text">();
+  expectTypeOf(text.auth).toEqualTypeOf<"login">();
+  expectTypeOf(none.body).toEqualTypeOf<"json">();
+  expectTypeOf(none.auth).toEqualTypeOf<"none">();
+  expectTypeOf(both.body).toEqualTypeOf<"text">();
+  expectTypeOf(both.auth).toEqualTypeOf<"none">();
+  expectTypeOf(zen.auth).toEqualTypeOf<"login">();
+
+  // A type argument for the settings: it may say only what the options say.
+  const agreeing = GitHub.route<typeof GET_REPO, never, None, never, { body: "text" }>(GET_REPO, { body: "text" });
+  expectTypeOf(agreeing.body).toEqualTypeOf<"text">();
+  // @ts-expect-error the type says text, and no options say it
+  const bareText = GitHub.route<typeof GET_REPO, never, None, never, { body: "text" }>(GET_REPO);
+  // @ts-expect-error the type says none, and the options say nothing
+  const emptyNone = GitHub.route<typeof GET_REPO, never, None, never, { auth: "none" }>(GET_REPO, {});
+  // @ts-expect-error the type says none, and the options leave `auth` out
+  const noAuth = GitHub.route<typeof ZEN, never, None, never, { body: "text"; auth: "none" }>(ZEN, { body: "text" });
+  // A type argument whose keys are optional leaves both open.
+  const viaTypeArgument = GitHub.route<typeof GET_REPO, never, None, never, Open>(GET_REPO, {});
+  expectTypeOf(viaTypeArgument.body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(viaTypeArgument.auth).toEqualTypeOf<"login" | "none">();
+
+  // An options variable with optional keys, and a widened one: the value may be either.
+  const typed: Open = { body: "text", auth: "none" };
+  const optional = GitHub.route(GET_REPO, typed);
+  expectTypeOf(optional.body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(optional.auth).toEqualTypeOf<"login" | "none">();
+  const fromParameter = (options: Open) => GitHub.route(GET_REPO, options);
+  expectTypeOf(fromParameter({}).body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(fromParameter({}).auth).toEqualTypeOf<"login" | "none">();
+  const widened = (body: "json" | "text") => GitHub.route(GET_REPO, { body });
+  expectTypeOf(widened("text").body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(widened("text").auth).toEqualTypeOf<"login">();
+
+  // A token: taken where the route sends the login, refused wherever it may send none.
+  const token = { token: Redacted.make("t") };
+  const taken = [GitHub.call(bare, input, token), GitHub.call(text, input, token), GitHub.call(zen, {}, token)];
+  // @ts-expect-error a route declared none sends no token
+  const noneToken = GitHub.call(none, input, token);
+  // @ts-expect-error a route that may be none drops a token
+  const maybeNone = GitHub.call(optional, input, token);
+  // @ts-expect-error a route that may be none drops a token, however it was built
+  const maybeNoneFromType = GitHub.call(viaTypeArgument, input, token);
+
+  expectTypeOf([taken, bareText, emptyNone, noAuth, noneToken, maybeNone, maybeNoneFromType]).toBeArray();
 };
 
 it("T14 type: route takes body: text where GitHub answers text, a success read from text, auth: none and a media type, and refuses the rest", () => {
@@ -621,7 +674,7 @@ it("T15 type: call takes a token as a Redacted, refuses it on a route that sends
   expectTypeOf(callOptions).toBeFunction();
 });
 
-it("T17 type: a route's body and auth, written as type arguments, are the ones its options give, or the call does not compile", () => {
+it("T17 type: a route's body and auth types hold what its value holds, however it was built, and a route that may send none takes no token", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
-  expectTypeOf(writtenTypes).toBeFunction();
+  expectTypeOf(everyWay).toBeFunction();
 });

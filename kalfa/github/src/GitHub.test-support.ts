@@ -547,7 +547,7 @@ export const Readme = GitHub.route(README, {
 });
 
 /** The check runs route with a query whose value is read as is, so a value a URL cannot carry reaches the check. */
-export const LooseQuery = GitHub.route(CHECK_RUNS, untyped({ query: { per_page: Schema.Unknown } }));
+export const LooseQuery = GitHub.route(CHECK_RUNS, { query: untyped({ per_page: Schema.Unknown }) });
 
 const StarRepo = GitHub.route(STAR);
 
