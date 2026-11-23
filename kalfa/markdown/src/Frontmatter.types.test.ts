@@ -15,12 +15,12 @@ const Shape = Schema.Struct({
 
 type Data = { readonly number: number; readonly status: "proposed" | "accepted"; readonly id: string };
 
-// A Schema that needs a service to decode, and one that needs a service to encode.
-declare const DecodeNeeds: Schema.Codec<string, string, "Db", never>;
-
-declare const EncodeNeeds: Schema.Codec<string, string, never, "Db">;
-
-const contract = () => {
+// The contract takes a Schema that needs a service to decode, and one that needs a service to encode, as
+// parameters: it is never called, so they only give the type checker a value of each type.
+const contract = (
+  DecodeNeeds: Schema.Codec<string, string, "Db", never>,
+  EncodeNeeds: Schema.Codec<string, string, never, "Db">,
+) => {
   expectTypeOf(Frontmatter.read("", Shape)).toEqualTypeOf<
     Effect.Effect<
       { readonly data: Data; readonly body: string },
@@ -66,10 +66,8 @@ it("T1 type: read, write and split have the types the plan gives, checked by the
 
 const Optional = Schema.Struct({ id: Schema.String, note: Schema.optionalKey(Schema.String) });
 
-// A Schema that needs a service to decode and another to encode.
-declare const BothNeed: Schema.Codec<{ readonly id: string }, { readonly id: string }, "Decode", "Encode">;
-
-const contractSet = () => {
+// A Schema that needs a service to decode and another to encode, a parameter for the same reason.
+const contractSet = (BothNeed: Schema.Codec<{ readonly id: string }, { readonly id: string }, "Decode", "Encode">) => {
   expectTypeOf(Frontmatter.set("", { status: "accepted" }, Shape)).toEqualTypeOf<
     Effect.Effect<string, Frontmatter.NoFrontmatter | Frontmatter.BadFrontmatter, never>
   >();
