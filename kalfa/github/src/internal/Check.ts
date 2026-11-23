@@ -4,7 +4,7 @@
 // one of those and is `unknown` when the caller's declaration holds, or a `Refused` text when it does not, so an argument
 // typed `Schema & FitsX<...>` stops compiling at the caller's own field.
 import type { paths } from "@octokit/openapi-types";
-import type { Schema } from "effect";
+import type { Option, Schema } from "effect";
 
 type Method = "get" | "put" | "post" | "patch" | "delete";
 
@@ -31,7 +31,7 @@ export type Params<R extends RouteName> = {
   readonly [K in PathNames<R>]: K extends keyof PathTypes<Operation<R>> ? PathTypes<Operation<R>>[K] : never;
 };
 
-type QueryParams<R extends RouteName> =
+export type QueryParams<R extends RouteName> =
   Operation<R> extends { readonly parameters: infer P }
     ? "query" extends keyof P
       ? NonNullable<P["query"]>
@@ -40,20 +40,20 @@ type QueryParams<R extends RouteName> =
 
 type HasRequired<T> = [T] extends [never] ? false : Partial<T> extends T ? false : true;
 
-type Body<R extends RouteName> = "requestBody" extends keyof Operation<R>
+export type Body<R extends RouteName> = "requestBody" extends keyof Operation<R>
   ? NonNullable<Operation<R>["requestBody"]> extends { readonly content: { readonly "application/json": infer B } }
     ? B
     : never
   : never;
 
-type BodyRequired<R extends RouteName> = "requestBody" extends keyof Operation<R>
+export type BodyRequired<R extends RouteName> = "requestBody" extends keyof Operation<R>
   ? HasRequired<Pick<Operation<R>, "requestBody">>
   : false;
 
 type Responses<R extends RouteName> = Operation<R> extends { readonly responses: infer S } ? S : never;
 
 /** The 2xx statuses a route answers with. */
-type SuccessStatus<R extends RouteName> = {
+export type SuccessStatus<R extends RouteName> = {
   [S in keyof Responses<R> & number]: `${S}` extends `2${string}` ? S : never;
 }[keyof Responses<R> & number];
 
@@ -64,7 +64,7 @@ type Content<R extends RouteName, S extends SuccessStatus<R>> = Responses<R>[S] 
   : never;
 
 /** The 2xx statuses that carry no body. */
-type Bodiless<R extends RouteName> = {
+export type Bodiless<R extends RouteName> = {
   [S in SuccessStatus<R>]: [Content<R, S>] extends [never] ? S : never;
 }[SuccessStatus<R>];
 
@@ -236,6 +236,40 @@ type Needs<R extends RouteName> =
 /** The arguments of `route` after the route text: present exactly when the description requires a part. */
 export type Options<R extends RouteName, S extends Schema.Constraint, Q extends Fields, P extends Schema.Constraint> =
   Needs<R> extends true ? [options: Given<R, S, Q, P>] : [options?: Given<R, S, Q, P>];
+
+type Absent<K extends string> = { readonly [P in K]?: never };
+
+type ParamsIn<R extends RouteName> = [PathNames<R>] extends [never] ? Absent<"params"> : { readonly params: Params<R> };
+
+type QueryIn<Q extends Schema.Constraint> = [keyof Q["Type"]] extends [never]
+  ? Absent<"query">
+  : HasRequired<Q["Type"]> extends true
+    ? { readonly query: Q["Type"] }
+    : { readonly query?: Q["Type"] };
+
+type PayloadIn<R extends RouteName, P extends Schema.Constraint> = [P] extends [never]
+  ? Absent<"payload">
+  : BodyRequired<R> extends true
+    ? { readonly payload: P["Type"] }
+    : { readonly payload?: P["Type"] };
+
+/** What a caller hands `call`: each part is there exactly when the route declared it, and a payload is the decoded type. */
+export type Input<R extends RouteName, Q extends Schema.Constraint, P extends Schema.Constraint> = ParamsIn<R> &
+  QueryIn<Q> &
+  PayloadIn<R, P>;
+
+/** What `call` gives: `void` with no success declared, the decoded success, or an `Option` of it beside a body-less 2xx. */
+export type Answered<R extends RouteName, S extends Schema.Constraint> = [S] extends [never]
+  ? void
+  : [Bodiless<R>] extends [never]
+    ? S["Type"]
+    : Option.Option<S["Type"]>;
+
+/** The services a route's Schemas need: to encode its query and payload, and to decode its success. */
+export type Needed<Q extends Schema.Constraint, P extends Schema.Constraint, S extends Schema.Constraint> =
+  | Q["EncodingServices"]
+  | P["EncodingServices"]
+  | S["DecodingServices"];
 
 // A route the shape does not have reads as neither 1 nor 0, so the whole version is `never`.
 type Has<K, T> = [T] extends [never] ? "missing" : K extends keyof T ? 1 : 0;

@@ -4,8 +4,9 @@ A client for GitHub's REST API that speaks GitHub's own words. A route is writte
 and the compiler refuses a typo in it: in the route text, in a path parameter, in a query key, in a payload key and in
 an answer field.
 
-This package has no area of GitHub in it (no pull requests, no check runs) and no call yet. Today it holds one thing:
-declaring an operation with `GitHub.route`. A caller declares the operations it needs, with only the fields it reads.
+This package has no area of GitHub in it (no pull requests, no check runs). It holds two things: declaring an operation with
+`GitHub.route`, and calling it with `GitHub.call`. A caller declares the operations it needs, with only the fields it reads.
+There is no live Layer yet: `call` sends through the `GitHub` service, and a program provides one.
 
 ## Declare an operation
 
@@ -43,6 +44,53 @@ export const ListCheckRuns = GitHub.route("GET /repos/{owner}/{repo}/commits/{re
 
 A path parameter's name comes from the route text, and its type from the description (the run id of a cancel is a
 number). `GitHub.apiVersion` is the date of the REST API the types describe.
+
+## Call an operation
+
+```ts
+import * as GitHub from "@kalfa/github";
+import { Effect } from "effect";
+
+// Effect<{ check_runs: ReadonlyArray<...> }, GitHubError | RateLimited, GitHub.GitHub>
+const runs = GitHub.call(ListCheckRuns, {
+  params: { owner: "o", repo: "r", ref: "feature/x" },
+  query: { per_page: 100 },
+});
+```
+
+The input is what the route declared, and nothing else: `params` when the route text has `{name}` parts, `query` when a query
+was declared (required when it holds a required key), and `payload` when a payload was declared. A payload is the decoded
+type of its Schema. The call gives the decoded success, `void` when no success was declared, or an `Option` of it for a route
+that also has a 2xx with no body (a workflow dispatch answers 204 or 200).
+
+- **The path.** Each `{name}` is filled with `encodeURIComponent`, so `feature/x` stays one segment. A name is read only as an
+  own key. A missing name, an empty or blank text, `.`, `..`, a number that is not whole and a lone surrogate are refused.
+- **What is left out is not sent.** A key whose value is `undefined` is left out of the query and the body, at any depth. An
+  explicit `null`, `0`, `false`, `""`, `[]` and `{}` are sent. An `undefined` inside a list, a number JSON cannot hold, and a key
+  the Schema lacks are refused.
+- **Schemas stay Effects.** Encoding the input and decoding the answer run through Effects, so a Schema that is async or needs
+  a service works, and its services show in the call's requirements.
+- **The answer.** Fields the caller did not declare are dropped. The body is read as JSON text.
+
+## Errors
+
+A call fails with `GitHubError`, which names the route text in `operation` and holds a `reason`, or with `RateLimited`, which
+the `GitHub` service gives.
+
+- `ClientError`: GitHub answered 4xx. It holds the `status`, and a `message`, a `documentationUrl` and `errors` exactly when
+  GitHub's body had them.
+- `Undecodable`: the input could not be encoded (`side` is `input`, and nothing was sent), or the answer could not be read
+  (`side` is `answer`: the SchemaError is its `cause`, and a status this client does not read has none). Its `message` holds
+  the offending value, so read it as private.
+
+`GitHubError` has no `message` and no `cause` field, on purpose: a failed span renders only those, so nothing under `reason`
+reaches a trace.
+
+## The span
+
+Each call runs in one span, `github.call`, with `http.request.method`, `kalfa.github.operation` (the route text) and, once a
+reply came, `http.response.status_code`. No path, query, header or value is put in it. The package never logs and never
+prints.
 
 ## What is checked at run time only
 

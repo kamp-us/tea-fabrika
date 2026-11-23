@@ -6,10 +6,13 @@
  *
  * A route is written as GitHub writes it, such as `"GET /repos/{owner}/{repo}/commits/{ref}/check-runs"`. The checks read
  * `@octokit/openapi-types`, so a typo in a route, a parameter, a query key, a payload key or an answer field does not
- * compile. The package never logs and imports no Node module.
+ * compile. `call` sends a declared operation through the `GitHub` service and reads GitHub's answer. The package never
+ * logs and imports no Node module.
  */
-import { Data, Schema } from "effect";
+import type { Duration, Result } from "effect";
+import { Context, Data, Effect, Option, Schema } from "effect";
 import type * as Check from "./internal/Check.ts";
+import * as wire from "./internal/wire.ts";
 
 /**
  * A route text GitHub's description has, in its own spelling: the method, a space, then the path with its `{name}` parts.
@@ -123,3 +126,277 @@ export const route = <
     ...(bodiless === undefined ? {} : { bodiless }),
   });
 };
+
+/**
+ * What `call` hands the `GitHub` service: the route as declared, with the path filled and the query and body encoded.
+ *
+ * **Details**
+ *
+ * No key of the query or the body has `undefined` as its value, at any depth, and no query holds a key the caller left out.
+ *
+ * @category models
+ */
+export interface Request {
+  /** The route text, as declared. */
+  readonly route: RouteName;
+  readonly method: Method;
+  /** The route's path, each `{name}` filled and encoded. */
+  readonly path: string;
+  /** The values that filled the path, as sent. */
+  readonly params: Readonly<Record<string, string>>;
+  readonly query: Readonly<Record<string, Schema.Json>>;
+  readonly body?: Schema.Json;
+}
+
+/**
+ * What the `GitHub` service answers: the status, the headers with lowercase names, and the body as GitHub sent its text.
+ *
+ * @category models
+ */
+export interface Reply {
+  readonly status: number;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: string;
+}
+
+/**
+ * A 4xx answer, as GitHub said it.
+ *
+ * **Details**
+ *
+ * Each optional field is there exactly when GitHub's body had it. `errors` stays as GitHub said it: objects or texts.
+ *
+ * @category errors
+ */
+export class ClientError extends Schema.TaggedError<ClientError, { readonly brand: unique symbol }>()("ClientError", {
+  status: Schema.Int,
+  message: Schema.optionalKey(Schema.String),
+  documentationUrl: Schema.optionalKey(Schema.String),
+  errors: Schema.optionalKey(Schema.Array(Schema.Json)),
+}) {}
+
+/**
+ * The input could not be encoded, or the answer could not be read.
+ *
+ * **Details**
+ *
+ * `message` says what was wrong, and holds the offending value when there is one. `cause` is the failure that said so, and
+ * is absent when nothing failed to decode, such as a status this client does not read.
+ *
+ * @category errors
+ */
+export class Undecodable extends Schema.TaggedError<Undecodable, { readonly brand: unique symbol }>()("Undecodable", {
+  side: Schema.Literals(["input", "answer"]),
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+}) {}
+
+/**
+ * Why a call failed, named by the route text.
+ *
+ * **Details**
+ *
+ * It has no `message` and no `cause` field of its own: a failed span renders only those, so nothing under `reason` (GitHub's
+ * text, the caller's input, the answer's values) reaches a span. A caller reads `reason`.
+ *
+ * @category errors
+ */
+export class GitHubError extends Schema.TaggedError<GitHubError, { readonly brand: unique symbol }>()("GitHubError", {
+  operation: Schema.String,
+  reason: Schema.Union([ClientError, Undecodable]),
+}) {}
+
+/**
+ * GitHub asked the client to wait. A `GitHub` service fails with it when it holds a rate limit.
+ *
+ * @category errors
+ */
+export class RateLimited extends Schema.TaggedError<RateLimited, { readonly brand: unique symbol }>()("RateLimited", {
+  operation: Schema.String,
+  until: Schema.DateTimeUtc,
+  limit: Schema.Literals(["primary", "secondary"]),
+  resource: Schema.optionalKey(Schema.String),
+}) {}
+
+/**
+ * The service `call` sends a request through.
+ *
+ * **Details**
+ *
+ * `send` answers a request with GitHub's reply, or fails with what the service holds: `GitHubError` or `RateLimited`. `poll`
+ * is how often a watch asks again.
+ *
+ * @category services
+ */
+export class GitHub extends Context.Service<
+  GitHub,
+  {
+    readonly send: (request: Request) => Effect.Effect<Reply, GitHubError | RateLimited>;
+    readonly poll: Duration.Duration;
+  }
+>()("@kalfa/github/GitHub") {}
+
+type Any = Route<RouteName, Schema.Constraint, Schema.Constraint, Schema.Constraint>;
+
+/**
+ * What a caller hands `call` for a declared operation: its path names, its query and its payload, each there exactly when the
+ * route declared it.
+ *
+ * @category models
+ */
+export type Input<Op extends Any> =
+  Op extends Route<infer R, Schema.Constraint, infer Q extends Schema.Constraint, infer P extends Schema.Constraint>
+    ? Check.Input<R, Q, P>
+    : never;
+
+/**
+ * What `call` gives for a declared operation: `void` when no success was declared, the success Schema's decoded type, or an
+ * `Option` of it for a route that also has a 2xx with no body.
+ *
+ * @category models
+ */
+export type Success<Op extends Any> =
+  Op extends Route<infer R, infer S extends Schema.Constraint, Schema.Constraint, Schema.Constraint>
+    ? Check.Answered<R, S>
+    : never;
+
+/**
+ * The services a declared operation's Schemas need.
+ *
+ * @category models
+ */
+export type Services<Op extends Any> =
+  Op extends Route<
+    RouteName,
+    infer S extends Schema.Constraint,
+    infer Q extends Schema.Constraint,
+    infer P extends Schema.Constraint
+  >
+    ? Check.Needed<Q, P, S>
+    : never;
+
+// What `call` reads of its input when it knows nothing of the route's types: the three parts, each as it was given.
+interface Given {
+  readonly params?: Readonly<Record<string, wire.PathValue>>;
+  readonly query?: unknown;
+  readonly payload?: unknown;
+}
+
+// A key the Schema lacks is refused when encoding, and dropped when decoding: the caller reads only some fields of GitHub's.
+const ENCODING = { onExcessProperty: "error", reportInput: true } as const;
+
+const DECODING = { reportInput: true } as const;
+
+const run = Effect.fn("github.call")(function* (op: Any, given: Given) {
+  yield* Effect.annotateCurrentSpan({ "http.request.method": op.method, "kalfa.github.operation": op.route });
+
+  const refuse = (side: "input" | "answer", message: string, cause?: unknown) =>
+    new GitHubError({
+      operation: op.route,
+      reason: new Undecodable({ side, message, ...(cause === undefined ? {} : { cause }) }),
+    });
+
+  const refused = (side: "input" | "answer") => (error: Schema.SchemaError) => refuse(side, error.message, error);
+
+  const filled = yield* Effect.fromResult(wire.fill(op.path, given.params ?? {})).pipe(
+    Effect.mapError((message) => refuse("input", message)),
+  );
+
+  // Each encoding is an Effect, since a caller's Schema may be async or need a service. What it gives is read as a `Tree`,
+  // which refuses what JSON cannot hold, and then made into what is sent.
+  const encoded = <S extends Schema.Constraint, A, B>(
+    schema: S,
+    value: S["Type"],
+    shape: Schema.Codec<A>,
+    send: (tree: A) => Result.Result<B, string>,
+  ) =>
+    Schema.encodeUnknownEffect(
+      schema,
+      ENCODING,
+    )(value).pipe(
+      Effect.flatMap((each) => Schema.decodeUnknownEffect(shape)(each)),
+      Effect.mapError(refused("input")),
+      Effect.flatMap((tree) =>
+        Effect.fromResult(send(tree)).pipe(Effect.mapError((message) => refuse("input", message))),
+      ),
+    );
+
+  const query =
+    op.query === undefined ? {} : yield* encoded(op.query, given.query ?? {}, wire.TreeRecord, wire.pruneObject);
+
+  const body =
+    op.payload === undefined || given.payload === undefined
+      ? undefined
+      : yield* encoded(op.payload, given.payload, wire.Tree, wire.prune);
+
+  const github = yield* GitHub;
+
+  const reply = yield* github.send({
+    route: op.route,
+    method: op.method,
+    path: filled.path,
+    params: filled.values,
+    query,
+    ...(body === undefined ? {} : { body }),
+  });
+
+  yield* Effect.annotateCurrentSpan({ "http.response.status_code": reply.status });
+
+  if (reply.status >= 200 && reply.status < 300) {
+    if (op.success === undefined) {
+      return;
+    }
+
+    if (op.bodiless?.includes(reply.status) === true) {
+      return Option.none();
+    }
+
+    const decoded = yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(op.success),
+      DECODING,
+    )(reply.body).pipe(Effect.mapError(refused("answer")));
+
+    return op.bodiless === undefined ? decoded : Option.some(decoded);
+  }
+
+  if (reply.status >= 400 && reply.status < 500) {
+    const said = Option.getOrUndefined(wire.errorBody(reply.body));
+
+    return yield* new GitHubError({
+      operation: op.route,
+      reason: new ClientError({
+        status: reply.status,
+        ...(said?.message === undefined ? {} : { message: said.message }),
+        ...(said?.documentation_url === undefined ? {} : { documentationUrl: said.documentation_url }),
+        ...(said?.errors === undefined ? {} : { errors: said.errors }),
+      }),
+    });
+  }
+
+  return yield* refuse("answer", `GitHub answered ${reply.status}, which this client does not read`);
+});
+
+/**
+ * Calls a declared operation: fills its path, encodes its query and payload, sends the request through the `GitHub` service
+ * and reads the answer through the success Schema.
+ *
+ * **When to use**
+ *
+ * Use to call an operation declared with `route`, from any program that has a `GitHub` Layer.
+ *
+ * **Details**
+ *
+ * A path value is encoded with `encodeURIComponent`. A key the caller left out (`undefined`) is not sent, and an explicit
+ * `null` is. The call fails with `GitHubError` when the input cannot be encoded (nothing is sent then), when GitHub answers
+ * with a 4xx, or when the answer cannot be read, and with `RateLimited` when the service says so. It runs in the span
+ * `github.call`, with `http.request.method`, `http.response.status_code` and `kalfa.github.operation`: no path, no query and
+ * no value is put in it.
+ *
+ * @category calls
+ */
+// SAFETY: `run` reads a route and its input as the loose types they have under every route; `Input`, `Success` and
+// `Services` name what each route's declared parts make of them, and `route` checked those parts when it was made.
+export const call = run as <Op extends Any>(
+  op: Op,
+  input: Input<Op>,
+) => Effect.Effect<Success<Op>, GitHubError | RateLimited, GitHub | Services<Op>>;
