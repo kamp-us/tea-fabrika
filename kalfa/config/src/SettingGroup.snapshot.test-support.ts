@@ -5,6 +5,7 @@
  *
  * Nothing here reads a file. The files are `MemoryFiles.live`'s, and time is Effect's `TestClock`.
  */
+import { createHash } from "node:crypto";
 import { expect } from "@effect/vitest";
 import type { FileSystem, Path } from "effect";
 import {
@@ -282,10 +283,22 @@ const started = (group: Group, scene: Scene, disk: MemoryFiles.LiveDisk, scope: 
   Layer.buildWithScope(
     SettingGroup.layer(group, { version: VERSION, repo: ROOT, flags: scene.flags }).pipe(
       Layer.provideMerge(disk.layer),
-      Layer.provideMerge(Digest.layerWebCrypto),
+      Layer.provideMerge(digestLayer),
     ),
     scope,
   ).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME, ...scene.env } }))));
+
+/**
+ * The digest a running group makes its snapshots with: SHA-256 computed in the call, so an item of the stream is made in the turns the scheduler gives it and the law needs no real time. Effect's own layer runs on `crypto.subtle`, which answers on the event loop after a time no turn of the scheduler can count, so a law that read the items a fixed number of turns after a change read them early on a busy machine. Every read and every hash outside a running group is made on that layer.
+ */
+const digestLayer = Layer.succeed(Digest.Digest)({
+  digest: (algorithm, data) =>
+    Effect.sync(() =>
+      algorithm.name === "SHA-256" ? new Uint8Array(createHash("sha256").update(data).digest()) : data,
+    ),
+  digestHex: (algorithm, data) =>
+    Effect.sync(() => (algorithm.name === "SHA-256" ? createHash("sha256").update(data).digest("hex") : "")),
+});
 
 /** Starts the scene's group and keeps it running until the rig's scope closes. */
 export const boot = Effect.fnUntraced(function* (scene: Scene) {
