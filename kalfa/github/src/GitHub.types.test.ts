@@ -593,6 +593,24 @@ const callOptions = () => {
   >();
 };
 
+// T17. Plant: let a route's type arguments name a `body` or an `auth` that its options leave out, and the four lines below compile.
+// The lines that name no type argument, and so let the types follow the options, are T14's.
+type None = Record<never, never>;
+
+const writtenTypes = () => {
+  // Type arguments that say more than the options do must fail, or the value would hold the defaults the type denies.
+  // @ts-expect-error the type says text, and the options leave `body` out
+  const bareText = GitHub.route<typeof GET_REPO, never, None, never, "text", "login">(GET_REPO);
+  // @ts-expect-error the type says none, and the options leave `auth` out, so the call would send the login
+  const bareNone = GitHub.route<typeof GET_REPO, never, None, never, "json", "none">(GET_REPO);
+  // @ts-expect-error the type says text and none, and the options say neither
+  const bareBoth = GitHub.route<typeof GET_REPO, never, None, never, "text", "none">(GET_REPO);
+  // @ts-expect-error the type says none, and the options leave `auth` out
+  const noAuth = GitHub.route<typeof ZEN, never, None, never, "text", "none">(ZEN, { body: "text" });
+
+  expectTypeOf([bareText, bareNone, bareBoth, noAuth]).toBeArray();
+};
+
 it("T14 type: route takes body: text where GitHub answers text, a success read from text, auth: none and a media type, and refuses the rest", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
   expectTypeOf(routeOptions).toBeFunction();
@@ -601,4 +619,9 @@ it("T14 type: route takes body: text where GitHub answers text, a success read f
 it("T15 type: call takes a token as a Redacted, refuses it on a route that sends none, and keeps the answer's type", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
   expectTypeOf(callOptions).toBeFunction();
+});
+
+it("T17 type: a route's body and auth, written as type arguments, are the ones its options give, or the call does not compile", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(writtenTypes).toBeFunction();
 });
