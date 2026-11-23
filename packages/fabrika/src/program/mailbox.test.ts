@@ -618,6 +618,55 @@ describe("pipes into the one mailbox", () => {
   );
 });
 
+// ---------------------------------------------------------------- idle
+
+describe("idle: every value told so far is handled", () => {
+  it("is done only once the handler of the last value told has returned, however many are told", async () => {
+    const got: number[] = [];
+    const seen = await Effect.runPromise(
+      Effect.gen(function* () {
+        const started = yield* start(served(got), {}, {}, { id: "idle:1", storage: memoryStorage() });
+
+        if (started.kind !== "running") {
+          return yield* Effect.die("did not start");
+        }
+
+        const { run } = started;
+        const before = yield* run.idle.pipe(Effect.timeoutOption("1 second"));
+        yield* run.offer("a", { n: 1, slow: 3 });
+        yield* run.offer("b", { n: 2, slow: 3 });
+        yield* run.idle;
+        const first = [...got];
+        // Again, and again: a wait that began just as the last was let go still ends.
+        yield* run.offer("a", { n: 3, slow: 2 });
+        yield* run.idle;
+        const second = [...got];
+        yield* run.offer("b", { n: 4, slow: 0 });
+        yield* run.idle;
+        return { before: before._tag, first, second, third: [...got] };
+      }).pipe(Effect.scoped),
+    );
+    expect(seen).toEqual({ before: "Some", first: [1, 2], second: [1, 2, 3], third: [1, 2, 3, 4] });
+  });
+
+  it("is done when the run ends, with values unread", async () => {
+    const got: number[] = [];
+    const ended = await Effect.runPromise(
+      Effect.gen(function* () {
+        const started = yield* start(served(got), {}, {}, { id: "idle:2", storage: memoryStorage() });
+
+        if (started.kind !== "running") {
+          return yield* Effect.die("did not start");
+        }
+
+        yield* started.stop;
+        return yield* started.run.idle.pipe(Effect.timeoutOption("1 second"));
+      }).pipe(Effect.scoped),
+    );
+    expect(ended._tag).toBe("Some");
+  });
+});
+
 // ---------------------------------------------------------------- types
 
 class Boom extends Schema.TaggedError<Boom>()("Boom", {}) {}
