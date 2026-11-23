@@ -10,7 +10,7 @@ import * as JsonSchema from "effect/JsonSchema";
 import * as SchemaRepresentation from "effect/SchemaRepresentation";
 import * as Frontmatter from "./Frontmatter.ts";
 
-type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
+export type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Seeds and texts
@@ -19,7 +19,7 @@ const Pick = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 9999 }));
 
 const Seed = Schema.Struct({ noise: Schema.String.check(Schema.isMaxLength(8)), a: Pick, b: Pick });
 
-type Seed = typeof Seed.Type;
+export type Seed = typeof Seed.Type;
 
 /** Six seeds: one run's whole supply of randomness for texts. */
 const seeds: Arbitrary.Arbitrary<ReadonlyArray<Seed>> = Arbitrary.array(Arbitrary.schema(Seed), {
@@ -27,7 +27,7 @@ const seeds: Arbitrary.Arbitrary<ReadonlyArray<Seed>> = Arbitrary.array(Arbitrar
   maxLength: 6,
 });
 
-const at = (list: ReadonlyArray<string>, n: number): string => list[n % list.length] ?? "";
+export const at = (list: ReadonlyArray<string>, n: number): string => list[n % list.length] ?? "";
 
 const halves = (seed: Seed): readonly [string, string] => {
   const cut = seed.noise.length >> 1;
@@ -51,7 +51,7 @@ const around = (piece: string, seed: Seed): string => {
   }
 };
 
-interface TextGroup {
+export interface TextGroup {
   /** The plan's letter for the group. */
   readonly id: string;
   /** Every fixed piece, then one random piece per seed. */
@@ -162,7 +162,7 @@ const PAIRS = ["Key", "key", "KEY", "a b", "a  b", "ab", " ab", "ab ", "A B"];
 const FENCE_LINE = /^---\r?$/;
 
 /** The text groups (a) to (j), for values, keys and bodies alike. */
-const TEXT_GROUPS: ReadonlyArray<TextGroup> = [
+export const TEXT_GROUPS: ReadonlyArray<TextGroup> = [
   group(
     "a",
     BLANKS,
@@ -235,7 +235,7 @@ const TEXT_GROUPS: ReadonlyArray<TextGroup> = [
 ];
 
 /** The key groups (k) to (m), which a key meets beyond the text groups. */
-const KEY_GROUPS: ReadonlyArray<TextGroup> = [
+export const KEY_GROUPS: ReadonlyArray<TextGroup> = [
   group(
     "k",
     PATHS,
@@ -269,14 +269,14 @@ const text = (pools: Pools, i: number): string => at(pools.texts, i);
 const key = (pools: Pools, i: number): string => at(pools.keys, i);
 
 // One text of every group, so a pool of a mix.
-const mixedTexts = (drawn: ReadonlyArray<Seed>): ReadonlyArray<string> =>
+export const mixedTexts = (drawn: ReadonlyArray<Seed>): ReadonlyArray<string> =>
   drawn.map((seed, i) => {
     const chosen = TEXT_GROUPS[(seed.a + i) % TEXT_GROUPS.length];
 
     return chosen === undefined ? "" : (chosen.pool([seed]).at(-1) ?? "");
   });
 
-const mixedKeys = (drawn: ReadonlyArray<Seed>): ReadonlyArray<string> =>
+export const mixedKeys = (drawn: ReadonlyArray<Seed>): ReadonlyArray<string> =>
   drawn.map((seed, i) => {
     const groups = [...TEXT_GROUPS, ...KEY_GROUPS];
     const chosen = groups[(seed.b + i) % groups.length];
@@ -284,7 +284,7 @@ const mixedKeys = (drawn: ReadonlyArray<Seed>): ReadonlyArray<string> =>
     return chosen === undefined ? "" : (chosen.pool([seed]).at(-1) ?? "");
   });
 
-const NUMBERS = [
+export const NUMBERS = [
   0,
   -0,
   1,
@@ -554,7 +554,7 @@ const CountSkeleton = Schema.Struct({
 const RecordSkeleton = Schema.Array(Schema.Struct({ k: Pick, v: Schema.Array(Schema.Array(Pick)) }));
 
 /** One run: everything a law may draw. A law takes what it needs and ignores the rest. */
-interface Run {
+export interface Run {
   readonly seeds: ReadonlyArray<Seed>;
   readonly json: Entries;
   readonly decision: typeof DecisionSkeleton.Type;
@@ -597,14 +597,15 @@ export const S3Date = Schema.toCodecJson(Schema.Struct({ when: Schema.Date, labe
 /** S4, a record of text keys to lists of lists of text. */
 export const S4 = Schema.Record(Schema.String, Schema.Array(Schema.Array(Schema.String)));
 
-interface Decision {
+// A type alias, not an interface: an interface has no implicit index signature, so it would not fit `Frontmatter.set`'s data.
+type Decision = {
   readonly number: number;
   readonly status: "proposed" | "accepted" | "superseded";
   readonly decided: string;
   readonly supersedes: ReadonlyArray<number>;
   readonly draft: boolean;
   readonly note: string | null;
-}
+};
 
 /** The decision-shaped JSON Schema (2020-12) that F10 reads a file against. */
 const decisionJsonSchema = JsonSchema.fromSchemaDraft2020_12({
