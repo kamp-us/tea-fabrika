@@ -1,4 +1,4 @@
-Approved by the lead agent, builds issues 1749, 1806, 1840, 0088, 0089, 0063; body dfd9be5745b9
+Approved by the lead agent, builds issues 1749, 1806, 1840, 0088, 0089, 0063; body 3caad9261bfa
 Plancheck-Version: 3
 
 # Plan: one command-line flag per setting, from its group
@@ -431,3 +431,13 @@ Every choice above picks how the code does what the ticket, the protocol, 1806's
    flags before the command's own (`effect/src/cli/Command.ts`, `runWith`, steps 1 and 2). Read only, not run, so
    not reported upstream; F12 keeps our side from reaching it. A run that shows `--help` listing a command's own
    `--version` while the runner prints the version would be the repro.
+
+## Amendment 1 (2026-11-22): `Flags` when the names are `string`
+
+The tests step found that a group whose setting names are `string`, not literals, gives
+`{ readonly [x: string]?: Flag }`, which `Command.make` refuses, so F2 and F4 had built their command from a
+test copy of the flags. The lead's call: `Flags<R>` is a plain `Readonly<Record<string, Flag.Flag<Option.Option<string>>>>`
+when `R[number]["name"]` is `string`, and keeps optional named keys when the names are literals. `FlagValues<R>`
+follows the same rule. F1 gains a case: a `SettingGroup<string, ReadonlyArray<Setting.Any>>` fits `Command.make` and
+`layer`'s `flags` option with no cast. F2 and F4 build their command from `{ settings: SettingGroup.flags(group) }`, as
+the plan says. The doubt at the top (70%) is settled: both cases compile against a throwaway product. No other change.
