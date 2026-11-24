@@ -392,6 +392,10 @@ export const answersIn = (text: string): ReadonlyArray<Answer> =>
     return found === null ? [] : [{ file: found[1] ?? "", line: found[2] === "*" ? null : Number(found[2]) }];
   });
 
+/** The nonblank rows of a text that answer nothing: a commit that only carries answers (stepcommit.sh --empty) holds none. Pure. */
+export const notAnswers = (text: string): ReadonlyArray<string> =>
+  Arr.filter(Str.split(text, "\n"), (row) => Str.trim(row) !== "" && !ANSWER.test(row));
+
 /** Whether a mutant on a line, or a file no law loads (`line` null), has an answer. Pure. */
 export const isAnswered = (answers: ReadonlyArray<Answer>, file: string, line: number | null): boolean =>
   Arr.some(answers, (answer) => answer.file === file && (answer.line === null || answer.line === line));

@@ -32,9 +32,10 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one r
   `*.test-support.ts`) needs the same line; a `fix` of product files only does not. The review reads
   the record from `git log`. A box's commit (drive's) needs none. Other steps may pass a body; none must.
 - **`--empty` makes a commit with no files.** The `lead` step uses it to open a slice's pull request. A
-  `build` or `fix` commit may too, to carry `Survivor:` lines: its body is those lines and nothing else, or the
-  script refuses (exit 2). It signs and pushes like that step's other commits. A commit right after an empty one
-  refuses (exit 4), since two empty links on one tree break the chain: put every line in one.
+  `build` or `fix` commit may too, to carry `Survivor:` lines: its body holds those lines and nothing else, each
+  one a line `survivors.ts` takes as an answer, or the script refuses (exit 2) and names the line. It signs and pushes like that step's other
+  commits. A commit right after an empty one refuses (exit 4), since two empty links on one tree
+  break the chain: put every line in one.
 - **Start with nothing staged.** If the index already holds changes, the script refuses (exit 4)
   before it stages anything, and lists them. Do not unstage another step's work: name the staged
   paths in your report, and finish the work that does not need the commit.

@@ -54,12 +54,11 @@ for the product code.
    files that hold the guarding checks with `--files`. Answer each survivor in a guarding check:
    a law is missing, so list it in your report and end with `answer: send tests <the survivors>`;
    or it guards nothing, so write `Survivor: <file>:<line> <reason> -- <evidence>` in the commit body
-   (`<file>:*` for a whole file), the whole line on one line: the check reads one line. When the
-   code is already committed, carry the lines in an empty commit: `stepcommit.sh --empty --body-file
-   <file> build <ticket> "<subject>"`, whose body is `Survivor:` lines and nothing else, all of
-   them in one commit. The code stays as the plan has it. The evidence is the input or plant you
-   tried and why it cannot reach the line, or one sentence on why the mutant is equivalent:
-   "unreachable" alone answers nothing. Leave the `static` lines as they are:
+   (`<file>:*` for a whole file), the whole line on one line: the check reads one line. After step
+   9's commit, when the gate finds survivors on committed code, carry all the answers in one empty
+   commit: `stepcommit.sh --empty --body-file <file> build <ticket> "<subject>"`
+   ([the rule](../step-commit/SKILL.md)). The evidence is the input or plant you tried and why it cannot
+   reach the line, or one sentence on why the mutant is equivalent: "unreachable" alone answers nothing. Leave the `static` lines as they are:
    code that runs as the module loads, which Stryker skips and the reviewer plants by hand.
    The step is done when the same command with `--answered --answers <your commit body file>` exits 0:
    every survivor is killed by a law or carried as a `Survivor:` line. A second call on the same

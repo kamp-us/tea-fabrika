@@ -1721,6 +1721,9 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
 
   const survivor = "Survivor: src/owned.ts:1 a help line only -- no law reads the string: grep of the tests finds none";
 
+  // Each opens as a Survivor: line and answers nothing: no line and no reason, then one bare word of evidence.
+  const malformed = ["Survivor: foo.ts", "Survivor: src/owned.ts:1 a help line only -- unreachable"];
+
   /** An empty commit that carries `body`, as a build or fix step makes one for its Survivor: lines. */
   const carry = (r: Repo, step: Step, body: string, flags: string[] = []) => {
     const bodyFile = join(r.dir, "carry.md");
@@ -1811,7 +1814,7 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
     );
   });
 
-  // Plants: allow an empty body, allow a body with a line that is no Survivor: line, or check only that the body holds one such line.
+  // Plants: allow an empty body, allow a line that is no Survivor: line, check only that a line opens with `Survivor:`, or leave the bad line out of the refusal.
   it("an empty build or fix commit with no Survivor: line, or with anything else in the body, is refused; nothing is committed", () => {
     each(["build", "fix"] satisfies Step[], (step) =>
       withRepo([], (r) => {
@@ -1821,12 +1824,21 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
           "Plant: holds: broke it: red",
           `${survivor}\nreworded a help line`,
           `note\n${survivor}`,
+          `${survivor}\n${malformed[0]}`,
+          malformed[1] ?? "",
         ];
 
         for (const body of bodies) {
           const got = carry(r, step, body, ["--commit-only"]);
           expect(got.code, got.text).toBe(2);
           expect(got.text).toContain("Survivor: lines and nothing else");
+
+          for (const line of malformed) {
+            if (body.includes(line)) {
+              expect(got.text).toContain(line);
+            }
+          }
+
           expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
         }
 
