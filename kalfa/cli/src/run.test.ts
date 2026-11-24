@@ -20,6 +20,7 @@ import {
   holdsRaw,
   modelFailure,
   packageName,
+  packageVersion,
   Probe,
   reachedAll,
   buildRepo,
@@ -283,11 +284,12 @@ it.effect.prop(
       for (const { found, run } of yield* endingRuns(drawn)) {
         reached.add(found.id);
 
-        if (found.id === "version") {
-          expect(run.out.length, "the version is one line").toBe(1);
-          expect(run.err, "nothing else is written").toEqual([]);
-
-          continue;
+        // The drawn repo lists its packages in one order and its root names sort in another, so a help that lists the
+        // subcommands in the order they were found is not the sorted one.
+        if (found.id === "help/root") {
+          expect(found.roots.toSorted(), "the root names are not in the order of their packages").not.toEqual(
+            found.roots,
+          );
         }
 
         expect(run.out, `${found.id}: standard output`).toEqual(found.out);
@@ -323,6 +325,11 @@ it.effect.prop(
 
         const last = run.err.at(-1) ?? "";
 
+        // Several refusals at once are one line: each message, one space between.
+        if (found.id === "parse/many-flags") {
+          expect(found.parseErrors, `${found.id}: effect/cli refused more than once`).toBeGreaterThan(1);
+        }
+
         expect(last.startsWith("kalfa: "), found.id).toBe(true);
         expect(broken(last), `${found.id}: the failure line breaks`).toBe(false);
         expect(run.err.filter((entry) => entry.startsWith("kalfa: ")).length, found.id).toBe(1);
@@ -345,6 +352,7 @@ it.effect.prop(
   { seed },
   ({ seed: drawn }) =>
     Effect.gen(function* () {
+      const version = yield* packageVersion;
       const reached = new Set<string>();
 
       for (const { found, run } of yield* endingRuns(drawn)) {
@@ -414,7 +422,7 @@ it.effect.prop(
           ).toBe(true);
         }
 
-        expect(Predicate.isString(root?.attributes.get("kalfa.cli.version")), label).toBe(true);
+        expect(root?.attributes.get("kalfa.cli.version"), `${label}: the version of the package`).toBe(version);
       }
 
       expect(reachedAll(reached, ENDING_IDS)).toEqual([]);
@@ -422,10 +430,10 @@ it.effect.prop(
   check,
 );
 
-// K7, the start that is refused: the steps that ran are still spans, and the exit is one of them.
+// K21, the start that is refused: the steps that ran are still spans, and the exit is one of them.
 // Plant: skip `cli.exit` on a failure, and a refused start has no `cli.exit` span.
 it.effect.prop(
-  "K7 property: a refused start still has cli.run as its root with cli.find and cli.exit inside it, and no cli.command",
+  "K21 property: a refused start still has cli.run as its root with cli.find and cli.exit inside it, and no cli.command",
   { seed },
   ({ seed: drawn }) =>
     Effect.gen(function* () {

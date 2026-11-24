@@ -3,6 +3,7 @@
 // subcommands a drawn repo holds, a recording tracer, and one function that runs `main` and reads everything it did.
 // Each law applies every class to each seed it draws, so each class a law must reach is in every run, and no run can pass
 // on less.
+import { NodeServices } from "@effect/platform-node";
 import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import * as Diagnostics from "@kalfa/diagnostics/Diagnostics";
 import {
@@ -12,6 +13,7 @@ import {
   Data,
   Effect,
   Exit,
+  FileSystem,
   Layer,
   Option,
   Path,
@@ -586,7 +588,9 @@ export const packageName = (s: Seed, index: number): string =>
   index % 3 === 2 ? `@${at(s.words, index + 5)}/p${index}${at(s.words, index)}` : `p${index}${at(s.words, index)}`;
 
 /** A distinct root name for the i-th word, as the rule of a root name allows. */
-const rootName = (s: Seed, index: number): string => `r${index}${at(s.words, index + 7)}`;
+// Counted down, so that the root names sort the other way round from the packages that hold them (a package's name is
+// counted up): a command that lists its subcommands in the order it found them is seen.
+const rootName = (s: Seed, index: number): string => `r${9 - index}${at(s.words, index + 7)}`;
 
 /** The spec of a subcommand: its root, a script, and a code of its own. */
 export const subcommandSpec = (s: Seed, index: number, script: ReadonlyArray<Step>): SubcommandSpec => ({
@@ -621,10 +625,10 @@ const tree = (subs: ReadonlyArray<Subcommand.Subcommand>) =>
   );
 
 /** What effect/cli alone does on these arguments over the subcommands' tree: what it printed to its log, and its refusal. */
-export const reference = (subs: ReadonlyArray<Subcommand.Subcommand>, args: ReadonlyArray<string>) =>
+export const reference = (subs: ReadonlyArray<Subcommand.Subcommand>, args: ReadonlyArray<string>, version: string) =>
   Effect.gen(function* () {
     const before = (yield* TestConsole.logLines).length;
-    const exit = yield* Effect.exit(Command.runWith(tree(subs), { version: "0.0.0", renderErrors: false })(args));
+    const exit = yield* Effect.exit(Command.runWith(tree(subs), { version, renderErrors: false })(args));
     const log = (yield* TestConsole.logLines).slice(before).map(String);
 
     const found = Exit.isFailure(exit) ? Cause.findError(exit.cause) : undefined;
@@ -647,3 +651,13 @@ export const parseMessage = (refusal: CliError.ShowHelp | undefined): string | u
       ? `\`${refusal.commandPath.join(" ")}\` needs a subcommand.`
       : refusal.errors.map((error) => error.message).join(" ")
     : undefined;
+
+/** The version this package's own manifest gives. */
+export const packageVersion: Effect.Effect<string> = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const text = yield* fs.readFileString(path.resolve(import.meta.dirname, "..", "package.json"));
+
+  return (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: Schema.String })))(text))
+    .version;
+}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);

@@ -96,7 +96,20 @@ const FORBIDDEN = [
   [".kal", "fa/"],
 ].map((pieces) => pieces.join(""));
 
-// K15. Plant: write the repo's own name into the README, and that file is named in the failure.
+// A line that is only an oxlint directive names the rules it switches off, and a rule's name may hold the repo's name
+// (a lint rule of this repo's own). The rule names are not read; the reason after ` -- ` is, so a directive cannot hide a
+// name, and nothing else on any line is spared.
+const DIRECTIVE = /^\s*(?:\/\/|\/\*)\s*oxlint-disable/;
+
+const readable = (text: string): string =>
+  text
+    .split("\n")
+    .map((line) => (DIRECTIVE.test(line) ? (line.includes(" -- ") ? line.slice(line.indexOf(" -- ")) : "") : line))
+    .join("\n");
+
+// K15. Plant: write the repo's own name into the README, and that file is named in the failure. Plant for the spared
+// directive lines: import a package of this repo's scope in a code line of `src/internal/packages.ts`, and that file is
+// named; write the name in the reason after ` -- ` of a directive line, and it is named too.
 it.effect("K15 scenario: no file of the package names this repo", () =>
   Effect.gen(function* () {
     // scenario: the package's own files at head; no generated input says what a file holds.
@@ -112,7 +125,7 @@ it.effect("K15 scenario: no file of the package names this repo", () =>
       files,
       (file) =>
         fs.readFileString(path.join(root, file)).pipe(
-          Effect.map((text) => ({ file, text: text.toLowerCase() })),
+          Effect.map((text) => ({ file, text: readable(text.toLowerCase()) })),
           Effect.orElseSucceed(() => ({ file, text: "" })),
         ),
       { concurrency: 4 },

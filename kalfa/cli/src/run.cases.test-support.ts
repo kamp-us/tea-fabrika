@@ -16,6 +16,7 @@ import {
   parseMessage,
   drawPlaces,
   type Ran,
+  packageVersion,
   reference,
   type Repo,
   buildRepo,
@@ -147,6 +148,8 @@ interface Case {
   readonly warnings: number;
   /** True when the handler of the first subcommand's `act` ran from its start. */
   readonly handled: boolean;
+  /** How many refusals effect/cli gave for a bad invocation: several are joined on one line. */
+  readonly parseErrors: number;
 }
 
 /** Each way a handler may end, as the classes of the plan's (l) and (u). */
@@ -167,6 +170,7 @@ export const ENDING_IDS: ReadonlyArray<string> = [
   "parse/missing-argument",
   "parse/no-subcommand-root",
   "parse/no-subcommand-sub",
+  "parse/many-flags",
   "help/root",
   "help/sub",
   "help/leaf",
@@ -261,6 +265,7 @@ const scripted = (id: string, world: World): Case => {
     errors: followed.errors,
     warnings: followed.warnings,
     handled: true,
+    parseErrors: 0,
   };
 };
 
@@ -345,6 +350,9 @@ export const endings = (seed: Seed): Effect.Effect<ReadonlyArray<Case>> =>
       cases.push(scripted("report-then-die", world));
     }
 
+    // The version `kalfa` is to print is the one its package's manifest gives, never a copy of it.
+    const version = yield* packageVersion;
+
     // Arguments that effect/cli refuses or answers itself, on the same tree.
     const world = yield* build((spec) => reportsFor(seed, spec, ["error"]));
     const roots = world.specs.map((spec) => spec.root);
@@ -352,16 +360,24 @@ export const endings = (seed: Seed): Effect.Effect<ReadonlyArray<Case>> =>
     const flag = `--zz${at(seed.words, 8)}`;
     const wrong = `${at(seed.words, 10)}x${at(seed.words, 11)}`;
 
+    // Two or three unknown flags, each with a name of its own.
+    const manyFlags = Array.from(
+      { length: 2 + ((seed.nums[3] ?? 0) % 2) },
+      (_, index) => `--zz${index}${at(seed.words, index + 8)}`,
+    );
+
     const parsed: ReadonlyArray<readonly [string, ReadonlyArray<string>]> = [
       ["parse/unknown-flag", [first, "act", flag]],
       ["parse/unknown-subcommand", [wrong]],
       ["parse/missing-argument", [first, "need"]],
       ["parse/no-subcommand-root", []],
       ["parse/no-subcommand-sub", [first]],
+      // Two or more refusals at once: effect/cli gives each its own message, and they are printed on one line.
+      ["parse/many-flags", [first, "act", ...manyFlags]],
     ];
 
     for (const [id, args] of parsed) {
-      const ref = yield* reference(world.subs, args);
+      const ref = yield* reference(world.subs, args, version);
       const refused = parseMessage(ref.refusal);
 
       cases.push({
@@ -380,6 +396,7 @@ export const endings = (seed: Seed): Effect.Effect<ReadonlyArray<Case>> =>
         errors: 0,
         warnings: 0,
         handled: false,
+        parseErrors: ref.refusal?.errors.length ?? 0,
       });
     }
 
@@ -390,7 +407,7 @@ export const endings = (seed: Seed): Effect.Effect<ReadonlyArray<Case>> =>
     ];
 
     for (const [id, args] of asked) {
-      const ref = yield* reference(world.subs, args);
+      const ref = yield* reference(world.subs, args, version);
 
       cases.push({
         id,
@@ -408,6 +425,7 @@ export const endings = (seed: Seed): Effect.Effect<ReadonlyArray<Case>> =>
         errors: 0,
         warnings: 0,
         handled: false,
+        parseErrors: 0,
       });
     }
 
@@ -419,8 +437,8 @@ export const endings = (seed: Seed): Effect.Effect<ReadonlyArray<Case>> =>
       packages: world.deps.map((dep) => dep.name),
       roots,
       code: 0,
-      // The version's own text is no law's: only that it is one line and nothing else is written.
-      out: [],
+      // What effect/cli prints for the version of this package's own manifest, and nothing else.
+      out: (yield* reference(world.subs, ["--version"], version)).log,
       err: [],
       diag: [],
       printed: [],
@@ -428,6 +446,7 @@ export const endings = (seed: Seed): Effect.Effect<ReadonlyArray<Case>> =>
       errors: 0,
       warnings: 0,
       handled: false,
+      parseErrors: 0,
     });
 
     return cases;
