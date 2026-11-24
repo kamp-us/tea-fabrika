@@ -75,6 +75,69 @@ and sampled flag.
 - A frame with a broken `traceparent` is a value with no trace, never an error. Plain `encode` writes no trace and plain
   `decode` drops one.
 
+## The hello
+
+A new connection starts with three frames, each one notification of the format: the gateway's `challenge`, the client's
+`hello`, and the gateway's `answer`. Transport carries the challenge, the proof and the answer for the app and reads none
+of them: each is the app's own schema.
+
+```ts
+import { Effect, Schema, Stream } from "effect";
+import { NodeSocket } from "@effect/platform-node";
+import { Format, Transport } from "@kalfa/transport";
+
+const program = Effect.gen(function* () {
+  const connected = yield* Transport.connect({
+    versions: [1, 2],
+    features: ["spans"],
+    challenge: Challenge, // the app's schema
+    hello: { schema: Proof, make: (challenge) => sign(challenge) }, // make is an Effect: signing needs a key
+    answer: SignInAnswer, // the app's schema: admitted, waiting or refused
+  });
+  // connected: { version: 2, ping: Duration (30 seconds), answer: SignInAnswer["Type"], socket: Socket }
+
+  yield* values.pipe(
+    Transport.encode(Message),
+    Transport.socket,
+    Transport.decode(Message),
+    Stream.runDrain,
+    Effect.provideService(Socket.Socket, connected.socket), // the same open connection, no second dial
+  );
+}).pipe(Effect.scoped, Effect.provide([NodeSocket.layerWebSocket(url), Format.layerJsonRpc]));
+```
+
+```json
+{"jsonrpc":"2.0","method":"challenge","params":{"value":{"nonce":"k3J9w"}}}
+{"jsonrpc":"2.0","method":"hello","params":{"value":{"versions":[1,2],"features":["spans"],"proof":{"key":"ed25519:AAAA","signature":"c2ln"}},"_meta":{"traceparent":"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}}}
+{"jsonrpc":"2.0","method":"answer","params":{"value":{"_tag":"Answer","version":1,"ping":30000,"answer":{"_tag":"admitted","name":"ada"}}}}
+{"jsonrpc":"2.0","method":"answer","params":{"value":{"_tag":"NoSharedVersion","client":[3],"gateway":[1,2]}}}
+```
+
+- A protocol version is a whole number of 1 or more. The gateway picks the highest version both ends list. When they share
+  none, the gateway's answer is `NoSharedVersion` with the two lists, and the client's `connect` fails with it. A gateway
+  that names a version the client never listed fails `connect` with `NoSharedVersion` too, holding the one version it named.
+- The hello says `features`, a list of what the client can do. Extra keys in a hello are ignored, so a later field breaks
+  no older gateway. The ping is whole milliseconds above 0, read into a `Duration`.
+- `connect` dials once. Effect dials every time a socket's reader is acquired, so a handshake and the stream that follows
+  must share one acquisition. `connect` acquires the reader in the caller's `Scope` and returns that open connection as
+  `socket`. A chain provided `socket` reads first the frames that came in the same batch as the answer, then the rest,
+  and never dials again. Acquiring `socket`'s reader a second time fails with `SocketError` of `SocketOpenError`.
+- `hello.make` returns an Effect, since signing needs a key. Its failure and its needs join `connect`'s, and its failure
+  passes through as it is: Transport adds none of its own.
+- A failed `connect` closes the connection at once. Transport's own refusals (`FormatError`, `NoSharedVersion`) close with
+  the refusal close code, 4000, and the error's name as the reason. The app's own failure in `make` and a socket that
+  failed close with 1000. A client may close with 1000 or a code of 3000 to 4999 only, so every protocol still works
+  from a browser tab.
+- The gateway's side is three functions of one frame, with no socket: `Transport.challenge(schema)(value)` writes the
+  first frame, `Transport.accept({ versions, hello })(frame)` reads the hello and picks the version, and
+  `Transport.answer(schema)(reply)` writes the answer or the `NoSharedVersion`.
+- Spans: `connect` makes `transport.connect` with a child for each step it reaches (`transport.connect.challenge`,
+  `transport.connect.hello`, `transport.connect.answer`), and each failure ends the step where it happened. `accept`,
+  `challenge` and `answer` make `transport.accept`, `transport.challenge` and `transport.answer`. `transport.connect` and
+  `transport.accept` carry `kalfa.transport.version`, `kalfa.transport.versions` and `kalfa.transport.features` on
+  success, and no span holds the challenge, the proof or the answer. The hello carries the trace of its own span; the
+  gateway's two frames carry none.
+
 ## The memory pair
 
 ```ts
@@ -85,12 +148,14 @@ const [left, right] = yield* MemorySocket.pair; // Effect<readonly [Socket, Sock
 
 Two joined sockets for a test: what one end writes, the other end reads, in order. Closing the reader scope of an end
 fails a pull waiting on it, and the far end reads every frame written before, then a close of code 1000. A `CloseEvent`
-written to an end closes both with its code and reason. A write to an end that closed itself fails with `SocketWriteError`. A write to an end whose far end closed is dropped and
+written to an end closes both with its code and reason, when a browser's `WebSocket.close` takes the code (1000, or 3000 to
+4999) and the end is the client's, the first of the pair: any other code fails the write with a `SocketWriteError` that holds an
+`InvalidAccessError`, and closes nothing. The second end stands in for the gateway and sends any code a server sends. A write to an end that closed itself fails with `SocketWriteError`. A write to an end whose far end closed is dropped and
 fails nothing, as a WebSocket drops it, and the close reaches the reader. There is no
 capacity, as a browser's `WebSocket.send` has none.
 
 ## What never shows a frame
 
-A frame can hold a person's secret, such as the app's sign-in proof. `FormatError` holds a reason and nothing else: no
-frame, no value and no cause. The `transport.socket` span has no attributes, and Transport writes no log line. So the
-rendered error, the span and the logs never hold a frame.
+A frame can hold a person's secret, such as the app's sign-in proof. `FormatError` and `NoSharedVersion` hold their
+reason or their two lists and nothing else: no frame, no value and no cause. The spans of the hello hold no challenge, proof
+or answer, and Transport writes no log line. So the rendered error, the span and the logs never hold a frame.
