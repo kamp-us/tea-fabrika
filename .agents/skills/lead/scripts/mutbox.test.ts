@@ -133,6 +133,7 @@ describe("mutbox, the pure parts", () => {
           // The marker CI hands in, or none (testing, linting and formatting live in @kalfa/quality, slice 2): Q18 holds what it does.
           ci: fc.constant(null),
           cap: fc.constant(null),
+          runs: fc.constant(null),
         }),
         (ask) => {
           const args = runArgs(ask);
@@ -180,7 +181,8 @@ describe("mutbox, the pure parts", () => {
   });
 
   // Plant: let a comma through, so `--mount` reads the rest of the path as its own options.
-  // Plant: pass CAP_SECONDS when no cap was asked, or leave it out when one was.
+  // Plant: pass CAP_SECONDS when no cap was asked, or leave it out when one was. Ticket 1306's plants, in the same law: pass
+  // MUTATE_RUNS when no depth was asked (the hourly run would lose its full depth), or leave it out when one was.
   // Q18, slice 2 of .kalfa/quests/kalfa-quality-stryker-PLAN.md (testing, linting and formatting live in @kalfa/quality): `CI` crosses into the container only
   // from CI. The hourly run on GitHub's runner sets `CI`, and the container's host guard (vitest.hostrun.ts)
   // lets `.integration.` laws start there; on the laptop mutbox has no `CI`, passes none, and the guard still
@@ -199,6 +201,7 @@ describe("mutbox, the pure parts", () => {
           lock: fc.string(),
           ci: fc.option(fc.stringMatching(/^[A-Za-z0-9._-]{1,12}$/), { nil: null }),
           cap: fc.option(fc.integer({ min: 1, max: 3600 }), { nil: null }),
+          runs: fc.option(fc.integer({ min: 1, max: 1000 }), { nil: null }),
         }),
         (ask) => {
           const args = runArgs(ask);
@@ -210,6 +213,7 @@ describe("mutbox, the pure parts", () => {
             `RELATED=${ask.related.join(",")}`,
             ...(ask.ci === null ? [] : [`CI=${ask.ci}`]),
             ...(ask.cap === null ? [] : [`CAP_SECONDS=${ask.cap}`]),
+            ...(ask.runs === null ? [] : [`MUTATE_RUNS=${ask.runs}`]),
           ]);
         },
       ),
@@ -1082,6 +1086,39 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(install.summary).toMatchObject({ outcome: "stuck", reason: "install_failed" });
   });
 
+  // Ticket 1306: two Git files died in the entry script in 3 s and 5 s, and the answer sent a reader to box/b/run.txt, which a run that
+  // dies before run.sh never writes. Plants: leave the container's words out of the detail, leave container.txt unwritten, or point at b/run.txt alone.
+  it("a container that dies before it writes any file says what it said, in the detail and in box/container.txt", () => {
+    const said = "cp: cannot create regular file '.git/objects/pack/x': No space left on device";
+    const died = run({ run: `echo "${said}" >&2\nexit 1\n` });
+
+    expect(died.code, died.text).toBe(30);
+    expect(died.summary).toMatchObject({ outcome: "stuck", reason: "no_report" });
+    expect(died.summary.detail).toContain("No space left on device");
+    expect(readFileSync(join(died.dir, "out", "box", "container.txt"), "utf8")).toContain(said);
+
+    const quiet = run({ run: "exit 1\n" });
+    expect(quiet.summary.detail).toContain("it said nothing");
+  });
+
+  // Ticket 1306. Plants: pass no MUTATE_RUNS for `--runs`, or pass it with none asked (the hourly run would lose its full depth);
+  // call exit 73 (the build has no depth.config.ts) done, or any other word than no_depth.
+  it("--runs reaches the container as MUTATE_RUNS, none asked passes none, and a build that cannot cap is stuck no_depth", () => {
+    const envs = (calls: ReadonlyArray<string>) =>
+      [...(calls.find((c) => c.startsWith("run ")) ?? "").matchAll(/--env (\S+)/g)].map((m) => m[1]);
+
+    const capped = run({ args: () => ["--runs", "6"] });
+    expect(capped.code, capped.text).toBe(0);
+    expect(envs(capped.calls)).toContain("MUTATE_RUNS=6");
+
+    const full = run();
+    expect(envs(full.calls).some((e) => e?.startsWith("MUTATE_RUNS"))).toBe(false);
+
+    const old = run({ run: "exit 73\n", args: () => ["--runs", "6"] });
+    expect(old.code, old.text).toBe(30);
+    expect(old.summary).toMatchObject({ outcome: "stuck", reason: "no_depth" });
+  });
+
   // Plants: call any untested sample a skip; call a mix, an empty report or a capped run static.
   it("scenario: a sample of only static mutants, which ignoreStatic leaves Ignored, is a skip", () => {
     const sample = JSON.stringify({ seed: 119120, ranges: ["src/a.ts:1:0-1:4"], total: 2, selected: 2, left: 0 });
@@ -1165,20 +1202,29 @@ describe("mutbox gc against a stand-in docker", () => {
     };
   };
 
-  // Plants: remove a live run's container; prune images without our label.
+  // Plants: remove a live run's container; prune images without our label; prune the build cache while a run holds the lock, or not at all.
   it("gc removes leftover containers and week-old images, and never touches a live run", () => {
     const swept = gc({ leftover: "abc123", lockPid: spawnSync(process.execPath, ["-e", ""]).pid! });
     expect(swept.code, swept.text).toBe(0);
     expect(swept.calls).toContain("rm -f abc123");
     expect(swept.calls).toContain(`image prune --all --force --filter label=${LABEL} --filter until=168h`);
     expect(swept.text).toContain("removed 1 containers and 1 images");
+    expect(swept.calls, "the build cache past a day goes too (ticket 1306: it filled Docker's disk)").toContain(
+      "builder prune --force --filter until=24h",
+    );
 
     const live = gc({ leftover: "abc123", lockPid: process.pid });
     expect(live.code, live.text).toBe(0);
     expect(live.text).toContain("keep mutbox");
-    expect(Arr.some(live.calls, (c) => pipe(c, Str.startsWith("rm ")) || pipe(c, Str.startsWith("image prune")))).toBe(
-      false,
-    );
+    expect(
+      Arr.some(
+        live.calls,
+        (c) =>
+          pipe(c, Str.startsWith("rm ")) ||
+          pipe(c, Str.startsWith("image prune")) ||
+          pipe(c, Str.startsWith("builder prune")),
+      ),
+    ).toBe(false);
 
     const down = gc({ down: true });
     expect(down.code, down.text).toBe(0);
@@ -1310,6 +1356,7 @@ const server = net.createServer((s) => s.end("hello")).listen(() => {
       lock: "probe",
       ci: null,
       cap: null,
+      runs: null,
     });
 
     const from = /^FROM (\S+)$/m.exec(dockerfile)?.[1] ?? "";

@@ -2,7 +2,7 @@
 // nothing is opened in the laptop sandbox (a step that needs ports or its own processes and network isolation runs in a container). Today's lead tooling, not product.
 //
 //   node mutbox.ts run --checkout <repo> --ticket <n> --build <commit> --related <a.test.ts,b.test.ts>
-//                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>] [--cap <n>] [--plan <file>]
+//                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>] [--cap <n>] [--runs <n>] [--plan <file>]
 //                      [--wait <seconds>]
 //   node mutbox.ts gc --lock <file>
 //
@@ -68,6 +68,9 @@
 //                                                  laws start on that disposable runner (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI);
 //                                                  with no CI, or an empty one, none is passed and
 //                                                  the guard refuses, as on the laptop
+// 25. `--runs <n>` caps the cases a property law   `--env MUTATE_RUNS=<n>` is passed, and the baseline and Stryker's own
+//     draws in the box (ticket 1306)                config run through depth.ts's cap; no `--runs` passes none, each law keeps its count; a build with no
+//                                                   depth.config.ts is stuck no_depth, never a full-depth answer under a depth label
 // Every report carries `reach`, the line "the sample reached N of M changed files", naming each
 // file with zero mutants (ticket 655).
 
@@ -128,6 +131,9 @@ export const secondsFor = (base: boolean, cap: number = CAP) => (base ? 2 * cap 
  * timed took 81 s (field note 2026-11-10-01), so `build` is 600 s. `prune` deletes image layers and
  * has no timing: 120 s is a guess. `docker run` keeps its own bound, secondsFor.
  */
+/** How old a build-cache layer must be, in hours, before gc drops it. */
+export const CACHE_HOURS = 24;
+
 export const DOCKER_SECONDS = { call: 30, prune: 120, build: 600 } as const;
 
 /** After SIGTERM, a stopped command's time to exit before SIGKILL: a hung client may ignore TERM. */
@@ -233,6 +239,8 @@ export const runArgs = (ask: {
   readonly ci: string | null;
   /** run.sh's time cap on Stryker, in seconds, or `null` for run.sh's own default. */
   readonly cap: number | null;
+  /** The most cases a property law draws in the box (`MUTATE_RUNS`, depth.ts), or `null` for each law's own count. */
+  readonly runs: number | null;
 }): Array<string> => [
   "run",
   "--rm",
@@ -273,6 +281,7 @@ export const runArgs = (ask: {
   `RELATED=${Arr.join(ask.related, ",")}`,
   ...(ask.ci === null ? [] : ["--env", `CI=${ask.ci}`]),
   ...(ask.cap === null ? [] : ["--env", `CAP_SECONDS=${ask.cap}`]),
+  ...(ask.runs === null ? [] : ["--env", `MUTATE_RUNS=${ask.runs}`]),
   ask.image,
   "nice",
   "-n",
@@ -498,6 +507,8 @@ export const narrowed = (a: ReadonlyArray<Row>, b: ReadonlyArray<Row>): Array<Ro
 /** What the run comes to, from what the container left. Pure. */
 export const judge = (seen: {
   readonly exit: number;
+  /** What the container itself said, docker's last lines: the only trace of a script that died before it wrote any file. */
+  readonly said?: string;
   readonly sample: typeof Sample.Type | null;
   readonly b: Arm | null;
   readonly failed: ReadonlyArray<string>;
@@ -525,6 +536,15 @@ export const judge = (seen: {
     };
   }
 
+  if (seen.exit === 73) {
+    return {
+      outcome: "stuck",
+      reason: "no_depth",
+      detail:
+        "a run depth was asked (--runs) and the build has no depth.config.ts: merge main into it, or run with no depth",
+    };
+  }
+
   if (seen.exit === 137) {
     return {
       outcome: "stuck",
@@ -545,7 +565,11 @@ export const judge = (seen: {
     return {
       outcome: "stuck",
       reason: "no_report",
-      detail: `the container exited ${seen.exit} and left no sample or report; see box/b/run.txt`,
+      detail: `the container exited ${seen.exit} and left no sample or report; ${
+        seen.said === undefined || seen.said === ""
+          ? "it said nothing (box/container.txt is empty)"
+          : `it said: ${seen.said} (all of it in box/container.txt)`
+      }; box/b/run.txt exists only when the run got as far as run.sh`,
     };
   }
 
@@ -969,6 +993,8 @@ interface Ask {
   readonly seconds: number | undefined;
   /** run.sh's time cap on Stryker, in seconds; none is run.sh's own default, CAP. */
   readonly cap: number | undefined;
+  /** The most cases a property law draws in the box; none is each law's own count (depth.ts). */
+  readonly runs: number | undefined;
   /** The approved plan, from the current folder, as drive reads it; its build-owned files must get a mutant. */
   readonly plan: string | undefined;
   /** Seconds this run waits in line for the box; none or 0 takes no place in line. */
@@ -1233,6 +1259,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
       lock: ask.lock,
       ci: process.env.CI === undefined || process.env.CI === "" ? null : process.env.CI,
       cap: ask.cap ?? null,
+      runs: ask.runs ?? null,
     }),
   ).pipe(Effect.timeoutOption(`${limit} seconds`));
 
@@ -1249,6 +1276,10 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   if (ran.value.code === 125 || ran.value.code === 127) {
     return yield* Stuck.make({ reason: "docker_run_failed", detail: tail(ran.value.err) });
   }
+
+  // The container's own words, kept beside its other files: a run that dies in the entry script, before it writes
+  // `b/`, leaves nothing else (ticket 1306: two Git files died in 3 s and 5 s with this the only trace).
+  yield* fs.writeFileString(path.join(box, "container.txt"), `${ran.value.out}${ran.value.err}`);
 
   const sample = yield* decoded(Sample, yield* readOut(box, "b/sample.json"));
   const b = yield* readArm(box, "b", sample?.selected ?? 0);
@@ -1268,6 +1299,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
 
   const ended = judge({
     exit: ran.value.code,
+    said: tail(`${ran.value.out}${ran.value.err}`),
     sample,
     b: b?.arm ?? null,
     failed: pipe(
@@ -1318,6 +1350,7 @@ const run = Command.make(
     base: Flag.String("base").pipe(Flag.withDefault(undefined)),
     seconds: Flag.Int("seconds").pipe(Flag.withDefault(undefined)),
     cap: Flag.Int("cap").pipe(Flag.withDefault(undefined)),
+    runs: Flag.Int("runs").pipe(Flag.withDefault(undefined)),
     plan: Flag.String("plan").pipe(Flag.withDefault(undefined)),
     wait: Flag.Int("wait").pipe(Flag.withDefault(undefined)),
   },
@@ -1353,7 +1386,7 @@ const run = Command.make(
 );
 
 /**
- * The lead's gc calls this: no container, and no image older than a week, is left to grow. It is
+ * The lead's gc calls this: no container, no image older than a week and no build-cache layer older than a day is left to grow. It is
  * best effort: a Docker call past its bound ends it with one line and exit 0, so the chain goes on.
  */
 const gc = Command.make(
@@ -1378,6 +1411,11 @@ const gc = Command.make(
         ["image", "prune", "--all", "--force", "--filter", `label=${LABEL}`, "--filter", "until=168h"],
         DOCKER_SECONDS.prune,
       );
+
+      // The build cache too, past a day old. Each image build leaves layers of its own, and a week of builds filled Docker's disk
+      // (20 GB of cache beside 30 GB of images, ticket 1306): the next build, then two runs' container, died with `No space left on device`.
+      // Safe here, since no run holds the lock and so no build is under way; a layer cut is fetched again.
+      yield* docker(["builder", "prune", "--force", "--filter", `until=${CACHE_HOURS}h`], DOCKER_SECONDS.prune);
 
       const images = Arr.filter(Str.split(pruned.out, "\n"), (l) => pipe(l, Str.startsWith("untagged: "))).length;
       yield* Console.log(`mutbox gc: removed ${containers} containers and ${images} images`);

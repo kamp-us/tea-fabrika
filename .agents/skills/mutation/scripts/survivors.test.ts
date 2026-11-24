@@ -20,6 +20,7 @@ import {
   readAnswers,
   reach,
   resolve,
+  runsFlag,
   staticLines,
   survivorLines,
   testsIn,
@@ -552,9 +553,22 @@ describe("survivors, the exit code and the answers file", () => {
   );
 });
 
+describe("survivors, the run depth it hands the box", () => {
+  // Ticket 1306. Plants: pass `--runs full`; pass no flag for a number; pass the number under another flag.
+  it("a depth is mutbox's --runs flag, and full is no flag, so the box leaves each law its own count", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 5000 }), (n) => {
+        expect(runsFlag(n)).toEqual(["--runs", String(n)]);
+      }),
+      options,
+    );
+    expect(runsFlag("full")).toEqual([]);
+  });
+});
+
 describe("survivors, a saved run", () => {
   const key = (files: ReadonlyArray<string>) =>
-    Saved.key({ base: "b0", tree: "t0", files, version: "v0", seconds: 300 });
+    Saved.key({ base: "b0", tree: "t0", files, version: "v0", seconds: 300, runs: 10 });
 
   /** The wait for a turn with nobody in line: the box is free, and a box taken in that moment is not looked for. */
   const direct = <E, R>(turn: { readonly use: Effect.Effect<Option.Option<Run>, E, R> }) =>

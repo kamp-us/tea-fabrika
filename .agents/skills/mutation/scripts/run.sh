@@ -9,6 +9,7 @@
 # BASELINE, when set, names vitest's JSON report of a plain run of the same tests here: the test
 # and hook limit is then limit.ts's answer for it, else the fast check's 10 s (ticket 605).
 # CAP_SECONDS is the time cap on Stryker, in whole seconds; unset, the fast check's five minutes.
+# MUTATE_RUNS, when set, caps the cases a property law draws (depth.ts, ticket 1306); unset, every law keeps its own count.
 set -eu
 : "${T:?T must name the ticket}"
 : "${BUILD:?BUILD must name the build commit}"
@@ -63,10 +64,11 @@ export TEST_LIMIT
 cat > vitest.mutation.config.ts <<'TS'
 import {testConfig as base} from "./vitest.config.ts";
 import {defineConfig} from "vitest/config";
+import {depthConfig} from "./.agents/skills/mutation/scripts/depth.ts";
 const include = process.env.RELATED?.split(",").map(p => p.trim()).filter(Boolean);
 if (!include?.length) throw new Error("RELATED must list the test paths");
 const limit = Number(process.env.TEST_LIMIT || 10_000);
-export default defineConfig({...base, test: {...base.test, include, maxWorkers: 1,
+export default defineConfig({...base, test: {...base.test, ...depthConfig(process.env.MUTATE_RUNS), include, maxWorkers: 1,
   testTimeout: limit, hookTimeout: limit,
 	exclude: [...(base.test?.exclude ?? []), "**/node_modules/**", "**/dist/**",
 		"packages/pipeline/src/stages/mutation/stryker*.test.ts",

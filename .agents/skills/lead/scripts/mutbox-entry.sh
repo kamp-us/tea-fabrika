@@ -2,7 +2,8 @@
 # Runs inside the mutation container (a step that needs ports or its own processes and network isolation runs in a container), as an unprivileged user with no network.
 # /in/repo.git is the commit under test, read-only. /out is the only folder that leaves the box.
 # Exit: 70 the offline install failed, 71 a related test fails before any mutant, 72 no test left,
-# else run.sh's own (124 when its five minutes ran out).
+# 73 a depth was asked (MUTATE_RUNS) and the build has no depth.config.ts, else run.sh's own (124 when
+# its five minutes ran out).
 set -eu
 usage() {
 	cat /sys/fs/cgroup/memory.peak > /out/memory.peak 2>/dev/null || :
@@ -23,8 +24,16 @@ IFS=,
 set -- $RELATED
 unset IFS
 [ $# -gt 0 ] || exit 72
+# MUTATE_RUNS, when set, caps the cases a property law draws in every run here (ticket 1306): the baseline
+# and arm a's baseline run through the config that caps them, and run.sh's own config does the same. A
+# build from before that config has none to run, and a full-depth answer under a depth label would be a lie.
+depth=
+if [ -n "${MUTATE_RUNS:-}" ]; then
+	[ -f .agents/skills/mutation/scripts/depth.config.ts ] || exit 73
+	depth=--config=.agents/skills/mutation/scripts/depth.config.ts
+fi
 # The baseline, with vitest's own reporter: which tests passed, failed or skipped themselves here.
-node_modules/.bin/vitest run --maxWorkers=1 --reporter=json --outputFile=/out/baseline.json "$@" \
+node_modules/.bin/vitest run --maxWorkers=1 $depth --reporter=json --outputFile=/out/baseline.json "$@" \
 	> /out/baseline.txt 2>&1 || exit 71
 
 # arm <name> <ticket> <baseline>: one run.sh round, its files copied to /out/<name>. The baseline is
@@ -66,7 +75,7 @@ if git rev-parse -q --verify refs/heads/base > /dev/null; then
 		IFS=,
 		set -- $kept
 		unset IFS
-		node_modules/.bin/vitest run --maxWorkers=1 --reporter=json --outputFile=/out/a-baseline.json "$@" \
+		node_modules/.bin/vitest run --maxWorkers=1 $depth --reporter=json --outputFile=/out/a-baseline.json "$@" \
 			> /out/a-baseline.txt 2>&1 || :
 		passing=$(node -e '
 const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));

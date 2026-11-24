@@ -122,10 +122,15 @@ It is the same container run on a smaller scope: `scripts/survivors.ts` picks th
 (those a change touches, or those `--files` names), finds the laws whose imports reach them, and
 hands mutbox a commit whose parent holds the base's version of those files, so the sampler draws
 from their changed lines (a named file the change does not touch is mutated whole). Its header
-holds the flags, the settings `MUTATE_SECONDS` (default 300) and `MUTATE_FILES` (default 8), the
+holds the flags, the settings `MUTATE_SECONDS` (default 300), `MUTATE_FILES` (default 8) and `MUTATE_RUNS` (default 10), the
 exits, and what it cannot see. It prints one line per survivor: `lived` (a law ran it and
 passed), `no law ran`, or `no law loads` for a file no law reaches, then `static` lines Stryker
 skipped, then the counts and seconds. A scope past `MUTATE_FILES` is refused before Docker starts.
+`MUTATE_RUNS` is the most cases a property law draws in the box, or `full` for each law's own count: the laws run
+three times over (the plain baseline, Stryker's dry run, then once per mutant they cover), so at full depth the slow
+ones alone passed the five minutes on `@kalfa/git`. A law that asks for fewer keeps its own count, the seed stays its
+own, and `depth.ts` says what the cap reaches. The depth is in the saved-run key, and the last line says it. The hourly
+run on CI passes none and keeps full depth.
 A call whose base, tree, files and scripts match a saved run reads it and starts no box, and a call that
 needs the box waits its turn in line, one box at a time; its header holds the settings and says how.
 `mutbox.ts run --wait <seconds>` takes a place in the same line. Drive's mutation step still refuses at the
