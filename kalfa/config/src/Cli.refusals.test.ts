@@ -35,6 +35,9 @@ import {
   fileText,
   forms,
   makeGroup,
+  MORE_IDS,
+  type MoreId,
+  moreCases,
   keyLine,
   type Observed,
   onDisk,
@@ -60,6 +63,7 @@ import {
   sitePath,
   sourced,
   startOn,
+  tableMessage,
   variable,
 } from "./Cli.refusals.test-support.ts";
 import { SettingGroup } from "./index.ts";
@@ -108,6 +112,62 @@ it.effect.prop(
 
         reach.mark(one.id);
       }
+
+      reach.done();
+    }),
+  check,
+);
+
+// ---------------------------------------------------------------------------------------------
+// RF9, the rest of the rules an issue can declare, and a table of settings given a value
+// ---------------------------------------------------------------------------------------------
+
+// Added by the build step, in its own commit, after the guard check found lines no law reached (ticket 1995).
+// Plants, one at a time on internal/check.ts, each seen red: (o) drop the `OneOf` arm of `rule`; (u) give `UnexpectedKey` no
+// rule; (m) say "Its schema names no rule." for a title with no rule; (v) answer the `message` annotation of a top-level
+// `InvalidValue`: the needle shows; (t) delete the table-of-settings branch of `explain`: the key reads `unknown`.
+it.effect.prop(
+  "RF9 the other rules an issue declares are said, and a table of settings given a value says so: each run builds one group per class (o), (u), (m) and (v), and a file that gives a value to a table, and each start fails `invalid` at the key's line with the rule its schema declares, holding no needle",
+  { draw: RuleDraw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const reach = new Reach<MoreId | "t">([...MORE_IDS, "t"]);
+
+      for (const one of moreCases(draw)) {
+        const observed = yield* startOn(makeGroup(draw, [one.setting]), {
+          files: { [repoPath(draw)]: fileText(draw, one.raw) },
+          env: { HOME: draw.home },
+          repo: draw.repo,
+        });
+
+        const found = refusal(observed);
+
+        expect(found.reason, `(${one.id}) the reason`).toBe("invalid");
+        expect(found.line, `(${one.id}) the line`).toBe(keyLine(draw));
+        expect(found.message, `(${one.id}) the message`).toBe(
+          `${repoName(draw)}, line ${keyLine(draw)}: ${settingName(draw)} is not ${one.tail}\n  ${draw.app} did not start.`,
+        );
+
+        for (const needle of one.needles) {
+          expect(found.message, `(${one.id}) no needle ${needle}`).not.toContain(needle);
+        }
+
+        reach.mark(one.id);
+      }
+
+      const table = tableMessage(draw);
+
+      const given = refusal(
+        yield* startOn(makeGroup(draw, [plain(draw)]), {
+          files: { [repoPath(draw)]: table.text },
+          env: { HOME: draw.home },
+          repo: draw.repo,
+        }),
+      );
+
+      expect(given.reason, "(t) the reason").toBe("invalid");
+      expect(given.message, "(t) the message").toBe(table.message);
+      reach.mark("t");
 
       reach.done();
     }),

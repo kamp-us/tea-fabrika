@@ -10,7 +10,20 @@ import { inspect } from "node:util";
  */
 import { expect } from "@effect/vitest";
 import type { Option } from "effect";
-import { Cause, ConfigProvider, Effect, Exit, Layer, Logger, PlatformError, References, Schema, Tracer } from "effect";
+import {
+  Cause,
+  ConfigProvider,
+  Effect,
+  Exit,
+  Layer,
+  Logger,
+  PlatformError,
+  References,
+  Schema,
+  SchemaGetter,
+  SchemaIssue,
+  Tracer,
+} from "effect";
 import { run, type World } from "./Cli.test-support.ts";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
@@ -278,6 +291,73 @@ export const ruleCases = (draw: RuleDraw): ReadonlyArray<RuleCase> => {
 
 export const makeGroup = (draw: RuleDraw, settings: ReadonlyArray<Setting.Any>): AnyGroup =>
   SettingGroup.make(draw.app, ...settings);
+
+export type MoreId = "o" | "u" | "m" | "v";
+
+export const MORE_IDS: ReadonlyArray<MoreId> = ["o", "u", "m", "v"];
+
+/** A text that cannot be decoded, and whose failure quotes it in a message written at run time. */
+const Broken = Schema.String.pipe(
+  Schema.decodeTo(Schema.String, {
+    decode: SchemaGetter.transformEffect((text: string) =>
+      Effect.fail(new SchemaIssue.InvalidValue({ message: `${text} is bad` })),
+    ),
+    encode: SchemaGetter.transform((text: string) => text),
+  }),
+);
+
+/**
+ * The classes of RF9, which RF1's do not reach: (o) a union that must match exactly one member and matches two, (u) a table given a key it does not have, (m) a title and a check that declares no rule, (v) a transformation that fails with a message that quotes the value.
+ */
+export const moreCases = (draw: RuleDraw): ReadonlyArray<Omit<RuleCase, "id"> & { readonly id: MoreId }> => {
+  const [one, two] = literals(draw);
+  const text = JSON.stringify(draw.secret);
+
+  return [
+    {
+      id: "o",
+      setting: made(draw, Schema.Union([Schema.Literals([one, two]), Schema.Literal(one)], { mode: "oneOf" })),
+      raw: JSON.stringify(one),
+      text: one,
+      tail: `a valid value. Expected "${one}" | "${two}" | "${one}".`,
+      needles: [],
+    },
+    {
+      id: "u",
+      setting: made(draw, Schema.Struct({ [first(draw)]: Schema.Finite, [second(draw)]: Schema.Finite })),
+      raw: `{ ${first(draw)} = 1, ${second(draw)} = 2, ${JSON.stringify(draw.other)} = 3 }`,
+      text: "",
+      tail: "a valid value. Expected a table with no other keys.",
+      needles: forms(draw.other),
+    },
+    {
+      id: "m",
+      setting: made(draw, Schema.Finite.check(even).annotate({ title: title(draw) })),
+      raw: String(odd(draw.number)),
+      text: String(odd(draw.number)),
+      tail: `${title(draw)}.`,
+      needles: [String(odd(draw.number))],
+    },
+    {
+      id: "v",
+      setting: made(draw, Broken),
+      raw: text,
+      text: draw.secret,
+      tail: "a valid value. Its schema names no rule.",
+      needles: forms(draw.secret),
+    },
+  ];
+};
+
+/** The message of a file that gives a value to a name that is a table of settings: the line of the key, and the table's own name. */
+export const tableMessage = (draw: RuleDraw) => {
+  const [table] = settingName(draw).split(".");
+
+  return {
+    text: `${Array.from({ length: draw.pad }, (_, n) => `# note ${n}\n`).join("")}${table} = 3\n`,
+    message: `${repoName(draw)}, line ${draw.pad + 1}: ${table} is a table of settings, not a value.\n  ${draw.app} did not start.`,
+  };
+};
 
 /** A file of a table and a key: `pad` comment lines, the table's header, then the key, which sits on line `pad + 2`. */
 export const fileText = (draw: RuleDraw, raw: string) => {
