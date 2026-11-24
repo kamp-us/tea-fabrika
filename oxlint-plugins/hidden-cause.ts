@@ -108,8 +108,15 @@ export const hiddenCause: CreateRule = {
       node.type === "MemberExpression" && isSchema(node.object) ? written(node.property, node.computed) : null;
 
     /** A call of one of Effect's Schema members, and its arguments. */
-    const schemaCall = (node: Node, names: ReadonlyArray<string>) =>
-      node.type === "CallExpression" && !node.optional && names.includes(schemaMember(node.callee) ?? "") ? node : null;
+    const schemaCall = (node: Node, names: ReadonlyArray<string>) => {
+      if (node.type !== "CallExpression" || node.optional) {
+        return null;
+      }
+
+      const name = schemaMember(node.callee);
+
+      return names.some((each) => each === name) ? node : null;
+    };
 
     /** Whether a node is the hidden cause of Diagnostics: `Hidden.Cause`, or `Cause` taken from its module by name. */
     const isHidden = (node: Node): boolean => {
