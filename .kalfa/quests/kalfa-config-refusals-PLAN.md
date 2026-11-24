@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds issues 1749, 1995; body a043c4ce3c1b
 Plancheck-Version: 3
 
 # Plan: the invalid and read refusals say why (ticket 1995)
@@ -509,6 +509,14 @@ None.
 
 Each choice picks how the code does what the ticket, `SettingsError`'s comment or the brief's lessons already say; the
 two under 80% are for the lead's read, not the owner's.
+
+## Lead's calls at signing (2026-11-23)
+
+- The `config.edit` span stays, since every step leaves a span.
+- The "a bad record member reads as `unknown` today" guess is settled by RF1's class (i) on the branch head before the build, and the tests step says what it found.
+- The new `Redacted` cause is fine for now. Tracker ticket 1310 moves every kalfa cause to a shared schema that stays hidden through `Schema.toCodecJson`, so no codec leak law is added here; 1310 adds those.
+- No fold-ins.
+- Trial: one agent writes the laws and then the code.
 
 ## Findings
 
