@@ -208,3 +208,12 @@ export const freePort: Effect.Effect<number> = Effect.callback<number>((resume) 
     server.close(() => resume(Effect.succeed(port)));
   });
 });
+
+/**
+ * What real workerd did after a server close, as R0 recorded it (the CI proof run
+ * https://github.com/kamp-us/tea-fabrika/actions/runs/45321159935, with workerd as Alchemy 2.0.0-beta.85 installs it): a close event
+ * comes later, once the client's Close frame is back, in an event of its own. It carries the code and reason of the client's Close
+ * frame, which a platform `WebSocket` writes as the server's code and no reason, so `reason` is empty whatever the server sent; it
+ * is clean; and the attachment is still readable in it. The stand-in copies this, and `M4` holds it to it on both worlds.
+ */
+export const SERVER_CLOSE_EVENT = { reason: "", wasClean: true, attachment: "kept" } as const;

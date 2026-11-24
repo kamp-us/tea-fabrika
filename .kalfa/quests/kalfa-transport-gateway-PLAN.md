@@ -726,3 +726,26 @@ the owner.
 3. **The gateway's spans have no lock-wait or size measures.** Decision 0063's "record wide" would put the lock wait and
    the frame size on `transport.serve`; the ticket asks for neither. A later Transport ticket can add them; before
    v0.0.0 no data is lost by waiting.
+
+## R0's recorded facts (slice 1, 2026-11-24)
+
+R0, the probe of real workerd through Alchemy's local dev, ran in CI at
+https://github.com/kamp-us/tea-fabrika/actions/runs/45321159935 (its facts are the same in the three draws of that run). It settles the two
+90% calls above:
+
+- **An object with only hibernatable sockets sleeps after 12 idle seconds in the local workerd:** 12 of 12 objects had a new wake token after
+  12 seconds, with their sockets still open and their attachments as written. The dev proxy keeps no idle timer of its own (Alchemy's
+  `cloudflare-runtime` 2.0.0-beta.85, `src/core/proxy/WorkerProxy.ts`).
+- **After a server close, `send` throws a `TypeError`, and the attachment is still readable in that same call.**
+- **A close event comes later** (`webSocketClose`, in an event of its own) once the client's Close frame is back, **and the attachment is
+  readable in it.** The event carries the code and reason of the client's Close frame: a platform `WebSocket` replies with the server's code and
+  no reason, so the event has the server's code and an empty reason, whatever reason the server sent. It is clean.
+- **After a client close, one close event comes** with the client's code and reason, clean, with the attachment kept.
+
+So `serve` runs `closed` itself in the wake that called `close`, and the later event runs nothing (it finds the mark, or the attachment as
+kept). The stand-in copies the facts, empty reason included, and law M4 holds it to them on both worlds (`SERVER_CLOSE_EVENT` in
+`Platform.test-support.ts`), in place of two product constants.
+
+One more fact, from the proof runs: a platform `WebSocket` client may close only with 1000 or 3000 to 4999 (undici 8.12.4,
+`lib/web/websocket/util.js` lines 290 to 295). So `platformCloses` draws no client close of 1001, which this plan named: a browser sends 1001
+only of its own accord when a page ends. The laws' client closes are 1000 and 3000 to 4999, and the server's are the same.

@@ -43,7 +43,15 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 import type { Socket } from "effect/socket";
 import { SEED } from "../Transport.test-support.ts";
 import { Attachment, Command, Report, ReportText } from "./platform-wire.test-support.ts";
-import { CLOSE_CLASSES, closesFrom, connect, dial, freePort, platformCloses } from "./Platform.test-support.ts";
+import {
+  CLOSE_CLASSES,
+  closesFrom,
+  connect,
+  dial,
+  freePort,
+  platformCloses,
+  SERVER_CLOSE_EVENT,
+} from "./Platform.test-support.ts";
 import type { Client, Close } from "./Platform.test-support.ts";
 
 /** How long the objects are left alone: the platform says 10 seconds with no event, and this is 2 more. */
@@ -406,10 +414,15 @@ layer(deployed, { excludeTestServices: true, timeout: "120 seconds" })("R0 the p
           );
         }
 
-        expect(
-          [...new Set(servers.map(afterServerClose))],
-          "a server close shows the same close event, or none, for every code and reason",
-        ).toHaveLength(1);
+        // What follows is the same shape for every draw: one close event with that draw's code, no reason, clean, attachment kept.
+        for (const one of servers) {
+          expect(
+            afterServerClose(one),
+            `${one.close.id}: a close event comes later with the code the client's Close frame carried, and the attachment kept`,
+          ).toBe(
+            `event ${one.close.code} ${Formatter.formatJson(SERVER_CLOSE_EVENT.reason)} clean ${SERVER_CLOSE_EVENT.wasClean} attachment ${SERVER_CLOSE_EVENT.attachment}`,
+          );
+        }
 
         // (3) one close event for a client close, with the client's code and reason.
         for (const { close, events } of seen.filter(({ close: one }) => one.by === "client")) {
