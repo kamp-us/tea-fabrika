@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds issues 1767, 2068; body 78252500cb30
 Plancheck-Version: 3
 
 # Plan: @kalfa/transport, a client says hello and gets the app's answer whole (ticket 2068)
@@ -671,6 +671,13 @@ Every doubt above picks how the code does what the ticket and the decisions alre
 the ticket writes, because two of its own criteria (one connection, and a hello signed with Identity's signer) cannot
 hold with it; the owner could refuse them only by going against Effect's `Socket` as the socket or Identity's sign call.
 The lead reads them and may show the owner the changed type.
+
+## Lead's calls at signing (2026-11-23)
+
+- `connect` needs `Scope` and returns the open socket: accepted.
+- `hello.make` returns an Effect, like Identity's `Signed.make`: accepted.
+- Transport's errors keep no cause, held by law E2: accepted. Any cause added later uses the shared hidden-cause schema from tracker ticket 1310.
+- Trial: one agent writes the laws and then the code.
 
 ## Findings
 
