@@ -29,11 +29,13 @@
 //   the `true` mark is lost and `fileOnly` twice compiles; (b) key `Flags` and `FlagValues` by every setting's name, so
 //   the record that names a file-only setting compiles; (c) type `Setting.live` as returning `Setting<N, A, true>`, so a
 //   file-only setting that is made live loses its mark.
+// - RF7 (ticket 1995): keep `cause: Schema.optional(Schema.Defect())` in `SettingsError`: the two `@ts-expect-error`
+//   lines compile, so their directives are unused, and the exact-type line fails.
 // - T6, one at a time, each on `Declaration.ts`: (a) type `make`'s schema as `C` again; (b) drop the brand line of
 //   `NotPlain`; (c) drop its "met before" check; (d) compare with "assignable one way" in place of `Same`; (e) answer
 //   `T` whole at the record line.
 import { expectTypeOf, it } from "@effect/vitest";
-import { Context, Effect, type FileSystem, Option, type Path, Schema } from "effect";
+import { Context, Effect, type FileSystem, Option, type Path, Redacted, Schema } from "effect";
 import type * as Digest from "effect/crypto/Digest";
 import type * as Duration from "effect/Duration";
 import type * as Layer from "effect/Layer";
@@ -531,4 +533,23 @@ it("T9 type: a disk set and remove each answer an Effect of nothing, failing onl
   expectTypeOf<ReturnType<typeof SettingGroup.remove<"demo", typeof group.settings>>>().toEqualTypeOf<
     Effect.Effect<void, SettingGroup.SettingsError, FileSystem.FileSystem | Path.Path>
   >();
+});
+
+// RF7: the cause of a `SettingsError` is hidden in a `Redacted`. A program makes one with no cause or with `Redacted.make`
+// of the failure, and a raw cause does not compile. This function is never called.
+const errors = () => [
+  new SettingGroup.SettingsError({ reason: "read", message: "m" }),
+  new SettingGroup.SettingsError({ reason: "read", message: "m", cause: Redacted.make(new Error("x")) }),
+  new SettingGroup.SettingsError({ reason: "read", message: "m", cause: undefined }),
+
+  // @ts-expect-error RF7: a raw failure is not a hidden one
+  new SettingGroup.SettingsError({ reason: "read", message: "m", cause: new Error("x") }),
+
+  // @ts-expect-error RF7: a text is not a hidden one
+  new SettingGroup.SettingsError({ reason: "read", message: "m", cause: "x" }),
+];
+
+it("RF7 type: a SettingsError's cause is a Redacted of anything, or none, and a raw cause does not compile", () => {
+  expectTypeOf(errors).toBeFunction();
+  expectTypeOf<SettingGroup.SettingsError["cause"]>().toEqualTypeOf<Redacted.Redacted<unknown> | undefined>();
 });
