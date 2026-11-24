@@ -1757,8 +1757,8 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
     );
   });
 
-  // Plants: allow --empty for another step, allow it with named files, or drop the lead ticket gate.
-  it("--empty is refused for tests and mutation, with named files, and for a ticket that is not open; nothing is committed", () => {
+  // Plants: allow --empty for another step (mutation), allow it with named files, or drop the lead ticket gate.
+  it("--empty is refused for mutation, with named files, and for a ticket that is not open; nothing is committed", () => {
     withRepo([["src/owned.ts", "build"]], (r) => {
       r.changed("src/owned.ts");
 
@@ -1774,7 +1774,7 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
         expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
       }
 
-      for (const step of ["tests", "mutation"] satisfies Step[]) {
+      for (const step of ["mutation"] satisfies Step[]) {
         const got = carry(r, step, survivor, ["--commit-only"]);
         expect(got.code, got.text).toBe(2);
         expect(got.text).toContain("Survivor: lines");
@@ -1797,10 +1797,13 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
     });
   });
 
-  // Plants: refuse --empty for build or fix, commit nothing (no --allow-empty), drop the signer for build or sign for fix, skip the push, or leave the lines out of the body.
-  it("an empty build or fix commit carries its Survivor: lines, signed like that step's other commits", () => {
+  // Plants: refuse --empty for tests, build or fix, commit nothing (no --allow-empty), drop the signer for tests or build or sign for fix, ask a tests
+  // commit of Survivor: lines for its plant record, skip the push, or leave the lines out of the body.
+  it("an empty tests, build or fix commit carries its Survivor: lines, signed like that step's other commits", () => {
     each(
       [
+        ["tests", false],
+        ["tests", true],
         ["build", false],
         ["build", true],
         ["fix", false],
@@ -1822,7 +1825,7 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
           expect(r.git("diff", "--name-only", `${r.base}..HEAD`).trim()).toBe("");
           expect(r.git("log", "-1", "--format=%B").trim()).toContain(lines);
           expect(r.signs().map((s) => s.slice(0, 5))).toEqual(
-            only || step === "fix" ? [] : [["commits", "sign", "--step", "build", "--ticket"]],
+            only || step === "fix" ? [] : [["commits", "sign", "--step", step, "--ticket"]],
           );
           expect(r.published()).toHaveLength(only ? 0 : 1);
         }),
@@ -1830,8 +1833,8 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
   });
 
   // Plants: allow an empty body, allow a line that is no Survivor: line, check only that a line opens with `Survivor:`, or leave the bad line out of the refusal.
-  it("an empty build or fix commit with no Survivor: line, or with anything else in the body, is refused; nothing is committed", () => {
-    each(["build", "fix"] satisfies Step[], (step) =>
+  it("an empty tests, build or fix commit with no Survivor: line, or with anything else in the body, is refused; nothing is committed", () => {
+    each(["tests", "build", "fix"] satisfies Step[], (step) =>
       withRepo([], (r) => {
         const bodies = [
           "",

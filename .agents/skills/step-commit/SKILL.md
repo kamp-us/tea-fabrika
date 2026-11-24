@@ -32,7 +32,7 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one r
   `*.test-support.ts`) needs the same line; a `fix` of product files only does not. The review reads
   the record from `git log`. A box's commit (drive's) needs none. Other steps may pass a body; none must.
 - **`--empty` makes a commit with no files.** The `lead` step uses it to open a slice's pull request. A
-  `build` or `fix` commit may too, to carry `Survivor:` lines: its body holds those lines and nothing else, each
+  `tests`, `build` or `fix` commit may too, to carry `Survivor:` lines (a `tests` one needs no `Plant:` line then): its body holds those lines and nothing else, each
   one a line `survivors.ts` takes as an answer, or the script refuses (exit 2) and names the line. A line
   answers when its evidence, after ` -- `, names one proof, and the line stays on one row:
   - `plant: <command> => <result>`, such as `Survivor: kalfa/git/src/Ref.ts:12 the arm cannot run -- plant: sed -i 's/=== 0/!== 0/' kalfa/git/src/Ref.ts && pnpm exec vitest run kalfa/git/src/Ref.test.ts => 12 passed, still green`
