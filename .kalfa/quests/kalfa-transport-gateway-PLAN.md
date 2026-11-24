@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds issues 1767, 2067; body 79b75c78561c
 Plancheck-Version: 3
 
 # Plan: @kalfa/transport/cloudflare, the gateway handles one frame at a time (ticket 2067)
@@ -706,6 +706,13 @@ None.
 Every call above picks how the code does what 1767's answers and decisions 0018, 0063, 0076 and 0079 already say, and
 the ticket gives the two open types (`serve`'s and the note's) and the frame-span switch to this plan, so none goes to
 the owner.
+
+## Lead's calls at signing (2026-11-23)
+
+- Two slices, as planned: the seam and the stand-in first, then `serve`.
+- A sleep after 10 s with no event, and a server-started close that runs `closed` in the same wake, are accepted at 90%. Law R0 is slice 1's first law, a CI probe on real workerd. If R0 shows otherwise, the tests step stops and reports before any other law.
+- The span call is accepted: `open`, `closed` and refusals keep their spans. Only frames on a span-carrying connection run untraced, per decision 0079, with the frame count on `closed`. The switch is `upgrade({ traceFrames: false })`.
+- Trial: one agent writes the laws and then the code.
 
 ## Findings
 
