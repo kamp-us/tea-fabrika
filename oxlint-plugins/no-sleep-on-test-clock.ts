@@ -21,21 +21,24 @@
 //   are not an object written in the call is skipped, since the rule cannot tell.
 //
 // A clock-driven wait is a member (or, imported by name, a call) of one of these: `Effect.sleep`,
-// `delay`, `timeout`, `timeoutOption`, `timeoutOrElse`; `Schedule.spaced`, `fixed`, `windowed`,
-// `exponential`, `fibonacci`, `duration`, `cron`; `Stream.tick`, `debounce`, `throttle`,
-// `throttleEffect`, `timeout`, `timeoutOrElse`, `groupedWithin`, `aggregateWithin`. Each one ends in
-// `Clock.sleep` (`effect/src/internal/effect.ts` line 6476 and `Schedule.ts` line 413).
+// `delay`; `Schedule.spaced`, `fixed`, `windowed`, `exponential`, `fibonacci`, `duration`, `cron`;
+// `Stream.tick`, `debounce`, `throttle`, `throttleEffect`, `groupedWithin`, `aggregateWithin`. Each
+// one ends in `Clock.sleep` (`effect/src/internal/effect.ts` line 6476 and `Schedule.ts` line 413).
+// The timeouts (`Effect.timeout`, `timeoutOption`, `timeoutOrElse`, `Stream.timeout`,
+// `timeoutOrElse`) are left out: a timeout around an effect that should finish is a safety net, and
+// it never hangs the test, so refusing it would only breed disable lines.
 //
 // What passes: a body with `TestClock.adjust` or `TestClock.setTime` anywhere in it (as a call or
-// only referred to); a wait inside a call that also carries `TestClock.withLive`, as its callee or
-// as one of its arguments (`TestClock.withLive(Effect.sleep(x))`, `Effect.sleep(x).pipe(TestClock.withLive)`);
+// only referred to); a body that calls a function declared in the same file whose own code does
+// (`yield* until(fibers)` where `until` adjusts the clock), one level deep: a helper that only calls
+// another helper, and a helper imported from another file, do not count; a wait inside a call that
+// also carries `TestClock.withLive`, as its callee or as one of its arguments
+// (`TestClock.withLive(Effect.sleep(x))`, `Effect.sleep(x).pipe(TestClock.withLive)`);
 // a body of `it.live` or of an `excludeTestServices` block; another object's `sleep`; a local or a
 // parameter named `Effect`; an `Effect` imported from any other module; a comment, a string.
 // Misses: a wait in a helper that the body calls but does not contain, a schedule passed in from
 // another file, and an alias made at run time (`const e = Effect; e.sleep(x)`).
 //
-// A wait that ends by itself on the test clock (an `Effect.timeout` around an effect that finishes
-// at once) takes `// oxlint-disable-next-line fabrika/no-sleep-on-test-clock -- <why it ends>`.
 // no fixer: the fix is `it.live` or a `TestClock.adjust`, which needs the test's own judgment.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
 import { below, type Node } from "./match.ts";
@@ -47,18 +50,9 @@ const MESSAGE =
 type Part = "Effect" | "Schedule" | "Stream" | "TestClock";
 
 const WAITS: Readonly<Record<Part, ReadonlySet<string>>> = {
-  Effect: new Set(["sleep", "delay", "timeout", "timeoutOption", "timeoutOrElse"]),
+  Effect: new Set(["sleep", "delay"]),
   Schedule: new Set(["spaced", "fixed", "windowed", "exponential", "fibonacci", "duration", "cron"]),
-  Stream: new Set([
-    "tick",
-    "debounce",
-    "throttle",
-    "throttleEffect",
-    "timeout",
-    "timeoutOrElse",
-    "groupedWithin",
-    "aggregateWithin",
-  ]),
+  Stream: new Set(["tick", "debounce", "throttle", "throttleEffect", "groupedWithin", "aggregateWithin"]),
   TestClock: new Set(),
 };
 
@@ -381,33 +375,66 @@ export const noSleepOnTestClock: CreateRule = {
       return false;
     };
 
-    const check = (body: Node) => {
-      const waits: Node[] = [];
-      let moves = false;
-
-      for (const node of below(body)) {
+    /** Whether code, as it is written, calls or hands on `TestClock.adjust` or `TestClock.setTime`. */
+    const movesIn = (root: Node): boolean => {
+      for (const node of below(root)) {
         if (node.type === "MemberExpression") {
-          moves = moves || isMove(node);
-
-          if (isWait(node)) {
-            waits.push(node);
+          if (isMove(node)) {
+            return true;
           }
         } else if (node.type === "CallExpression" && node.callee.type === "Identifier") {
-          moves = moves || isMove(node.callee);
-
-          if (isWait(node.callee)) {
-            waits.push(node);
+          if (isMove(node.callee)) {
+            return true;
           }
         } else if (node.type === "Identifier") {
           // `run(adjust)`: a move named by import and handed on, with no call of its own.
           // SAFETY: oxlint sets `parent` on every node it visits, and an identifier in a body always has one.
           const { parent } = node as Node & { readonly parent: Node };
 
-          moves = moves || (parent.type === "CallExpression" && parent.callee !== node && isMove(node));
+          if (parent.type === "CallExpression" && parent.callee !== node && isMove(node)) {
+            return true;
+          }
         }
       }
 
-      if (moves) {
+      return false;
+    };
+
+    /** Whether a name called in a body is a function declared in this file whose own body moves the clock. */
+    const helperMoves = (callee: Node & { readonly name: string }): boolean => {
+      const def = resolve(callee)?.defs[0];
+
+      if (def === undefined) {
+        return false;
+      }
+
+      if (def.type === "FunctionName") {
+        return movesIn(def.node);
+      }
+
+      return def.type === "Variable" && def.node.type === "VariableDeclarator" && def.node.init != null
+        ? movesIn(def.node.init)
+        : false;
+    };
+
+    const check = (body: Node) => {
+      const waits: Node[] = [];
+      const called: Array<Node & { readonly name: string }> = [];
+
+      for (const node of below(body)) {
+        if (node.type === "MemberExpression" && isWait(node)) {
+          waits.push(node);
+        } else if (node.type === "CallExpression" && node.callee.type === "Identifier") {
+          if (isWait(node.callee)) {
+            waits.push(node);
+          } else {
+            called.push(node.callee);
+          }
+        }
+      }
+
+      // A helper of this file counts one level deep: what it calls in turn, and what it imports, are not read.
+      if (waits.length === 0 || movesIn(body) || called.some(helperMoves)) {
         return;
       }
 

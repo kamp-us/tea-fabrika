@@ -5,7 +5,7 @@ import { it } from "@effect/vitest";
 // never moves that clock. Law 1 runs generated files in process through oxlint's RuleTester: each
 // way a test is registered, on the test clock or off it, each way a wait is spelled, with and
 // without a move of the clock or a `TestClock.withLive`, and look-alikes that must pass. Law 2
-// writes out the bodies by hand, the pipe forms among them. The scenario is one real oxlint run
+// writes out the bodies by hand, the pipe forms among them. Law 3 does the same for a body that calls a helper of the same file, which moves the clock or does not. The scenario is one real oxlint run
 // with the repo's config, since only the config says which paths are tests.
 //
 // Plants, each run once on no-sleep-on-test-clock.ts and restored, each red as named:
@@ -14,8 +14,11 @@ import { it } from "@effect/vitest";
 // - drop the move check (laws 1 and 2: a body with `adjust` or `setTime` fires);
 // - drop the `withLive` exemption (laws 1 and 2: a wait inside `TestClock.withLive` fires);
 // - hold `it.live` to the rule too (law 1 and the scenario: an `it.live` wait fires);
-// - drop one wait from the list, `timeoutOrElse` (law 1: its fire is gone);
-// - resolve no name through its import (all three: no wait is seen).
+// - drop one wait from the list, `delay` (law 1: its fire is gone);
+// - follow no same-file helper (law 3: the helpers that move the clock fire);
+// - follow a helper of a helper too (law 3: the helper one level too deep stops firing);
+// - drop the timeouts back into the list, `Effect.timeout` and `timeoutOption` (law 2: the timeout line fires);
+// - resolve no name through its import (laws 1, 2 and 3 and the scenario: no wait is seen).
 import { Array as Arr, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -80,9 +83,6 @@ const reaches = (part: Part, member: string, alias: string): ReadonlyArray<Reach
 const WAITS: ReadonlyArray<readonly [Part, string]> = [
   ["Effect", "sleep"],
   ["Effect", "delay"],
-  ["Effect", "timeout"],
-  ["Effect", "timeoutOption"],
-  ["Effect", "timeoutOrElse"],
   ["Schedule", "spaced"],
   ["Schedule", "fixed"],
   ["Schedule", "windowed"],
@@ -94,8 +94,6 @@ const WAITS: ReadonlyArray<readonly [Part, string]> = [
   ["Stream", "debounce"],
   ["Stream", "throttle"],
   ["Stream", "throttleEffect"],
-  ["Stream", "timeout"],
-  ["Stream", "timeoutOrElse"],
   ["Stream", "groupedWithin"],
   ["Stream", "aggregateWithin"],
 ];
@@ -371,6 +369,7 @@ const WRITTEN: ReadonlyArray<readonly [string, string, boolean]> = [
     "pipe(Effect.sleep(1), Effect.asVoid, TestClock.withLive)",
     false,
   ],
+  ["a timeout, which is a safety net and no wait", "run(Effect.timeout(x, 1), Effect.timeoutOption(x, 1))", false],
   ["a sleep beside another in withLive", "run(Effect.sleep(1), TestClock.withLive(Effect.sleep(2)))", true],
 ];
 
@@ -400,6 +399,78 @@ it("law 2: reads the whole body, so a wait beside a move of the clock passes, an
               code: Arr.join([...head, `it.effect("a", () => ${body});`, ""], "\n"),
               filename: "next/packages/libfabrika/src/runtime/Case.test.ts",
               errors: [{ line: head.length + 1, message: REFUSED }],
+            },
+          ]
+        : [],
+    ),
+  });
+});
+
+/** A same-file helper, as the file declares it, the call a body makes to it, and whether the wait beside that call fires. */
+const HELPERS: ReadonlyArray<readonly [string, string, string, boolean]> = [
+  ["an arrow that adjusts", "const bump = () => TestClock.adjust(1);", "run(bump(), Effect.sleep(1))", false],
+  [
+    "a function declaration that sets the time",
+    "function bump() { return TestClock.setTime(1); }",
+    "run(bump(), Effect.sleep(1))",
+    false,
+  ],
+  [
+    "an Effect.fnUntraced that adjusts in a loop",
+    "const bump = Effect.fnUntraced(function* (n: number) { for (let i = 0; i < n; i += 1) { yield* TestClock.adjust(5); } });",
+    "run(bump(3), Effect.sleep(1))",
+    false,
+  ],
+  [
+    "a helper that adjusts, called after the wait",
+    "const bump = () => TestClock.adjust(1);",
+    "run(Effect.sleep(1), bump())",
+    false,
+  ],
+  ["an arrow that only builds a value", "const bump = () => Effect.succeed(1);", "run(bump(), Effect.sleep(1))", true],
+  [
+    "a helper that calls a helper that adjusts, which is one level too deep",
+    "const inner = () => TestClock.adjust(1);\nconst bump = () => inner();",
+    "run(bump(), Effect.sleep(1))",
+    true,
+  ],
+  ["a helper imported from another file", 'import { bump } from "./helpers.ts";', "run(bump(), Effect.sleep(1))", true],
+  [
+    "a helper that adjusts, named and not called",
+    "const bump = () => TestClock.adjust(1);",
+    "run(bump, Effect.sleep(1))",
+    true,
+  ],
+  [
+    "a parameter that shadows the helper",
+    "const bump = () => TestClock.adjust(1);",
+    "((bump: () => unknown) => run(bump(), Effect.sleep(1)))(x)",
+    true,
+  ],
+];
+
+it("law 3: a body that calls a helper of its own file counts the helper's move of the clock, one level deep", () => {
+  const head = [
+    'import { it } from "@effect/vitest";',
+    'import { Effect } from "effect";',
+    'import { TestClock } from "effect/testing";',
+    "declare const x: unknown, run: (...steps: unknown[]) => unknown;",
+  ];
+
+  const filename = "next/packages/libfabrika/src/runtime/Case.test.ts";
+
+  const file = ([, helper, call]: (typeof HELPERS)[number]) =>
+    Arr.join([...head, helper, `it.effect("a", () => ${call});`, ""], "\n");
+
+  tester.run("no-sleep-on-test-clock", noSleepOnTestClock, {
+    valid: Arr.flatMap(HELPERS, (row) => (row[3] ? [] : [{ code: file(row), filename }])),
+    invalid: Arr.flatMap(HELPERS, (row) =>
+      row[3]
+        ? [
+            {
+              code: file(row),
+              filename,
+              errors: [{ line: head.length + row[1].split("\n").length + 1, message: REFUSED }],
             },
           ]
         : [],

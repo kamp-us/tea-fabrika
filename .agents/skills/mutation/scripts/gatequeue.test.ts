@@ -105,7 +105,6 @@ it.effect.prop(
 
       yield* Effect.forkChild(
         Effect.andThen(
-          // oxlint-disable-next-line fabrika/no-sleep-on-test-clock -- `until` above moves the test clock for this body, which the rule cannot see
           Effect.sleep(Duration.seconds(hold)),
           Effect.sync(() => void (state.held = null)),
         ),
@@ -151,7 +150,6 @@ it.effect.prop(
 
       yield* Effect.forkChild(
         Effect.andThen(
-          // oxlint-disable-next-line fabrika/no-sleep-on-test-clock -- `until` above moves the test clock for this body, which the rule cannot see
           Effect.sleep(Duration.seconds(hold)),
           Effect.sync(() => void (state.held = null)),
         ),
@@ -314,7 +312,6 @@ it.effect.prop(
 
       yield* Effect.forkChild(
         Effect.andThen(
-          // oxlint-disable-next-line fabrika/no-sleep-on-test-clock -- `until` above moves the test clock for this body, which the rule cannot see
           Effect.sleep(Duration.seconds(hold)),
           Effect.sync(() => void (state.held = null)),
         ),
