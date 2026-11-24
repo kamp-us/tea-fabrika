@@ -50,43 +50,100 @@ const SPELLINGS: ReadonlyArray<(alias: string) => Spelling> = [
   (alias) => ({ header: `import * as ${alias} from "effect/Schema";`, module: alias, root: alias }),
   // The barrel as a namespace.
   (alias) => ({ header: `import * as ${alias} from "effect";`, module: `${alias}.Schema`, root: alias }),
+  // The name written as a string.
+  (alias) => ({ header: `import { "Schema" as ${alias} } from "effect";`, module: alias, root: alias }),
+  // The barrel's member read as a string.
+  (alias) => ({ header: `import * as ${alias} from "effect";`, module: `${alias}["Schema"]`, root: alias }),
 ];
 
-/** How a file reaches the hidden cause: the import line, how a cause is written, and the file it sits in (`./Hidden.ts` is held to its own package). */
+/** How a file reaches the hidden cause: the import line, how a cause is written, the file it sits in, and whether it is the hidden cause of Diagnostics. */
 type Hiding = {
   readonly header: string;
   readonly cause: string;
   readonly filename: string;
-  readonly inPackage: boolean;
+  readonly valid: boolean;
 };
 
 const SECRETS = "kalfa/secrets/src/Case.ts";
+
+const OWN = "kalfa/diagnostics/src/Case.ts";
 
 const HIDINGS: ReadonlyArray<(alias: string) => Hiding> = [
   () => ({
     header: 'import * as Hidden from "@kalfa/diagnostics/Hidden";',
     cause: "Hidden.Cause",
     filename: SECRETS,
-    inPackage: false,
+    valid: true,
   }),
   (alias) => ({
     header: `import * as ${alias} from "@kalfa/diagnostics/Hidden";`,
     cause: `${alias}.Cause`,
     filename: SECRETS,
-    inPackage: false,
+    valid: true,
+  }),
+  (alias) => ({
+    header: `import * as ${alias} from "@kalfa/diagnostics/Hidden";`,
+    cause: `${alias}["Cause"]`,
+    filename: SECRETS,
+    valid: true,
   }),
   () => ({
     header: 'import { Cause } from "@kalfa/diagnostics/Hidden";',
     cause: "Cause",
     filename: SECRETS,
-    inPackage: false,
+    valid: true,
   }),
+  (alias) => ({
+    header: `import { Cause as ${alias} } from "@kalfa/diagnostics/Hidden";`,
+    cause: alias,
+    filename: SECRETS,
+    valid: true,
+  }),
+  // `./Hidden.ts` is the hidden cause from inside the package's own folder of sources, and anything else from anywhere else.
+  () => ({ header: 'import * as Hidden from "./Hidden.ts";', cause: "Hidden.Cause", filename: OWN, valid: true }),
+  () => ({ header: 'import { Cause } from "./Hidden.ts";', cause: "Cause", filename: OWN, valid: true }),
+  () => ({ header: 'import * as Hidden from "./Hidden.ts";', cause: "Hidden.Cause", filename: SECRETS, valid: false }),
   () => ({
     header: 'import * as Hidden from "./Hidden.ts";',
     cause: "Hidden.Cause",
-    filename: "kalfa/diagnostics/src/Case.ts",
-    inPackage: true,
+    filename: "kalfa/diagnostics/other/Case.ts",
+    valid: false,
   }),
+  () => ({ header: 'import { Cause } from "./Hidden.ts";', cause: "Cause", filename: SECRETS, valid: false }),
+  // Another member of the module, a name that is not `Cause` imported under that name, and a module that only looks like it.
+  () => ({
+    header: 'import * as Hidden from "@kalfa/diagnostics/Hidden";',
+    cause: "Hidden.placeholder",
+    filename: SECRETS,
+    valid: false,
+  }),
+  () => ({
+    header: 'import { placeholder as Cause } from "@kalfa/diagnostics/Hidden";',
+    cause: "Cause",
+    filename: SECRETS,
+    valid: false,
+  }),
+  () => ({
+    header: 'import * as Hidden from "@kalfa/ledger/Hidden";',
+    cause: "Hidden.Cause",
+    filename: SECRETS,
+    valid: false,
+  }),
+  () => ({
+    header: 'import { Cause } from "effect";',
+    cause: "Cause",
+    filename: SECRETS,
+    valid: false,
+  }),
+  // A default import binds no name of the module, and a cause that is no import at all.
+  () => ({
+    header: 'import Hidden from "@kalfa/diagnostics/Hidden";',
+    cause: "Hidden.Cause",
+    filename: SECRETS,
+    valid: false,
+  }),
+  () => ({ header: "const Hidden = { Cause: 1 };", cause: "Hidden.Cause", filename: SECRETS, valid: false }),
+  () => ({ header: "", cause: "Hidden.Cause", filename: SECRETS, valid: false }),
 ];
 
 /** One error class on one line, over the fields given. */
@@ -112,6 +169,18 @@ const REDACTED_LINES: ReadonlyArray<(s: Spelling, i: number) => string> = [
   (s, i) => klass(s, i, `{ x: ${s.module}.RedactedFromValue(${s.module}.String) }`),
   // (h) the class written as `Schema.Error`.
   (s, i) => `class K${i} extends ${s.module}.Error<K${i}>("K${i}")({ x: ${s.module}.Redacted(${s.module}.String) }) {}`,
+  // The member written as a string, a class expression, a `const` in an array, a `const` behind a spread behind a `const`, and a `Struct` in a `const`.
+  (s, i) => klass(s, i, `{ x: ${s.module}["Redacted"](${s.module}.String) }`),
+  (s, i) =>
+    `const E${i} = class extends ${s.module}.TaggedError<K${i}>()("K${i}", { x: ${s.module}.Redacted(${s.module}.String) }) {};`,
+  (s, i) =>
+    `const C${i} = ${s.module}.Redacted(${s.module}.String); ${klass(s, i, `{ x: ${s.module}.Union([C${i}, ${s.module}.String]) }`)}`,
+  (s, i) =>
+    `const A${i} = { x: ${s.module}.Redacted(${s.module}.String) }; const B${i} = { ...A${i} }; ${klass(s, i, `B${i}`)}`,
+  (s, i) =>
+    `const S${i} = ${s.module}.Struct({ y: ${s.module}.Redacted(${s.module}.String) }); ${klass(s, i, `{ x: S${i} }`)}`,
+  (s, i) =>
+    klass(s, i, `{ x: ${s.module}.String, cause: ${s.module}.optional(${s.module}.Redacted(${s.module}.Defect())) }`),
 ];
 
 /** Lines that fire as refusal two: a `cause` that is none of the four forms. */
@@ -128,11 +197,38 @@ const CAUSE_LINES: ReadonlyArray<(s: Spelling, i: number) => string> = [
   (s, i) => `import * as Alien${i} from "@kalfa/ledger/Hidden"; ${klass(s, i, `{ cause: Alien${i}.Cause }`)}`,
   (s, i) =>
     `const make${i} = () => { const Hidden = { Cause: ${s.module}.String }; return ${klass(s, i, "{ cause: Hidden.Cause }")}; };`,
+  // The key written as a string, and as a computed string.
+  (s, i) => klass(s, i, `{ "cause": ${s.module}.String }`),
+  (s, i) => klass(s, i, `{ ["cause"]: ${s.module}.String }`),
+  // A form that is not quite one: `optional` with two arguments, with none, twice, and `Defect` or `optional` not called.
+  (s, i) => klass(s, i, `{ cause: ${s.module}.optional(${s.module}.Defect(), ${s.module}.String) }`),
+  (s, i) => klass(s, i, `{ cause: ${s.module}.optional() }`),
+  (s, i) => klass(s, i, `{ cause: ${s.module}.optional(${s.module}.optional(${s.module}.Defect())) }`),
+  (s, i) => klass(s, i, `{ cause: ${s.module}.Defect }`),
+  (s, i) => klass(s, i, `{ cause: ${s.module}.optional(${s.module}.Defect) }`),
+  (s, i) => klass(s, i, `{ cause: ${s.module}.Defect?.() }`),
+  (s, i) => klass(s, i, `{ cause: ${s.module}.optional?.(${s.module}.Defect()) }`),
+  // A cause named by a `let`, a pattern and a call: no same-file `const` holds it.
+  (s, i) => `let C${i} = ${s.module}.Defect(); ${klass(s, i, `{ cause: C${i} }`)}`,
+  (s, i) => `const { C${i} } = make(); ${klass(s, i, `{ cause: C${i} }`)}`,
+  (s, i) => `const C${i} = make(); ${klass(s, i, `{ cause: C${i} }`)}`,
+  // A cause inside a `const` fields object, whole and spread, and through a `const` that is spread twice.
+  (s, i) => `const F${i} = { cause: ${s.module}.String }; ${klass(s, i, `F${i}`)}`,
+  (s, i) => `const F${i} = { cause: ${s.module}.String }; ${klass(s, i, `{ ...F${i} }`)}`,
+  (s, i) =>
+    `const F${i} = { cause: ${s.module}.String }; const G${i} = { ...F${i} }; ${klass(s, i, `{ x: ${s.module}.String, ...G${i} }`)}`,
+  // The class written as `Schema.Error`, and as an expression.
+  (s, i) => `class K${i} extends ${s.module}.Error<K${i}>("K${i}")({ cause: ${s.module}.String }) {}`,
+  (s, i) => `const E${i} = class extends ${s.module}.TaggedError<K${i}>()("K${i}", { cause: ${s.module}.String }) {};`,
 ];
 
-/** The `./Hidden.ts` form of (j): from the package's own file it is the hidden cause, so it fires anywhere else. */
-const OUTSIDE_LINE = (s: Spelling, i: number): string =>
-  `import * as Alien${i} from "./Hidden.ts"; ${klass(s, i, `{ cause: Alien${i}.Cause }`)}`;
+/** Lines that name the hidden cause as this file's `Hidden` does: they pass when it is the hidden cause of Diagnostics, and fire when it only looks like it. */
+const HIDDEN_LINES: ReadonlyArray<(s: Spelling, h: Hiding, i: number) => string> = [
+  (s, h, i) => klass(s, i, `{ cause: ${h.cause} }`),
+  (s, h, i) => klass(s, i, `{ cause: ${s.module}.optional(${h.cause}) }`),
+  (s, h, i) => `const H${i} = ${h.cause}; ${klass(s, i, `{ cause: H${i} }`)}`,
+  (s, h, i) => `class K${i} extends ${s.module}.Error<K${i}>("K${i}")({ cause: ${h.cause} }) {}`,
+];
 
 /** Lines that name `Redacted` or a `cause` and must pass, in any file. */
 const PASSING_LINES: ReadonlyArray<(s: Spelling, h: Hiding, i: number) => string> = [
@@ -147,14 +243,46 @@ const PASSING_LINES: ReadonlyArray<(s: Spelling, h: Hiding, i: number) => string
   // The four forms of a cause, in this file's spelling of `Hidden`, and one through a same-file `const`.
   (s, _, i) => klass(s, i, `{ cause: ${s.module}.Defect() }`),
   (s, _, i) => klass(s, i, `{ cause: ${s.module}.optional(${s.module}.Defect()) }`),
-  (s, h, i) => klass(s, i, `{ cause: ${h.cause} }`),
-  (s, h, i) => klass(s, i, `{ cause: ${s.module}.optional(${h.cause}) }`),
   (s, _, i) => `const D${i} = ${s.module}.Defect(); ${klass(s, i, `{ cause: D${i} }`)}`,
+  (s, _, i) => `const D${i} = ${s.module}.optional(${s.module}.Defect()); ${klass(s, i, `{ cause: D${i} }`)}`,
   // A class of other fields, and a `cause` that is not the error's own: nested in a `Struct`.
   (s, _, i) => klass(s, i, `{ x: ${s.module}.String, y: ${s.module}.Struct({ cause: ${s.module}.Unknown }) }`),
+  // A class that is no error class: no `extends`, another base, `Class` and `TaggedClass`, a tag alone, a call that is no member, a struct.
+  (_, __, i) => `class N${i} {}`,
+  (_, __, i) => `class N${i} extends Base {}`,
+  (s, _, i) =>
+    `class N${i} extends ${s.module}.Class<N${i}>("N${i}")({ x: ${s.module}.Redacted(${s.module}.String), cause: ${s.module}.String }) {}`,
+  (s, _, i) =>
+    `class N${i} extends ${s.module}.TaggedClass<N${i}>()("N${i}", { x: ${s.module}.Redacted(${s.module}.String), cause: ${s.module}.String }) {}`,
+  (s, _, i) => `class N${i} extends ${s.module}.TaggedError<N${i}>()("N${i}") {}`,
+  (s, _, i) => `class N${i} extends make()("N${i}", { x: ${s.module}.Redacted(${s.module}.String) }) {}`,
+  (s, _, i) => `class N${i} extends ${s.module}.Struct({ cause: ${s.module}.String }) {}`,
+  // A call that is optional is no call of the member: the old text patterns did not match it either.
+  (s, _, i) => klass(s, i, `{ x: ${s.module}.Redacted?.(${s.module}.String) }`),
+  // A key that is computed from a name is no `cause`, and neither is the key of another field.
+  (s, _, i) => `const cause${i} = "c"; ${klass(s, i, `{ [cause${i}]: ${s.module}.String }`)}`,
+  (s, _, i) => klass(s, i, `{ causes: ${s.module}.String, because: ${s.module}.Unknown }`),
+  // A `Schema` that is not Effect's: a file of the repo, a member of another module, a member two levels down, a default import, and a name nothing binds.
+  (_, __, i) =>
+    `import { Schema as Own${i} } from "./own.ts"; class N${i} extends Own${i}.TaggedError<N${i}>()("N${i}", { x: Own${i}.Redacted(1), cause: Own${i}.String }) {}`,
+  (_, __, i) =>
+    `import * as Own${i} from "./own.ts"; class N${i} extends Own${i}.Schema.TaggedError<N${i}>()("N${i}", { x: Own${i}.Schema.Redacted(1) }) {}`,
+  (_, __, i) =>
+    `import * as Own${i} from "effect/Cause"; class N${i} extends Own${i}.TaggedError<N${i}>()("N${i}", { x: Own${i}.Redacted(1) }) {}`,
+  (_, __, i) =>
+    `import * as Own${i} from "effect"; class N${i} extends Own${i}.Cause.TaggedError<N${i}>()("N${i}", { x: Own${i}.Cause.Redacted(1) }) {}`,
+  (_, __, i) =>
+    `import Own${i} from "effect"; class N${i} extends Own${i}.TaggedError<N${i}>()("N${i}", { x: Own${i}.Redacted(1) }) {}`,
+  (_, __, i) =>
+    `import { Cause as Own${i} } from "effect"; class N${i} extends Own${i}.TaggedError<N${i}>()("N${i}", { x: Own${i}.Redacted(1) }) {}`,
+  (_, __, i) =>
+    `class N${i} extends unbound${i}.TaggedError<N${i}>()("N${i}", { x: unbound${i}.Redacted(1), cause: unbound${i}.String }) {}`,
+  (_, __, i) =>
+    `class N${i} extends a${i}.b.Schema.TaggedError<N${i}>()("N${i}", { x: a${i}.b.Schema.Redacted(1) }) {}`,
   // A comment and a string.
   (s) => `// ${s.module}.Redacted(x) in a comment`,
-  (s, _, i) => `const n${i} = "class K extends ${s.module}.TaggedError<K>()('K', { cause: ${s.module}.Redacted(x) })";`,
+  (s, _, i) =>
+    `const n${i} = 'class K extends ${s.module.replaceAll('"', "")}.TaggedError<K>()("K", { cause: ${s.module.replaceAll('"', "")}.Redacted(x) })';`,
 ];
 
 /** Imports that look like Effect's and are not, on every file. None fires. */
@@ -162,22 +290,42 @@ const OTHERS = ['import { Redacted as Mine } from "./mine.ts";', "const mine = M
 
 const piece = fc.oneof(
   fc.record({ kind: fc.constant("redacted" as const), form: fc.nat({ max: REDACTED_LINES.length - 1 }) }),
-  fc.record({ kind: fc.constant("cause" as const), form: fc.nat({ max: CAUSE_LINES.length }) }),
+  fc.record({ kind: fc.constant("cause" as const), form: fc.nat({ max: CAUSE_LINES.length - 1 }) }),
+  fc.record({ kind: fc.constant("hidden" as const), form: fc.nat({ max: HIDDEN_LINES.length - 1 }) }),
   fc.record({ kind: fc.constant("passes" as const), form: fc.nat({ max: PASSING_LINES.length - 1 }) }),
 );
 
 const generated = fc.record({
-  spelling: fc.constantFrom(...SPELLINGS),
-  hiding: fc.constantFrom(...HIDINGS),
+  spelling: fc.nat({ max: SPELLINGS.length - 1 }),
+  hiding: fc.nat({ max: HIDINGS.length - 1 }),
   alias: fc.stringMatching(/^[a-z]{2,6}$/).map((w) => `K${w}`),
   pieces: fc.array(piece, { minLength: 1, maxLength: 6 }),
 });
 
+/** Every spelling, every hiding and every form of every kind of piece the run drew: the law fails when one was never reached. */
+const reached = new Set<string>();
+
+const everything = [
+  ...SPELLINGS.map((_, form) => `spelling ${form}`),
+  ...HIDINGS.map((_, form) => `hiding ${form}`),
+  ...REDACTED_LINES.map((_, form) => `redacted ${form}`),
+  ...CAUSE_LINES.map((_, form) => `cause ${form}`),
+  ...HIDDEN_LINES.map((_, form) => `hidden ${form}`),
+  ...PASSING_LINES.map((_, form) => `passes ${form}`),
+];
+
 it("L1: reports exactly the refusals it should, through every import spelling of Schema and of Hidden, every nesting and every form of cause", () => {
   fc.assert(
     fc.property(generated, ({ spelling, hiding, alias, pieces }) => {
-      const s = spelling(alias);
-      const h = hiding(`H${alias}`);
+      const s = SPELLINGS[spelling]!(alias);
+      const h = HIDINGS[hiding]!(`H${alias}`);
+
+      reached.add(`spelling ${spelling}`);
+      reached.add(`hiding ${hiding}`);
+
+      for (const { kind, form } of pieces) {
+        reached.add(`${kind} ${form}`);
+      }
 
       /** A line, and the message it must be reported with, if any. */
       const lines: ReadonlyArray<readonly [string, RegExp | null]> = [
@@ -189,12 +337,9 @@ it("L1: reports exactly the refusals it should, through every import spelling of
             case "redacted":
               return [REDACTED_LINES[form]!(s, i), REDACTED];
             case "cause":
-              // The last form is the `./Hidden.ts` one, which passes from the package's own folder.
-              return form === CAUSE_LINES.length
-                ? h.inPackage
-                  ? [klass(s, i, `{ cause: ${h.cause} }`), null]
-                  : [OUTSIDE_LINE(s, i), CAUSE]
-                : [CAUSE_LINES[form]!(s, i), CAUSE];
+              return [CAUSE_LINES[form]!(s, i), CAUSE];
+            case "hidden":
+              return [HIDDEN_LINES[form]!(s, h, i), h.valid ? null : CAUSE];
             case "passes":
               return [PASSING_LINES[form]!(s, h, i), null];
           }
@@ -228,8 +373,13 @@ it("L1: reports exactly the refusals it should, through every import spelling of
               ],
       });
     }),
-    { seed: 119120, numRuns: 100 },
+    { seed: 119120, numRuns: 400 },
   );
+
+  expect(
+    everything.filter((each) => !reached.has(each)),
+    "every spelling, hiding and line the law lists was drawn",
+  ).toEqual([]);
 });
 
 const BODY = Arr.join(

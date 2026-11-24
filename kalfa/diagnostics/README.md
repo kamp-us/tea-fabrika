@@ -153,6 +153,18 @@ Give the error a field `cause: Hidden.Cause` (or `Schema.optional(Hidden.Cause)`
 `Schema.toCodecJson` of the error writes `{ _tag: "StoreFailed", cause: "<redacted>" }`, whatever the cause was. The example in
 `Hidden.Cause`'s doc block shows the whole class.
 
+```ts
+import * as Hidden from "@kalfa/diagnostics/Hidden";
+import { Redacted, Schema } from "effect";
+
+export class StoreFailed extends Schema.TaggedError<StoreFailed, { readonly brand: unique symbol }>()("StoreFailed", {
+  cause: Hidden.Cause,
+}) {}
+
+// The cause is made with `Redacted.make`; `Schema.toCodecJson` of the error writes its `cause` as "<redacted>".
+const failed = new StoreFailed({ cause: Redacted.make(new Error("bad value")) });
+```
+
 - **Why not `Schema.Redacted`.** In Effect 4.1.3 `Schema.toCodecJson` of a `Schema.Redacted` writes the value it holds, in full. So an
   error that crosses a socket would carry its cause. `Hidden.Cause` writes `<redacted>` there, whatever the cause was, and a label is
   not written either.
