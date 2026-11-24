@@ -124,8 +124,10 @@ const program = Effect.gen(function* () {
   and never dials again. Acquiring `socket`'s reader a second time fails with `SocketError` of `SocketOpenError`.
 - `hello.make` returns an Effect, since signing needs a key. Its failure and its needs join `connect`'s, and its failure
   passes through as it is: Transport adds none of its own.
-- A failed `connect` closes the connection at once: code 1002 for Transport's own refusals (`FormatError`,
-  `NoSharedVersion`), 1000 for the app's own failure in `make` and for a socket that closed.
+- A failed `connect` closes the connection at once. Transport's own refusals (`FormatError`, `NoSharedVersion`) close with
+  the refusal close code, 4000, and the error's name as the reason. The app's own failure in `make` and a socket that
+  failed close with 1000. A client may close with 1000 or a code of 3000 to 4999 only, so every protocol still works
+  from a browser tab.
 - The gateway's side is three functions of one frame, with no socket: `Transport.challenge(schema)(value)` writes the
   first frame, `Transport.accept({ versions, hello })(frame)` reads the hello and picks the version, and
   `Transport.answer(schema)(reply)` writes the answer or the `NoSharedVersion`.
@@ -146,7 +148,8 @@ const [left, right] = yield* MemorySocket.pair; // Effect<readonly [Socket, Sock
 
 Two joined sockets for a test: what one end writes, the other end reads, in order. Closing the reader scope of an end
 fails a pull waiting on it, and the far end reads every frame written before, then a close of code 1000. A `CloseEvent`
-written to an end closes both with its code and reason. A write to an end that closed itself fails with `SocketWriteError`. A write to an end whose far end closed is dropped and
+written to an end closes both with its code and reason, when a browser's `WebSocket.close` takes the code (1000, or 3000 to
+4999): any other code fails the write with a `SocketWriteError` that holds an `InvalidAccessError`, and closes nothing. A write to an end that closed itself fails with `SocketWriteError`. A write to an end whose far end closed is dropped and
 fails nothing, as a WebSocket drops it, and the close reaches the reader. There is no
 capacity, as a browser's `WebSocket.send` has none.
 

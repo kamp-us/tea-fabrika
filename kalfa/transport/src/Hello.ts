@@ -5,13 +5,22 @@
  *
  * The three frames are ordinary notifications of the format, with the method words `challenge`, `hello` and `answer`. Transport carries the challenge, the proof and the answer for the app and reads none of them: each is the app's own schema. `connect` is the client's side and keeps its one connection open for the stream that follows. `challenge`, `accept` and `answer` are the gateway's side, one frame at a time, and touch no socket.
  */
-import { Context, Effect, Option, Schema, SchemaTransformation, Tracer } from "effect";
+import { Context, Effect, Option, Predicate, Schema, SchemaTransformation, Tracer } from "effect";
 import type { Duration, Scope } from "effect";
 import { Socket } from "effect/socket";
 import type { Format, FormatError } from "./Format.ts";
 import type { Frame } from "./Frame.ts";
 import * as Connection from "./internal/connection.ts";
 import { receive, send } from "./internal/message.ts";
+
+/**
+ * The close code of a refusal of Transport's own. A client may close with 1000 or with a code of 3000 to 4999 only, as a browser's `WebSocket.close` refuses any other, so the refusal takes the first code of the range an app's own protocol may use.
+ */
+const REFUSED = 4000;
+
+// Transport's own refusals: the two errors it makes itself. A failure of the socket and the app's own are not.
+const isRefusal = (error: unknown): error is FormatError | NoSharedVersion =>
+  Predicate.isTagged(error, "FormatError") || Predicate.isTagged(error, "NoSharedVersion");
 
 /** A protocol version: a whole number of 1 or more. */
 const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
@@ -119,7 +128,7 @@ const describe = (version: number, versions: ReadonlyArray<number>, features: Re
  *
  * **Details**
  *
- * The connection is dialed once, in the caller's `Scope`, and `socket` is that open connection: a chain provided `socket` reads the frames that came in the answer's batch first and never dials again. A first frame that does not fit fails with a `FormatError`, a gateway that shares no version, or names one the client did not list, fails with `NoSharedVersion`, and the app's own failure in `make` passes through as it is. A failed `connect` closes the connection at once, with code 1002 for Transport's own refusals and 1000 for the app's failure. The call runs in a span `transport.connect` with a child for each step, and the hello carries the trace of its own span.
+ * The connection is dialed once, in the caller's `Scope`, and `socket` is that open connection: a chain provided `socket` reads the frames that came in the answer's batch first and never dials again. A first frame that does not fit fails with a `FormatError`, a gateway that shares no version, or names one the client did not list, fails with `NoSharedVersion`, and the app's own failure in `make` passes through as it is. A failed `connect` closes the connection at once, with code 4000 and the error's name as the reason for Transport's own refusals, and with 1000 for the app's failure and for a socket's own. The call runs in a span `transport.connect` with a child for each step, and the hello carries the trace of its own span.
  *
  * @category client
  */
@@ -144,7 +153,7 @@ export const connect = Effect.fn("transport.connect")(function* <
   Socket.Socket | Format | Scope.Scope | R | C["DecodingServices"] | H["EncodingServices"] | A["DecodingServices"]
 > {
   const connection = yield* Connection.open(yield* Socket.Socket);
-  // Whether the failure is the app's own, from `make`: it closes with 1000, Transport's own refusals with 1002.
+  // Whether the failure is the app's own, from `make`: it closes with 1000, Transport's own refusals with 4000 and the error's name as the reason.
   let theirs = false;
 
   const connected = yield* Effect.gen(function* () {
@@ -184,7 +193,11 @@ export const connect = Effect.fn("transport.connect")(function* <
 
       return { version: value.version, ping: value.ping, answer: value.answer, socket: connection.handOn };
     }).pipe(Effect.withSpan("transport.connect.answer"));
-  }).pipe(Effect.tapError((error) => connection.close(theirs || Socket.isSocketError(error) ? 1000 : 1002)));
+  }).pipe(
+    Effect.tapError((error) =>
+      !theirs && isRefusal(error) ? connection.close(REFUSED, error._tag) : connection.close(1000),
+    ),
+  );
 
   yield* describe(connected.version, options.versions, options.features);
 

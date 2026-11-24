@@ -27,7 +27,7 @@ export const text = (chunk: string | Uint8Array): Frame =>
 export interface Connection {
   readonly next: Effect.Effect<Frame, Socket.SocketError>;
   readonly write: (frame: Frame) => Effect.Effect<void, Socket.SocketError>;
-  readonly close: (code: number) => Effect.Effect<void>;
+  readonly close: (code: number, reason?: string) => Effect.Effect<void>;
   readonly handOn: Socket.Socket;
 }
 
@@ -58,8 +58,10 @@ export const open = Effect.fnUntraced(function* (socket: Socket.Socket) {
       : Effect.succeed(first);
   });
 
-  const close = (code: number) =>
-    Effect.ignore(writer.write(new Socket.CloseEvent(code))).pipe(Effect.andThen(Scope.close(child, Exit.void)));
+  const close = (code: number, reason?: string) =>
+    Effect.ignore(writer.write(new Socket.CloseEvent(code, reason))).pipe(
+      Effect.andThen(Scope.close(child, Exit.void)),
+    );
 
   let taken = false;
 

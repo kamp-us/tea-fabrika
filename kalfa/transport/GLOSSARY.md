@@ -53,6 +53,10 @@ _Avoid_: welcome, reply, response, result
 A whole number, 1 or more, naming one version of what the two ends speak; the gateway picks the highest one both list.
 _Avoid_: revision, protocol id, level
 
+**Refusal close code**:
+The close code 4000, with which `connect` closes a connection when Transport itself refuses it, a frame that does not fit or no shared version; the reason is the error's name. It sits in the range of 3000 to 4999 that a client may send, since a browser's `WebSocket.close` refuses any other code but 1000.
+_Avoid_: 1002, protocol error code
+
 **Feature**:
 One optional thing a client says in its hello that it can do.
 _Avoid_: capability, has, extension
