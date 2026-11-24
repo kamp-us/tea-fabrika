@@ -1,7 +1,7 @@
 // outside.setup.ts: vitest's setup file for the mutation box's Stryker run (ticket 1314), the edge of outside.ts. It does nothing outside a
 // Stryker run. Before each test it hands the active mutant to the child processes the test starts, and in the dry run it
 // makes a lint rule's own test cover the rule's mutants. outside.ts says why.
-import { readFileSync } from "node:fs"; // edge: the instrumented rule's text, read as the dry run starts a test
+import { existsSync, readFileSync } from "node:fs"; // edge: the instrumented rule's text, read as the dry run starts a test
 import { join, relative } from "node:path"; // edge: the test's place under the repo, to find its rule
 import { beforeEach, inject } from "vitest";
 import type { Task } from "vitest";
@@ -33,6 +33,10 @@ const coverageKey = (task: Task, separator: string): string => {
   return `${task.file.filepath}#${parts.join(separator)}`.trim();
 };
 
+/** The mutants an instrumented rule file holds; none when the test of this name has no rule beside it (`plants.test.ts`) or the rule is not instrumented. */
+const mutantsIn = (file: string): ReadonlyArray<string> =>
+  existsSync(file) ? mutantIds(readFileSync(file, "utf8")) : [];
+
 /** Holds the active mutant's id for the processes started from now on, or none. */
 const hand = (active: string | undefined) => {
   if (active === undefined) {
@@ -52,15 +56,11 @@ if (inject("globalNamespace") === "__stryker__") {
     hand(ns.activeMutant);
 
     const rule = ruleBehind(relative(process.cwd(), task.file.filepath));
+    const ids = rule === null ? [] : mutantsIn(join(process.cwd(), rule));
 
-    if (ns.activeMutant === undefined && rule !== null && inject("mode") !== "mutant") {
+    if (ns.activeMutant === undefined && ids.length > 0 && inject("mode") !== "mutant") {
       ns.mutantCoverage ??= { static: {}, perTest: {} };
-
-      coverRule(
-        ns.mutantCoverage,
-        coverageKey(task, inject("testNameSeparator") ?? " "),
-        mutantIds(readFileSync(join(process.cwd(), rule), "utf8")),
-      );
+      coverRule(ns.mutantCoverage, coverageKey(task, inject("testNameSeparator") ?? " "), ids);
     }
   });
 }
