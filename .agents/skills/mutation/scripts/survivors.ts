@@ -26,6 +26,11 @@
 //
 //   MUTATE_SECONDS       300   how long Stryker may test mutants: run.sh's cap, in whole seconds
 //   MUTATE_FILES         8     the most product files one run takes; more is refused, naming the count
+//   MUTATE_RUNS          25    the most cases a property law draws in the box, or `full` for each law's own count
+//                              (ticket 1306: the laws run three times over, and at full depth they alone cost more
+//                              than the 300 s; depth.ts says how the cap reaches a law, and what it cannot reach). A
+//                              mutant that lives at the cap is run again at full depth, in the laws that cover it, and
+//                              is listed only if it lives there too (recheck.ts); that run has its own MUTATE_SECONDS
 //   MUTATE_WAIT_SECONDS  7200  the longest a run waits in line for the box; then it gives up its place (exit 2)
 //   MUTATE_KEEP_DAYS     7     how long a saved run is kept: each save drops the ones older than this
 //   BOXES                the boxes folder beside the main checkout, as env.sh finds it; the one Docker
@@ -92,6 +97,11 @@ const SECONDS = Config.schema(AtLeastOne, "MUTATE_SECONDS").pipe(Config.withDefa
 
 /** The most product files one run takes. */
 const FILES = Config.schema(AtLeastOne, "MUTATE_FILES").pipe(Config.withDefault(8));
+
+/** The most cases a property law draws in the box, or `full`: no cap, each law's own count. */
+const RUNS = Config.schema(Schema.Union([AtLeastOne, Schema.Literal("full")]), "MUTATE_RUNS").pipe(
+  Config.withDefault(25),
+);
 
 /** How many days a saved run is kept: a save drops the older ones. */
 const KEEP = Config.schema(AtLeastOne, "MUTATE_KEEP_DAYS").pipe(Config.withDefault(7));
@@ -467,6 +477,19 @@ export const judge = <E, R, E2, R2>(ask: {
 
 // ---------------------------------------------------------------- the run
 
+/**
+ * The recheck's part of the last line: the counts above are the capped run's, and this says how many of the mutants that lived there
+ * died at full depth, so a reader sees both. Empty with no recheck. Pure.
+ */
+export const recheckText = (recheck: Summary["recheck"], runs: number | "full"): string =>
+  recheck === null
+    ? ""
+    : `; rechecked at full depth: ${recheck.cleared.length} of the ${recheck.asked} that lived at ${runs} cases died there and are not listed, ${recheck.confirmed} lived there too${recheck.unreached > 0 ? ` (${recheck.unreached} not reached)` : ""}`;
+
+/** mutbox's flag for the run depth: the cap as `--runs <n>`, and none for `full`, which leaves each law its own count. Pure. */
+export const runsFlag = (runs: number | "full"): ReadonlyArray<string> =>
+  runs === "full" ? [] : ["--runs", String(runs)];
+
 /** The scripts whose text is in a saved run's key, beside this one: what makes the box's answer. */
 const SCRIPTS = [
   "survivors.ts",
@@ -475,6 +498,9 @@ const SCRIPTS = [
   "limit.ts",
   "heartbeat.ts",
   "run.sh",
+  "depth.ts",
+  "depth.arbitrary.ts",
+  "depth.config.ts",
   "../../lead/scripts/mutbox.ts",
   "../../lead/scripts/mutbox.Dockerfile",
   "../../lead/scripts/mutbox-entry.sh",
@@ -669,6 +695,7 @@ export const scope = Effect.fnUntraced(function* (
     readonly cap: number;
     readonly version: string;
     readonly seconds: number;
+    readonly runs: number | "full";
   },
 ) {
   const base = Str.trim(
@@ -703,7 +730,7 @@ export const scope = Effect.fnUntraced(function* (
     tree,
     list,
     files,
-    key: Saved.key({ base, tree, files, version: ask.version, seconds: ask.seconds }),
+    key: Saved.key({ base, tree, files, version: ask.version, seconds: ask.seconds, runs: ask.runs }),
   };
 });
 
@@ -719,14 +746,14 @@ const check = Effect.fnUntraced(function* (ask: {
   const path = yield* Path.Path;
   const started = yield* Clock.currentTimeMillis;
 
-  const { seconds, cap, wait, days } = yield* Effect.mapError(
+  const { seconds, cap, wait, days, runs } = yield* Effect.mapError(
     Effect.gen(function* () {
-      return { seconds: yield* SECONDS, cap: yield* FILES, wait: yield* WAIT, days: yield* KEEP };
+      return { seconds: yield* SECONDS, cap: yield* FILES, wait: yield* WAIT, days: yield* KEEP, runs: yield* RUNS };
     }),
     () =>
       Refused.make({
         detail:
-          "MUTATE_SECONDS, MUTATE_FILES, MUTATE_WAIT_SECONDS and MUTATE_KEEP_DAYS are whole numbers, 1 or more, when set",
+          "MUTATE_SECONDS, MUTATE_FILES, MUTATE_WAIT_SECONDS, MUTATE_KEEP_DAYS and MUTATE_RUNS are whole numbers, 1 or more, when set (MUTATE_RUNS may be `full` too)",
       }),
   );
 
@@ -751,6 +778,7 @@ const check = Effect.fnUntraced(function* (ask: {
     cap,
     version,
     seconds,
+    runs,
   });
 
   // Read again after the box answers, so a Survivor: line written while the run waited counts. Read once
@@ -851,8 +879,9 @@ const check = Effect.fnUntraced(function* (ask: {
         lock,
         "--cap",
         String(seconds),
+        ...runsFlag(runs),
       ],
-      secondsFor(false, seconds) + DOCKER_SECONDS.build + 6 * DOCKER_SECONDS.call,
+      secondsFor(false, seconds, runs !== "full") + DOCKER_SECONDS.build + 6 * DOCKER_SECONDS.call,
     );
 
     const answer = yield* Schema.decodeEffect(Schema.fromJsonString(Summary))(
@@ -926,8 +955,10 @@ const check = Effect.fnUntraced(function* (ask: {
     Arr.join(
       [
         `survivors: ${lines.length} to kill or explain; ${counts}`,
+        recheckText(summary.recheck, runs),
         explained > 0 ? `; ${explained} answered by a Survivor: line` : "",
         summary.sample === null ? "" : `; ${summary.sample.selected} of ${summary.sample.total} mutants sampled`,
+        runs === "full" ? "" : `; property laws drew at most ${runs} cases (MUTATE_RUNS)`,
         summary.reach === null ? "" : `; ${summary.reach}`,
         summary.b.unreached > 0
           ? `; the ${seconds} s budget (MUTATE_SECONDS) ran out with ${summary.b.unreached} sampled mutants not reached`

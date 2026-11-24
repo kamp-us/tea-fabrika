@@ -39,8 +39,10 @@ import dockerfile from "./mutbox.Dockerfile?raw";
 import {
   baseNode,
   bounded,
+  BUILDER,
   buildOwns,
   CallTimeout,
+  confirm,
   DOCKER_SECONDS,
   droppedFromArmA,
   exitCode,
@@ -133,6 +135,7 @@ describe("mutbox, the pure parts", () => {
           // The marker CI hands in, or none (testing, linting and formatting live in @kalfa/quality, slice 2): Q18 holds what it does.
           ci: fc.constant(null),
           cap: fc.constant(null),
+          runs: fc.constant(null),
         }),
         (ask) => {
           const args = runArgs(ask);
@@ -180,7 +183,8 @@ describe("mutbox, the pure parts", () => {
   });
 
   // Plant: let a comma through, so `--mount` reads the rest of the path as its own options.
-  // Plant: pass CAP_SECONDS when no cap was asked, or leave it out when one was.
+  // Plant: pass CAP_SECONDS when no cap was asked, or leave it out when one was. Ticket 1306's plants, in the same law: pass
+  // MUTATE_RUNS when no depth was asked (the hourly run would lose its full depth), or leave it out when one was.
   // Q18, slice 2 of .kalfa/quests/kalfa-quality-stryker-PLAN.md (testing, linting and formatting live in @kalfa/quality): `CI` crosses into the container only
   // from CI. The hourly run on GitHub's runner sets `CI`, and the container's host guard (vitest.hostrun.ts)
   // lets `.integration.` laws start there; on the laptop mutbox has no `CI`, passes none, and the guard still
@@ -199,6 +203,7 @@ describe("mutbox, the pure parts", () => {
           lock: fc.string(),
           ci: fc.option(fc.stringMatching(/^[A-Za-z0-9._-]{1,12}$/), { nil: null }),
           cap: fc.option(fc.integer({ min: 1, max: 3600 }), { nil: null }),
+          runs: fc.option(fc.integer({ min: 1, max: 1000 }), { nil: null }),
         }),
         (ask) => {
           const args = runArgs(ask);
@@ -210,6 +215,7 @@ describe("mutbox, the pure parts", () => {
             `RELATED=${ask.related.join(",")}`,
             ...(ask.ci === null ? [] : [`CI=${ask.ci}`]),
             ...(ask.cap === null ? [] : [`CAP_SECONDS=${ask.cap}`]),
+            ...(ask.runs === null ? [] : [`MUTATE_RUNS=${ask.runs}`]),
           ]);
         },
       ),
@@ -327,6 +333,65 @@ describe("mutbox, the pure parts", () => {
             const killedInA = Arr.some(a, (x) => same(x, r) && (x.status === "Killed" || x.status === "Timeout"));
             expect(list.includes(r)).toBe(lives && killedInA);
           }
+        },
+      ),
+      options,
+    );
+  });
+
+  // Ticket 1306. Plants: report a mutant that died at full depth, clear one that lived there too, clear one the recheck never reached,
+  // clear every survivor when the recheck left no answer, or change the counts of the cap's own run.
+  it("a mutant that dies only at full depth is not reported, and one that lives there, or was not run again, still is", () => {
+    const key = (r: object) => JSON.stringify({ ...r, status: "" });
+
+    fc.assert(
+      fc.property(
+        fc.array(row, { maxLength: 12 }),
+        fc.array(fc.constantFrom("Killed", "Survived", "Timeout", "NoCoverage"), { maxLength: 12 }),
+        (every, fullStatuses) => {
+          const b = Arr.dedupeWith(every, (x, y) => key(x) === key(y));
+          const arm = tally(0, "report", b, b.length);
+          const lived = [...arm.survivors, ...arm.uncovered];
+
+          // Arm c: the first of them, each with the status it got at full depth.
+          const c = Arr.map(Arr.take(lived, fullStatuses.length), (r, i) => ({
+            ...r,
+            status: fullStatuses[i] ?? "Killed",
+          }));
+
+          const got = confirm(arm, c);
+
+          const died = new Set(
+            Arr.map(
+              Arr.filter(c, (r) => r.status === "Killed" || r.status === "Timeout"),
+              key,
+            ),
+          );
+
+          const reported = [...got.b.survivors, ...got.b.uncovered];
+
+          expect(got.b.counts, "the counts stay the cap's own").toEqual(arm.counts);
+          expect(
+            Arr.some(reported, (r) => died.has(key(r))),
+            "a mutant that died at full depth is not reported",
+          ).toBe(false);
+          expect(
+            Arr.every(lived, (r) => died.has(key(r)) || reported.includes(r)),
+            "every other one still is",
+          ).toBe(true);
+
+          if (lived.length === 0) {
+            expect(got.recheck).toBeNull();
+          } else {
+            expect(got.recheck?.asked).toBe(lived.length);
+            expect(got.recheck?.cleared.length).toBe(died.size);
+            expect(got.recheck?.confirmed).toBe(reported.length);
+            expect(got.recheck?.unreached).toBe(Arr.filter(reported, (r) => !c.some((x) => key(x) === key(r))).length);
+          }
+
+          // No answer from arm c: nothing is cleared.
+          const none = confirm(arm, null);
+          expect([...none.b.survivors, ...none.b.uncovered]).toEqual(lived);
         },
       ),
       options,
@@ -543,7 +608,10 @@ case "$1 $2" in
 "rm "*|"kill "*) : ;;
 "image inspect") [ -e "$FAKE/image" ] || exit 1; echo id ;;
 "image prune") echo "untagged: fabrika-mutbox:old" ;;
-"build "*) for a; do last=$a; done; (cd "$last" && find . -type f | sort) > "$FAKE/context.txt"; touch "$FAKE/image" ;;
+"buildx inspect") [ -e "$FAKE/builder" ] || exit 1 ;;
+"buildx create") touch "$FAKE/builder" ;;
+"buildx build") for a; do last=$a; done; (cd "$last" && find . -type f | sort) > "$FAKE/context.txt"; touch "$FAKE/image" ;;
+"buildx prune") : ;;
 "run "*)
 	for a; do case $a in type=bind,src=*,dst=/out) out=\${a#type=bind,src=}; out=\${out%,dst=/out} ;; esac; done
 	for a; do case $a in type=bind,src=*,dst=/in,readonly) in=\${a#type=bind,src=}; in=\${in%,dst=/in,readonly} ;; esac; done
@@ -594,6 +662,8 @@ git --git-dir "$IN/repo.git" log --format=%s refs/heads/build > "$FAKE/commits.t
 type Setup = {
   run?: string;
   image?: boolean;
+  /** The box's own builder already exists. */
+  builder?: boolean;
   env?: Record<string, string>;
   docker?: boolean;
   lockPid?: number;
@@ -671,6 +741,10 @@ const run = (setup: Setup = {}) => {
 
   if (setup.image !== false) {
     writeFileSync(join(fake, "image"), "");
+  }
+
+  if (setup.builder === true) {
+    writeFileSync(join(fake, "builder"), "");
   }
 
   if (setup.lockPid !== undefined) {
@@ -800,7 +874,7 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(runCall).toContain("--network none");
     expect(runCall).toContain(`src=${join(got.dir, "out", "box")},dst=/out`);
     expect(got.calls.at(-1)).toMatch(/^rm -f fabrika-mutbox-483-\d+$/);
-    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("build ")))).toBe(false);
+    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("buildx build ")))).toBe(false);
   });
 
   // Q18's edge, through the real script and the stand-in docker: the host's own `CI`, when set and not
@@ -857,7 +931,7 @@ describe("mutbox, the run against a stand-in docker", () => {
   it("a missing image is built from the commit's own lockfile, and a changed lockfile is a new image", () => {
     const first = run({ image: false });
     expect(first.code, first.text).toBe(0);
-    const built = firstCall(first.calls, "build");
+    const built = firstCall(first.calls, "buildx build");
     expect(built).toContain("--build-arg PNPM=12.16.1");
     expect(built).toContain(`--label ${LABEL}`);
     // The build's folder holds the lockfile, workspace file, patches and our two files only.
@@ -868,7 +942,7 @@ describe("mutbox, the run against a stand-in docker", () => {
       "./pnpm-lock.yaml",
       "./pnpm-workspace.yaml",
     ]);
-    const tag = (calls: string[]) => /--tag (fabrika-mutbox:[0-9a-f]{16})/.exec(firstCall(calls, "build"))?.[1];
+    const tag = (calls: string[]) => /--tag (fabrika-mutbox:[0-9a-f]{16})/.exec(firstCall(calls, "buildx build"))?.[1];
     const again = run({ image: false });
     const other = run({ image: false, lockfile: "lockfileVersion: '9.0'\n# changed\n" });
     expect(tag(again.calls)).toBe(tag(first.calls));
@@ -881,9 +955,9 @@ describe("mutbox, the run against a stand-in docker", () => {
     const got = run({ node: "20.0.0", image: false });
     expect(got.code, got.text).toBe(30);
     expect(got.summary).toMatchObject({ outcome: "stuck", reason: "node_mismatch" });
-    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("build ")) || pipe(c, Str.startsWith("run ")))).toBe(
-      false,
-    );
+    expect(
+      Arr.some(got.calls, (c) => pipe(c, Str.startsWith("buildx build ")) || pipe(c, Str.startsWith("run "))),
+    ).toBe(false);
   });
 
   // Plant: wait for the container for ever, or leave it running after the limit.
@@ -1082,6 +1156,87 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(install.summary).toMatchObject({ outcome: "stuck", reason: "install_failed" });
   });
 
+  // Ticket 1306: two Git files died in the entry script in 3 s and 5 s, and the answer sent a reader to box/b/run.txt, which a run that
+  // dies before run.sh never writes. Plants: leave the container's words out of the detail, leave container.txt unwritten, or point at b/run.txt alone.
+  it("a container that dies before it writes any file says what it said, in the detail and in box/container.txt", () => {
+    const said = "cp: cannot create regular file '.git/objects/pack/x': No space left on device";
+    const died = run({ run: `echo "${said}" >&2\nexit 1\n` });
+
+    expect(died.code, died.text).toBe(30);
+    expect(died.summary).toMatchObject({ outcome: "stuck", reason: "no_report" });
+    expect(died.summary.detail).toContain("No space left on device");
+    expect(readFileSync(join(died.dir, "out", "box", "container.txt"), "utf8")).toContain(said);
+
+    const quiet = run({ run: "exit 1\n" });
+    expect(quiet.summary.detail).toContain("it said nothing");
+  });
+
+  // Ticket 1306, through the real script and the stand-in docker: arm b leaves two survivors at the cap and arm c, the full-depth
+  // recheck, kills one. The summary reports the other, names the one that died at full depth, and keeps the cap's own counts.
+  // Plants: leave arm c unread; clear both; clear none.
+  it("a mutant that lives at the cap and dies at full depth is cleared in the summary, and the one that lives there too is reported", () => {
+    const both = JSON.stringify({ files: { "src/a.ts": { mutants: [mutant("Survived", 1), mutant("Survived", 2)] } } });
+    const full = JSON.stringify({ files: { "src/a.ts": { mutants: [mutant("Killed", 1), mutant("Survived", 2)] } } });
+    const armB = `${DONE}\necho '${both}' > "$OUT/b/report.json"\n`;
+    const armC = `mkdir -p "$OUT/c"\necho 0 > "$OUT/c/exit"\necho '${full}' > "$OUT/c/report.json"\n`;
+
+    const got = run({ run: `${armB}${armC}`, args: () => ["--runs", "25"] });
+
+    expect(got.code, got.text).toBe(0);
+    expect(got.summary.b.counts).toEqual({ Survived: 2 });
+    expect(got.summary.b.survivors.map((r: { line: number }) => r.line)).toEqual([2]);
+    expect(got.summary.recheck).toMatchObject({ asked: 2, confirmed: 1, unreached: 0 });
+    expect(got.summary.recheck.cleared.map((r: { line: number; status: string }) => [r.line, r.status])).toEqual([
+      [1, "Killed"],
+    ]);
+
+    // No arm c (the recheck left nothing): both are reported, and none is called cleared.
+    const none = run({ run: armB, args: () => ["--runs", "25"] });
+    expect(none.summary.b.survivors).toHaveLength(2);
+    expect(none.summary.recheck).toMatchObject({ asked: 2, confirmed: 2, unreached: 2, cleared: [] });
+
+    // No depth asked: no recheck, and both are reported.
+    const plain = run({ run: `${armB}${armC}` });
+    expect(plain.summary.recheck).toBeNull();
+    expect(plain.summary.b.survivors).toHaveLength(2);
+  });
+
+  // Ticket 1306. Plants: build on the default builder, or make the builder every run, or never.
+  it("the image is built on the box's own builder, made once when missing", () => {
+    const first = run({ image: false });
+    expect(first.code, first.text).toBe(0);
+    const verbs = Arr.map(first.calls, (c) => c.split(" ").slice(0, 2).join(" "));
+    expect(verbs.indexOf("buildx create")).toBeGreaterThan(verbs.indexOf("buildx inspect"));
+    expect(verbs.indexOf("buildx build")).toBeGreaterThan(verbs.indexOf("buildx create"));
+    expect(first.calls.find((c) => c.startsWith("buildx create "))).toBe(
+      `buildx create --name ${BUILDER} --driver docker-container`,
+    );
+    expect(first.calls.find((c) => c.startsWith("buildx build "))).toContain(`--builder ${BUILDER} --load`);
+
+    const made = run({ image: false, builder: true });
+    expect(made.code, made.text).toBe(0);
+    expect(Arr.some(made.calls, (c) => c.startsWith("buildx create "))).toBe(false);
+    expect(Arr.some(made.calls, (c) => c.startsWith("buildx build "))).toBe(true);
+  });
+
+  // Ticket 1306. Plants: pass no MUTATE_RUNS for `--runs`, or pass it with none asked (the hourly run would lose its full depth);
+  // call exit 73 (the build has no depth.config.ts) done, or any other word than no_depth.
+  it("--runs reaches the container as MUTATE_RUNS, none asked passes none, and a build that cannot cap is stuck no_depth", () => {
+    const envs = (calls: ReadonlyArray<string>) =>
+      [...(calls.find((c) => c.startsWith("run ")) ?? "").matchAll(/--env (\S+)/g)].map((m) => m[1]);
+
+    const capped = run({ args: () => ["--runs", "6"] });
+    expect(capped.code, capped.text).toBe(0);
+    expect(envs(capped.calls)).toContain("MUTATE_RUNS=6");
+
+    const full = run();
+    expect(envs(full.calls).some((e) => e?.startsWith("MUTATE_RUNS"))).toBe(false);
+
+    const old = run({ run: "exit 73\n", args: () => ["--runs", "6"] });
+    expect(old.code, old.text).toBe(30);
+    expect(old.summary).toMatchObject({ outcome: "stuck", reason: "no_depth" });
+  });
+
   // Plants: call any untested sample a skip; call a mix, an empty report or a capped run static.
   it("scenario: a sample of only static mutants, which ignoreStatic leaves Ignored, is a skip", () => {
     const sample = JSON.stringify({ seed: 119120, ranges: ["src/a.ts:1:0-1:4"], total: 2, selected: 2, left: 0 });
@@ -1165,20 +1320,43 @@ describe("mutbox gc against a stand-in docker", () => {
     };
   };
 
-  // Plants: remove a live run's container; prune images without our label.
+  // Plants: remove a live run's container; prune images without our label; prune the build cache while a run holds the lock, or not at all.
   it("gc removes leftover containers and week-old images, and never touches a live run", () => {
     const swept = gc({ leftover: "abc123", lockPid: spawnSync(process.execPath, ["-e", ""]).pid! });
     expect(swept.code, swept.text).toBe(0);
     expect(swept.calls).toContain("rm -f abc123");
     expect(swept.calls).toContain(`image prune --all --force --filter label=${LABEL} --filter until=168h`);
     expect(swept.text).toContain("removed 1 containers and 1 images");
+    expect(
+      swept.calls,
+      "the box's own build cache past a day goes too (ticket 1306: it filled Docker's disk)",
+    ).toContain("buildx prune --builder mutbox --filter until=24h --force");
+
+    // Plants: a prune with no `--builder mutbox` (it would clear every project's build cache on this machine), an image prune with no
+    // label filter, or a `docker builder prune` / `docker system prune` of any kind.
+    const prunes = Arr.filter(swept.calls, (c) => / prune\b/.test(c) || pipe(c, Str.startsWith("system ")));
+    expect(prunes).toHaveLength(2);
+
+    for (const c of prunes) {
+      expect(c, "every prune names the box's own builder, or the box's own label").toSatisfy(
+        (text: string) =>
+          (pipe(text, Str.startsWith("buildx prune ")) && text.includes("--builder mutbox")) ||
+          (pipe(text, Str.startsWith("image prune ")) && text.includes(`--filter label=${LABEL}`)),
+      );
+    }
 
     const live = gc({ leftover: "abc123", lockPid: process.pid });
     expect(live.code, live.text).toBe(0);
     expect(live.text).toContain("keep mutbox");
-    expect(Arr.some(live.calls, (c) => pipe(c, Str.startsWith("rm ")) || pipe(c, Str.startsWith("image prune")))).toBe(
-      false,
-    );
+    expect(
+      Arr.some(
+        live.calls,
+        (c) =>
+          pipe(c, Str.startsWith("rm ")) ||
+          pipe(c, Str.startsWith("image prune")) ||
+          pipe(c, Str.startsWith("buildx prune")),
+      ),
+    ).toBe(false);
 
     const down = gc({ down: true });
     expect(down.code, down.text).toBe(0);
@@ -1310,6 +1488,7 @@ const server = net.createServer((s) => s.end("hello")).listen(() => {
       lock: "probe",
       ci: null,
       cap: null,
+      runs: null,
     });
 
     const from = /^FROM (\S+)$/m.exec(dockerfile)?.[1] ?? "";

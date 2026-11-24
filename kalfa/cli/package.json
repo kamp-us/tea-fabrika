@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "The kalfa command, and the shape a package exports to give it a subcommand.",
+  "bin": {
+    "kalfa": "./src/bin.ts"
+  },
   "scripts": {
     "build": "rslib build",
     "typecheck": "tsc --noEmit"
@@ -39,6 +42,9 @@
         "default": "./dist/Subcommand.js"
       },
       "./package.json": "./package.json"
+    },
+    "bin": {
+      "kalfa": "./dist/bin.js"
     }
   },
   "peerDependencies": {
