@@ -481,6 +481,9 @@ Estimate: 5 steps, $45
 - `because`, in `kalfa/config/src/internal/error.ts`: the end of a read's sentence. Internal.
 - `rule` and `expected`, in `kalfa/config/src/internal/check.ts`: what a refused value had to be, and a type's text.
   Internal.
+- `reaches`, in `kalfa/config/src/internal/check.ts`: whether a path is a setting's own name or goes on inside its value (a member of a record, a field of a table). Internal.
+- `faultLine`, in `kalfa/config/src/internal/check.ts`: the line a fault is on, read from the issue's path, never an invented one. Internal.
+- `unread`, in `kalfa/config/src/internal/error.ts`: the one `read` error, which every read site makes. It holds `because`, the end of its sentence. Internal.
 - `config.edit`: a span name, `<package>.<call>` by decision 0063.
 - `SettingGroup.refusals.test.ts`: a test file named for what it checks, as `SettingGroup.fileOnly.test.ts` is.
 
