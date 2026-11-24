@@ -1,5 +1,5 @@
-// D5 to D7: the types of the hello. The compile-time laws need tsc (the build runs it); each is written as a function the test never
-// calls, so no value is declared and the file also runs under vitest. D5 also runs the plan's sketch, a chain on the socket `connect` gave.
+// D8, D6 and D7 (the plan names D8 as D5, which Transport.types.test.ts already holds): the types of the hello. The compile-time laws need tsc (the build runs it); each is written as a function the test never
+// calls, so no value is declared and the file also runs under vitest. D8 also runs the plan's sketch, a chain on the socket `connect` gave.
 import { assert, expectTypeOf, it } from "@effect/vitest";
 import { Context, Duration, Effect, Exit, Layer, Option, Schema, Stream } from "effect";
 import type { Scope } from "effect";
@@ -80,7 +80,7 @@ const sketch = (values: Stream.Stream<Message>, stand: Socket.Socket, versions: 
   }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(Format.layerJsonRpc, Layer.succeed(Socket.Socket, stand))));
 
 it.effect.prop(
-  "D5 type and run: connect for the test app's schemas and a make of Effect<Proof, SignError, Signer> is Effect<Connected<SignInAnswer>, NoSharedVersion | SocketError | FormatError | SignError, Socket | Format | Scope | Signer> with make's challenge typed and no annotation, and the sketch's chain, provided the stand-in and the format, is Effect<void, ..., never> and runs",
+  "D8 type and run: connect for the test app's schemas and a make of Effect<Proof, SignError, Signer> is Effect<Connected<SignInAnswer>, NoSharedVersion | SocketError | FormatError | SignError, Socket | Format | Scope | Signer> with make's challenge typed and no annotation, and the sketch's chain, provided the stand-in and the format, is Effect<void, ..., never> and runs",
   { draw: helloDraw },
   ({ draw }) =>
     Effect.gen(function* () {

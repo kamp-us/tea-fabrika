@@ -188,7 +188,7 @@ export const seed: Arbitrary.Arbitrary<Seed> = Arbitrary.all({
 });
 
 /** A value a law of values sends: JSON, or one of the two Effect's JSON codec writes as JSON (a BigInt, bytes). */
-export type Value = Json | bigint | Uint8Array;
+type Value = Json | bigint | Uint8Array;
 
 /** A class of value: its schema, and one value of it for each seed. */
 interface ValueClass {
@@ -983,7 +983,7 @@ export const secretFrom = (each: { readonly secret: string; readonly n: number }
 // Nothing here reads a name of the package at module load, so the older laws that share this file load as before.
 
 /** The test app's nonce: a text that is not empty, branded, so a challenge can be refused for its range. */
-export const Nonce = Schema.NonEmptyString.pipe(Schema.brand("Nonce"));
+const Nonce = Schema.NonEmptyString.pipe(Schema.brand("Nonce"));
 
 /** The test app's challenge. */
 export const Challenge = Schema.Struct({ nonce: Nonce });
@@ -994,7 +994,7 @@ export const Proof = Schema.Struct({ key: Schema.String, signature: Schema.Strin
 /** What the test app answers a hello with: admitted, waiting or refused. */
 export const Admitted = Schema.TaggedStruct("admitted", { name: Schema.String });
 
-export const Waiting = Schema.TaggedStruct("waiting", { code: Schema.String });
+const Waiting = Schema.TaggedStruct("waiting", { code: Schema.String });
 
 export const Refused = Schema.TaggedStruct("refused", { reason: Schema.String });
 
@@ -1003,7 +1003,7 @@ export const SignInAnswer = Schema.Union([Admitted, Waiting, Refused]);
 export type SignInAnswer = typeof SignInAnswer.Type;
 
 /** The app's own failure while it makes a proof. */
-export class AppFailure extends Schema.TaggedError<AppFailure, { readonly brand: unique symbol }>()("AppFailure", {
+class AppFailure extends Schema.TaggedError<AppFailure, { readonly brand: unique symbol }>()("AppFailure", {
   word: Schema.String,
 }) {}
 
@@ -1013,7 +1013,7 @@ export class StageError extends Schema.TaggedError<StageError, { readonly brand:
 }) {}
 
 /** An app as the laws use it: its two schemas, how it makes a proof from a challenge, and how it checks a proof. */
-export interface App {
+interface App {
   readonly name: string;
   readonly challenge: Plain;
   readonly proof: Plain;
@@ -1042,7 +1042,7 @@ const makeApp = <C, P>(options: {
 };
 
 /** The key the test app signs with. */
-export const KEY = "ed25519:AAAA";
+const KEY = "ed25519:AAAA";
 
 /** The proof the test app makes for a nonce. */
 export const signed = (nonce: string): typeof Proof.Type => ({ key: KEY, signature: `${KEY}/${nonce}` });
@@ -1060,14 +1060,14 @@ export const signInApp: App = makeApp({
 });
 
 /** The same app, whose proof fails with the app's own error. */
-export const failingApp = (word: string): App => ({
+const failingApp = (word: string): App => ({
   ...signInApp,
   name: "failing",
   make: () => Effect.fail(new AppFailure({ word })),
 });
 
 /** An app whose challenge is a value of one of the classes (a) to (d): the proof holds the challenge as its signature. */
-export const classApp = (klass: { readonly id: string; readonly name: string; readonly schema: Plain }): App =>
+const classApp = (klass: { readonly id: string; readonly name: string; readonly schema: Plain }): App =>
   makeApp({
     name: klass.name,
     challenge: klass.schema,
@@ -1077,7 +1077,7 @@ export const classApp = (klass: { readonly id: string; readonly name: string; re
   });
 
 /** An app whose proof is any value at all: a proof the hello can fail to write. */
-export const looseApp: App = makeApp({
+const looseApp: App = makeApp({
   name: "loose",
   challenge: Challenge,
   proof: Schema.Unknown,
@@ -1088,7 +1088,7 @@ export const looseApp: App = makeApp({
 // ---- the far end of a connection
 
 /** What a far end saw of one connection. */
-export interface Seen {
+interface Seen {
   /** Every frame it read, in order. */
   readonly frames: Array<Frame>;
   /** The challenges it sent. */
@@ -1110,7 +1110,7 @@ export const newSeen = (): Seen => ({
 });
 
 /** The far end's own tools: read one frame, send frames as one batch, close. */
-export interface Far {
+interface Far {
   readonly read: Effect.Effect<Frame, Socket.SocketError>;
   readonly send: (frames: readonly [Frame, ...Array<Frame>]) => Effect.Effect<void, Socket.SocketError>;
   readonly close: (code: number, reason?: string) => Effect.Effect<void, Socket.SocketError>;
@@ -1252,7 +1252,7 @@ export const dialing: Effect.Effect<Harness & { readonly socket: Socket.Socket }
 // ---- the programs a far end runs
 
 /** The frame of a message. */
-export const frameFrom = (value: Message) => Effect.map(framesFrom(Message, [value]), (frames) => frames[0] ?? "");
+const frameFrom = (value: Message) => Effect.map(framesFrom(Message, [value]), (frames) => frames[0] ?? "");
 
 /** The challenge frame the test app's schema accepts, written by hand. */
 export const goodChallenge = (nonce: string): Frame => notification("challenge", { nonce });
@@ -1302,7 +1302,7 @@ export const closing =
 export const ACK = textMessage("ack");
 
 /** What an honest gateway does for one connection. */
-export interface Honest {
+interface Honest {
   readonly app: App;
   readonly challenge: Plain["Type"];
   /** The versions the gateway speaks. */
@@ -1359,13 +1359,13 @@ export const honest =
     });
 
 /** The messages a far end read after the hello, as the values they carry. */
-export const readBy = (seen: Seen) =>
+const readBy = (seen: Seen) =>
   Stream.fromIterable(seen.frames.slice(1)).pipe(Transport.decode(Message), Stream.runCollect);
 
 // ---- (a) to (z): what one drawn run holds, and the classes made from it
 
 /** What a drawn run holds for the hello: the made-up parts every class is built from. */
-export interface HelloDraw {
+interface HelloDraw {
   readonly seeds: ReadonlyArray<Seed>;
   readonly text: string;
   readonly nonce: string;
@@ -1405,7 +1405,7 @@ export const helloDraw: Arbitrary.Arbitrary<HelloDraw> = Arbitrary.all({
 // ---- (n) and (o): the lists of versions
 
 /** Two lists of versions, and the version the pick must give, when they share one. */
-export interface Lists {
+interface Lists {
   readonly id: "n" | "o";
   readonly name: string;
   readonly client: ReadonlyArray<number>;
@@ -1513,7 +1513,7 @@ export const connectionCases = (draw: HelloDraw): ReadonlyArray<ConnectionCase> 
 };
 
 /** What one connection came to. */
-export interface CaseOutcome {
+interface CaseOutcome {
   readonly version: number;
   readonly ping: Duration.Duration;
   readonly answer: unknown;
@@ -1608,13 +1608,13 @@ export const runCase = (harness: Harness, each: ConnectionCase) =>
 // ---- the connections that do not succeed: (a) to (j)
 
 /** What a failed `connect` must come to. */
-export type Expected =
+type Expected =
   | { readonly kind: "format"; readonly reason: FormatError["reason"] }
   | { readonly kind: "noShared"; readonly client: ReadonlyArray<number>; readonly gateway: ReadonlyArray<number> }
   | { readonly kind: "app"; readonly error: AppFailure };
 
 /** One connection that fails, and how. */
-export interface Handshake {
+interface Handshake {
   readonly id: string;
   readonly name: string;
   readonly app: App;
@@ -1805,7 +1805,7 @@ export const handshakes = (draw: HelloDraw): ReadonlyArray<Handshake> => {
 };
 
 /** One `connect` that was tried on a stand-in, read while the caller's scope was still open. */
-export interface Attempt {
+interface Attempt {
   /** How it ended, none when it stalled. */
   readonly exit: Option.Option<Exit.Exit<unknown, unknown>>;
   /** What `make` was called with, in order. */
@@ -1951,7 +1951,7 @@ export const unwritableHellos = (draw: HelloDraw): ReadonlyArray<Handshake> => {
 // ---- (p) to (r): the hellos a gateway reads
 
 /** A hello frame, and why `accept` refuses it. */
-export interface HelloFrame {
+interface HelloFrame {
   readonly id: "p" | "q";
   readonly name: string;
   readonly frame: Frame;
@@ -2045,9 +2045,6 @@ export const unwritablePings = (
   { name: PING_CLASSES[2], ping: Duration.infinity },
   { name: PING_CLASSES[3], ping: Duration.micros(BigInt(draw.ping) * 1000n + 500n) },
 ];
-
-/** The hello frame of a connection that succeeded, as the far end read it. */
-export const helloFrame = (seen: Seen): Frame => seen.frames[0] ?? "";
 
 /** The notification a frame holds, as the keys of its method, its value and its params. */
 export const holds = Schema.decodeUnknownSync(
