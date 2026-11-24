@@ -7,8 +7,20 @@
  */
 import { Schema } from "effect";
 
-/** `kalfa` cannot start: what is wrong, which package it names, and the field and subpath it was reading. */
-export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
+/** What a refusal is made of, by reason: only a reason that reads an entry names its field and its subpath. */
+type Fields =
+  | { readonly reason: "no-manifest" | "bad-manifest" | "not-installed"; readonly packages: ReadonlyArray<string> }
+  // A `kalfa` field that is not an object has no field of its own to name.
+  | { readonly reason: "bad-field"; readonly packages: ReadonlyArray<string>; readonly field?: "cli" }
+  | {
+      readonly reason: "load" | "no-subcommand" | "not-exported";
+      readonly packages: ReadonlyArray<string>;
+      readonly field: "cli";
+      readonly subpath: string;
+    };
+
+// The fields are optional here and required by `Refused`'s constructor, so a message reads what the reason gives it.
+class Refusal extends Schema.TaggedError<Refusal, { readonly brand: unique symbol }>()("Refused", {
   reason: Schema.Literals([
     "no-manifest",
     "not-installed",
@@ -25,8 +37,6 @@ export class Refused extends Schema.TaggedError<Refused, { readonly brand: uniqu
 }) {
   override get message(): string {
     const name = this.packages.join(", ");
-    const field = `kalfa.${this.field ?? "cli"}`;
-    const subpath = this.subpath ?? ".";
 
     switch (this.reason) {
       case "no-manifest":
@@ -38,13 +48,19 @@ export class Refused extends Schema.TaggedError<Refused, { readonly brand: uniqu
       case "bad-field":
         return this.field === undefined
           ? `${name}'s kalfa field must be an object.`
-          : `${name}'s ${field} field must be "." or a "./" path inside the package.`;
+          : `${name}'s kalfa.${this.field} field must be "." or a "./" path inside the package.`;
       case "not-exported":
-        return `${name} names ${subpath} in its ${field} field, but its exports give that path no "default" condition, so kalfa cannot load it.`;
+        return `${name} names ${this.subpath} in its kalfa.${this.field} field, but its exports give that path no "default" condition, so kalfa cannot load it.`;
       case "load":
-        return `${name}'s ${field} entry ${subpath} failed to load.`;
+        return `${name}'s kalfa.${this.field} entry ${this.subpath} failed to load.`;
       case "no-subcommand":
-        return `${name} names ${subpath} in its ${field} field, but that entry exports no subcommand. Expected: export const subcommand = Subcommand.make(command, { layer, diagnostics }), from @kalfa/cli/Subcommand.`;
+        return `${name} names ${this.subpath} in its kalfa.${this.field} field, but that entry exports no subcommand. Expected: export const subcommand = Subcommand.make(command, { layer, diagnostics }), from @kalfa/cli/Subcommand.`;
     }
   }
 }
+
+/** `kalfa` cannot start: what is wrong, which package it names, and for an entry the field and subpath it was reading. */
+export type Refused = Refusal;
+
+/** Makes a refusal from the fields its reason has: an entry that cannot be loaded cannot be written without its field and subpath. */
+export const Refused: new (refusal: Fields) => Refused = Refusal;

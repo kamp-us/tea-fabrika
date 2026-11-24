@@ -6,7 +6,7 @@
  * A package is looked for from the repo's own folder, never from where `kalfa` is installed, so it finds the packages the repo depends on. The laws run on a stand-in of this service held in memory.
  */
 import { createRequire, findPackageJSON } from "node:module"; // edge: Node's own resolve is the only way to find a package as Node itself would, and it is a synchronous call
-import { Context, Effect, FileSystem, Layer, Option, Path, Predicate } from "effect";
+import { Context, Effect, FileSystem, Layer, Option, Path, Predicate, Schema } from "effect";
 import { Refused } from "./failure.ts";
 
 /**
@@ -24,18 +24,27 @@ export class Packages extends Context.Service<
     /** The `package.json` text of an installed package, found from the repo's folder; none when it is not installed. */
     readonly manifest: (name: string) => Effect.Effect<Option.Option<string>, Refused>;
     /** The exports of the module that a specifier resolves to, found from the repo's folder. */
-    readonly load: (pkg: string, specifier: string) => Effect.Effect<Record<string, unknown>, Refused>;
+    readonly load: (pkg: string, specifier: string) => Effect.Effect<Record<string, unknown>, Unloaded | Refused>;
   }
 >()("@kalfa/cli/Packages") {}
+
+/**
+ * A module that Node could not give: its resolve refused the specifier, or it threw as it loaded. It knows no field and no subpath, which `kalfa` adds when it turns this into a `Refused`.
+ *
+ * @category errors
+ */
+export class Unloaded extends Schema.TaggedError<Unloaded, { readonly brand: unique symbol }>()("Unloaded", {
+  reason: Schema.Literals(["not-exported", "load"]),
+}) {}
 
 // The `code` Node puts on an error it throws, such as `ERR_PACKAGE_PATH_NOT_EXPORTED`.
 const errorCode = (cause: unknown): string | undefined =>
   Predicate.hasProperty(cause, "code") && Predicate.isString(cause.code) ? cause.code : undefined;
 
-/** Imports the module at a URL of a package: a module that throws as it loads is `load`. */
-const imported = (pkg: string, href: string): Effect.Effect<Record<string, unknown>, Refused> =>
+/** Imports the module at a URL: a module that throws as it loads is `load`. */
+const imported = (href: string): Effect.Effect<Record<string, unknown>, Unloaded> =>
   // oxlint-disable-next-line fabrika/no-promises -- edge: a package named at run time is loaded only by import(), which answers a Promise
-  Effect.tryPromise({ try: () => import(href), catch: () => new Refused({ reason: "load", packages: [pkg] }) });
+  Effect.tryPromise({ try: () => import(href), catch: () => new Unloaded({ reason: "load" }) });
 
 /**
  * `Packages` on Node: files read through the file system, packages found with `findPackageJSON` and `createRequire`, modules loaded with `import()`.
@@ -67,19 +76,15 @@ export const layerNode = (folder: string): Layer.Layer<Packages, never, FileSyst
           Effect.mapError(() => new Refused({ reason: "bad-manifest", packages: [name] })),
         );
 
-      const load = (pkg: string, specifier: string) =>
+      const load = (_pkg: string, specifier: string) =>
         Effect.try({ try: () => require.resolve(specifier), catch: errorCode }).pipe(
           Effect.mapError(
-            (code) =>
-              new Refused({
-                reason: code === "ERR_PACKAGE_PATH_NOT_EXPORTED" ? "not-exported" : "load",
-                packages: [pkg],
-              }),
+            (code) => new Unloaded({ reason: code === "ERR_PACKAGE_PATH_NOT_EXPORTED" ? "not-exported" : "load" }),
           ),
           Effect.flatMap((resolved) =>
             path.toFileUrl(resolved).pipe(
-              Effect.mapError(() => new Refused({ reason: "load", packages: [pkg] })),
-              Effect.flatMap((url) => imported(pkg, url.href)),
+              Effect.mapError(() => new Unloaded({ reason: "load" })),
+              Effect.flatMap((url) => imported(url.href)),
             ),
           ),
         );
