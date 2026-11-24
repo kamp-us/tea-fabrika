@@ -5,7 +5,8 @@
  *
  * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a call. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`, and a ref that could not be moved is read again with `for-each-ref`. It writes with `hash-object` and `update-ref` and runs no command that reaches a remote.
  */
-import { Array as Arr, Config, Duration, Effect, Fiber, Layer, Option, Stream } from "effect";
+import type { Duration } from "effect";
+import { Array as Arr, Config, Effect, Fiber, Layer, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Commit from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
@@ -46,11 +47,6 @@ const PINNED = {
   LC_ALL: "C",
 };
 
-// How long a child that ignores the first signal has to end before it is killed outright. A time limit ends a call, so
-// the child must end with it: without this, a git that ignores SIGTERM would hold the call open past its limit. It is
-// short and fixed, and no caller has a reason to change it.
-const KILL_AFTER = Duration.seconds(5);
-
 const encoder = new TextEncoder();
 
 const unavailable = (reason: Repository.GitUnavailable["reason"]): Repository.GitUnavailable =>
@@ -90,6 +86,7 @@ const child = (
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   path: string,
   env: Record<string, string>,
+  kill: Duration.Duration,
   args: ReadonlyArray<string>,
   input: Uint8Array | undefined,
 ) =>
@@ -98,7 +95,7 @@ const child = (
       ChildProcess.make("git", [...start(path), ...args], {
         extendEnv: false,
         env,
-        forceKillAfter: KILL_AFTER,
+        forceKillAfter: kill,
         stdin: input === undefined ? "ignore" : Stream.make(input),
       }),
     )
@@ -112,11 +109,12 @@ const runner = (
   path: string,
   env: Record<string, string>,
   settings: Settings.Settings,
+  kill: Duration.Duration,
 ): Run =>
   Effect.fnUntraced(function* (args, input) {
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const handle = yield* child(spawner, path, env, args, input);
+        const handle = yield* child(spawner, path, env, kill, args, input);
 
         const [stdout, stderr, code] = yield* Effect.all(
           [
@@ -155,11 +153,12 @@ const lister = (
   path: string,
   env: Record<string, string>,
   settings: Settings.Settings,
+  kill: Duration.Duration,
 ): Listed =>
   Effect.fnUntraced(function* (args, entries) {
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const handle = yield* child(spawner, path, env, args, undefined);
+        const handle = yield* child(spawner, path, env, kill, args, undefined);
 
         const errors = yield* Effect.forkScoped(
           Stream.runFold(handle.stderr, () => new Uint8Array(), firstBytes(settings.limits.bytes)),
@@ -679,9 +678,10 @@ export const layer = (options: {
       );
 
       const env = { PATH: path, ...PINNED };
-      const run = runner(spawner, options.path, env, options.settings);
-      const list = lister(spawner, options.path, env, options.settings);
       const after = Settings.timeLimit(options.settings);
+      const kill = Settings.killWait(options.settings);
+      const run = runner(spawner, options.path, env, options.settings, kill);
+      const list = lister(spawner, options.path, env, options.settings, kill);
 
       const open = Effect.fn("git.open")(function* () {
         const printed = yield* Effect.fromResult(
