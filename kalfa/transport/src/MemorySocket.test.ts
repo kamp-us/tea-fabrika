@@ -92,6 +92,19 @@ const closedByEvent = (
     return { refused, read: yield* drained(far) };
   }).pipe(Effect.scoped);
 
+/** A CloseEvent a browser refuses: the write fails, nothing closes, and a close that is allowed still closes with its own code. */
+const closeRefused = (close: Socket.CloseEvent, frame: string | Uint8Array, allowed: number) =>
+  Effect.gen(function* () {
+    const [near, far] = yield* MemorySocket.pair;
+    const writer = yield* near.writer;
+
+    const refused = yield* Effect.exit(writer.write(close));
+    yield* writer.write(frame);
+    yield* writer.write(new Socket.CloseEvent(allowed));
+
+    return { refused, read: yield* drained(far) };
+  }).pipe(Effect.scoped);
+
 /** The far end closes with 1000: the near end's frames written before are read at the far end, its later writes are dropped. */
 const closedByFar = (
   before: ReadonlyArray<string | Uint8Array>,
@@ -119,6 +132,7 @@ const closedByFar = (
     return { written, writtenAll, readByNear: yield* drained(near), readByFar: yield* drained(far) };
   }).pipe(Effect.scoped);
 
+// M1 holds the close codes a browser lets a client write: 1000 and 3000 to 4999.
 // M1. Plant: let a write after close succeed and drop the frame; leave a waiting pull blocked when its scope closes; give the far end
 // code 1006 for a closed scope; hand an end's own writes to its own reader; drop the frames waiting when the close came.
 it.effect.prop(
@@ -126,7 +140,7 @@ it.effect.prop(
   {
     frames: Arbitrary.array(chunk, { maxLength: 20 }),
     more: chunk,
-    extra: between(0, 999),
+    extra: between(0, 1999),
     reason: word,
     which: pick([0, 1, 2, 3, 4]),
   },
@@ -167,7 +181,7 @@ it.effect.prop(
       );
 
       // A CloseEvent: the far end reads what was waiting, then the code and the reason.
-      const code = [1000, 1001, 1006, 1011, 4000 + extra][which] ?? 1000;
+      const code = [1000, 3000, 4000, 4999, 3000 + extra][which] ?? 1000;
 
       for (const reasoned of [false, true]) {
         const name = `a CloseEvent of ${code}${reasoned ? " with a reason" : ""}`;
@@ -183,6 +197,54 @@ it.effect.prop(
         );
         expect(byEvent.refused, `${name}: a write to the closed end fails`).toBe(true);
       }
+    }),
+  { arbitrary: { seed: SEED, runs: 200 } },
+);
+
+// M2. Plant: let a CloseEvent of any code close the pair; refuse a code of 3000 to 4999 or 1000; fail with a different error than
+// InvalidAccessError; close the pair when the refused write comes.
+it.effect.prop(
+  "M2 the memory pair refuses the close codes a browser refuses, as `WebSocket.close` does: a CloseEvent of any code but 1000 and 3000 to 4999 fails the write with a SocketWriteError holding an InvalidAccessError and closes nothing, so the later frames and a close that is allowed come through",
+  {
+    low: between(0, 999),
+    middle: between(1001, 2999),
+    high: between(5000, 65_535),
+    which: pick([0, 1, 2, 3, 4, 5, 6, 7]),
+    allowed: between(3000, 4999),
+    reason: word,
+    reasoned: Arbitrary.schema(Schema.Boolean),
+    frame: chunk,
+  },
+  ({ low, middle, high, which, allowed, reason, reasoned, frame }) =>
+    Effect.gen(function* () {
+      // The codes a browser refuses, as RFC 6455 names them: the ones a client may not send, which are all but 1000 and 3000 to 4999.
+      const code = [low, middle, high, 1001, 1002, 1006, 1011, 1015][which] ?? 1002;
+
+      const run = finished(
+        yield* settled(closeRefused(new Socket.CloseEvent(code, reasoned ? reason : undefined), frame, allowed)),
+        `a close of ${code}`,
+      );
+
+      const failure = failureFrom(run.refused).error;
+
+      expect(
+        Option.exists(failure, (error) => Predicate.isTagged(error.reason, "SocketWriteError")),
+        `${code}: the write fails with a SocketWriteError`,
+      ).toBe(true);
+      expect(
+        Option.exists(
+          failure,
+          ({ reason: write }) =>
+            Predicate.isTagged(write, "SocketWriteError") &&
+            Predicate.hasProperty(write.cause, "name") &&
+            write.cause.name === "InvalidAccessError",
+        ),
+        `${code}: the cause is an InvalidAccessError`,
+      ).toBe(true);
+      assert.deepStrictEqual(run.read.frames, [frame], `${code}: the frame written after it comes through`);
+      expect(exitClose(run.read.exit), `${code}: and the close that is allowed closes with its own code`).toEqual(
+        Option.some({ code: allowed, reason: undefined }),
+      );
     }),
   { arbitrary: { seed: SEED, runs: 200 } },
 );

@@ -2,7 +2,7 @@
 // it). A span held by `encodeTraced` is written, a plain `encode` writes none, a broken trace in a frame is no trace and never an
 // error, and a span made by Effect's own tracer crosses the memory pair with its ids.
 import { assert, expect, it } from "@effect/vitest";
-import { Duration, Effect, Option, Stream, Tracer } from "effect";
+import { Context, Duration, Effect, Option, Stream, Tracer } from "effect";
 import { Format, Transport } from "./index.ts";
 import type { Traced } from "./index.ts";
 import * as MemorySocket from "./MemorySocket.ts";
@@ -359,6 +359,46 @@ it.effect.prop(
 
       expect(quiet.seen.frames.length > 0, "the hello was sent").toBe(true);
       expect(hasNoTraceKey(quiet.seen.frames[0] ?? ""), "(y) the tracer off: the hello holds no trace").toBe(true);
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 100 } },
+);
+
+/** A tracer whose spans all say they do not propagate, though their ids are real: the delegate's spans, marked. */
+const notPropagating = Effect.gen(function* () {
+  const delegate = yield* Tracer.Tracer;
+
+  return Tracer.make({
+    span(options) {
+      const span = delegate.span(options);
+
+      return Object.assign(span, { annotations: Context.add(span.annotations, Tracer.DisablePropagation, true) });
+    },
+  });
+});
+
+// T5. Plant: delete the DisablePropagation filter from the hello's current span.
+it.effect.prop(
+  "T5 a span that does not propagate: when the span the hello is written under says it must not propagate, the hello holds no trace, though its trace and span ids are real",
+  { draw: helloDraw, drawn: traceSeed },
+  ({ draw, drawn }) =>
+    Effect.gen(function* () {
+      const each = connectionCases(draw)[0];
+
+      if (each === undefined) {
+        return assert.fail("no case is made");
+      }
+
+      const tracer = yield* notPropagating;
+
+      for (const parent of validTraces(drawn)) {
+        const out = yield* runCase(yield* dialing, each).pipe(
+          Effect.withParentSpan(externalSpanFor(parent)),
+          Effect.withTracer(tracer),
+        );
+
+        expect(out.seen.frames.length > 0, `${parent.name}: the hello was sent`).toBe(true);
+        expect(hasNoTraceKey(out.seen.frames[0] ?? ""), `${parent.name}: the hello holds no trace`).toBe(true);
+      }
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 100 } },
 );

@@ -110,7 +110,7 @@ const flows = (secret: string, cut: number): ReadonlyArray<Flow> => {
           const { pull } = yield* far.reader;
           yield* pull;
           const writer = yield* far.writer;
-          yield* writer.write(new Socket.CloseEvent(1011, "gone"));
+          yield* writer.write(new Socket.CloseEvent(3011, "gone"));
         });
 
         const [exit] = yield* Effect.all(
@@ -136,7 +136,7 @@ const flows = (secret: string, cut: number): ReadonlyArray<Flow> => {
         expect(
           Option.flatMap(error, (each) => (Socket.isSocketError(each) ? exitClose(Exit.fail(each)) : Option.none())),
           "the socket fails with the close",
-        ).toEqual(Option.some({ code: 1011, reason: "gone" }));
+        ).toEqual(Option.some({ code: 3011, reason: "gone" }));
       },
     },
   ];

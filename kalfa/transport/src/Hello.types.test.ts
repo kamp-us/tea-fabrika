@@ -258,13 +258,9 @@ it("D6 type: every way the options are typed compiles with the plan's types (no 
   expectTypeOf(optionTypes).toBeFunction();
 });
 
-// Plant: make `accept` need `Socket.Socket` (the needs line fails); let `answer` take a `FormatError` (the `@ts-expect-error` line is
-// unused and fails).
-const gatewayTypes = (
-  frame: Frame,
-  error: FormatError,
-  needsDecoding: Schema.Codec<string, string, NeedsDecoding, never>,
-) => {
+// Plant: make `accept` need `Socket.Socket` (the needs line fails); let `answer` take a `FormatError` (the `expectTypeOf` line fails); let
+// `answer` take a bare `{ version }` (the `@ts-expect-error` line is unused: TS2578).
+const gatewayTypes = (frame: Frame, needsDecoding: Schema.Codec<string, string, NeedsDecoding, never>) => {
   const accepting = Transport.accept({ versions: [1], hello: Proof })(frame);
   expectTypeOf(accepting).toEqualTypeOf<
     Effect.Effect<Hello<typeof Proof.Type>, NoSharedVersion | FormatError, Format>
@@ -286,9 +282,14 @@ const gatewayTypes = (
 
   expectTypeOf(answering).toEqualTypeOf<Effect.Effect<Frame, FormatError, Format>>();
 
-  // @ts-expect-error `answer` takes an Answer or a NoSharedVersion and nothing else.
-  // @effect-diagnostics-next-line missingEffectError:off -- a FormatError is an Effect, and the call is refused on purpose
-  const refusing = () => Transport.answer(SignInAnswer)(error);
+  // `answer` takes an Answer or a NoSharedVersion and nothing else: the first line says so for every other type, a FormatError
+  // included, and the second refuses a value that is not whole. The refusal below is a plain value, since a FormatError is an Effect,
+  // and passing one draws the Effect plugin's own error beside the compiler's, which a `@ts-expect-error` cannot own.
+  expectTypeOf(Transport.answer(SignInAnswer)).parameter(0).toEqualTypeOf<Answer<SignInAnswer> | NoSharedVersion>();
+
+  const refusing = () =>
+    // @ts-expect-error an answer without its ping and its answer is no Answer.
+    Transport.answer(SignInAnswer)({ version: 1 });
 
   return [accepting, needing, challenging, answering, refusing];
 };

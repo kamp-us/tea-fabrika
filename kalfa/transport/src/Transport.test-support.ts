@@ -1625,11 +1625,14 @@ interface Handshake {
   readonly steps: ReadonlyArray<"challenge" | "hello" | "answer">;
   /** Whether the far end reads a hello frame. */
   readonly hello: boolean;
-  /** The code of the close `connect` writes when it fails. */
-  readonly close: 1000 | 1002;
+  /** The close `connect` writes when it fails: 1000, or a refusal of Transport's own, which is a code of 4000 to 4999. */
+  readonly close: 1000 | "refused";
 }
 
 const STEPS = ["challenge", "hello", "answer"] as const;
+
+/** The codes a refusal of Transport's own may close with: the range a browser lets a client use for its own. */
+export const REFUSED = { low: 4000, high: 4999 } as const;
 
 /** The names of the classes of `handshakes`, in order. */
 export const HANDSHAKE_CLASSES = [
@@ -1700,7 +1703,7 @@ export const handshakes = (draw: HelloDraw): ReadonlyArray<Handshake> => {
       expected: { kind: "format", reason },
       steps: STEPS.slice(0, 1),
       hello: false,
-      close: 1002,
+      close: "refused",
     }) satisfies Handshake;
 
   // The far end sends a good challenge, reads the hello, and answers with this frame.
@@ -1718,7 +1721,7 @@ export const handshakes = (draw: HelloDraw): ReadonlyArray<Handshake> => {
     expected,
     steps: STEPS,
     hello: true,
-    close: 1002,
+    close: "refused",
   });
 
   const refused = (id: string, name: (typeof HANDSHAKE_CLASSES)[number], frame: Frame) =>
@@ -1866,6 +1869,72 @@ export const attempt = (each: {
     return result;
   });
 
+/** What `connect` came to over a socket whose reader fails with a `SocketError` of its own, and what it was given to write. */
+interface ReaderFailure {
+  /** How `connect` ended, none when it stalled. */
+  readonly exit: Option.Option<Exit.Exit<unknown, unknown>>;
+  /** The codes of the closes written to the socket, in order. */
+  readonly closes: ReadonlyArray<number>;
+  /** How many frames of text were written to it. */
+  readonly frames: number;
+}
+
+/**
+ * Runs `connect` over a socket that is no memory pair: it gives the gateway's challenge when asked to, then its reader fails with a
+ * `SocketReadError`, before the challenge or after the hello was written. It keeps what it was given to write.
+ */
+export const readerFailure = (when: "before the challenge" | "after the hello", nonce: string) =>
+  Effect.gen(function* () {
+    const written: Array<string | Uint8Array | Socket.CloseEvent> = [];
+    let pulls = 0;
+
+    const socket = Socket.make({
+      reader: Effect.succeed({
+        pull: Effect.suspend(() => {
+          pulls += 1;
+
+          return when === "after the hello" && pulls === 1
+            ? Effect.succeed([goodChallenge(nonce)])
+            : Effect.fail(new Socket.SocketError({ reason: new Socket.SocketReadError({ cause: "the line broke" }) }));
+        }),
+        upgrade: Socket.SocketUpgradeError.unsupported,
+      }),
+      writer: Effect.succeed({
+        write: (chunk) =>
+          Effect.sync(() => {
+            written.push(chunk);
+          }),
+        writeAll: (chunks) =>
+          Effect.sync(() => {
+            written.push(...chunks);
+          }),
+      }),
+    });
+
+    const scope = yield* Scope.make();
+
+    const exit = yield* settled(
+      Transport.connect({
+        versions: [1],
+        features: [],
+        challenge: signInApp.challenge,
+        hello: { schema: signInApp.proof, make: (challenge: Plain["Type"]) => signInApp.make(challenge) },
+        answer: SignInAnswer,
+      }).pipe(Effect.provideService(Socket.Socket, socket), Scope.provide(scope)),
+      TURNS,
+    );
+
+    yield* Scope.close(scope, Exit.void);
+
+    const result: ReaderFailure = {
+      exit,
+      closes: written.filter(Socket.isCloseEvent).map(({ code }) => code),
+      frames: written.filter(Predicate.isString).length,
+    };
+
+    return result;
+  });
+
 /** Checks what a failed `connect` came to: the error, no defect, and what the far end saw. */
 export const checkFailed = (each: Handshake, run: Attempt) => {
   const exit = Option.getOrElse(run.exit, () => assert.fail(`${each.name}: connect stalled`));
@@ -1903,7 +1972,7 @@ export const checkFailed = (each: Handshake, run: Attempt) => {
   );
   expect(run.closedEarly, `${each.name}: the connection is closed before the caller's scope ends`).toBe(true);
   expect(
-    Option.map(run.seen.close, ({ code }) => code),
+    Option.map(run.seen.close, ({ code }) => (code >= REFUSED.low && code <= REFUSED.high ? "refused" : code)),
     `${each.name}: the close code`,
   ).toEqual(Option.some(each.close));
 };
@@ -1926,7 +1995,7 @@ export const unwritableHellos = (draw: HelloDraw): ReadonlyArray<Handshake> => {
     expected: { kind: "format", reason: "value" },
     steps: STEPS.slice(0, 2),
     hello: false,
-    close: 1002,
+    close: "refused",
   } as const;
 
   const versions = [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].map((bad, index): Handshake => ({

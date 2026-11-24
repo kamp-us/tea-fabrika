@@ -1,4 +1,4 @@
-// H1 to H7: `Transport.connect`, the client's side of the hello. A client reads the gateway's challenge, makes the proof with the
+// H1 to H9: `Transport.connect`, the client's side of the hello. A client reads the gateway's challenge, makes the proof with the
 // app's own `make`, sends the hello and reads the app's answer whole, on one connection. Each law runs over the dialing stand-in
 // (a memory pair for each reader acquisition) with a far end the law scripts, and every class of the plan is reached in every run.
 import { assert, expect, it } from "@effect/vitest";
@@ -22,6 +22,8 @@ import {
   holds,
   LIST_CLASSES,
   PROOF_CLASSES,
+  readerFailure,
+  REFUSED,
   runCase,
   SEED,
   signInApp,
@@ -84,7 +86,7 @@ it.effect.prop(
   { arbitrary: { seed: SEED, runs: 300 } },
 );
 
-// H3. Plant: wrap make's error in `FormatError "value"`; close with 1002 for it.
+// H3. Plant: wrap make's error in `FormatError "value"`; close with the refusal code for it.
 it.effect.prop(
   "H3 the app's failure stays the app's: connect fails with the very error make failed with, not a FormatError or a SocketError; the far end reads no hello and reads the close 1000",
   { draw: helloDraw },
@@ -162,7 +164,7 @@ it.effect.prop(
 // H5. Plant: skip the method compare on the answer; read the ping with `Schema.DurationFromMillis` as it ships; read a
 // NoSharedVersion reply as an answer with no version; skip the client's own version check.
 it.effect.prop(
-  "H5 an answer that does not fit, or a refusal: connect fails with a FormatError of the frame's reason, or with the gateway's own NoSharedVersion, or with one naming the version the gateway named; each closes with 1002",
+  "H5 an answer that does not fit, or a refusal: connect fails with a FormatError of the frame's reason, or with the gateway's own NoSharedVersion, or with one naming the version the gateway named; each closes with Transport's refusal code",
   { draw: helloDraw },
   ({ draw }) =>
     Effect.gen(function* () {
@@ -193,12 +195,13 @@ it.effect.prop(
   { arbitrary: { seed: SEED, runs: 200 } },
 );
 
-const CLOSE_CODES = [1000, 1001, 1006, 1011] as const;
+// The codes a browser lets a client write, which the memory pair keeps: a gateway's own 1001 or 1011 cannot be written through it.
+const CLOSE_CODES = [1000, 3000, 4999] as const;
 
 // H7. Plant: end the read cleanly on the close 1000, as `socket` does (connect hangs on its next frame).
 it.effect.prop(
   "H7 a close during the hello: connect fails with Effect's SocketError holding the close's code and reason, 1000 included; it never succeeds, never hangs and is never a defect",
-  { draw: helloDraw, code: between(4000, 4999) },
+  { draw: helloDraw, code: between(3000, 4999) },
   ({ draw, code }) =>
     Effect.gen(function* () {
       for (const closeCode of [...CLOSE_CODES, code]) {
@@ -225,4 +228,63 @@ it.effect.prop(
       }
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 200 } },
+);
+
+/** The error each refusal of Transport's own is, by the kind a law expects. */
+const REFUSAL_TAGS = { format: "FormatError", noShared: "NoSharedVersion" } as const;
+
+// H8. Plant: close with 1002 or with 1000 for a refusal; write no reason; write a reason that does not name the error; close a
+// NoSharedVersion with another code than a FormatError; write a reason of more than 123 bytes.
+it.effect.prop(
+  "H8 a refused connect's close reaches the far end: for every refusal of Transport's own, the far end reads a close with a code of 4000 to 4999, the same code for every refusal, and a reason that names the error and fits the 123 bytes a browser allows",
+  { draw: helloDraw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const refusals = handshakes(draw).filter(({ expected }) => expected.kind !== "app");
+      const codes = new Set<number>();
+      const kinds = new Set<string>();
+
+      for (const each of refusals) {
+        const run = yield* attempt(each);
+        const close = Option.getOrElse(run.seen.close, () => assert.fail(`${each.name}: the far end read no close`));
+        const tag = REFUSAL_TAGS[each.expected.kind === "format" ? "format" : "noShared"];
+
+        expect(close.code >= REFUSED.low && close.code <= REFUSED.high, `${each.name}: a code of 4000 to 4999`).toBe(
+          true,
+        );
+        expect(close.reason?.includes(tag), `${each.name}: the reason names ${tag}`).toBe(true);
+        expect(
+          new TextEncoder().encode(close.reason ?? "").length <= 123,
+          `${each.name}: the reason fits 123 bytes`,
+        ).toBe(true);
+        codes.add(close.code);
+        kinds.add(each.expected.kind);
+      }
+
+      expect([...kinds].sort(), "a FormatError and a NoSharedVersion are both refused").toEqual(["format", "noShared"]);
+      expect(codes.size, "one code for every refusal").toBe(1);
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 100 } },
+);
+
+// H9. Plant: delete `|| Socket.isSocketError(error)` from the close code, so a socket's own failure closes as a refusal.
+it.effect.prop(
+  "H9 a socket's own failure is no refusal: when the socket's reader fails with a SocketError, before the challenge or after the hello, connect fails with that error and closes with 1000, never with a refusal code",
+  { draw: helloDraw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      for (const when of ["before the challenge", "after the hello"] as const) {
+        const run = yield* readerFailure(when, draw.nonce);
+        const exit = Option.getOrElse(run.exit, () => assert.fail(`${when}: connect stalled`));
+        const { error, defect } = failureFrom(exit);
+
+        expect(defect, `${when}: never a defect`).toBe(false);
+        expect(Option.exists(error, Socket.isSocketError), `${when}: connect fails with the SocketError`).toBe(true);
+        expect(run.closes, `${when}: one close, 1000`).toEqual([1000]);
+        expect(run.frames, `${when}: the hello is written only after the challenge`).toBe(
+          when === "after the hello" ? 1 : 0,
+        );
+      }
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 100 } },
 );

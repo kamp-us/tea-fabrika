@@ -57,7 +57,7 @@ const closedWith = (values: ReadonlyArray<Message>, code: number) =>
 // S1. Plant: name the span `transport.stream`; make one span for each frame; make a span in `decode`.
 it.effect.prop(
   "S1 the span: each running socket makes exactly one span named transport.socket, ended when its stream ends, failed with a SocketError for a close other than 1000, and encode and decode make none",
-  { left: messages, right: messages, extra: between(0, 999) },
+  { left: messages, right: messages, extra: between(0, 1999) },
   ({ left, right, extra }) =>
     Effect.gen(function* () {
       // Two ends run, many frames cross each way: one span for each end, and no more.
@@ -74,7 +74,7 @@ it.effect.prop(
       ).toEqual(["Ended", "Ended"]);
 
       // A close of each code: the span fails with the SocketError of a close other than 1000, and not for 1000.
-      for (const code of [1000, 1001, 1006, 1011, 4000 + extra]) {
+      for (const code of [1000, 3000, 3999, 4999, 3000 + extra]) {
         const closed = yield* watching;
         const exit = yield* closedWith(left, code).pipe(Effect.withTracer(closed.tracer));
 
@@ -132,8 +132,15 @@ const ATTRIBUTES = ["kalfa.transport.features", "kalfa.transport.version", "kalf
 /** The names of a span's attributes, sorted. */
 const attributeNames = (span: Tracer.Span) => [...span.attributes.keys()].sort();
 
+/** The three attributes of a span, as they were set: the version both ends agreed, the client's versions and the client's features. */
+const attributeValues = (span: Tracer.Span) => ({
+  version: span.attributes.get("kalfa.transport.version"),
+  versions: span.attributes.get("kalfa.transport.versions"),
+  features: span.attributes.get("kalfa.transport.features"),
+});
+
 // S3. Plant: make no span for the answer step; end the spans ok on a NoSharedVersion from the gateway; add a `kalfa.transport.answer`
-// attribute.
+// attribute; set `kalfa.transport.version` to the highest version of the client's list, or to the gateway's first.
 it.effect.prop(
   "S3 connect's spans: transport.connect with, under it and in order, a child for each step reached and no others; a refusal ends the step where it happened and transport.connect with that error; on success transport.connect has exactly the version, versions and features attributes",
   { draw: helloDraw },
@@ -202,12 +209,16 @@ it.effect.prop(
           connect === undefined ? [] : attributeNames(connect),
           `${each.name}: exactly the three attributes`,
         ).toEqual(ATTRIBUTES);
+        expect(
+          connect === undefined ? undefined : attributeValues(connect),
+          `${each.name}: the agreed version, the client's versions and its features`,
+        ).toEqual({ version: each.picked, versions: each.client.versions, features: each.client.features });
       }
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 200 } },
 );
 
-// S4. Plant: build `accept` with `Effect.fnUntraced`; end `transport.accept` ok on (o).
+// S4. Plant: build `accept` with `Effect.fnUntraced`; end `transport.accept` ok on (o); set `kalfa.transport.version` to the client's first version.
 it.effect.prop(
   "S4 the gateway's spans: accept makes one transport.accept with the three attributes on success, failed with NoSharedVersion or FormatError otherwise; challenge makes one transport.challenge; answer makes one transport.answer, failed for a ping it cannot write",
   { draw: helloDraw },
@@ -240,6 +251,14 @@ it.effect.prop(
         if (Option.isSome(each.picked)) {
           expect(endedOk(spans[0]!), `${each.name}: ends ok`).toBe(true);
           expect(attributeNames(spans[0]!), `${each.name}: the three attributes`).toEqual(ATTRIBUTES);
+          expect(
+            attributeValues(spans[0]!),
+            `${each.name}: the agreed version, the client's versions and its features`,
+          ).toEqual({
+            version: each.picked.value,
+            versions: [...each.client],
+            features: [...draw.features],
+          });
         } else {
           expect(
             Option.exists(failedWith(spans[0]!), Predicate.isTagged("NoSharedVersion")),
