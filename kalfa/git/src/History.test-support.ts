@@ -509,7 +509,7 @@ const durationTextArb: Arbitrary.Arbitrary<string> = Arbitrary.all({
   unit: pick(["millis", "seconds", "minutes", "hours"]),
 }).pipe(Arbitrary.map(({ amount, unit }) => `${amount} ${unit}`));
 
-/** Positive whole counts and a time as duration text: what the settings accept. */
+/** Positive whole counts and a time, and a kill wait, each as duration text: what the settings accept. */
 export const limitsArb = Arbitrary.all({
   commits: intBetween(1, 1_000_000_000),
   refs: intBetween(1, 1_000_000_000),
@@ -518,6 +518,7 @@ export const limitsArb = Arbitrary.all({
   diff: intBetween(1, 1_000_000_000),
   blob: intBetween(1, 1_000_000_000),
   time: durationTextArb,
+  kill: durationTextArb,
 });
 
 // ---------------------------------------------------------------------------------------------------------

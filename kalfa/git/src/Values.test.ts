@@ -312,7 +312,7 @@ it.prop(
 
 const decoded = Schema.decodeUnknownResult(Settings.Settings);
 
-const KEYS = ["commits", "refs", "bytes", "files", "diff", "blob", "time"] as const;
+const KEYS = ["commits", "refs", "bytes", "files", "diff", "blob", "time", "kill"] as const;
 
 const NOT_A_TIME = [
   ["zero seconds", "0 seconds"],
@@ -329,7 +329,9 @@ const NOT_A_TIME = [
 
 // Plant: give `commits` a default; drop the text check on `time`, so `"ten"` is accepted; drop the finite check on `time`,
 // so `"Infinity"` is accepted; give `diff` a default; accept `files: 0` (a `files` that is any whole number); leave `files`
-// out of the limits. Ticket 1935: give `blob` a default; accept `blob: 0`; leave `blob` out of the limits.
+// out of the limits. Ticket 1935: give `blob` a default; accept `blob: 0`; leave `blob` out of the limits. Ticket 2011: give `kill`
+// a default (`Schema.withDecodingDefaultKey`), so a missing `kill` decodes; declare `kill` as plain `Schema.String`, so `"ten"`
+// decodes; leave `kill` out of the limits, so the drawn `kill` is not kept.
 it.prop(
   "G5 settings: Settings accepts every positive count and duration text, refuses the rest, and has no default",
   { limits: limitsArb },
@@ -342,9 +344,15 @@ it.prop(
       diff: limits.diff,
       blob: limits.blob,
       time: limits.time,
+      kill: limits.kill,
     };
 
-    expect(Result.isSuccess(decoded({ limits: good, committer: COMMITTER })), `${limits.time} is accepted`).toBe(true);
+    const accepted = decoded({ limits: good, committer: COMMITTER });
+    expect(Result.isSuccess(accepted), `${limits.time} is accepted`).toBe(true);
+
+    if (Result.isSuccess(accepted)) {
+      expect(accepted.success.limits.kill, "the kill wait is kept as given").toBe(limits.kill);
+    }
 
     for (const key of KEYS) {
       const { [key]: _gone, ...without } = good;
@@ -352,7 +360,7 @@ it.prop(
         true,
       );
 
-      if (key !== "time") {
+      if (key !== "time" && key !== "kill") {
         for (const bad of [0, -limits.commits, limits.commits + 0.5]) {
           expect(
             Result.isFailure(decoded({ limits: { ...good, [key]: bad }, committer: COMMITTER })),
@@ -362,17 +370,20 @@ it.prop(
       }
     }
 
-    for (const [label, bad] of NOT_A_TIME) {
+    for (const key of ["time", "kill"] as const) {
+      for (const [label, bad] of NOT_A_TIME) {
+        expect(
+          Result.isFailure(decoded({ limits: { ...good, [key]: bad }, committer: COMMITTER })),
+          `${label} is refused as ${key}`,
+        ).toBe(true);
+      }
+
       expect(
-        Result.isFailure(decoded({ limits: { ...good, time: bad }, committer: COMMITTER })),
-        `${label} is refused as a time`,
+        Result.isFailure(decoded({ limits: { ...good, [key]: `-${limits[key]}` }, committer: COMMITTER })),
+        `the negative of a good ${key}`,
       ).toBe(true);
     }
 
-    expect(
-      Result.isFailure(decoded({ limits: { ...good, time: `-${limits.time}` }, committer: COMMITTER })),
-      "the negative of a good time",
-    ).toBe(true);
     expect(Result.isFailure(decoded({ committer: COMMITTER })), "no limits has no default").toBe(true);
     expect(Result.isFailure(decoded({ limits: {}, committer: COMMITTER })), "{ limits: {} } has no default").toBe(true);
   },

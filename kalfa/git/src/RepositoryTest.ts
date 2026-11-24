@@ -146,6 +146,8 @@ export const settings = (
     readonly files?: number;
     readonly diff?: number;
     readonly blob?: number;
+    readonly time?: string;
+    readonly kill?: string;
   } = {},
   committer: Committer = COMMITTER,
 ): Settings.Settings =>
@@ -158,6 +160,7 @@ export const settings = (
       diff: 10_000_000,
       blob: 10_000_000,
       time: "10 seconds",
+      kill: "5 seconds",
       ...limits,
     },
     committer,

@@ -1,7 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
-// K1 to K4: what the package's own files say. It stands alone (decision on small libraries usable alone):
-// it names no other package of this repository, it has no dependencies, and no file in it names the repository.
+// K1 to K5: what the package's own files say. It stands alone (decision on small libraries usable alone):
+// it names no other package of this repository, it has no dependencies, and no file in it names the repository. K5 holds its
+// code free of a fixed limit: every limit is a setting.
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import manifest from "../package.json" with { type: "json" };
@@ -110,4 +112,52 @@ it("K3 scenario: no file of the package names a signature for a human being; the
 it("K4 scenario: the public test entries export only what a caller needs", () => {
   expect(Object.keys(RepositoryTest).sort(), "/test").toEqual(["settings", "suite"]);
   expect(Object.keys(HistoryTest).sort(), "/test/History").toEqual(["shapes", "textureArb"]);
+});
+
+// What K5 leaves out: a test names a time on purpose, the two test layers hold test settings, and `Settings.ts` is where limits are named.
+const NOT_SCANNED = /(?:\.test\.ts|\.test-support\.ts)$|^(?:RepositoryTest|HistoryTest|Settings)\.ts$/;
+
+const DURATION_CALL = /Duration\.(?:nanos|micros|millis|seconds|minutes|hours|days|weeks)\(/;
+
+const DURATION_TEXT = /["'`]\s*\d[\d_.]*\s*(?:nanos?|micros?|millis?|seconds?|minutes?|hours?|days?|weeks?)\s*["'`]/;
+
+const COUNT_CONSTANT = /^(?:export )?const ([A-Z][A-Z0-9_]*) = (\d[\d_]*)\s*;/gm;
+
+// Each is git's own rule or git's own fixed format, not a limit an app could choose: how far into a file git looks for a NUL
+// to call it binary, and how much of a printed row a parser reads.
+const GIT_OWN = ["BINARY_WINDOW", "HEADER_BYTES", "HEAD_BYTES"];
+
+// Plant: put `const KILL_AFTER = Duration.seconds(5);` back in `ProcessRepository.ts`; write `forceKillAfter: "5 seconds"`
+// there; add `const MOST_PATHS = 1000;` to `internal/lookup.ts` and scan only the top folder, so the scanned-list check fails it;
+// remove `BINARY_WINDOW` from `internal/lines.ts` and keep it allowed, so "found exactly once" fails it.
+it("K5 scenario: no code of the package holds a fixed duration or a top-level count limit, except git's own three constants", () => {
+  const root = new URL("./", import.meta.url);
+
+  const scanned = filesUnder(root)
+    .map((file) => relative(fileURLToPath(root), file))
+    .filter((file) => file.endsWith(".ts") && !NOT_SCANNED.test(file));
+
+  expect(scanned, "the scan reads the adapters and a folder below").toEqual(
+    expect.arrayContaining([
+      "ProcessRepository.ts",
+      "MemoryRepository.ts",
+      "internal/parse.ts",
+      "internal/lines.ts",
+      "internal/lookup.ts",
+    ]),
+  );
+
+  const found: Array<string> = [];
+
+  for (const file of scanned) {
+    const text = readFileSync(new URL(file, root), "utf8");
+    expect(DURATION_CALL.test(text), `${file} builds a fixed duration`).toBe(false);
+    expect(DURATION_TEXT.test(text), `${file} writes a fixed duration as text`).toBe(false);
+
+    for (const [, name] of text.matchAll(COUNT_CONSTANT)) {
+      found.push(name ?? "");
+    }
+  }
+
+  expect(found.toSorted(), "each top-level count is git's own, found once").toEqual(GIT_OWN.toSorted());
 });
