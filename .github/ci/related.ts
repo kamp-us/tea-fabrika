@@ -65,6 +65,7 @@ const SUBPATHS = [
   "Print",
   "Snapshot",
   "Load",
+  "Cli",
 ];
 
 const STAGES = ["build", "pack", "install", "runtime", "imports", "private", "types"];

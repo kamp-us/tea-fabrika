@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import * as Root from "@kalfa/config";
 import * as App from "@kalfa/config/App";
+import * as Cli from "@kalfa/config/Cli";
 import * as Codec from "@kalfa/config/Codec";
 import * as Files from "@kalfa/config/Files";
 import * as JsonSchema from "@kalfa/config/JsonSchema";
@@ -12,8 +13,23 @@ import * as Snapshot from "@kalfa/config/Snapshot";
 import * as Sources from "@kalfa/config/Sources";
 import * as Toml from "@kalfa/config/Toml";
 import * as TomlParser from "@kalfa/config/TomlParser";
-import { ConfigProvider, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
+import {
+  ConfigProvider,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Predicate,
+  Schema,
+  Stdio,
+  Stream,
+  Terminal,
+} from "effect";
+import { Command } from "effect/cli";
 import { Digest } from "effect/crypto";
+import { ChildProcessSpawner } from "effect/process";
+import { TestConsole } from "effect/testing";
 
 const publicModules = {
   App,
@@ -28,11 +44,14 @@ const publicModules = {
   Print,
   Snapshot,
   Load,
+  Cli,
 };
 
 for (const name of Object.keys(publicModules)) {
   assert.ok(import.meta.resolve(`@kalfa/config/${name}`).endsWith(`/dist/${name}.js`));
 }
+
+assert.ok(Predicate.isFunction(Cli.config));
 
 // The root entry: `@kalfa/config` itself, beside the twelve modules.
 assert.ok(import.meta.resolve("@kalfa/config").endsWith("/dist/index.js"));
@@ -149,6 +168,46 @@ assert.equal(await Effect.runPromise(edited.set(declared, 4200)), "[service]\npo
 
 assert.equal(await Effect.runPromise(edited.remove(declared)), "[service]\n   # the port\n");
 
+// The `config` command, from the installed archive: `config list` reads the repo configuration in the folder it is handed, from
+// an in-memory file, and prints one block for the setting, its value, where it came from and its description.
+const listed = Effect.gen(function* () {
+  const command = Cli.config("demo", [declaredGroup], { version: "1.2.3", repo: "/work" });
+
+  yield* Command.runWith(command, { version: "1.2.3" })(["list"]);
+
+  const lines = yield* TestConsole.logLines;
+
+  assert.equal(
+    lines.map((line) => `${String(line)}\n`).join(""),
+    "service.port = 4100\n  from .demo/demo.toml, line 2\n  restart\n  The service port.\n",
+  );
+}).pipe(
+  Effect.provide(TestConsole.layer),
+  Effect.provide(
+    Layer.mergeAll(
+      FileSystem.layerNoop({ readFileString: () => Effect.succeed("[service]\nport = 4100\n") }),
+      Path.layer,
+      ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
+      Stdio.layerTest({}),
+      Layer.succeed(
+        Terminal.Terminal,
+        Terminal.make({
+          columns: Effect.succeed(80),
+          rows: Effect.succeed(24),
+          size: Effect.die("unused"),
+          readInput: Effect.die("unused"),
+          readLine: Effect.die("unused"),
+          display: () => Effect.void,
+        }),
+      ),
+      Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make(() => Effect.die("unused")),
+      ),
+    ),
+  ),
+);
+
 // edge: this fixture is the installed Node ESM client, outside the Effect test runner.
 await Effect.runPromise(runtime);
 
@@ -158,10 +217,20 @@ await Effect.runPromise(rooted);
 // edge: the same client starts a group from a stream of one snapshot.
 await Effect.runPromise(worker);
 
+// edge: the same client runs the `config` command.
+await Effect.runPromise(listed);
+
 for (const name of ["internal/edit", "internal/start", "internal/document", "App.test"]) {
   await assert.rejects(import(`@kalfa/config/${name}`), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
 }
 
 console.log(
-  JSON.stringify({ runtime: "passed", imports: "passed", private: "passed", edit: "passed", worker: "passed" }),
+  JSON.stringify({
+    runtime: "passed",
+    imports: "passed",
+    private: "passed",
+    edit: "passed",
+    worker: "passed",
+    config: "passed",
+  }),
 );

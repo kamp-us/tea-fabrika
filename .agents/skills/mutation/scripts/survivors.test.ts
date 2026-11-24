@@ -15,6 +15,7 @@ import {
   leftOut,
   mutable,
   normal,
+  notAnswers,
   parentEntries,
   pick,
   readAnswers,
@@ -475,6 +476,18 @@ describe("survivors, which mutants a Survivor: line answers", () => {
           }
         },
       ),
+      options,
+    );
+  });
+
+  // Plants: list a row that answers; leave out a blank-free row that answers nothing; list a blank row; list rows by their first word alone.
+  it("notAnswers lists the nonblank rows that answer nothing, in order", () => {
+    fc.assert(
+      fc.property(fc.array(fc.oneof(answer.map(row), unsound, noise), { maxLength: 8 }), (rows) => {
+        expect(notAnswers(Arr.join(rows, "\n"))).toEqual(
+          Arr.filter(rows, (r) => r.trim() !== "" && answersIn(r).length === 0),
+        );
+      }),
       options,
     );
   });
