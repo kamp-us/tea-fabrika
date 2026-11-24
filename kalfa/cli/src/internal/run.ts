@@ -71,11 +71,11 @@ const command = Effect.fn("cli.command")(function* (
 ) {
   const packages = yield* Packages;
   const path = yield* Path.Path;
-  const [first = ""] = args;
+  const asked = subcommands.find((each) => each.name === args[0]);
 
   // The first argument is a root name only when a subcommand has it: otherwise it is what a person typed.
-  if (subcommands.some((each) => each.name === first)) {
-    yield* Effect.annotateCurrentSpan("kalfa.cli.root", first);
+  if (asked !== undefined) {
+    yield* Effect.annotateCurrentSpan("kalfa.cli.root", asked.name);
   }
 
   yield* Command.runWith(tree(subcommands), { version: VERSION, renderErrors: false })(args).pipe(
