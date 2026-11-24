@@ -16,6 +16,8 @@ import {
   mutable,
   normal,
   notAnswers,
+  oldestFirst,
+  refusedIn,
   parentEntries,
   pick,
   readAnswers,
@@ -26,6 +28,7 @@ import {
   staticLines,
   survivorLines,
   testsIn,
+  typedText,
 } from "./survivors.ts";
 import type { Run } from "./survivors.ts";
 
@@ -415,54 +418,111 @@ describe("survivors, which mutants a Survivor: line answers", () => {
   const words = (min: number) =>
     fc.array(fc.stringMatching(/^[a-z]{1,8}$/), { minLength: min, maxLength: 5 }).map((parts) => Arr.join(parts, " "));
 
+  // The three proofs (ticket 1309): a plant run with its result, a search with what it found, a law's id. Prose may come before one.
+  const proof = fc.oneof(
+    fc.tuple(words(1), words(1)).map(([command, result]) => `plant: ${command} => ${result}`),
+    fc.tuple(words(1), words(1)).map(([search, found]) => `rg: ${search} => ${found}`),
+    fc.stringMatching(/^[A-Z][A-Za-z]{0,3}[0-9]{1,2}$/).map((id) => `law: ${id}`),
+  );
+
+  const evidence = fc
+    .tuple(fc.option(words(1), { nil: null }), proof)
+    .map(([prose, p]) => (prose === null ? p : `${prose} ${p}`));
+
   const answer = fc.record({
     file: anyFile,
     line: fc.option(fc.integer({ min: 1, max: 400 }), { nil: null }),
     reason: words(1),
-    evidence: words(2),
+    evidence,
   });
 
   const row = (a: { file: string; line: number | null; reason: string; evidence: string }) =>
     `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- ${a.evidence}`;
 
-  // A line that gives no answer: a missing reason, no ` -- `, no evidence, or one bare word of it.
+  // A line that gives no answer: a missing reason, no ` -- `, no evidence, one bare word of it, words that name no proof, or a proof marker
+  // without its result or its id.
   const unsound = fc
-    .tuple(answer, fc.constantFrom("no reason", "no dashes", "no evidence", "one word"))
-    .map(([a, flaw]) =>
-      flaw === "no reason"
-        ? `Survivor: ${a.file}:${a.line ?? "*"} -- ${a.evidence}`
-        : flaw === "no dashes"
-          ? `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} ${a.evidence}`
-          : flaw === "no evidence"
-            ? `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- `
-            : `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- unreachable`,
-    );
+    .tuple(
+      answer,
+      fc.constantFrom(
+        "no reason",
+        "no dashes",
+        "no evidence",
+        "one word",
+        "prose only",
+        "plant without result",
+        "rg without result",
+        "plant without command",
+        "rg without command",
+        "law without id",
+        "no colon",
+      ),
+      words(2),
+    )
+    .map(([a, flaw, prose]) => {
+      const at = `Survivor: ${a.file}:${a.line ?? "*"}`;
+
+      switch (flaw) {
+        case "no reason":
+          return `${at} -- ${a.evidence}`;
+        case "no dashes":
+          return `${at} ${a.reason} ${a.evidence}`;
+        case "no evidence":
+          return `${at} ${a.reason} -- `;
+        case "one word":
+          return `${at} ${a.reason} -- unreachable`;
+        case "prose only":
+          return `${at} ${a.reason} -- ${prose}`;
+        case "plant without result":
+          return `${at} ${a.reason} -- plant: ${prose}`;
+        case "rg without result":
+          return `${at} ${a.reason} -- rg: ${prose} =>`;
+        case "plant without command":
+          return `${at} ${a.reason} -- plant: => ${prose} => ${prose}`;
+        case "rg without command":
+          return `${at} ${a.reason} -- rg:=> ${prose} => ${prose}`;
+        case "law without id":
+          return `${at} ${a.reason} -- law: ${prose}`;
+        default:
+          return `${at} ${a.reason} -- plant ${prose} => green`;
+      }
+    });
 
   const noise = fc.constantFrom(
     "",
     "Plant: a: b: c",
     "tests: add a law",
     "survivor: lower case",
-    "  Survivor: indented a.ts:1 r -- e f",
+    "  Survivor: indented a.ts:1 r -- plant: e => f",
   );
 
-  // Plants: accept a line with no evidence; accept one bare word of evidence; read `*` as a number; match a
+  /** Rows with a place of their own each (the index in front of the file), so no row stands down for another. */
+  const distinct = (rows: ReadonlyArray<string>) =>
+    Arr.map(rows, (text, i) => text.replace(/^Survivor: /, `Survivor: ${i}/`));
+
+  // Plants: accept a line with no evidence; accept one bare word of evidence; accept evidence that names no proof; read `*` as a number; match a
   // line by file only; let a file's own `*` answer a different file.
-  it("a Survivor: line with a reason and evidence answers its mutant, and nothing else does", () => {
+  it("a Survivor: line with a reason and a plant, search or law answers its mutant, and nothing else does", () => {
     fc.assert(
       fc.property(
         fc.array(fc.tuple(answer, fc.array(fc.oneof(unsound, noise), { maxLength: 3 })), { maxLength: 6 }),
         fc.nat(),
         (rows, pick) => {
-          const text = Arr.join(
-            Arr.flatMap(rows, ([a, other]) => [...other, row(a)]),
-            "\n",
+          const entries = Arr.flatMap(rows, ([a, other]) => [
+            ...Arr.map(other, (text) => ({ text, a: null })),
+            { text: row(a), a },
+          ]);
+
+          const text = Arr.join(distinct(Arr.map(entries, (e) => e.text)), "\n");
+
+          const want = Arr.flatMap(entries, (e, i) =>
+            e.a === null ? [] : [{ file: `${i}/${e.a.file}`, line: e.a.line }],
           );
 
           const got = answersIn(text);
-          expect(got).toEqual(Arr.map(rows, ([a]) => ({ file: a.file, line: a.line })));
+          expect(got).toEqual(want);
 
-          for (const [a] of rows) {
+          for (const a of want) {
             // A file's own line is answered, and a `*` answers any line of its file and the file no law loads.
             expect(isAnswered(got, a.file, a.line ?? pick)).toBe(true);
             expect(isAnswered(got, a.file, null)).toBe(Arr.some(got, (g) => g.file === a.file && g.line === null));
@@ -482,6 +542,92 @@ describe("survivors, which mutants a Survivor: line answers", () => {
     );
   });
 
+  // Plants: let the oldest row of a place win; let any row with a proof win; keep every row of a place; let a newer row with no proof leave an older proof standing;
+  // treat `file:*` and `file:12` as one place.
+  it("the newest row of a place wins: an older row with no proof stands down for a newer one with it, and a newer one with none takes the answer away", () => {
+    fc.assert(
+      fc.property(
+        answer,
+        fc.array(fc.boolean(), { minLength: 1, maxLength: 5 }),
+        fc.array(fc.oneof(unsound, noise), { maxLength: 3 }),
+        (a, proven, other) => {
+          const here = (ok: boolean, i: number) =>
+            ok ? row({ ...a, reason: `r${i}` }) : `Survivor: ${a.file}:${a.line ?? "*"} r${i} -- unreachable`;
+
+          const mine = Arr.map(proven, here);
+
+          const elsewhere = Arr.map(distinct(other), (text) =>
+            text.replace(/^Survivor: (\d+)\//, "Survivor: elsewhere$1/"),
+          );
+
+          const text = Arr.join([...elsewhere, ...mine], "\n");
+          const last = proven.at(-1) === true;
+
+          expect(Arr.filter(answersIn(text), (x) => x.file === a.file && x.line === a.line)).toEqual(
+            last ? [{ file: a.file, line: a.line }] : [],
+          );
+
+          expect(Arr.filter(refusedIn(text), (r) => r.startsWith(`Survivor: ${a.file}:${a.line ?? "*"} `))).toEqual(
+            last ? [] : [here(false, proven.length - 1)],
+          );
+
+          // Another place is its own: a `*` row does not stand in for a line row.
+          const star = `Survivor: ${a.file}:* r -- unreachable`;
+          const line = `Survivor: ${a.file}:7 r -- unreachable`;
+          expect(refusedIn(`${star}\n${line}`)).toEqual([star, line]);
+        },
+      ),
+      options,
+    );
+  });
+
+  // Plants: read the log newest first (an older row without proof then wins); keep the empty piece after the last separator as a body.
+  it("the commit bodies of git log are read oldest first, so a newer commit's proof clears an older commit's bare row", () => {
+    const old = "Survivor: a/b.ts:3 r -- unreachable";
+    const fresh = "Survivor: a/b.ts:3 r -- plant: sed -i s/x/y/ a/b.ts => still green";
+    const log = `${fresh}\n\u0000${old}\n\u0000`;
+
+    expect(answersIn(oldestFirst(log))).toEqual([{ file: "a/b.ts", line: 3 }]);
+    expect(refusedIn(oldestFirst(log))).toEqual([]);
+
+    // The other order: the proof is older and a newer commit says it with none.
+    const back = `${old}\n\u0000${fresh}\n\u0000`;
+    expect(answersIn(oldestFirst(back))).toEqual([]);
+    expect(refusedIn(oldestFirst(back))).toEqual([old]);
+    expect(oldestFirst("")).toBe("");
+  });
+
+  // The three forms by example, as the build skill shows them. Plants: refuse one form; accept the same line with its marker, its result or its id cut.
+  it("each of the three proofs answers, and the same line without its marker, result or id does not", () => {
+    const at = "Survivor: kalfa/git/src/Ref.ts:12 the arm cannot run";
+
+    const forms = [
+      "plant: sed -i 's/true/false/' kalfa/git/src/Ref.ts && pnpm exec vitest run kalfa/git/src/Ref.test.ts => 12 passed, still green",
+      'rg: rg -n "parseRef" kalfa --glob "*.ts" => one caller, kalfa/git/src/Repository.ts:40, which never passes a bare name',
+      "law: R3 fails with the line planted",
+    ];
+
+    for (const form of forms) {
+      expect(answersIn(`${at} -- ${form}`), form).toEqual([{ file: "kalfa/git/src/Ref.ts", line: 12 }]);
+    }
+
+    const cut = [
+      "sed -i 's/true/false/' kalfa/git/src/Ref.ts and the laws stayed green",
+      "plant: sed -i 's/true/false/' kalfa/git/src/Ref.ts",
+      'rg: rg -n "parseRef" kalfa =>',
+      "the laws never call it, rg found one caller",
+      "law:  fails with the line planted",
+      "law: three",
+      "plant: => 12 passed => still green",
+      "rg: => one caller => none reads it",
+      "rg:=> one caller => none reads it",
+    ];
+
+    for (const form of cut) {
+      expect(answersIn(`${at} -- ${form}`), form).toEqual([]);
+    }
+  });
+
   // Plants: list a row that answers; leave out a blank-free row that answers nothing; list a blank row; list rows by their first word alone.
   it("notAnswers lists the nonblank rows that answer nothing, in order", () => {
     fc.assert(
@@ -494,11 +640,25 @@ describe("survivors, which mutants a Survivor: line answers", () => {
     );
   });
 
-  // Plants: let a text of no Survivor: line answer anything; take a line without its evidence.
-  it("lines that carry no evidence, or no reason, answer nothing", () => {
+  // Plants: list a Survivor: row that answers; leave out one that answers nothing; list a row that is no Survivor: row; list the rows out of order.
+  it("refusedIn lists the Survivor: rows that answer nothing, in order, and no other row", () => {
+    fc.assert(
+      fc.property(fc.array(fc.oneof(answer.map(row), unsound, noise), { maxLength: 8 }), (all) => {
+        const rows = distinct(all);
+
+        expect(refusedIn(Arr.join(rows, "\n"))).toEqual(
+          Arr.filter(rows, (r) => r.startsWith("Survivor:") && answersIn(r).length === 0),
+        );
+      }),
+      options,
+    );
+  });
+
+  // Plants: let a text of no Survivor: line answer anything; take a line without its evidence or its proof.
+  it("lines that carry no proof, or no reason, answer nothing", () => {
     fc.assert(
       fc.property(fc.array(fc.oneof(unsound, noise), { maxLength: 8 }), (rows) => {
-        expect(answersIn(Arr.join(rows, "\n"))).toEqual([]);
+        expect(answersIn(Arr.join(distinct(rows), "\n"))).toEqual([]);
       }),
       options,
     );
@@ -509,10 +669,11 @@ describe("survivors, the exit code and the answers file", () => {
   // Zero is as likely as any count, so the case with nothing left to answer is always reached.
   const count = fc.oneof(fc.constant(0), fc.nat({ max: 20 }));
 
-  // Plants: always 0; always 1; count only the mutants that lived and not the files no law loads (or the reverse).
-  it("the exit code is 1 while any mutant or any unloaded file has no answer, and 0 otherwise", () => {
+  // Plants: always 0; always 1; count only the mutants that lived and not the files no law loads (or the reverse); leave a refused line out.
+  it("the exit code is 1 while any mutant or any unloaded file has no answer or a Survivor: line was refused, and 0 otherwise", () => {
     fc.assert(
-      fc.property(count, count, (open, unloaded) => {
+      fc.property(count, count, count, (open, unloaded, refused) => {
+        expect(exitCode(open, unloaded, refused)).toBe(open === 0 && unloaded === 0 && refused === 0 ? 0 : 1);
         expect(exitCode(open, unloaded)).toBe(open === 0 && unloaded === 0 ? 0 : 1);
       }),
       options,
@@ -545,8 +706,9 @@ describe("survivors, the exit code and the answers file", () => {
       name: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)),
       lines: Schema.Array(
         Schema.Literals([
-          "Survivor: a/b.ts:3 log text -- the line only words a message and no input changes what runs",
-          "Survivor: a/b.ts:* thin glue -- no law loads it, and a call of it only forwards",
+          "Survivor: a/b.ts:3 log text -- rg: rg -n message a => the line only words a message and no reader branches on it",
+          "Survivor: a/b.ts:* thin glue -- law: G1 pins what the glue forwards",
+          "Survivor: a/b.ts:4 log text -- the line only words a message and no input changes what runs",
           "Plant: a law: a break: red",
         ]),
       ),
@@ -587,6 +749,16 @@ describe("survivors, the run depth it hands the box", () => {
     expect(text).toContain("0 of the 5 that lived at 25 cases died there");
     expect(text).toContain("2 lived there too (1 not reached)");
     expect(recheckText({ asked: 1, cleared: [], confirmed: 1, unreached: 0 }, 25)).not.toContain("not reached");
+  });
+
+  // Plants: print the count when none is a type error; leave the count out; count a status other than CompileError.
+  it("the last line says how many mutants do not type-check and count as kills, and nothing when none does", () => {
+    expect(typedText({ Killed: 9, Survived: 2 })).toBe("");
+    expect(typedText({ CompileError: 0 })).toBe("");
+
+    const text = typedText({ Killed: 9, CompileError: 4 });
+    expect(text).toContain("4 mutants do not type-check");
+    expect(text).toContain("count as kills");
   });
 });
 
@@ -641,7 +813,10 @@ describe("survivors, a saved run", () => {
 
   const body = (rows: ReadonlyArray<typeof Row.Type>) =>
     Arr.join(
-      Arr.map(rows, (row) => `Survivor: ${row.file}:${row.line} a log line -- no input changes what runs here`),
+      Arr.map(
+        rows,
+        (row) => `Survivor: ${row.file}:${row.line} a log line -- plant: sed -n 1p ${row.file} => no law fails`,
+      ),
       "\n",
     );
 

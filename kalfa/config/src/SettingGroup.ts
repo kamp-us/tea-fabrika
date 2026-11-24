@@ -236,7 +236,7 @@ export const flags = <App extends string, R extends ReadonlyArray<Setting.Any>>(
  *
  * **Details**
  *
- * It runs in a span named `config.layer` with the attribute `kalfa.config.app`, and no value goes in the span. A group with a live setting also gets the restart setting `config.watch.debounce`, the quiet window, 100 milliseconds by default. In order: it reads the repo configuration at `<repo>/.<app>/<app>.toml`, checks the minimum version `<app>-version` against `version`, checks the repo configuration whole, then finds, reads and checks the user configuration whole, and only then resolves each setting by precedence: command-line flag, environment variable, repo configuration, user configuration, default. Fails with one `SettingsError`, the repo configuration's first. `repo` is the folder that holds `.<app>/`, the current folder by default. `flags` is what the command's handler got for `flags(group)`: a flag's text is read as the variable's text is, and with no `flags`, no flag was given. A file-only setting is read from its files and its default only, and a flag or a variable that names it stops the start with `scope`.
+ * It runs in a span named `config.layer` with the attribute `kalfa.config.app`, and no value goes in the span. A group with a live setting also gets the restart setting `config.watch.debounce`, the quiet window, 100 milliseconds by default. In order: it reads the repo configuration at `<repo>/.<app>/<app>.toml`, checks the minimum version `<app>-version` against `version`, checks the repo configuration whole, then finds, reads and checks the user configuration whole, and only then resolves each setting by precedence: command-line flag, environment variable, repo configuration, user configuration, default. Fails with one `SettingsError`, the repo configuration's first. `repo` is the folder that holds `.<app>/`, the current folder by default. `flags` is what the command's handler got for `flags(group)`: a flag's text is read as the variable's text is, and with no `flags`, no flag was given. A file-only setting is read from its files and its default only, and a flag or a variable that names it stops the start with `scope`. A refusal says why: an `invalid` one names the rule the value broke, from its schema's declared title, description or rule, and a `read` one names the reason the read failed. Neither holds a value, a secret or an absolute path, and the error's `cause` is hidden in a `Redacted`.
  *
  * A group with a live setting then watches the folder of each configuration file for as long as the layer lives. A file that has been quiet for the window is read again and checked whole as the start does, every setting is resolved again, and each live value that differs is published to its `changes`. A refused file is logged as a warning with its file and line, the last good values hold, and nothing fails. A restart setting whose value changed is logged once and applies at the next start. A file that cannot be watched is logged once and followed only at a restart. The watch ends with the layer.
  *
@@ -370,7 +370,7 @@ export interface Edit<R extends ReadonlyArray<Setting.Any>> {
  *
  * `file` says which file the text is, `"repo"` or `"user"`, and the errors name it as a person reads it: `.<app>/<app>.toml` or `~/.<app>/<app>.toml`. Only the changed value's text is replaced, so every comment and line break and every other key stays as it was. A record written over several lines (under its own header, under the headers of its items, or by dotted keys) is compared key by key: a key that is the same keeps its lines, a changed key has only its value replaced, a new item is written beside its siblings, and an item that leaves takes its lines, with the comments inside it and the comment lines right above its header. An array is replaced whole, in the form it had. A set of the value the file already holds, or a remove of a key the file lacks, answers the same text.
  *
- * Before the text is changed, the setting must be one of the group's, the file must be one its file scope allows, a value must pass its schema and be one the file can write, and the whole text must pass the start's check with this setting's own old value left out, so an edit can fix a bad value. After it, the new text is read again: it must hold only that one change and pass the whole check. The first fault is the one error, and no text comes back. A message ends `<file> was not changed.` and never holds a value.
+ * Before the text is changed, the setting must be one of the group's, the file must be one its file scope allows, a value must pass its schema and be one the file can write, and the whole text must pass the start's check with this setting's own old value left out, so an edit can fix a bad value. After it, the new text is read again: it must hold only that one change and pass the whole check. The first fault is the one error, and no text comes back. A message ends `<file> was not changed.` and never holds a value. Each call runs in the span `config.edit`, with the attributes `kalfa.config.app`, `kalfa.config.setting` and `kalfa.config.file`, and no value.
  *
  * **Gotchas**
  *
@@ -386,9 +386,19 @@ export const edit = <App extends string, R extends ReadonlyArray<Setting.Any>>(
   const place = { file, names: shown(group.app, toml) };
   const read = { app: group.app, settings: watched(group.settings) };
 
+  const traced = Effect.fn("config.edit")(function* (setting: Setting.Any, made: Effect.Effect<string, SettingsError>) {
+    yield* Effect.annotateCurrentSpan({
+      "kalfa.config.app": group.app,
+      "kalfa.config.setting": setting.name,
+      "kalfa.config.file": file,
+    });
+
+    return yield* made;
+  });
+
   return {
-    set: (setting, value) => change.set(read, toml, place, text, setting, value),
-    remove: (setting) => change.remove(read, toml, place, text, setting),
+    set: (setting, value) => traced(setting, change.set(read, toml, place, text, setting, value)),
+    remove: (setting) => traced(setting, change.remove(read, toml, place, text, setting)),
   };
 };
 

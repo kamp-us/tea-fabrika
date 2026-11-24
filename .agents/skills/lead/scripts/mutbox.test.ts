@@ -306,8 +306,8 @@ describe("mutbox, the pure parts", () => {
     expect(secondsFor(true, 600) - secondsFor(true)).toBe(600);
   });
 
-  // Plants: count NoCoverage as tested; report a mutant arm a also lets live as narrowing; list a
-  // Survived mutant as uncovered, or a Killed one as ignored.
+  // Plants: count NoCoverage as tested; leave CompileError out of the tested (a run whose mutants the type check refused would be called
+  // untested); report a mutant arm a also lets live as narrowing; list a Survived mutant as uncovered, or a Killed one as ignored.
   it("an arm's counts add up, and narrowing is exactly what arm a kills and arm b lets live", () => {
     fc.assert(
       fc.property(
@@ -317,7 +317,9 @@ describe("mutbox, the pure parts", () => {
         (a, b, selected) => {
           const arm = tally(0, "report", b, selected);
           expect(Arr.reduce(Rec.values(arm.counts), 0, (x, y) => x + y)).toBe(b.length);
-          expect(arm.tested).toBe(Arr.filter(b, (r) => ["Killed", "Survived", "Timeout"].includes(r.status)).length);
+          expect(arm.tested).toBe(
+            Arr.filter(b, (r) => ["Killed", "Survived", "Timeout", "CompileError"].includes(r.status)).length,
+          );
           expect(arm.survivors).toEqual(Arr.filter(b, (r) => r.status === "Survived"));
           expect(arm.uncovered).toEqual(Arr.filter(b, (r) => r.status === "NoCoverage"));
           expect(arm.ignored).toEqual(Arr.filter(b, (r) => r.status === "Ignored"));
@@ -1201,6 +1203,24 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(plain.summary.b.survivors).toHaveLength(2);
   });
 
+  // Ticket 1309. Plants: type-check before arm b has run, or after the recheck's plan is made (the type errors would be run again at full
+  // depth); run it on a run with no report; let a failing check stop the entry; leave the files mutated by a check.
+  it("the entry type-checks arm b's report after arm b and before the recheck is planned, and a check that fails stops nothing", () => {
+    const typed = entry.indexOf("typedFrom({");
+    expect(entry.indexOf('arm b "$T"')).toBeGreaterThan(-1);
+    expect(entry.indexOf('arm b "$T"')).toBeLessThan(typed);
+    expect(typed).toBeLessThan(entry.indexOf("planFrom(readFileSync"));
+
+    const step = entry.slice(
+      entry.lastIndexOf("if [ -f /out/b/report.json ]", typed),
+      entry.indexOf("planFrom(readFileSync"),
+    );
+
+    expect(step).toContain("|| :");
+    expect(step).toContain("git reset -q --hard refs/heads/build");
+    expect(step).toContain("/out/b/report.json");
+  });
+
   // Ticket 1306. Plants: build on the default builder, or make the builder every run, or never.
   it("the image is built on the box's own builder, made once when missing", () => {
     const first = run({ image: false });
@@ -1261,6 +1281,11 @@ describe("mutbox, the run against a stand-in docker", () => {
       expect(mixed.code, mixed.text).toBe(30);
       expect(mixed.summary).toMatchObject({ outcome: "stuck", reason: "no_tested_mutant" });
     }
+
+    // A mutant the type check refused (recheck.ts) is a result, so a sample of only those is judged, not stuck.
+    const typed = ran(["CompileError", "CompileError"]);
+    expect(typed.code, typed.text).toBe(0);
+    expect(typed.summary).toMatchObject({ outcome: "done" });
 
     const capped = ran(["Ignored"], 124);
     expect(capped.code, capped.text).not.toBe(40);
