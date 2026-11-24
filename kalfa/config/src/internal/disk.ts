@@ -190,7 +190,7 @@ const attributes = (group: Group, setting: Setting.Any, file: Setting.File) =>
     "kalfa.config.file": file,
   });
 
-/** Sets one setting in the file `file` of `group`, which `found` locates, on disk. The caller's span is the call's span. */
+/** Sets one setting in the file `file` of `group`, which `found` locates, on disk, in the caller's span. */
 export const set = Effect.fnUntraced(function* (
   group: Group,
   format: Format,
@@ -205,7 +205,7 @@ export const set = Effect.fnUntraced(function* (
   );
 });
 
-/** Takes one setting out of the file `file` of `group`, which `found` locates, on disk. The caller's span is the call's span. */
+/** Takes one setting out of the file `file` of `group`, which `found` locates, on disk, in the caller's span. */
 export const remove = Effect.fnUntraced(function* (
   group: Group,
   format: Format,
