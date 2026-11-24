@@ -1,6 +1,9 @@
 #!/bin/sh
 # stepcommit.sh [--commit-only] [--empty] [--body-file <file>] <step> <ticket> <subject> <file>...
-# --empty makes a commit with no files (name none), to open a slice's draft PR on a fresh branch; only the lead step may, and it is signed like any lead commit.
+# --empty makes a commit with no files (name none), signed like any commit of its step. The lead step may, to open a slice's
+# draft PR on a fresh branch. A build or fix step may too, when its body holds Survivor: lines and nothing else: that
+# is how it carries the answers to a guard check's survivors, never a code change made only to hold them.
+# A commit right after an empty one is refused: two empty links on one tree break the chain.
 # --body-file puts the file's text in the commit body. A tests commit needs one with a plant line
 # ("Plant: <law>: <what was broken>: <first red line>"; a fix commit needs it only when it names a
 # *.test.ts or *.test-support.ts file), so a reviewer reads the plants in git log;
@@ -26,13 +29,17 @@ while args and args[0] in ("--commit-only", "--empty", "--body-file"):
 if len(args) < (3 if empty else 4): refuse("name step, ticket, subject" + ("" if empty else " and named paths"), 2)
 step, ticket, subject, *paths = args
 if empty and paths: refuse("--empty makes a commit with no files; name none", 2)
-if empty and step != "lead": refuse("--empty is for the lead step only: it opens a slice's pull request; a " + step + " commit holds its files", 2)
+if empty and step not in ("lead", "build", "fix"): refuse("--empty is for the lead step (it opens a slice's pull request) and for a build or fix commit of Survivor: lines; a " + step + " commit holds its files", 2)
 if step not in ("tests", "build", "mutation", "lead", "fix"): refuse("unknown step " + step, 2)
 role = "tests" if step == "mutation" else step
 body = ""
 if body_file is not None:
     try: body = pathlib.Path(body_file).read_text().strip()
     except (OSError, ValueError) as e: refuse("cannot read --body-file " + body_file + ": " + str(e), 2)
+# An empty build or fix commit exists only to carry Survivor: lines (the guard check reads them from commit bodies), so
+# its body is those lines and nothing else. survivors.ts judges each line's shape; here a line must open as one.
+if empty and step != "lead" and not (body and all(l.startswith("Survivor:") for l in body.splitlines() if l.strip())):
+    refuse("an empty " + step + " commit carries Survivor: lines and nothing else: pass --body-file <file> holding one 'Survivor: <file>:<line> <reason> -- <evidence>' line per answer", 2)
 # The tests step's plant record lives only in its answer, which a reviewer never reads. A tests commit
 # (or a fix round that names a test file) carries it in the body: one "Plant: ..." line per new law (and, when the plan has a Generators
 # section, the reach table under it). A box's commit is drive's, and its report holds the record.
@@ -47,6 +54,10 @@ def git(*args, **kw):
 merging = git("rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
 if not merging and git("diff", "--cached", "--quiet").returncode:
     refuse("the index already holds staged changes; commit only your own paths", 4)
+# Two empty links on one tree repeat a `from` and the commits check reads the chain as broken, and a rewrite is
+# never allowed, so the second one is refused here. All of a step's Survivor: lines go in one empty commit.
+if empty and git("diff", "--quiet", "HEAD~1", "HEAD").returncode == 0:
+    refuse("the last commit is already empty; two empty commits in a row break the chain. Put every Survivor: line in one", 4)
 root = pathlib.Path(git("rev-parse", "--show-toplevel").stdout.decode().strip())
 named = []
 for p in paths:
