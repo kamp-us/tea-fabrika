@@ -1,12 +1,13 @@
 // What the laws of `@kalfa/secrets` share: the generators, the forms a value is written in elsewhere, a recording tracer and logger. Each law
 // applies, to each value it draws, one made from it for every class the plan names, so every class is reached in every run and no run can
 // pass on less.
+import { inspect } from "node:util";
 import {
   Arbitrary,
   Array as Arr,
   Effect,
   Equal,
-  type Exit,
+  Exit,
   Logger,
   Match,
   Layer,
@@ -445,7 +446,7 @@ export const shown = (write: () => string | undefined): string => Result.getOrEl
 // ---- stores and a recorder that fail with a value in their error
 
 /** The error a store's own client raises when it quotes what it read: the value in its message, and in the error under it, and under that. */
-const quoting = (text: string): Error =>
+export const quoting = (text: string): Error =>
   new Error(`bad value ${text}`, { cause: new Error(`nested ${text}`, { cause: text }) });
 
 /** A store whose every read fails as `StoreFailed`, with an error that quotes `text`, a value the store holds. */
@@ -493,3 +494,83 @@ export const failingRecorder = (text: string): Layer.Layer<Recorder.Recorder> =>
   Layer.succeed(Recorder.Recorder, {
     record: () => Effect.fail(new Errors.RecordFailed({ cause: Redacted.make(quoting(text)) })),
   });
+
+// ---- causes: the plan's classes (e), (t), (r) and (l), and every text a codec gives for an error
+
+/** What every cause law draws once: the word the causes quote, a label, and the form a labeled cause is made over. */
+export const causes = Arbitrary.all({
+  word: marker,
+  label: Arbitrary.array(pick(LOWER), { minLength: 3, maxLength: 8 }).pipe(Arbitrary.map((chars) => chars.join(""))),
+  form: pick(["e", "t", "r"] as const),
+});
+
+type CauseTexture = Drawn<typeof causes>;
+
+/** A cause that quotes the word, the class it is of, and the plain value inside. */
+interface Quoting {
+  readonly id: "e" | "t" | "r" | "l";
+  readonly plain: unknown;
+}
+
+/** The causes of every class: an `Error` that quotes the word, under which is one that quotes it, under which is the word; the word as text; a record that holds it two levels down; and any of the three, hidden with a label. */
+export const causeClasses = (
+  texture: CauseTexture,
+): ReadonlyArray<Quoting & { readonly hidden: Redacted.Redacted<unknown> }> => {
+  const plain = {
+    e: quoting(texture.word),
+    t: texture.word,
+    r: { reason: texture.word, nested: { reason: texture.word } },
+  };
+
+  return [
+    { id: "e", plain: plain.e, hidden: Redacted.make(plain.e) },
+    { id: "t", plain: plain.t, hidden: Redacted.make(plain.t) },
+    { id: "r", plain: plain.r, hidden: Redacted.make(plain.r) },
+    { id: "l", plain: plain[texture.form], hidden: Redacted.make(plain[texture.form], { label: texture.label }) },
+  ];
+};
+
+/** The word a cause quotes, as the one value a search for it looks for. */
+export const wordValue = (word: string): Value => ({ id: "c", text: word, core: word });
+
+/** A schema that needs no service to read or write: the kind every error class here is. */
+export type Plain = Schema.Top & { readonly EncodingServices: never; readonly DecodingServices: never };
+
+/** The text of an attempt to write: the JSON it wrote, or each rendering of the refusal it met. */
+const attempted = (attempt: () => Schema.Json | Schema.StringTree): ReadonlyArray<string> =>
+  Result.match(Result.try(attempt), {
+    onSuccess: (value) => [JSON.stringify(value) ?? ""],
+    onFailure: (refused) =>
+      Predicate.isError(refused)
+        ? [refused.message, refused.stack ?? "", String(refused), inspect(refused, { depth: 10, showHidden: true })]
+        : [String(refused)],
+  });
+
+/**
+ * Every text the codecs give for `error`, written by `schema`: the JSON codec, the string-tree codec and the Go-style JSON codec, each alone, and the JSON
+ * codec over an `Exit` that fails with it and an `Exit` that dies of it. An encode that throws gives its rendered refusal instead, so a refused encode is
+ * read too.
+ */
+export const written = <S extends Plain>(schema: S, error: S["Type"]): ReadonlyArray<string> => {
+  const exit = Schema.toCodecJson(Schema.Exit(Schema.Void, schema, Schema.Defect()));
+
+  return [
+    ...attempted(() => Schema.encodeUnknownSync(Schema.toCodecJson(schema))(error)),
+    ...attempted(() => Schema.encodeUnknownSync(Schema.toCodecStringTree(schema))(error)),
+    ...attempted(() => Schema.encodeUnknownSync(Schema.toCodecGoJson(schema))(error)),
+    ...attempted(() => Schema.encodeUnknownSync(exit)(Exit.fail(error))),
+    ...attempted(() => Schema.encodeUnknownSync(exit)(Exit.die(error))),
+  ];
+};
+
+/** The texts a flow's own `Exit` gives through the JSON codec, with the failures a store or a recorder ends it with: the failure the flow's exit holds, written whole. */
+export const writtenExit = (failures: Plain, exit: Exit.Exit<unknown, unknown>): ReadonlyArray<string> =>
+  attempted(() =>
+    Schema.encodeUnknownSync(Schema.toCodecJson(Schema.Exit(Schema.Unknown, failures, Schema.Defect())))(exit),
+  );
+
+/** The keys and values a wire object holds, sorted by key: what a law compares, so no tagged object is written by hand. */
+export const fieldsOf = (wire: Schema.Json): ReadonlyArray<readonly [string, Schema.Json]> =>
+  Object.entries(Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(wire)).toSorted(
+    ([left], [right]) => (left < right ? -1 : left > right ? 1 : 0),
+  );

@@ -23,6 +23,7 @@ import {
   found,
   needles,
   outcome,
+  quoting,
   reachable,
   SEED,
   showsAny,
@@ -31,6 +32,8 @@ import {
   valueClasses,
   valueTexture,
   watched,
+  written,
+  writtenExit,
   type Value,
 } from "./Secrets.test-support.ts";
 
@@ -70,10 +73,24 @@ const classIds = (values: ReadonlyArray<Value>): string => values.map((value) =>
 const run = { arbitrary: { runs: 300, seed: SEED } };
 
 /** The errors a caller could make from a carrier, each as the cause: a store that failed and a recorder that failed. */
-const errorsFrom = (thing: object) => [
-  new Errors.StoreFailed({ cause: Redacted.make(thing) }),
-  new Errors.RecordFailed({ cause: Redacted.make(thing) }),
-];
+const errorsFrom = (thing: object) =>
+  [
+    new Errors.StoreFailed({ cause: Redacted.make(thing) }),
+    new Errors.RecordFailed({ cause: Redacted.make(thing) }),
+  ] as const;
+
+/** The same errors with the schema that writes each, so a law reads what a codec gives for it. */
+const writersFrom = (thing: object) => {
+  const [store, record] = errorsFrom(thing);
+
+  return [
+    { schema: Errors.StoreFailed, error: store },
+    { schema: Errors.RecordFailed, error: record },
+  ] as const;
+};
+
+/** Both failures of a store side as one schema, as an `Exit` that holds either is written. */
+const Failures = Schema.Union([Errors.StoreFailed, Errors.RecordFailed]);
 
 // X6. [secrets] Plant: give the answer a `toJSON` that returns the value's text; give it a `toString` that does; give the contents a plain record of
 // the values as an own property; give a fact a `value` field; write the value's base64 in the version; write the `Redacted` into the answer as
@@ -166,7 +183,8 @@ it.effect.prop(
 );
 
 // X9. [secrets] Plant: give the answer a `toString` that returns the value's text (an error that renders its cause shows it); render an error's cause
-// with its JSON; put the value's text in the error's message.
+// with its JSON; put the value's text in the error's message; put `Schema.Redacted(Schema.Defect())` back on `StoreFailed`, or on `RecordFailed`, which
+// `Schema.toCodecJson` writes in full.
 it.effect.prop(
   "X9 rendered errors: [secrets] StoreFailed and RecordFailed made over a carrier render no value through String, message, stack, JSON, Formatter, inspect or Cause.pretty, in any form",
   { texture: valueTexture },
@@ -176,14 +194,22 @@ it.effect.prop(
       expect(classIds(values), "the generator reaches every value class").toBe("cde");
 
       for (const value of values) {
-        for (const { name, thing } of yield* carriers(value)) {
-          for (const error of errorsFrom(thing)) {
+        // The carriers the flow leaves hide themselves; a cause that quotes the value in plain data, as a store's own client does, does not, and a codec
+        // writes it in full unless the cause is hidden for every codec.
+        const made = [
+          ...(yield* carriers(value)),
+          { name: "an error that quotes the value", thing: quoting(value.text) },
+        ];
+
+        for (const { name, thing } of made) {
+          for (const { schema, error } of writersFrom(thing)) {
             const texts = [
               ...displays(error),
               error.message,
               error.stack ?? "",
               Cause.pretty(Cause.fail(error)),
               Cause.pretty(Cause.die(error)),
+              ...written(schema, error),
             ];
 
             expect(showsAny(texts, needles(value)), `${value.id}: ${error._tag} over ${name}`).toEqual([]);
@@ -222,7 +248,7 @@ it.effect.prop(
 
 // X11. [secrets] Plant: write the cause's text into StoreFailed's message; write it into RecordFailed's message; keep the cause in a
 // plain property that is no `Redacted`, so the error under it prints and lists the value; give the error a `toJSON` that returns the
-// cause's text.
+// cause's text; put `Schema.Redacted(Schema.Defect())` back on `StoreFailed`, or on `RecordFailed`, which `Schema.toCodecJson` writes in full.
 it.effect.prop(
   "X11 failures: [secrets] a store and a recorder that fail with an error that quotes a value fail with an error that shows no value, in its text, its message, its stack, its JSON, its properties, the cause chain under it, the spans and the logs that carry it",
   { texture: valueTexture },
@@ -266,6 +292,9 @@ it.effect.prop(
           const cause = Exit.isFailure(exit) ? [exit.cause] : [];
 
           const texts = [
+            // What the codecs write for each failure, alone and inside an `Exit`, and for the flow's own `Exit`.
+            ...errors.flatMap((error) => written(Failures, error)),
+            ...writtenExit(Failures, exit),
             ...errors.flatMap((error) => [
               ...displays(error),
               error.message,

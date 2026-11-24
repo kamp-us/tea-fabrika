@@ -429,7 +429,7 @@
       "name": "kalfa-secrets",
       "layer": 2,
       "paths": ["kalfa/secrets/src"],
-      "imports": ["kalfa-config"]
+      "imports": ["kalfa-config", "kalfa-diagnostics"]
     },
     {
       "name": "next-telemetry",

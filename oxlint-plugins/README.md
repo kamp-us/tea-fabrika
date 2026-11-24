@@ -961,6 +961,51 @@ fixes all 10.
 import spelling, uses and neighbors that must pass, 100 runs, seed 119120. Law 3 is one real oxlint
 run over one planted file per path kind, with the repo's config.
 
+## A hidden cause stays hidden when it is written as JSON, ticket 1310
+
+`hidden-cause` keeps `Schema.Redacted` out of a kalfa error class's fields, and holds each `cause` to one of four forms. Effect
+4.1.3's `Schema.Redacted` hides its value from `String`, `JSON.stringify`, `inspect` and `Cause.pretty`, but its `toCodecJson`
+link encodes with `Redacted.value` (`node_modules/effect/src/Schema.ts:17044-17055`), so `Schema.toCodecJson` writes the value in
+full. Transport writes every frame with it, so the first `StoreFailed` that crossed a socket would carry a cause that quotes a
+secret. `Hidden.Cause` from `@kalfa/diagnostics/Hidden` is held as a `Redacted` and written by every codec as `<redacted>`.
+
+An error class is a class that extends `<S>.TaggedError<...>()(tag, fields)` or `<S>.Error<...>(id)(fields)`, where `<S>` is
+Effect's `Schema` under any spelling (named, renamed, `effect/Schema` as a namespace, the barrel as a namespace), resolved
+through the file's own scope. Its fields are the object literal, or a same-file `const` it names, followed one step at a time.
+
+- **Refusal one:** a call of `Schema.Redacted(` or `Schema.RedactedFromValue(` in the fields at any depth, or in a same-file
+  `const` a call, a property, a spread or an array in the fields names.
+- **Refusal two:** a top-level `cause` that is none of `Schema.Defect(...)`, `Schema.optional(Schema.Defect(...))`,
+  `Hidden.Cause` and `Schema.optional(Hidden.Cause)`, where `Hidden` is a namespace import of `@kalfa/diagnostics/Hidden` (or
+  `Cause` imported from it by name), or `./Hidden.ts` inside `kalfa/diagnostics/src/`. One cause is reported once.
+- **Passes:** `Schema.Redacted(` outside an error class (`Schema.is(...)`, a plain `Schema.Struct`), a local named `Schema`, a
+  comment and a string.
+- **Misses:** fields built by a call (`Schema.Struct(...).fields`), fields imported from another file, an alias made at run time
+  (`const S = Schema`), and anything outside `kalfa/`. `next/`'s `Audit.ts` and `LaunchdStatus.ts` use `Schema.Redacted` and stay out.
+
+One override in `.oxlintrc.json` holds every file of `kalfa/` as an error and leaves out `*.test.ts`, `*.test.tsx` and
+`*.test-support.ts`: a test makes errors with any cause to probe them. The Secrets import block of the same file lets
+`@kalfa/diagnostics/Hidden` through.
+
+Tools looked at first, none used:
+
+| Tool | Why not |
+|---|---|
+| oxlint's `no-restricted-syntax` | oxlint has no such rule |
+| oxlint's [`no-restricted-imports`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-imports) | It sees an import, not a call inside a class's fields |
+| `banNames` in `match.ts` | It bans a name everywhere, and cannot tell an error's fields from a `Schema.is` check |
+| `no-data-taggederror.ts` | It matches the `extends` and not its arguments |
+
+First-day count, 2026-11-23, on this branch before the build: one oxlint run over `kalfa` with the repo's config, each fire read by
+hand: **2 fires in 1 file, 2 real, 0 false alarms**, from refusal one: `kalfa/secrets/src/Errors.ts:21` (`StoreFailed`) and `:31`
+(`RecordFailed`). Refusal two has 0. A text search for `Schema.Redacted(` in kalfa's product files finds those two lines and
+`kalfa/github/src/GitHubLive.ts:21`, a `Schema.is` check on a token that is no error class, which passes. The build moves both
+causes to `Hidden.Cause`, and the rule then has 0 fires.
+
+`hidden-cause.test.ts` holds the laws. L1 is a property through oxlint's `RuleTester`: an import spelling of `Schema`, one of
+`Hidden`, and one to six lines that fire or must pass (100 runs, seed 119120). L2 is one real oxlint run over one planted body per
+path kind, with the repo's config. L3 is the entry in `plants.test.ts`.
+
 ## A test's kind follows what it uses, an earlier decision
 
 A test that starts or reaches a real thing is named `*.integration.test.ts` (or `*.visual.test.ts`

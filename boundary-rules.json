@@ -69,7 +69,7 @@
       "pure": false
     },
     "kalfa-secrets": {
-      "imports": ["kalfa-config"],
+      "imports": ["kalfa-config", "kalfa-diagnostics"],
       "pure": false
     },
     "kalfa-transport": {

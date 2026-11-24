@@ -643,6 +643,9 @@ describe("each rule refuses what it is there to refuse", () => {
         "no-static-layer",
         // Generated no-cause-squash.test.ts plants run at next/ and .agents/ paths with the real lint config.
         "no-cause-squash",
+        // Ticket 1310's rule reads kalfa's product files only: generated hidden-cause.test.ts files run through RuleTester, and one real lint run per path kind
+        // plants the same body at kalfa product paths and at the paths it leaves out.
+        "hidden-cause",
         // P16's rule reads the program package, so generated packages plant it in its own test file.
         "program-package-layout",
         // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
