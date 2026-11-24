@@ -1,9 +1,9 @@
-// P1, P2 and E1: what the package's own files say. It stands alone (decision on small libraries usable alone): it names no other package of
-// this repository, it has no dependencies, and it has one error of its own, `FormatError`, with no `Unreachable` and no
-// `TransportUnavailable` (a socket that cannot be reached is the socket Layer's `SocketError`, never Transport's word). The two
-// Cloudflare entry points are loaded by `import()` inside the test, so a Cloudflare file that is not there fails its own laws
-// and no other.
-import { existsSync } from "node:fs";
+// P1, E1 and P2: what the package's own files say. It stands alone (decision on small libraries usable alone): it names no other package of
+// this repository, it has no dependencies, and it has two errors of its own, `FormatError` and `NoSharedVersion`, with no `Unreachable` and no
+// `TransportUnavailable` (a socket that cannot be reached is the socket Layer's `SocketError`, never Transport's word). The hello says `features`,
+// and today's word `has` appears nowhere. The two Cloudflare entry points are loaded by `import()` inside the test, so a Cloudflare file that
+// is not there fails its own laws and no other.
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "@effect/vitest";
 import { Effect, Predicate, Schema } from "effect";
@@ -101,7 +101,7 @@ const cloudflare = Effect.all(
 // Plant: export a `challenge` helper from `Gateway.ts` and re-export it from the index; export a second name (`Held`) from
 // `MemoryGateway.ts`; export a `route` helper from the index.
 it.effect(
-  "P2 scenario: the Cloudflare entry points give exactly the slice's exports, and no name of a route, a sign-in or a challenge",
+  "P3 scenario: the Cloudflare entry points give exactly the slice's exports, and no name of a route, a sign-in or a challenge",
   () =>
     Effect.gen(function* () {
       const [index, memory] = yield* cloudflare;
@@ -119,10 +119,10 @@ it.effect(
     }),
 );
 
-// Plant: rename `FormatError` to `TransportUnavailable`; export an `Unreachable` class from `Format.ts`; add a `RefusedError` class to
-// `Gateway.ts` and export it from the index.
+// Plant: rename `FormatError` to `TransportUnavailable`; export an `Unreachable` class from `Format.ts`; export a `ConnectError` class from `Hello.ts`;
+// add a `RefusedError` class to `Gateway.ts` and export it from the index.
 it.effect(
-  "E1 scenario: no export or member of any of the four entry points is named Unreachable or TransportUnavailable, and FormatError is the one error class",
+  "E1 scenario: no export or member of any of the four entry points is named Unreachable or TransportUnavailable, and FormatError and NoSharedVersion are the error classes",
   () =>
     Effect.gen(function* () {
       const [index, memory] = yield* cloudflare;
@@ -132,7 +132,53 @@ it.effect(
         expect(entries.flatMap(namesIn), `no name is ${word}`).not.toContain(word);
       }
 
-      expect(entries.flatMap(errorClasses), "the one error class of the package").toEqual(["FormatError"]);
+      expect(entries.flatMap(errorClasses), "the error classes of the package").toEqual([
+        "FormatError",
+        "NoSharedVersion",
+      ]);
       expect(new Root.FormatError({ reason: "text" })._tag, "its tag").toBe("FormatError");
     }),
 );
+
+/** The product files of the package: every `.ts` file under `src`, tests and test support left out. */
+const productFiles = (folder: URL): ReadonlyArray<URL> =>
+  readdirSync(folder, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? productFiles(new URL(`${entry.name}/`, folder))
+      : entry.name.endsWith(".ts") && !/\.test(-support|\.types|\.integration)?\.ts$/u.test(entry.name)
+        ? [new URL(entry.name, folder)]
+        : [],
+  );
+
+/** The text of a file with its comment lines taken out. */
+const withoutComments = (text: string): string =>
+  text
+    .split("\n")
+    .filter((line) => !/^\s*(\/\/|\/\*|\*)/u.test(line))
+    .join("\n");
+
+/** The code blocks of a Markdown file. */
+const codeBlocks = (text: string): string =>
+  [...text.matchAll(/```[^\n]*\n([\s\S]*?)```/gu)].map(([, code]) => code).join("\n");
+
+// `has` as a key or a property: `has:`, `has?:`, `"has"` and `'has'`. A call like `Set.has(` is no key.
+const HAS = /(^|[^\w.])has\s*\??\s*:|["']has["']/u;
+
+// Plant: add `has: Schema.Array(Schema.String)` to the hello value in `Hello.ts`.
+it("P2 scenario: today's `has` appears nowhere: no key or property named has in a product file with its comments taken out, or in a code block of the README", () => {
+  const files = productFiles(new URL("./", import.meta.url));
+  expect(files.length > 0, "the product files are found").toBe(true);
+
+  for (const file of files) {
+    expect(HAS.test(withoutComments(readFileSync(file, "utf8"))), `${file.pathname}: no key named has`).toBe(false);
+  }
+
+  // The law is no empty promise: the hello's own file is there, and it says `features`.
+  const hello = files.find((file) => file.pathname.endsWith("/Hello.ts"));
+  expect(hello === undefined ? "" : withoutComments(readFileSync(hello, "utf8")), "Hello.ts says features").toMatch(
+    /features\s*:/u,
+  );
+
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  expect(HAS.test(codeBlocks(readme)), "the README's code blocks: no key named has").toBe(false);
+});

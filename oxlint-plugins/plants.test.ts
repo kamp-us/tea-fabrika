@@ -663,6 +663,9 @@ describe("each rule refuses what it is there to refuse", () => {
         // The real-resource rule is on for next/'s and kalfa/'s test files only: integration-test-name.test.ts plants a plain
         // and a named file under each and runs oxlint over them with the real lint config.
         "integration-test-name",
+        // Ticket 1311's rule reads test files and test kits only: no-sleep-on-test-clock.test.ts plants generated
+        // test bodies at those paths and at product paths, with the real lint config.
+        "no-sleep-on-test-clock",
         // Ticket 1029's rule reads only next/'s test files, suites and test kits: test-database.test.ts
         // plants generated lines at those paths, and at product and outside paths it must pass.
         "test-database",

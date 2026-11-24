@@ -11,6 +11,7 @@
 //   files     the product files mutated, sorted and unique
 //   version   the scripts that make the run (`survivors.ts`, mutbox and what it starts)
 //   seconds   MUTATE_SECONDS, the time budget: a larger one can reach more mutants
+//   runs      MUTATE_RUNS, the most cases a property law draws, or `full`: fewer cases can let a mutant live
 //
 // The commit bodies and `--answers` are not in the key: `Survivor:` lines are read again on every call
 // and applied to the saved result, so a line added after the run counts at once.
@@ -33,7 +34,9 @@ export const key = (ask: {
   readonly files: ReadonlyArray<string>;
   readonly version: string;
   readonly seconds: number;
-}): string => sha(JSON.stringify([ask.base, ask.tree, [...new Set(ask.files)].sort(), ask.version, ask.seconds]));
+  readonly runs: number | "full";
+}): string =>
+  sha(JSON.stringify([ask.base, ask.tree, [...new Set(ask.files)].sort(), ask.version, ask.seconds, ask.runs]));
 
 /** The version of a set of scripts: a hash of each one's name and text. Pure. */
 export const version = (scripts: ReadonlyArray<{ readonly name: string; readonly text: string }>): string =>
