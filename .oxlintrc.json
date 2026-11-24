@@ -750,7 +750,8 @@
         "kalfa/git/src/**",
         "kalfa/github/src/**",
         "kalfa/markdown/src/**",
-        "kalfa/permissions/src/**"
+        "kalfa/permissions/src/**",
+        "kalfa/transport/src/**"
       ],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
       "rules": {
@@ -5987,6 +5988,532 @@
           {
             "name": "WebSocket",
             "message": "@kalfa/secrets does no IO: no network of its own."
+          }
+        ]
+      }
+    },
+    {
+      // @kalfa/transport (ticket 2066) moves values over a socket it is given. It imports no other package of this repository and no tea package (decision 0047: it is usable alone), no Telemetry (its span is made with Effect's own calls, decision 0063), no platform package and no Node module (the app joins the socket Layer at the top), and no test tool. Tests, test support and the integration file are left out below: an override applies to product files only. An override replaces a rule's options, so this repeats the base entries and adds its own. Every pattern that means "and below" ends in /**, never /*.
+      "files": ["kalfa/transport/src/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test-support.ts", "**/*.integration.test.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib",
+                  "assert/**",
+                  "async_hooks/**",
+                  "buffer/**",
+                  "child_process/**",
+                  "cluster/**",
+                  "console/**",
+                  "constants/**",
+                  "crypto/**",
+                  "dgram/**",
+                  "diagnostics_channel/**",
+                  "dns/**",
+                  "domain/**",
+                  "events/**",
+                  "fs/**",
+                  "http/**",
+                  "http2/**",
+                  "https/**",
+                  "inspector/**",
+                  "module/**",
+                  "net/**",
+                  "os/**",
+                  "path/**",
+                  "perf_hooks/**",
+                  "process/**",
+                  "punycode/**",
+                  "querystring/**",
+                  "readline/**",
+                  "repl/**",
+                  "stream/**",
+                  "string_decoder/**",
+                  "sys/**",
+                  "timers/**",
+                  "tls/**",
+                  "trace_events/**",
+                  "tty/**",
+                  "url/**",
+                  "util/**",
+                  "v8/**",
+                  "vm/**",
+                  "wasi/**",
+                  "worker_threads/**",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/transport imports no Node module, so it runs in a browser and in Node alike: the app joins a socket Layer at the top. Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/transport imports no platform package: the app provides the socket Layer (NodeSocket.layerWebSocket and its kin) at the top."
+              },
+              {
+                "group": ["@effect/vitest/**", "vitest/**", "fast-check/**"],
+                "message": "@kalfa/transport: no test tools in product files."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/transport imports no Telemetry: its span is made with Effect's own calls (decision 0063)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**"],
+                "message": "@kalfa/transport imports no other package of this repository and no tea package (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/transport imports no path out of its own folder."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The stream functions (Transport.ts) stay apart from the format: they call `Format`'s `write` and `read` and never the JSON-RPC frame's own writer (the line format a test passes in its place must work with no change here). The package override's entries, repeated, and one more.
+      "files": ["kalfa/transport/src/Transport.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib",
+                  "assert/**",
+                  "async_hooks/**",
+                  "buffer/**",
+                  "child_process/**",
+                  "cluster/**",
+                  "console/**",
+                  "constants/**",
+                  "crypto/**",
+                  "dgram/**",
+                  "diagnostics_channel/**",
+                  "dns/**",
+                  "domain/**",
+                  "events/**",
+                  "fs/**",
+                  "http/**",
+                  "http2/**",
+                  "https/**",
+                  "inspector/**",
+                  "module/**",
+                  "net/**",
+                  "os/**",
+                  "path/**",
+                  "perf_hooks/**",
+                  "process/**",
+                  "punycode/**",
+                  "querystring/**",
+                  "readline/**",
+                  "repl/**",
+                  "stream/**",
+                  "string_decoder/**",
+                  "sys/**",
+                  "timers/**",
+                  "tls/**",
+                  "trace_events/**",
+                  "tty/**",
+                  "url/**",
+                  "util/**",
+                  "v8/**",
+                  "vm/**",
+                  "wasi/**",
+                  "worker_threads/**",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/transport imports no Node module, so it runs in a browser and in Node alike: the app joins a socket Layer at the top. Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/transport imports no platform package: the app provides the socket Layer (NodeSocket.layerWebSocket and its kin) at the top."
+              },
+              {
+                "group": ["@effect/vitest/**", "vitest/**", "fast-check/**"],
+                "message": "@kalfa/transport: no test tools in product files."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/transport imports no Telemetry: its span is made with Effect's own calls (decision 0063)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**"],
+                "message": "@kalfa/transport imports no other package of this repository and no tea package (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/transport imports no path out of its own folder."
+              },
+              {
+                "group": ["./internal/jsonRpc*", "**/internal/jsonRpc*", "**/jsonRpc", "**/jsonRpc.ts"],
+                "message": "Transport.ts calls the format through `Format`, never the JSON-RPC frame's own writer: a test Layer replaces the format with no change to the stream functions."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The memory pair (MemorySocket.ts) is a socket and knows no format and no stream function: it imports neither the JSON-RPC frame, `Format.ts` nor `Transport.ts`. The package override's entries, repeated, and more.
+      "files": ["kalfa/transport/src/MemorySocket.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib",
+                  "assert/**",
+                  "async_hooks/**",
+                  "buffer/**",
+                  "child_process/**",
+                  "cluster/**",
+                  "console/**",
+                  "constants/**",
+                  "crypto/**",
+                  "dgram/**",
+                  "diagnostics_channel/**",
+                  "dns/**",
+                  "domain/**",
+                  "events/**",
+                  "fs/**",
+                  "http/**",
+                  "http2/**",
+                  "https/**",
+                  "inspector/**",
+                  "module/**",
+                  "net/**",
+                  "os/**",
+                  "path/**",
+                  "perf_hooks/**",
+                  "process/**",
+                  "punycode/**",
+                  "querystring/**",
+                  "readline/**",
+                  "repl/**",
+                  "stream/**",
+                  "string_decoder/**",
+                  "sys/**",
+                  "timers/**",
+                  "tls/**",
+                  "trace_events/**",
+                  "tty/**",
+                  "url/**",
+                  "util/**",
+                  "v8/**",
+                  "vm/**",
+                  "wasi/**",
+                  "worker_threads/**",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/transport imports no Node module, so it runs in a browser and in Node alike: the app joins a socket Layer at the top. Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/transport imports no platform package: the app provides the socket Layer (NodeSocket.layerWebSocket and its kin) at the top."
+              },
+              {
+                "group": ["@effect/vitest/**", "vitest/**", "fast-check/**"],
+                "message": "@kalfa/transport: no test tools in product files."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/transport imports no Telemetry: its span is made with Effect's own calls (decision 0063)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**"],
+                "message": "@kalfa/transport imports no other package of this repository and no tea package (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/transport imports no path out of its own folder."
+              },
+              {
+                "group": [
+                  "./internal/jsonRpc*",
+                  "**/internal/jsonRpc*",
+                  "**/jsonRpc",
+                  "**/jsonRpc.ts",
+                  "./Format.ts",
+                  "./Format",
+                  "**/Format.ts",
+                  "**/Format",
+                  "./Transport.ts",
+                  "./Transport",
+                  "**/Transport.ts",
+                  "**/Transport"
+                ],
+                "message": "MemorySocket.ts is a socket and knows no format: it imports neither the JSON-RPC frame, Format.ts nor Transport.ts."
+              }
+            ]
           }
         ]
       }

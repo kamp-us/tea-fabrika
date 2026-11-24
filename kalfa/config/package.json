@@ -43,6 +43,7 @@
     "./Print": "./src/Print.ts",
     "./Snapshot": "./src/Snapshot.ts",
     "./Load": "./src/Load.ts",
+    "./Cli": "./src/Cli.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -98,6 +99,10 @@
       "./Load": {
         "types": "./dist/Load.d.ts",
         "default": "./dist/Load.js"
+      },
+      "./Cli": {
+        "types": "./dist/Cli.d.ts",
+        "default": "./dist/Cli.js"
       },
       "./package.json": "./package.json"
     }

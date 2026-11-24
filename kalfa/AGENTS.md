@@ -19,5 +19,6 @@ with a reason.
   package and ranks lowest; CI, Code hosting, Delivery and Reconciliation rank above it. GitHub (`@kalfa/github`) ranks above Secrets
   and Configuration and below Code hosting, CI, Conversation and Identity, which reach GitHub through it
   ([0050](../.kalfa/decisions/0050-a-vendor-client-is-its-own-package.md)).
+  Transport (`@kalfa/transport`) imports no kalfa package and ranks lowest, beside Source control.
 - **Keep the import graph small.** Each new edge needs a reason. Fewer edges keep each package
   usable alone.
