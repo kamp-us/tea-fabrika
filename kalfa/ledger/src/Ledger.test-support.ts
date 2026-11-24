@@ -282,13 +282,112 @@ export const pairs = (texture: ChildTexture): ReadonlyArray<Pair> => {
   ];
 };
 
-// ---- errors: one of each of the eight, made from one drawn texture
+// ---- revisions and positions: the numbers a stream counts with
+
+/** What the number law draws once: whole numbers from 0 up and from below 0, and the numbers no count is. */
+export const numberTexture = Arbitrary.all({
+  above: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }))),
+  below: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: -Number.MAX_SAFE_INTEGER, maximum: -1 }))),
+  fraction: between(1, 999).pipe(Arbitrary.map((tenth) => tenth / 1000 + 1)),
+});
+
+type NumberTexture = Drawn<typeof numberTexture>;
+
+/** A candidate for a revision or a position, with the class it is of and whether it is a count. */
+interface Count {
+  readonly id: string;
+  readonly candidate: unknown;
+  readonly counts: boolean;
+}
+
+/** The number classes, in the order `counts` gives them. */
+export const COUNT_CLASSES = [
+  "zero",
+  "a whole number from 0 up",
+  "the largest safe whole number",
+  "minus one",
+  "a whole number below 0",
+  "a fraction",
+  "not a number",
+  "infinity",
+  "minus infinity",
+  "the text of a count",
+  "nothing",
+] as const;
+
+/** One candidate for each class: the whole numbers from 0 up are counts, and nothing else is. */
+export const counts = (texture: NumberTexture): ReadonlyArray<Count> => [
+  { id: COUNT_CLASSES[0], candidate: 0, counts: true },
+  { id: COUNT_CLASSES[1], candidate: texture.above, counts: true },
+  { id: COUNT_CLASSES[2], candidate: Number.MAX_SAFE_INTEGER, counts: true },
+  { id: COUNT_CLASSES[3], candidate: -1, counts: false },
+  { id: COUNT_CLASSES[4], candidate: texture.below, counts: false },
+  { id: COUNT_CLASSES[5], candidate: texture.fraction, counts: false },
+  { id: COUNT_CLASSES[6], candidate: Number.NaN, counts: false },
+  { id: COUNT_CLASSES[7], candidate: Number.POSITIVE_INFINITY, counts: false },
+  { id: COUNT_CLASSES[8], candidate: Number.NEGATIVE_INFINITY, counts: false },
+  { id: COUNT_CLASSES[9], candidate: String(texture.above), counts: false },
+  { id: COUNT_CLASSES[10], candidate: undefined, counts: false },
+];
+
+// ---- child on what no type lets in: a name or a parent that breaks its own type
+
+/** What the misfit law draws once: a short name and parent, a parent of 255 characters, a character no id holds, and a place to put it. */
+export const misfitTexture = Arbitrary.all({
+  name: textBetween(NAME_CHARS, 1, 20),
+  parent: textBetween(ID_CHARS, 1, 40),
+  long: text(ID_CHARS, ID_LIMIT),
+  bad: pick(BAD_CHARS.map(([, char]) => char)),
+  place: between(0, 100),
+});
+
+type MisfitTexture = Drawn<typeof misfitTexture>;
+
+/** A name and a parent as plain text, as an untyped caller can send them, and whether `child` must refuse them. */
+interface Misfit {
+  readonly id: string;
+  readonly name: string;
+  readonly parent: string;
+  readonly mustRefuse: boolean;
+}
+
+/** The misfit classes, in the order `misfits` gives them. */
+export const MISFIT_CLASSES = [
+  "a bad character in a name, joined short",
+  "a bad character in a name, joined long",
+  "a bad character in a parent, joined short",
+  "a bad character in a parent, joined long",
+  "a bad character in both, joined short",
+] as const;
+
+/** The text with `bad` put in at `place`, or at the end when `place` is past it. */
+const withBad = (candidate: string, bad: string, place: number): string =>
+  `${candidate.slice(0, place % (candidate.length + 1))}${bad}${candidate.slice(place % (candidate.length + 1))}`;
+
+/**
+ * Pairs that break a type, one for each class: a name or a parent with a character no id holds, where the joined text is short enough to stay plain and
+ * where it is long enough to be hashed. A parent that is hashed is read as bytes, so a bad character in it still gives a valid id.
+ */
+export const misfits = (texture: MisfitTexture): ReadonlyArray<Misfit> => {
+  const { name, parent, long, bad, place } = texture;
+
+  return [
+    { id: MISFIT_CLASSES[0], name: withBad(name, bad, place), parent, mustRefuse: true },
+    { id: MISFIT_CLASSES[1], name: withBad(name, bad, place), parent: long, mustRefuse: true },
+    { id: MISFIT_CLASSES[2], name, parent: withBad(parent, bad, place), mustRefuse: true },
+    { id: MISFIT_CLASSES[3], name, parent: withBad(long.slice(1), bad, place), mustRefuse: false },
+    { id: MISFIT_CLASSES[4], name: withBad(name, bad, place), parent: withBad(parent, bad, place), mustRefuse: true },
+  ];
+};
+
+// ---- errors: one of each of the nine, made from one drawn texture
 
 const generated = Arbitrary.schema;
 
 /**
- * What every error law draws once: a value for each field of each of the eight errors. The numbers and the texts come from Effect's own schemas, never
- * from the error's field, so a field the build types wrongly is a field a law catches. Only `part` is read from its field, since the field is its list.
+ * What every error law draws once: a value for each field of each of the nine errors. The numbers and the texts come from Effect's own schemas, never
+ * from the error's field, so a field the build types wrongly is a field a law catches. A revision is a whole number from 0 up, written here and not read
+ * from `Revision`, so a `Revision` that takes more or less is no revision the laws agree with. Only `part` is read from its field, since the field is its list.
  */
 export const errorTexture = Arbitrary.all({
   part: generated(Errors.BadEntry.fields.part),
@@ -296,25 +395,20 @@ export const errorTexture = Arbitrary.all({
   limit: generated(Schema.Int),
   admission: generated(Schema.String),
   reason: generated(Schema.String),
-  expected: generated(Entry.Revision),
-  actual: generated(Entry.Revision),
+  expected: generated(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }))),
+  actual: generated(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }))),
   cause: generated(Schema.Json),
 });
 
 type ErrorTexture = Drawn<typeof errorTexture>;
 
 /** The nine errors a package may answer with, as a union a test can list. */
-export type AnyError = Errors.Refusal | Errors.Failure;
+export type AnyError = Errors.Refusal | Errors.EmptyTags | Errors.Failure;
 
-/** The tags of the six refusals and of the three failures, in the order `eachError` gives them. */
-export const REFUSAL_TAGS = [
-  "BadEntry",
-  "IdReused",
-  "TooBig",
-  "AdmissionRefused",
-  "RevisionConflict",
-  "EmptyTags",
-] as const;
+/** The tags of the five refusals, of the one error a read has of its own, and of the three failures, in the order `eachError` gives them. */
+export const REFUSAL_TAGS = ["BadEntry", "IdReused", "TooBig", "AdmissionRefused", "RevisionConflict"] as const;
+
+export const READ_TAGS = ["EmptyTags"] as const;
 
 export const FAILURE_TAGS = ["Unreachable", "BadRow", "StorageFailed"] as const;
 
@@ -324,12 +418,14 @@ interface Made {
   readonly fields: Readonly<Record<string, unknown>>;
 }
 
-/** One of each of the nine errors, made from the texture's fields, each beside the fields it was given. */
+const revision = Schema.decodeUnknownSync(Entry.Revision);
+
+/** One of each of the nine errors, made from the texture's fields, each beside the fields it was given (a failure's cause is the one hidden value). */
 export const eachError = (texture: ErrorTexture): ReadonlyArray<Made> => {
   const bad = { part: texture.part };
   const big = { bytes: texture.bytes, limit: texture.limit };
   const refused = { admission: texture.admission, reason: texture.reason };
-  const conflict = { expected: texture.expected, actual: texture.actual };
+  const conflict = { expected: revision(texture.expected), actual: revision(texture.actual) };
   const cause = Redacted.make(texture.cause);
 
   return [

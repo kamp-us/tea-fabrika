@@ -75,7 +75,7 @@ it("P1 scenario: the manifest is a private package with one dependency held at a
 const unavailable = (names: ReadonlyArray<string>): ReadonlyArray<string> =>
   names.filter((name) => name.endsWith(part("Un", "available")));
 
-// E1. Plant: leave `RevisionConflict` or `EmptyTags` out of `Refusal`; export a copy of `EntryId` (the same schema made again); export a copy of `child`; drop `Placed` from
+// E1. Plant: leave `RevisionConflict` out of `Refusal`; put `EmptyTags` in `Refusal`; export a copy of `EntryId` (the same schema made again); export a copy of `child`; drop `Placed` from
 // the root; export `Failure` with two members; name an export `ChatUnavailable`; export a second `Settings` made again.
 it("E1 scenario: the root entry point gives the Ledger, the ids, the entries, the settings and the nine errors with the two unions, the very ones their files make", () => {
   // scenario: the root entry point at head; no generated input says what a module re-exports.
@@ -102,15 +102,11 @@ it("E1 scenario: the root entry point gives the Ledger, the ids, the entries, th
   expect(Root.Refusal, "the refusals").toBe(Errors.Refusal);
   expect(Root.Failure, "the failures").toBe(Errors.Failure);
 
-  expect(new Set(Errors.Refusal.members), "a refusal is exactly one of the six").toEqual(
-    new Set([
-      Errors.BadEntry,
-      Errors.IdReused,
-      Errors.TooBig,
-      Errors.AdmissionRefused,
-      Errors.RevisionConflict,
-      Errors.EmptyTags,
-    ]),
+  expect(
+    new Set(Errors.Refusal.members),
+    "a refusal is exactly one of the five: EmptyTags is no refusal, since it keeps no entry to refuse",
+  ).toEqual(
+    new Set([Errors.BadEntry, Errors.IdReused, Errors.TooBig, Errors.AdmissionRefused, Errors.RevisionConflict]),
   );
   expect(new Set(Errors.Failure.members), "a failure is exactly one of the three").toEqual(
     new Set([Errors.Unreachable, Errors.BadRow, Errors.StorageFailed]),

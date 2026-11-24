@@ -2,7 +2,7 @@
 // pull request.
 import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import * as EntryId from "./EntryId.ts";
 import {
   ACCEPTED_ID_CLASSES,
@@ -13,6 +13,9 @@ import {
   idTexture,
   isIdText,
   isNameText,
+  MISFIT_CLASSES,
+  misfits,
+  misfitTexture,
   NAME_LIMIT,
   PAIR_CLASSES,
   pairs,
@@ -151,6 +154,41 @@ it.effect.prop(
         "so a plain kind and a hashed kind never meet",
       ).toEqual([]);
       expect(plainKinds.size > 0 && hashedKinds.size > 0, "both forms were reached").toBe(true);
+    }),
+  { arbitrary: { runs: 300, seed: SEED } },
+);
+
+// I3. Plant: delete the check of the plain form in `child` (a bad character in a name or a parent comes back as an id); delete the check of the hashed form (a
+// bad character in a name comes back as an id); check only the name and not the parent; make `child` repair a bad character by dropping it (the result is valid,
+// and the refusing classes are not refused).
+it.effect.prop(
+  "I3 child: a name or a parent that breaks its type, sent by a caller that no type holds, is refused and never comes back as an id, and a parent of any bytes that is hashed gives a valid id",
+  { texture: misfitTexture },
+  ({ texture }) =>
+    Effect.sync(() => {
+      const drawn = misfits(texture);
+
+      expect(
+        drawn.map((each) => each.id),
+        "the generator reaches every misfit class",
+      ).toEqual(MISFIT_CLASSES);
+
+      for (const { id, name, parent, mustRefuse } of drawn) {
+        // An untyped call: the arguments are plain text, which the types do not allow and a JavaScript caller can send.
+        const made = Result.try(() =>
+          Schema.decodeUnknownSync(Schema.String)(Reflect.apply(EntryId.child, undefined, [name, parent])),
+        );
+
+        if (mustRefuse) {
+          expect(Result.isFailure(made), `${id}: refused, not given as an id`).toBe(true);
+        }
+
+        if (Result.isSuccess(made)) {
+          expect(isIdText(made.success), `${id}: what comes back is a valid id: ${JSON.stringify(made.success)}`).toBe(
+            true,
+          );
+        }
+      }
     }),
   { arbitrary: { runs: 300, seed: SEED } },
 );

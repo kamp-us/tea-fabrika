@@ -6,13 +6,13 @@ import { expectTypeOf, it } from "@effect/vitest";
 import type { Array as Arr, Effect, Stream } from "effect";
 import type { Entry, NewEntry, Placed, Revision } from "./Entry.ts";
 import type { EntryId } from "./EntryId.ts";
-import type { Failure, Refusal } from "./Errors.ts";
+import type { EmptyTags, Failure, Refusal } from "./Errors.ts";
 import type * as Ledger from "./Ledger.ts";
 
 type Service = Ledger.Ledger["Service"];
 
 // D1. Plant: add an overload of `append` with no id (the no-id line compiles); type the id as `string` (the plain-string line compiles); widen `read`'s error to
-// `Refusal | Failure`; give `append` an error of `unknown`; add a third call to the service; type `after` as `number` (the plain-number line compiles).
+// `Refusal | Failure`; leave `EmptyTags` out of `read`'s error (the exact-type line fails); put `EmptyTags` in `append`'s error; give `append` an error of `unknown`; add a third call to the service; type `after` as `number` (the plain-number line compiles).
 const callTypes = (
   ledger: Service,
   stream: string,
@@ -24,8 +24,8 @@ const callTypes = (
 ) => {
   // An append answers a `Placed`, or a refusal or a failure.
   expectTypeOf(ledger.append(stream, id, entry)).toEqualTypeOf<Effect.Effect<Placed, Refusal | Failure>>();
-  // A read gives entries and can only fail as a failure: a refusal is an answer to an append.
-  expectTypeOf(ledger.read(stream, after)).toEqualTypeOf<Stream.Stream<Entry, Failure>>();
+  // A read gives entries and fails as a failure, or as the one error of its own, an empty list of tags: a refusal is an answer to an append.
+  expectTypeOf(ledger.read(stream, after)).toEqualTypeOf<Stream.Stream<Entry, EmptyTags | Failure>>();
 
   // There is no append without an id, and the id is an `EntryId`, never plain text.
   // @ts-expect-error an append names its id
@@ -51,7 +51,7 @@ const callTypes = (
   return [noId, textId, swapped, numberAfter, noStream];
 };
 
-it("D1 type: append takes a stream, an id and an entry and answers a Placed or a refusal or a failure, read answers entries or a failure, and a call with no id or a plain-text id is no call", () => {
+it("D1 type: append takes a stream, an id and an entry and answers a Placed or a refusal or a failure, read answers entries or an empty-tags error or a failure, and a call with no id or a plain-text id is no call", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(callTypes).toBeFunction();
 });
