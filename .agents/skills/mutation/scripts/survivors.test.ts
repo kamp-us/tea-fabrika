@@ -21,6 +21,8 @@ import {
   readAnswers,
   reach,
   resolve,
+  recheckText,
+  runsFlag,
   staticLines,
   survivorLines,
   testsIn,
@@ -565,9 +567,32 @@ describe("survivors, the exit code and the answers file", () => {
   );
 });
 
+describe("survivors, the run depth it hands the box", () => {
+  // Ticket 1306. Plants: pass `--runs full`; pass no flag for a number; pass the number under another flag.
+  it("a depth is mutbox's --runs flag, and full is no flag, so the box leaves each law its own count", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 5000 }), (n) => {
+        expect(runsFlag(n)).toEqual(["--runs", String(n)]);
+      }),
+      options,
+    );
+    expect(runsFlag("full")).toEqual([]);
+  });
+
+  // Plants: print a recheck when none ran; leave out how many died, or how many lived, at full depth.
+  it("the last line gives the counts at both depths: none when no recheck ran, else how many died and how many lived at full depth", () => {
+    expect(recheckText(null, 25)).toBe("");
+
+    const text = recheckText({ asked: 5, cleared: [], confirmed: 2, unreached: 1 }, 25);
+    expect(text).toContain("0 of the 5 that lived at 25 cases died there");
+    expect(text).toContain("2 lived there too (1 not reached)");
+    expect(recheckText({ asked: 1, cleared: [], confirmed: 1, unreached: 0 }, 25)).not.toContain("not reached");
+  });
+});
+
 describe("survivors, a saved run", () => {
   const key = (files: ReadonlyArray<string>) =>
-    Saved.key({ base: "b0", tree: "t0", files, version: "v0", seconds: 300 });
+    Saved.key({ base: "b0", tree: "t0", files, version: "v0", seconds: 300, runs: 10 });
 
   /** The wait for a turn with nobody in line: the box is free, and a box taken in that moment is not looked for. */
   const direct = <E, R>(turn: { readonly use: Effect.Effect<Option.Option<Run>, E, R> }) =>

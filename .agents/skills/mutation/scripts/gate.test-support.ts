@@ -120,4 +120,5 @@ export const answer = (
   a: null,
   narrowing: null,
   armA: null,
+  recheck: null,
 });
