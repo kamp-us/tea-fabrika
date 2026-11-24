@@ -1,7 +1,7 @@
 /**
  * What `Secrets` does with a declared secret: the checks that come before any store is asked, and the fetch.
  */
-import { type Context, Effect, Redacted } from "effect";
+import { type Context, Effect } from "effect";
 import * as Errors from "../Errors.ts";
 import * as Name from "../Name.ts";
 import * as Recorder from "../Recorder.ts";
@@ -42,7 +42,7 @@ export const fetch = (world: World) =>
 
     // SAFETY: a store's ports need what `Store.Needs` names, and `Secrets.layer` took that from its own context, which `world` holds. A
     // store is any store, so its needs are `any`, which no provided context can take away in the types.
-    const read = routed.holds.read(routed.item).pipe(Effect.provideContext(world.context)) as Effect.Effect<
+    const read = routed.holds.read(routed.item, name).pipe(Effect.provideContext(world.context)) as Effect.Effect<
       Store.Held,
       Errors.StoreFailed
     >;
@@ -58,5 +58,5 @@ export const fetch = (world: World) =>
     yield* Effect.annotateCurrentSpan("kalfa.secrets.version", version);
     yield* world.recorder.record(new Recorder.Fetched({ name, store, version })).pipe(Effect.mapError(unavailable));
 
-    return Redacted.make(Redacted.value(value), { label: name });
+    return value;
   });

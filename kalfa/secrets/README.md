@@ -77,7 +77,7 @@ const store = Store.make({
 `Store.make` gives a store its types from what it is given: its id, the type of its items (as a route's text decodes to them) and
 what its ports need. `Store.Needs` of a store, or of a union of stores, is what they need.
 
-- **`holds`** reads an item. It answers `Found`, with the value as a `Redacted` and a `Version`, or `Missing`, with a reason:
+- **`holds`** reads an item, for the secret `name` that was asked for. It answers `Found`, with the value as a `Redacted` that the store has already labeled with that name, and a `Version`, or `Missing`, with a reason:
   `absent` (nothing is there; an empty text is nothing), `kind` (the other kind of secret is) or `algorithm` (a key of another
   algorithm). It fails with `StoreFailed` when the store cannot answer. A store's own client may quote a value it read, so the
   failure holds its cause as a `Redacted`, which no rendering shows: make it with `Redacted.make(cause)`, and read it on purpose
