@@ -8,7 +8,8 @@
 // `SnapshotError` (`Snapshot.ts`) holds its cause as `Schema.optional(Hidden.Cause)` since ticket 1310: a cause
 // may quote a value, so it never crosses whole. Its wire form (`Schema.toCodecJson`) reads the placeholder
 // `<redacted>` as an empty hidden cause, and refuses every other value at `cause`, an encoded Error and any
-// other JSON included (kalfa/diagnostics/src/Hidden.ts, its law H3). The old law expected an encoded Error to
+// other JSON included (kalfa/diagnostics/src/Hidden.ts, its law H3), except `null`: JSON has no `undefined`, so
+// the codec of an optional field reads `null` as no cause. The old law expected an encoded Error to
 // decode to an Error, which is the leak that change removes; that case now expects the refusal, and the
 // property keeps every other case: absent, written-undefined, and the field-for-field read of the rest.
 // Plants: put `Schema.optionalKey(Schema.Defect())` back on `Files.ts:29`, and the written-undefined case of
@@ -45,13 +46,16 @@ const snapshotBefore = Schema.Struct({ ...SnapshotError.fields, cause: Schema.op
  * Each error moved to `optional`, beside the schema it had before 0568, and its encoded form with no
  * cause: made with drawn fields and encoded by the old schema.
  */
+/** A decoded error, as the laws read it: the error, and its cause, whatever the cause holds. */
+type Read = Exit.Exit<{ readonly cause?: unknown }, unknown>;
+
 const errors = {
   SettingsError: {
     now: SettingsError,
     // The cause is a `Defect`: the wire form is the schema's own encoded form, and an encoded Error decodes to an Error.
     hidden: false,
     forms: ["absent", "undefined", "json", "error"],
-    read: (_form: Form, value: unknown) => Schema.decodeUnknownExit(SettingsError)(value),
+    read: (_form: Form, value: unknown): Read => Schema.decodeUnknownExit(SettingsError)(value),
     before: settingsBefore,
     encoded: fc
       .record({ reason: fc.constantFrom(...SettingsError.fields.reason.literals), message: fc.string() })
@@ -63,7 +67,7 @@ const errors = {
     hidden: true,
     forms: ["absent", "undefined", "placeholder", "json", "error"],
     // A cause written as `undefined` is no JSON, so it is read as the class's own schema reads it, in the process. The rest is JSON, read by the codec.
-    read: (form: Form, value: unknown) =>
+    read: (form: Form, value: unknown): Read =>
       form === "undefined"
         ? Schema.decodeUnknownExit(SnapshotError)(value)
         : Schema.decodeUnknownExit(Schema.toCodecJson(SnapshotError))(value),
@@ -111,7 +115,12 @@ const encoded = fc
     form: errors[name].forms[pick % errors[name].forms.length] ?? "absent",
   }))
   .chain(({ name, form, json, error }) =>
-    errors[name].encoded.map((base) => ({ name, form, value: { ...base, ...causeKey(form, json, error) } })),
+    errors[name].encoded.map((base) => ({
+      name,
+      form,
+      bare: base,
+      value: { ...base, ...causeKey(form, json, error) },
+    })),
   );
 
 /**
@@ -129,19 +138,18 @@ describe("T1062 L4, a settings error whose cause may be missing reads a cause wr
   it("L4: SettingsError and SnapshotError decode a missing and a written-undefined cause; a Defect cause decodes an encoded Error to an Error; a hidden cause reads the placeholder as an empty hidden cause and refuses an encoded Error and any other JSON; the rest reads as the optionalKey schema read it", () => {
     const seen = new Map<string, number>();
     fc.assert(
-      fc.property(encoded, ({ name, form, value }) => {
+      fc.property(encoded, ({ name, form, bare, value }) => {
         seen.set(`${name} ${form}`, (seen.get(`${name} ${form}`) ?? 0) + 1);
         const now = errors[name].read(form, value);
         const before = Schema.decodeUnknownExit(errors[name].before)(value);
-        const refused = errors[name].hidden && (form === "json" || form === "error");
+        // JSON has no `undefined`: the codec of an optional field reads `null` as no cause, so that one JSON value is no refusal.
+        const nothing = errors[name].hidden && form === "json" && value.cause === null;
+        const refused = errors[name].hidden && (form === "json" || form === "error") && !nothing;
 
         if (refused) {
           // A hidden cause never crosses whole: the placeholder is the one value it reads. The error without the cause decodes, so the refusal is the cause's.
           expect(Exit.isFailure(now), `${name} refuses a cause that is ${form}`).toBe(true);
-          expect(
-            Exit.isSuccess(errors[name].read("absent", Rec.remove(value, "cause"))),
-            `${name} reads the rest`,
-          ).toBe(true);
+          expect(Exit.isSuccess(errors[name].read("absent", bare)), `${name} reads the rest`).toBe(true);
 
           return;
         }
@@ -152,7 +160,7 @@ describe("T1062 L4, a settings error whose cause may be missing reads a cause wr
           expect(now.value.cause).toBeUndefined();
         }
 
-        if (Exit.isSuccess(now) && form === "absent") {
+        if (Exit.isSuccess(now) && (form === "absent" || nothing)) {
           expect(now.value.cause).toBeUndefined();
         }
 
