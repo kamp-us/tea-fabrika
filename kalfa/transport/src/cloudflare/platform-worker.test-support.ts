@@ -8,14 +8,12 @@
 // `main` socket can carry nothing more. Both are told apart by the path the client connects to, `/<object>/<role>`.
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Cause, Effect, Exit, Layer, Predicate, Result, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Predicate, Result, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
-import { Attachment, Command, Report, ReportText } from "./platform-wire.test-support.ts";
+import { Attachment, Command, Report, ReportText, route } from "./platform-wire.test-support.ts";
 
 const CommandText = Schema.fromJsonString(Command);
-
-const Role = Schema.Literals(["main", "log"]);
 
 interface ProbeShape {
   readonly fetch: NonNullable<Cloudflare.DurableObjectShape["fetch"]>;
@@ -86,10 +84,13 @@ const ProbeLive = Probe.make(
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
 
-          const role = yield* Schema.decodeUnknownEffect(Role)(new URL(request.url).pathname.split("/").at(-1)).pipe(
-            Effect.orDie,
-          );
+          const found = route(request.url);
 
+          if (Option.isNone(found)) {
+            return yield* Effect.die(new Error("the Worker sends only routes the object can read"));
+          }
+
+          const { role } = found.value;
           const [response] = yield* Cloudflare.upgrade({ tags: [role] });
 
           return response;
@@ -178,9 +179,14 @@ export default Host.make(
       // `/<object>/<role>`: the first segment names the object, so each case has an object of its own.
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const name = decodeURIComponent(new URL(request.url).pathname.split("/")[1] ?? "");
+        const found = route(request.url);
 
-        return yield* probes.getByName(name).fetch(request);
+        // A path that names no object and role is no probe's: say so, which is also how the readiness request is answered.
+        if (Option.isNone(found)) {
+          return HttpServerResponse.text("no such route", { status: 404 });
+        }
+
+        return yield* probes.getByName(found.value.object).fetch(request);
       }).pipe(
         Effect.catchCause((cause) => Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 }))),
       ),

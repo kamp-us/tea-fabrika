@@ -1,7 +1,7 @@
 // The words the probe Worker and its client say to each other (R0 and the real runs of the platform laws): what a client tells the
 // object, what the object reports, and what a socket's attachment holds when it looks. It is a file of its own so the test reads
 // the schemas without loading the Worker module, which reads its port from the environment when it is loaded.
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 
 /** What a client tells the object, as the text of a message on the `main` socket. */
 export const Command = Schema.TaggedUnion({
@@ -43,3 +43,26 @@ export const Report = Schema.TaggedUnion({
 
 /** One report as the text of a message. */
 export const ReportText = Schema.fromJsonString(Report);
+
+/** The two sockets an object holds: the one under test, and the sink that carries reports. */
+const Role = Schema.Literals(["main", "log"]);
+
+/** Where a request goes: the object it names, and the role of the socket it opens. */
+interface Route {
+  readonly object: string;
+  readonly role: typeof Role.Type;
+}
+
+/**
+ * The route of a request, read from its URL: `/<object>/<role>`, with the object's name percent-encoded. The URL is what an Effect
+ * `HttpServerRequest` gives, which is a path with its query and no host, and also a whole URL, which a platform `Request` gives,
+ * so a path is read against a base that is never used. None for a URL that names no object and role.
+ */
+export const route = (url: string): Option.Option<Route> => {
+  const [object, role] = new URL(url, "http://probe.invalid").pathname.split("/").slice(1);
+
+  return Option.all({
+    object: Option.flatMap(Option.fromNullishOr(object), Option.liftThrowable(decodeURIComponent)),
+    role: Schema.decodeUnknownOption(Role)(role),
+  });
+};

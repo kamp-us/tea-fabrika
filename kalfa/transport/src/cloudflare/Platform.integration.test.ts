@@ -139,7 +139,7 @@ const deployed = Layer.effect(
     // `deploy` returns once Alchemy reports the dev server started, on the port the Worker's module read from the environment: it
     // is loaded by the import above, after the environment was set here, and never before (a module that read it earlier would
     // read nothing, and Alchemy would pick a port of its own). This one request only confirms it answers: this path names no
-    // role, so the object refuses it and the Worker answers 500.
+    // object and role, so the Worker answers 404.
     yield* HttpClient.get(`http://127.0.0.1:${port}/ready`).pipe(
       Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
     );
