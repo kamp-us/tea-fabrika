@@ -15,6 +15,7 @@ import { noCauseSquash } from "./no-cause-squash.ts";
 import { noClockInView } from "./no-clock-in-view.ts";
 import { noContextTag } from "./no-context-tag.ts";
 import { noDataTaggederror } from "./no-data-taggederror.ts";
+import { noDeclareInTests } from "./no-declare-in-tests.ts";
 import { noEffectPromise } from "./no-effect-promise.ts";
 import { noEffectRunOutsideEdge } from "./no-effect-run-outside-edge.ts";
 import { noExpectInIf } from "./no-expect-in-if.ts";
@@ -30,6 +31,7 @@ import { noQuestionWordKey } from "./no-question-word-key.ts";
 import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
+import { noSleepOnTestClock } from "./no-sleep-on-test-clock.ts";
 import { noStabilityTag } from "./no-stability-tag.ts";
 import { noStageWord } from "./no-stage-word.ts";
 import { noStaticLayer } from "./no-static-layer.ts";
@@ -71,6 +73,7 @@ const plugin: Plugin = {
     "no-clock-in-view": noClockInView,
     "no-context-tag": noContextTag,
     "no-data-taggederror": noDataTaggederror,
+    "no-declare-in-tests": noDeclareInTests,
     "no-effect-promise": noEffectPromise,
     "no-effect-run-outside-edge": noEffectRunOutsideEdge,
     "no-expect-in-if": noExpectInIf,
@@ -86,6 +89,7 @@ const plugin: Plugin = {
     "no-raw-try-catch": noRawTryCatch,
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
+    "no-sleep-on-test-clock": noSleepOnTestClock,
     "no-stability-tag": noStabilityTag,
     "no-stage-word": noStageWord,
     "no-static-layer": noStaticLayer,

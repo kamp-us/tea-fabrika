@@ -420,10 +420,28 @@
       "imports": ["kalfa-config"]
     },
     {
+      "name": "kalfa-cli",
+      "layer": 2,
+      "paths": ["kalfa/cli/src"],
+      "imports": ["kalfa-diagnostics"]
+    },
+    {
+      "name": "kalfa-secrets",
+      "layer": 2,
+      "paths": ["kalfa/secrets/src"],
+      "imports": ["kalfa-config"]
+    },
+    {
       "name": "next-telemetry",
       "layer": 1,
       "paths": ["next/packages/libfabrika/src/telemetry"],
       "imports": ["next-shared"]
+    },
+    {
+      "name": "kalfa-config-cli",
+      "layer": 2,
+      "paths": ["kalfa/config/src/Cli*.ts", "kalfa/config/src/internal/cli"],
+      "imports": ["kalfa-config", "next-vitest"]
     },
     {
       "name": "kalfa-config",
@@ -479,6 +497,18 @@
       "imports": []
     },
     {
+      "name": "kalfa-permissions",
+      "layer": 0,
+      "paths": ["kalfa/permissions/src"],
+      "imports": []
+    },
+    {
+      "name": "kalfa-transport",
+      "layer": 0,
+      "paths": ["kalfa/transport/src"],
+      "imports": []
+    },
+    {
       "name": "apps",
       "paths": ["apps"]
     },
@@ -527,11 +557,15 @@
     "next/packages/libfabrika/src",
     "next/packages/tuval/src",
     "next/packages/vitest/src",
+    "kalfa/cli/src",
     "kalfa/config/src",
     "kalfa/diagnostics/src",
     "kalfa/git/src",
     "kalfa/github/src",
-    "kalfa/markdown/src"
+    "kalfa/markdown/src",
+    "kalfa/permissions/src",
+    "kalfa/secrets/src",
+    "kalfa/transport/src"
   ],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],
   "allowed": [

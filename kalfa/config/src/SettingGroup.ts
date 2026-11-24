@@ -19,13 +19,15 @@ import { SettingsError } from "./internal/error.ts";
 import { type FlagValues, type Flags, make as build } from "./internal/flags.ts";
 import { frozen } from "./internal/frozen.ts";
 import type { Live } from "./internal/live.ts";
-import { field, variable } from "./internal/names.ts";
+import { clashes, refusedApp, variable } from "./internal/names.ts";
 import { shown } from "./internal/place.ts";
 import { receive } from "./internal/receive.ts";
+import * as references from "./internal/reference.ts";
+import * as schema from "./internal/schema.ts";
 import { make as snapshot, same, type Snapshot } from "./internal/snapshot.ts";
 import { type Resolved, start } from "./internal/start.ts";
 import { toml } from "./internal/toml.ts";
-import { debounce, type Watched, watched } from "./internal/window.ts";
+import { type Watched, watched } from "./internal/window.ts";
 import type { Origin } from "./Sources.ts";
 
 export {
@@ -125,14 +127,14 @@ const key = <App extends string, R extends ReadonlyArray<Setting.Any>>(app: App,
     ["@kalfa/config/SettingGroup", app, ...settings.map((setting) => setting.name)].join("/"),
   );
 
-const App = /^[a-z][a-z0-9]*$/u;
-
 const Segment = /^[a-z0-9]+(-[a-z0-9]+)*$/u;
 
 /** Why a group cannot be read, or undefined when it can. */
 const refusal = (app: string, settings: ReadonlyArray<Setting.Any>) => {
-  if (!App.test(app)) {
-    return `${JSON.stringify(app)} is not an app name: it must be one lowercase word, as demo`;
+  const unnamed = refusedApp(app);
+
+  if (unnamed !== undefined) {
+    return unnamed;
   }
 
   for (const [n, setting] of settings.entries()) {
@@ -142,7 +144,7 @@ const refusal = (app: string, settings: ReadonlyArray<Setting.Any>) => {
       return `${name} is not a setting name: each word is lowercase letters and digits, with single hyphens between`;
     }
 
-    if (setting.description === undefined) {
+    if (setting.description === "") {
       return `${name} has no description`;
     }
 
@@ -169,21 +171,6 @@ const refusal = (app: string, settings: ReadonlyArray<Setting.Any>) => {
   }
 
   return undefined;
-};
-
-const clashes = (app: string, a: Setting.Any, b: Setting.Any) => {
-  const [short, long] = a.name.length <= b.name.length ? [a.name, b.name] : [b.name, a.name];
-
-  if (short === long || long.startsWith(`${short}.`)) {
-    return "are one name, or a value and its table";
-  }
-
-  // The window is read by its setting name and never as a field of the program's values, so only the program's own fields can clash.
-  if (a !== debounce && b !== debounce && field(a.name) === field(b.name)) {
-    return `are read as one field, ${field(a.name)}`;
-  }
-
-  return variable(app, a.name) === variable(app, b.name) ? `share ${variable(app, a.name)}` : undefined;
 };
 
 // SAFETY: `start` fills one field of `values` for each setting the program declared, named by `field`, with that
@@ -305,6 +292,37 @@ export type {
 };
 
 /**
+ * The editor's JSON Schema of the repo or the user configuration, as the text a repo commits.
+ *
+ * **Details**
+ *
+ * It holds the settings the file's scope allows, each with its description and encoded default, and nothing else: a key no setting names is refused. The repo's also holds `<app>-version`, as a pattern. The quiet window is in it for a group with a live setting. The text is two-space JSON as `pnpm format` prints it, with one final line break, and is the same for a group with its settings in another order.
+ *
+ * **Gotchas**
+ *
+ * Throws an `Error` when a setting's schema cannot be written as JSON Schema without loosening it, as a bare `Schema.makeFilter` cannot.
+ *
+ * @category combinators
+ */
+export const jsonSchema = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+  group: SettingGroup<App, R>,
+  file: Setting.File,
+): string => schema.text({ app: group.app, settings: watched(group.settings) }, file);
+
+/**
+ * The settings reference as Markdown: one section per setting, by name, the quiet window included.
+ *
+ * **Details**
+ *
+ * Each section holds the setting's description, and a table of its files, its environment variable and flag (`none: file-only` for a file-only setting), its default (`none: required` for a required one) and whether a change applies live or at a restart. It is made from the declarations alone, and ends in one line break.
+ *
+ * @category combinators
+ */
+export const reference = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+  group: SettingGroup<App, R>,
+): string => references.text({ app: group.app, settings: watched(group.settings) });
+
+/**
  * Starts a group from a stream of snapshots, in a process that cannot read files. The first snapshot starts it; each later one updates its live settings.
  *
  * **Details**
@@ -389,14 +407,22 @@ export const edit = <App extends string, R extends ReadonlyArray<Setting.Any>>(
  *
  * @category combinators
  */
-export const set = <App extends string, R extends ReadonlyArray<Setting.Any>, S extends R[number]>(
+export const set = Effect.fn("config.set")(function* <
+  App extends string,
+  R extends ReadonlyArray<Setting.Any>,
+  S extends R[number],
+>(
   group: SettingGroup<App, R>,
   setting: S,
   value: Setting.Type<S>,
   file: Setting.File,
   options?: { readonly repo?: string },
-): Effect.Effect<void, SettingsError, FileSystem.FileSystem | Path.Path> =>
-  disk.set(group, toml, setting, value, file, options?.repo ?? ".");
+): Effect.fn.Return<void, SettingsError, FileSystem.FileSystem | Path.Path> {
+  const read = { app: group.app, settings: watched(group.settings) };
+  const found = yield* disk.locate(group.app, toml, file, options?.repo ?? ".");
+
+  yield* disk.set(read, toml, setting, value, file, found);
+});
 
 /**
  * Takes one setting out of a configuration file on disk, the same way `set` writes: the same file, lock and rename.
@@ -407,10 +433,14 @@ export const set = <App extends string, R extends ReadonlyArray<Setting.Any>, S 
  *
  * @category combinators
  */
-export const remove = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+export const remove = Effect.fn("config.remove")(function* <App extends string, R extends ReadonlyArray<Setting.Any>>(
   group: SettingGroup<App, R>,
   setting: R[number],
   file: Setting.File,
   options?: { readonly repo?: string },
-): Effect.Effect<void, SettingsError, FileSystem.FileSystem | Path.Path> =>
-  disk.remove(group, toml, setting, file, options?.repo ?? ".");
+): Effect.fn.Return<void, SettingsError, FileSystem.FileSystem | Path.Path> {
+  const read = { app: group.app, settings: watched(group.settings) };
+  const found = yield* disk.locate(group.app, toml, file, options?.repo ?? ".");
+
+  yield* disk.remove(read, toml, setting, file, found);
+});

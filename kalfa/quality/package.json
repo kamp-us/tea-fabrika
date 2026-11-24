@@ -19,9 +19,6 @@
     "./cli": "./src/cli.ts",
     "./package.json": "./package.json"
   },
-  "kalfa": {
-    "cli": "./cli"
-  },
   "peerDependencies": {
     "@stryker-mutator/core": "catalog:",
     "@stryker-mutator/instrumenter": "catalog:",

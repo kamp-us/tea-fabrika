@@ -2,7 +2,7 @@
 // only the laws that load them, and lists every mutant that lived. Today's lead tooling, run by the
 // builder once its laws are green, and by the reviewer on the branch.
 //
-//   node .agents/skills/mutation/scripts/survivors.ts --out <folder> [--base <commit>] [--head <commit>] [--files <a.ts,b.ts>]
+//   node .agents/skills/mutation/scripts/survivors.ts --out <folder> [--base <commit>] [--head <commit>] [--files <a.ts,b.ts>] [--answered] [--answers <file>]
 //
 // - `--base` is where the change starts; none is `git merge-base origin/main HEAD`.
 // - `--head` is the commit to check; none is the working tree as it is now, uncommitted and
@@ -12,17 +12,40 @@
 // - `--files` names the product files to mutate, such as the files that hold the guarding checks. A file the change touches
 //   is mutated on its changed lines; a file it does not touch is mutated whole. None: every product
 //   file the change touches, by the hourly run's own file rule (`scope.ts`).
+// - `--answered` takes each `Survivor: <file>:<line> <reason>` line of the commit bodies from `--base` to
+//   `--head` (HEAD when none) as the answer to the mutant on that line; `<file>:*` answers a file no law loads
+//   or every mutant of a file. A line has its evidence after ` -- `: `Survivor: <file>:<line> <reason> -- <the
+//   input or plant tried and why it cannot reach the line, or why the mutant is equivalent>`. A line with no
+//   evidence, or one bare word of it ("unreachable"), answers nothing. The check reads one line, so the
+//   reason and the evidence stay on it. `--answers` names a file of such lines too, such as the commit body about to be
+//   written. An answered mutant is counted and no longer listed, so exit 0 says every survivor is killed or
+//   answered. Without either flag no line is read and a mutant that lived is always listed.
 // - `--out` is your scratch folder; mutbox's whole answer is `<out>/mutbox.json`.
 //
 // Settings, each from the environment with its default, as the lead's other settings are read:
 //
-//   MUTATE_SECONDS  300  how long Stryker may test mutants: run.sh's cap, in whole seconds
-//   MUTATE_FILES    8    the most product files one run takes; more is refused, naming the count
-//   BOXES           the boxes folder beside the main checkout, as env.sh finds it; the one Docker
-//                   box's lock is `<BOXES>/state/docker.lock`
+//   MUTATE_SECONDS       300   how long Stryker may test mutants: run.sh's cap, in whole seconds
+//   MUTATE_FILES         8     the most product files one run takes; more is refused, naming the count
+//   MUTATE_RUNS          25    the most cases a property law draws in the box, or `full` for each law's own count
+//                              (ticket 1306: the laws run three times over, and at full depth they alone cost more
+//                              than the 300 s; depth.ts says how the cap reaches a law, and what it cannot reach). A
+//                              mutant that lives at the cap is run again at full depth, in the laws that cover it, and
+//                              is listed only if it lives there too (recheck.ts); that run has its own MUTATE_SECONDS
+//   MUTATE_WAIT_SECONDS  7200  the longest a run waits in line for the box; then it gives up its place (exit 2)
+//   MUTATE_KEEP_DAYS     7     how long a saved run is kept: each save drops the ones older than this
+//   BOXES                the boxes folder beside the main checkout, as env.sh finds it; the one Docker
+//                        box's lock is `<BOXES>/state/docker.lock`
 //
-// Exit 0: no mutant lived. 1: a mutant lived, or a file in scope has no law that loads it; each is
-// one line. 2: refused before the run (too wide, a bad `--files`), or the box is stuck.
+// A second call on the same commit and files is instant. The box's answer is saved in
+// `<BOXES>/state/gate/` under a key of the base, the head's tree, the files, the scripts' text and
+// MUTATE_SECONDS (`gatecache.ts`), and a call with the same key reads it and starts no box. The
+// `Survivor:` lines are not in the key: they are read again on every call and applied to the saved
+// answer, so a line added since counts. A call that must start the box takes a place in line first,
+// and says its place and the run ahead every minute (`gatequeue.ts`); the box is taken in arrival
+// order, one at a time, and a run that waits leaves the line as soon as the run ahead saves its answer.
+//
+// Exit 0: no mutant lived, or each one that did is answered. 1: a mutant lived, or a file in scope has no
+// law that loads it, and no `Survivor:` line answers it; each is one line. 2: refused before the run (too wide, a bad `--files`), the box is stuck, or the wait for the box passed its limit.
 //
 // How it runs, with no second Stryker config: it makes a commit whose parent holds the base's
 // version of each file in scope (or no file, for one mutated whole) and the head everywhere else, so
@@ -57,8 +80,12 @@ import {
   Result,
   Schema,
 } from "effect";
+import type { PlatformError } from "effect";
 import { Command, Flag } from "effect/cli";
-import { bounded, DOCKER_SECONDS, loads, secondsFor, Summary } from "../../lead/scripts/mutbox.ts";
+import { alive, bounded, DOCKER_SECONDS, heldBy, loads, secondsFor, Summary } from "../../lead/scripts/mutbox.ts";
+import * as Saved from "./gatecache.ts";
+import { inLine, noteLine } from "./gatequeue.ts";
+import type { Line } from "./gatequeue.ts";
 import { inScope, product } from "./scope.ts";
 
 // ---------------------------------------------------------------- the settings
@@ -70,6 +97,17 @@ const SECONDS = Config.schema(AtLeastOne, "MUTATE_SECONDS").pipe(Config.withDefa
 
 /** The most product files one run takes. */
 const FILES = Config.schema(AtLeastOne, "MUTATE_FILES").pipe(Config.withDefault(8));
+
+/** The most cases a property law draws in the box, or `full`: no cap, each law's own count. */
+const RUNS = Config.schema(Schema.Union([AtLeastOne, Schema.Literal("full")]), "MUTATE_RUNS").pipe(
+  Config.withDefault(25),
+);
+
+/** How many days a saved run is kept: a save drops the older ones. */
+const KEEP = Config.schema(AtLeastOne, "MUTATE_KEEP_DAYS").pipe(Config.withDefault(7));
+
+/** The longest a run waits in line for the box, in seconds. */
+const WAIT = Config.schema(AtLeastOne, "MUTATE_WAIT_SECONDS").pipe(Config.withDefault(7200));
 
 const BOXES = Config.option(Config.NonEmptyString("BOXES"));
 
@@ -348,7 +386,125 @@ export const staticLines = (rows: ReadonlyArray<Row>): ReadonlyArray<string> => 
   return Arr.map([...lines], ([place, mutators]) => `static  ${place} ${Arr.join(mutators, ", ")}`);
 };
 
+/**
+ * A `Survivor: <file>:<line> <reason> -- <evidence>` line: the build says the mutant there guards nothing, and
+ * shows why. `line` is null for `<file>:*`.
+ */
+export type Answer = { readonly file: string; readonly line: number | null };
+
+const ANSWER = /^Survivor:[ \t]+(\S+):(\d+|\*)[ \t]+\S.*?[ \t]+--[ \t]+\S+[ \t]+\S/;
+
+/** The `Survivor:` lines of a text; a line with no reason, or with no evidence of at least two words, is no answer. Pure. */
+export const answersIn = (text: string): ReadonlyArray<Answer> =>
+  Arr.flatMap(Str.split(text, "\n"), (row) => {
+    const found = ANSWER.exec(row);
+
+    return found === null ? [] : [{ file: found[1] ?? "", line: found[2] === "*" ? null : Number(found[2]) }];
+  });
+
+/** The nonblank rows of a text that answer nothing: a commit that only carries answers (stepcommit.sh --empty) holds none. Pure. */
+export const notAnswers = (text: string): ReadonlyArray<string> =>
+  Arr.filter(Str.split(text, "\n"), (row) => Str.trim(row) !== "" && !ANSWER.test(row));
+
+/** Whether a mutant on a line, or a file no law loads (`line` null), has an answer. Pure. */
+export const isAnswered = (answers: ReadonlyArray<Answer>, file: string, line: number | null): boolean =>
+  Arr.some(answers, (answer) => answer.file === file && (answer.line === null || answer.line === line));
+
+/** The exit code: 1 while a mutant lived or a file has no law that loads it, and no `Survivor:` line answers it; else 0. Pure. */
+export const exitCode = (open: number, unloaded: number): 0 | 1 => (open + unloaded > 0 ? 1 : 0);
+
+/** One answer of the box, and whether it was read from a saved run (and when that run was saved, in ms) or made now. */
+export type Run = { readonly summary: Summary; readonly reused: boolean; readonly savedAt: number | null };
+
+/** What `judge`'s line is given: where to look again for a run saved while it waited, and what to do once it is its turn. */
+type Turn<E, R> = {
+  readonly saved: Effect.Effect<Option.Option<Run>, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path>;
+  readonly use: Effect.Effect<
+    Option.Option<Run>,
+    E | PlatformError.PlatformError | Schema.SchemaError,
+    R | FileSystem.FileSystem | Path.Path
+  >;
+};
+
+/**
+ * The box's answer for a key and what it says of the answers, read now. A saved run is read first
+ * and starts nothing. Else the run waits its turn in `line`, and at its turn `start` makes the answer
+ * (none when the box was taken in that moment: the wait goes on), which is saved before the place in
+ * line is given up, so a run waiting behind it for the same key finds it and starts no second box. The
+ * `Survivor:` lines come after, on a saved run as on a new one, so a line written since the run counts.
+ * Gives the mutants that lived and the ones still open.
+ */
+export const judge = <E, R, E2, R2>(ask: {
+  readonly dir: string;
+  readonly key: string;
+  /** The days a saved run is kept. */
+  readonly days: number;
+  readonly answers: Effect.Effect<ReadonlyArray<Answer>, E, R>;
+  readonly start: Effect.Effect<Option.Option<Summary>, E, R>;
+  readonly line: (turn: Turn<E, R>) => Effect.Effect<Run, E2, R2>;
+}) =>
+  Effect.gen(function* () {
+    const saved = Effect.map(
+      Saved.find(ask.dir, ask.key),
+      Option.map((entry): Run => ({ summary: entry.summary, reused: true, savedAt: entry.saved })),
+    );
+
+    const first = yield* saved;
+
+    const use = Effect.flatMap(
+      ask.start,
+      Option.match({
+        onNone: () => Effect.succeed(Option.none<Run>()),
+        onSome: (summary) =>
+          Effect.as(
+            Saved.keep(ask.dir, ask.key, summary, ask.days),
+            Option.some<Run>({ summary, reused: false, savedAt: null }),
+          ),
+      }),
+    );
+
+    const run = Option.isSome(first) ? first.value : yield* ask.line({ saved, use });
+    const answers = yield* ask.answers;
+    const lived = run.summary.b === null ? [] : [...run.summary.b.survivors, ...run.summary.b.uncovered];
+
+    return {
+      ...run,
+      answers,
+      lived,
+      open: Arr.filter(lived, (row) => !isAnswered(answers, row.file, row.line)),
+    };
+  });
+
 // ---------------------------------------------------------------- the run
+
+/**
+ * The recheck's part of the last line: the counts above are the capped run's, and this says how many of the mutants that lived there
+ * died at full depth, so a reader sees both. Empty with no recheck. Pure.
+ */
+export const recheckText = (recheck: Summary["recheck"], runs: number | "full"): string =>
+  recheck === null
+    ? ""
+    : `; rechecked at full depth: ${recheck.cleared.length} of the ${recheck.asked} that lived at ${runs} cases died there and are not listed, ${recheck.confirmed} lived there too${recheck.unreached > 0 ? ` (${recheck.unreached} not reached)` : ""}`;
+
+/** mutbox's flag for the run depth: the cap as `--runs <n>`, and none for `full`, which leaves each law its own count. Pure. */
+export const runsFlag = (runs: number | "full"): ReadonlyArray<string> =>
+  runs === "full" ? [] : ["--runs", String(runs)];
+
+/** The scripts whose text is in a saved run's key, beside this one: what makes the box's answer. */
+const SCRIPTS = [
+  "survivors.ts",
+  "scope.ts",
+  "sample.ts",
+  "limit.ts",
+  "heartbeat.ts",
+  "run.sh",
+  "depth.ts",
+  "depth.arbitrary.ts",
+  "depth.config.ts",
+  "../../lead/scripts/mutbox.ts",
+  "../../lead/scripts/mutbox.Dockerfile",
+  "../../lead/scripts/mutbox-entry.sh",
+];
 
 const git = (root: string, args: ReadonlyArray<string>, env: ReadonlyArray<string> = []) =>
   bounded("env", [...env, "git", "-C", root, ...args], DOCKER_SECONDS.call);
@@ -362,6 +518,18 @@ const ok = Effect.fnUntraced(function* (root: string, args: ReadonlyArray<string
   }
 
   return got.out;
+});
+
+/** The `Survivor:` lines of the file `--answers` names; a file that cannot be read is a refusal naming it. */
+export const readAnswers = Effect.fnUntraced(function* (file: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+
+  return answersIn(
+    yield* fs
+      .readFileString(path.resolve(file))
+      .pipe(Effect.mapError(() => Refused.make({ detail: `--answers names no readable file: ${file}` }))),
+  );
 });
 
 const z = (text: string) => Arr.filter(Str.split(text, "\0"), (s) => s !== "");
@@ -501,29 +669,35 @@ const Ask = {
     Flag.withDescription("Product files to mutate, separated by commas, as the plan names them"),
     Flag.withDefault(undefined),
   ),
+  answered: Flag.Boolean("answered").pipe(
+    Flag.withDescription("Count each mutant a Survivor: line of the commit bodies, base to head, answers"),
+    Flag.withDefault(false),
+  ),
+  answers: Flag.String("answers").pipe(
+    Flag.withDescription("A file of Survivor: lines that answer mutants too, such as the commit body to be written"),
+    Flag.withDefault(undefined),
+  ),
 };
 
-const check = Effect.fnUntraced(function* (ask: {
-  readonly out: string;
-  readonly base: string | undefined;
-  readonly head: string | undefined;
-  readonly files: string | undefined;
-}) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const started = yield* Clock.currentTimeMillis;
-
-  const { seconds, cap } = yield* Effect.mapError(
-    Effect.gen(function* () {
-      return { seconds: yield* SECONDS, cap: yield* FILES };
-    }),
-    () => Refused.make({ detail: "MUTATE_SECONDS and MUTATE_FILES are whole numbers, 1 or more, when set" }),
-  );
-
-  const root = Str.trim(yield* ok(".", ["rev-parse", "--show-toplevel"]));
-  const out = path.resolve(ask.out);
-  yield* fs.makeDirectory(out, { recursive: true });
-
+/**
+ * What a call looks at, from git: the base commit, the head's whole tree (the working tree as `git add -A`
+ * would take it when no head is named), the files to mutate, and the key of a saved run. The key holds the
+ * whole tree, not only the files to mutate: a change to a law alone changes the answer, and a law is not a
+ * product file.
+ */
+export const scope = Effect.fnUntraced(function* (
+  root: string,
+  ask: {
+    readonly base: string | undefined;
+    readonly head: string | undefined;
+    readonly files: string | undefined;
+    readonly index: string;
+    readonly cap: number;
+    readonly version: string;
+    readonly seconds: number;
+    readonly runs: number | "full";
+  },
+) {
   const base = Str.trim(
     ask.base === undefined
       ? yield* ok(root, ["merge-base", "origin/main", "HEAD"])
@@ -532,7 +706,7 @@ const check = Effect.fnUntraced(function* (ask: {
 
   const tree =
     ask.head === undefined
-      ? yield* workingTree(root, path.join(out, "index"))
+      ? yield* workingTree(root, ask.index)
       : Str.trim(yield* ok(root, ["rev-parse", "--verify", `${ask.head}^{tree}`]));
 
   const list = z(yield* ok(root, ["ls-tree", "-r", "-z", "--name-only", tree]));
@@ -549,7 +723,74 @@ const check = Effect.fnUntraced(function* (ask: {
           (file) => file !== "",
         );
 
-  const files = yield* Effect.fromResult(pick({ changed: touched, named, tree: new Set(list), cap }));
+  const files = yield* Effect.fromResult(pick({ changed: touched, named, tree: new Set(list), cap: ask.cap }));
+
+  return {
+    base,
+    tree,
+    list,
+    files,
+    key: Saved.key({ base, tree, files, version: ask.version, seconds: ask.seconds, runs: ask.runs }),
+  };
+});
+
+const check = Effect.fnUntraced(function* (ask: {
+  readonly out: string;
+  readonly base: string | undefined;
+  readonly head: string | undefined;
+  readonly files: string | undefined;
+  readonly answered: boolean;
+  readonly answers: string | undefined;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const started = yield* Clock.currentTimeMillis;
+
+  const { seconds, cap, wait, days, runs } = yield* Effect.mapError(
+    Effect.gen(function* () {
+      return { seconds: yield* SECONDS, cap: yield* FILES, wait: yield* WAIT, days: yield* KEEP, runs: yield* RUNS };
+    }),
+    () =>
+      Refused.make({
+        detail:
+          "MUTATE_SECONDS, MUTATE_FILES, MUTATE_WAIT_SECONDS, MUTATE_KEEP_DAYS and MUTATE_RUNS are whole numbers, 1 or more, when set (MUTATE_RUNS may be `full` too)",
+      }),
+  );
+
+  const root = Str.trim(yield* ok(".", ["rev-parse", "--show-toplevel"]));
+  const out = path.resolve(ask.out);
+  yield* fs.makeDirectory(out, { recursive: true });
+
+  // The key's scripts: what makes the box's answer.
+  const version = Saved.version(
+    yield* Effect.forEach(
+      SCRIPTS,
+      (name) => fs.readFileString(path.join(import.meta.dirname, name)).pipe(Effect.map((text) => ({ name, text }))),
+      { concurrency: 1 },
+    ),
+  );
+
+  const { base, tree, list, files, key } = yield* scope(root, {
+    base: ask.base,
+    head: ask.head,
+    files: ask.files,
+    index: path.join(out, "index"),
+    cap,
+    version,
+    seconds,
+    runs,
+  });
+
+  // Read again after the box answers, so a Survivor: line written while the run waited counts. Read once
+  // now too: a --answers file that cannot be read is refused before any wait.
+  const current = Effect.gen(function* () {
+    return [
+      ...(ask.answered ? answersIn(yield* ok(root, ["log", "--format=%B", `${base}..${ask.head ?? "HEAD"}`])) : []),
+      ...(ask.answers === undefined ? [] : yield* readAnswers(ask.answers)),
+    ];
+  });
+
+  const answers = yield* current;
 
   if (files.length === 0) {
     return yield* Console.log("survivors: no product file changed between base and head, so nothing to mutate");
@@ -562,13 +803,15 @@ const check = Effect.fnUntraced(function* (ask: {
     yield* Console.log(`left out  ${test.path}: ${test.reason}`);
   }
 
+  const unloaded = Arr.filter(bare, (file) => !isAnswered(answers, file, null));
+
   if (laws.length === 0) {
-    for (const file of bare) {
+    for (const file of unloaded) {
       yield* Console.log(`no law loads  ${file}: every mutant there lives`);
     }
 
     return yield* Effect.sync(() => {
-      process.exitCode = 1;
+      process.exitCode = exitCode(0, unloaded.length);
     });
   }
 
@@ -599,41 +842,71 @@ const check = Effect.fnUntraced(function* (ask: {
 
   const mutbox = path.join(import.meta.dirname, "..", "..", "lead", "scripts", "mutbox.ts");
 
+  const queue: Line = {
+    dir: path.join(boxes, "state", "docker.queue"),
+    pid: process.pid,
+    label: `${path.basename(root)} ${pipe(tree, Str.slice(0, 7))}`,
+    holder: heldBy(lock),
+    alive,
+    say: (note) => Console.log(`survivors: ${noteLine(note)}`),
+    poll: 5,
+    every: 60,
+    limit: wait,
+  };
+
   // mutbox bounds its own Docker calls; this bound is a backstop past its image build and its run.
-  const ran = yield* bounded(
-    "nice",
-    [
-      "-n",
-      "15",
-      process.execPath,
-      mutbox,
-      "run",
-      "--checkout",
-      root,
-      "--ticket",
-      "0",
-      "--build",
-      build,
-      "--related",
-      Arr.join(laws, ","),
-      "--out",
-      out,
-      "--lock",
-      lock,
-      "--cap",
-      String(seconds),
-    ],
-    secondsFor(false, seconds) + DOCKER_SECONDS.build + 6 * DOCKER_SECONDS.call,
-  );
+  // A box taken in that moment by a run with no place in line is none: the wait goes on.
+  const start = Effect.gen(function* () {
+    const ran = yield* bounded(
+      "nice",
+      [
+        "-n",
+        "15",
+        process.execPath,
+        mutbox,
+        "run",
+        "--checkout",
+        root,
+        "--ticket",
+        "0",
+        "--build",
+        build,
+        "--related",
+        Arr.join(laws, ","),
+        "--out",
+        out,
+        "--lock",
+        lock,
+        "--cap",
+        String(seconds),
+        ...runsFlag(runs),
+      ],
+      secondsFor(false, seconds, runs !== "full") + DOCKER_SECONDS.build + 6 * DOCKER_SECONDS.call,
+    );
 
-  const summary = yield* Schema.decodeEffect(Schema.fromJsonString(Summary))(
-    Str.trim((yield* fs.readFileString(path.join(out, "mutbox.json")).pipe(Effect.orElseSucceed(() => ""))) || ran.out),
-  ).pipe(
-    Effect.mapError(() =>
-      Refused.make({ detail: `mutbox left no answer (exit ${ran.code}): ${Str.trim(ran.err).slice(-400)}` }),
-    ),
-  );
+    const answer = yield* Schema.decodeEffect(Schema.fromJsonString(Summary))(
+      Str.trim(
+        (yield* fs.readFileString(path.join(out, "mutbox.json")).pipe(Effect.orElseSucceed(() => ""))) || ran.out,
+      ),
+    ).pipe(
+      Effect.mapError(() =>
+        Refused.make({ detail: `mutbox left no answer (exit ${ran.code}): ${Str.trim(ran.err).slice(-400)}` }),
+      ),
+    );
 
+    return answer.outcome === "stuck" && answer.reason === "docker_busy" ? Option.none() : Option.some(answer);
+  });
+
+  const judged = yield* judge({
+    dir: path.join(boxes, "state", "gate"),
+    key,
+    days,
+    answers: current,
+    start,
+    line: ({ saved, use }) => inLine(queue, saved, use),
+  });
+
+  const { summary } = judged;
   const took = Math.round(((yield* Clock.currentTimeMillis) - started) / 1000);
 
   if (summary.outcome === "stuck") {
@@ -660,9 +933,13 @@ const check = Effect.fnUntraced(function* (ask: {
     sources.set(file, yield* show(file));
   }
 
+  const { lived, open } = judged;
+  const unanswered = Arr.filter(bare, (file) => !isAnswered(judged.answers, file, null));
+  const explained = lived.length - open.length + bare.length - unanswered.length;
+
   const lines = [
-    ...Arr.map(bare, (file) => `no law loads  ${file}: every mutant there lives`),
-    ...survivorLines([...summary.b.survivors, ...summary.b.uncovered], (file) => sources.get(file) ?? ""),
+    ...Arr.map(unanswered, (file) => `no law loads  ${file}: every mutant there lives`),
+    ...survivorLines(open, (file) => sources.get(file) ?? ""),
   ];
 
   for (const line of [...lines, ...staticLines(summary.b.ignored)]) {
@@ -678,22 +955,26 @@ const check = Effect.fnUntraced(function* (ask: {
     Arr.join(
       [
         `survivors: ${lines.length} to kill or explain; ${counts}`,
+        recheckText(summary.recheck, runs),
+        explained > 0 ? `; ${explained} answered by a Survivor: line` : "",
         summary.sample === null ? "" : `; ${summary.sample.selected} of ${summary.sample.total} mutants sampled`,
+        runs === "full" ? "" : `; property laws drew at most ${runs} cases (MUTATE_RUNS)`,
         summary.reach === null ? "" : `; ${summary.reach}`,
         summary.b.unreached > 0
           ? `; the ${seconds} s budget (MUTATE_SECONDS) ran out with ${summary.b.unreached} sampled mutants not reached`
           : "",
+        judged.savedAt === null
+          ? ""
+          : `; a run saved ${new Date(judged.savedAt).toISOString()} for the same base, tree and files was reused, and no box was started`,
         `; ${took} s`,
       ],
       "",
     ),
   );
 
-  if (lines.length > 0) {
-    yield* Effect.sync(() => {
-      process.exitCode = 1;
-    });
-  }
+  yield* Effect.sync(() => {
+    process.exitCode = exitCode(open.length, unanswered.length);
+  });
 });
 
 /** A refusal's one line on stderr, and exit 2. */
@@ -711,6 +992,8 @@ const survivors = Command.make("survivors", Ask, (ask) =>
     Effect.catchTags({
       Refused: (refused) => refuse(`refused: ${refused.detail}`),
       CallTimeout: (timeout) => refuse(`${timeout.command} passed its ${timeout.seconds} s bound and was stopped`),
+      Waited: (waited) =>
+        refuse(`waited ${waited.seconds} s in line for the mutation box (MUTATE_WAIT_SECONDS), and gave up its place`),
     }),
   ),
 );

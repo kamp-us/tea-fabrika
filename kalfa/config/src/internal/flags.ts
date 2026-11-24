@@ -42,11 +42,6 @@ export const make = (settings: ReadonlyArray<Setting.Any>): Readonly<Record<stri
           throw new Error(`Settings cannot be declared: ${s.name} is a flag Effect's command line keeps for itself.`);
         }
 
-        // `SettingGroup.make` refuses a setting with no description, so a group's settings always have one.
-        if (s.description === undefined) {
-          throw new Error(`Settings cannot be declared: ${s.name} has no description.`);
-        }
-
         return [s.name, Flag.String(s.name).pipe(Flag.withDescription(s.description), Flag.optional)];
       }),
   );

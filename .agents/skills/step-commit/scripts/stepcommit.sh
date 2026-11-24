@@ -1,5 +1,9 @@
 #!/bin/sh
-# stepcommit.sh [--commit-only] [--body-file <file>] <step> <ticket> <subject> <file>...
+# stepcommit.sh [--commit-only] [--empty] [--body-file <file>] <step> <ticket> <subject> <file>...
+# --empty makes a commit with no files (name none), signed like any commit of its step. The lead step may, to open a slice's
+# draft PR on a fresh branch. A build or fix step may too, when its body holds Survivor: lines and nothing else: that
+# is how it carries the answers to a guard check's survivors, never a code change made only to hold them.
+# A commit right after an empty one is refused: two empty links on one tree break the chain.
 # --body-file puts the file's text in the commit body. A tests commit needs one with a plant line
 # ("Plant: <law>: <what was broken>: <first red line>"; a fix commit needs it only when it names a
 # *.test.ts or *.test-support.ts file), so a reviewer reads the plants in git log;
@@ -13,21 +17,36 @@ exec python3 - "$here" "$@" <<'PY'
 import hashlib, json, os, pathlib, re, subprocess, sys, tempfile
 here = pathlib.Path(sys.argv[1])
 args = sys.argv[2:]
-only, body_file = False, None
+only, empty, body_file = False, False, None
 def refuse(why, code=1):
     print("stepcommit: " + why, file=sys.stderr); sys.exit(code)
-while args and args[0] in ("--commit-only", "--body-file"):
-    if args.pop(0) == "--commit-only": only = True
+while args and args[0] in ("--commit-only", "--empty", "--body-file"):
+    flag = args.pop(0)
+    if flag == "--commit-only": only = True
+    elif flag == "--empty": empty = True
     elif args: body_file = args.pop(0)
     else: refuse("--body-file needs a file", 2)
-if len(args) < 4: refuse("name step, ticket, subject and named paths", 2)
+if len(args) < (3 if empty else 4): refuse("name step, ticket, subject" + ("" if empty else " and named paths"), 2)
 step, ticket, subject, *paths = args
+if empty and paths: refuse("--empty makes a commit with no files; name none", 2)
+if empty and step not in ("lead", "build", "fix"): refuse("--empty is for the lead step (it opens a slice's pull request) and for a build or fix commit of Survivor: lines; a " + step + " commit holds its files", 2)
 if step not in ("tests", "build", "mutation", "lead", "fix"): refuse("unknown step " + step, 2)
 role = "tests" if step == "mutation" else step
 body = ""
 if body_file is not None:
     try: body = pathlib.Path(body_file).read_text().strip()
     except (OSError, ValueError) as e: refuse("cannot read --body-file " + body_file + ": " + str(e), 2)
+# An empty build or fix commit exists only to carry Survivor: lines (the guard check reads them from commit bodies), so
+# its body is those lines and nothing else. Each line is read by survivors.ts's own parser (notAnswers), so a line that
+# would answer nothing is refused here, before a commit the builder cannot take back.
+if empty and step != "lead":
+    asked = "an empty " + step + " commit carries Survivor: lines and nothing else: pass --body-file <file> holding one 'Survivor: <file>:<line> <reason> -- <evidence>' line per answer"
+    if not body: refuse(asked, 2)
+    reader = "const m = await import(process.argv[1]); let t = ''; for await (const c of process.stdin) t += c; console.log(JSON.stringify(m.notAnswers(t)));"
+    read = subprocess.run(["node", "--input-type=module", "-e", reader, (here / "../../mutation/scripts/survivors.ts").as_uri()], input=body, capture_output=True, text=True)
+    try: bad = json.loads(read.stdout)
+    except ValueError: refuse("cannot read the Survivor: lines with survivors.ts: " + read.stderr.strip(), 2)
+    if bad: refuse(asked + "; this line answers nothing (it needs a reason and two words of evidence): " + bad[0], 2)
 # The tests step's plant record lives only in its answer, which a reviewer never reads. A tests commit
 # (or a fix round that names a test file) carries it in the body: one "Plant: ..." line per new law (and, when the plan has a Generators
 # section, the reach table under it). A box's commit is drive's, and its report holds the record.
@@ -42,6 +61,10 @@ def git(*args, **kw):
 merging = git("rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
 if not merging and git("diff", "--cached", "--quiet").returncode:
     refuse("the index already holds staged changes; commit only your own paths", 4)
+# Two empty links on one tree repeat a `from` and the commits check reads the chain as broken, and a rewrite is
+# never allowed, so the second one is refused here. All of a step's Survivor: lines go in one empty commit.
+if empty and git("diff", "--quiet", "HEAD~1", "HEAD").returncode == 0:
+    refuse("the last commit is already empty; two empty commits in a row break the chain. Put every Survivor: line in one", 4)
 root = pathlib.Path(git("rev-parse", "--show-toplevel").stdout.decode().strip())
 named = []
 for p in paths:
@@ -301,8 +324,8 @@ for n in named:
     for t in tracked:
         if t != n and t.lower() == n.lower() and t not in named:
             if git("--literal-pathspecs", "rm", "--cached", "-q", "--", t).returncode: refuse("case rename could not be staged: " + t)
-added = git("--literal-pathspecs", "add", "--", *named)
-if added.returncode: refuse("named path could not be staged")
+added = git("--literal-pathspecs", "add", "--", *named) if named else None
+if added is not None and added.returncode: refuse("named path could not be staged")
 # --no-renames lists both sides as add/delete, including a removed exam path.
 staged = [p for p in staged_names() if p not in brought]
 try:
@@ -371,7 +394,7 @@ if not coauthor:
     name = git("config", "--global", "user.name").stdout.decode().strip()
     email = git("config", "--global", "user.email").stdout.decode().strip()
     coauthor = f"{name} <{email}>"
-commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", "-m", subject, *(["-m", body] if body else []), "-m", "Co-authored-by: " + coauthor])
+commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", *(["--allow-empty"] if empty else []), "-m", subject, *(["-m", body] if body else []), "-m", "Co-authored-by: " + coauthor])
 if commit.returncode: sys.exit(commit.returncode)
 if not only and step != "fix":
     # STEPCOMMIT_SIGNER: drive.ts names main's own signer when the tree holds an agent's edits.

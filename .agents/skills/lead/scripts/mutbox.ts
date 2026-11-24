@@ -2,7 +2,8 @@
 // nothing is opened in the laptop sandbox (a step that needs ports or its own processes and network isolation runs in a container). Today's lead tooling, not product.
 //
 //   node mutbox.ts run --checkout <repo> --ticket <n> --build <commit> --related <a.test.ts,b.test.ts>
-//                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>] [--cap <n>] [--plan <file>]
+//                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>] [--cap <n>] [--runs <n>] [--plan <file>]
+//                      [--wait <seconds>]
 //   node mutbox.ts gc --lock <file>
 //
 // `run` prints one JSON line and writes the same value to <out>/mutbox.json: outcome `done` (exit
@@ -29,7 +30,11 @@
 //   5. the commit's Node is not the image's        stuck node_mismatch
 //   6. the time limit hits                         docker kill, stuck time_limit, no container left
 //   7. the container is killed mid-run             stuck killed, no container left
-//   8. two runs at once                            the second is stuck docker_busy (one Docker box)
+//   8. two runs at once                            the second is stuck docker_busy (one Docker box);
+//                                                  with `--wait <seconds>` it takes a place in line
+//                                                  (`docker.queue` beside the lock) instead, goes
+//                                                  after each run ahead of it, and is stuck
+//                                                  docker_busy only when its wait runs out
 //   9. a dead run left its lock or its container   the lock is taken over, the container removed
 //  10. a path with spaces                          runs; a path Docker's --mount cannot take
 //                                                  (a comma, a quote, a newline) is stuck bad_path
@@ -63,6 +68,12 @@
 //                                                  laws start on that disposable runner (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI);
 //                                                  with no CI, or an empty one, none is passed and
 //                                                  the guard refuses, as on the laptop
+// 25. `--runs <n>` caps the cases a property law   `--env MUTATE_RUNS=<n>` is passed, and the baseline and Stryker's own
+//     draws in the box (ticket 1306)                config run through depth.ts's cap; no `--runs` passes none, each law keeps its count; a build with no
+//                                                   depth.config.ts is stuck no_depth, never a full-depth answer under a depth label
+// 26. the image is built on the box's own buildx   `docker buildx create --name mutbox` once, `buildx build --builder mutbox --load`; gc prunes
+//     builder, and gc prunes only that cache        `buildx prune --builder mutbox` (never `docker builder prune`, which is every project's cache) and
+//                                                   `image prune` with the box's label (ticket 1306)
 // Every report carries `reach`, the line "the sample reached N of M changed files", naming each
 // file with zero mutants (ticket 655).
 
@@ -87,6 +98,8 @@ import type { PlatformError } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import { parseSync, Visitor } from "oxc-parser";
+import { held, noteLine } from "../../mutation/scripts/gatequeue.ts";
+import type { Line } from "../../mutation/scripts/gatequeue.ts";
 
 /** Docker's own label on every image and container this script makes, so cleanup finds them. */
 export const LABEL = "fabrika.mutbox=1";
@@ -108,9 +121,11 @@ const CAP = 300;
 
 /**
  * The container's time limit: one arm is run.sh's cap plus 180 s for the install and the baseline;
- * with a base, two arms and 300 s. The default cap gives the measured 480 s and 900 s.
+ * with a base, two arms and 300 s. The default cap gives the measured 480 s and 900 s. A run with a depth
+ * (`rechecked`) may run its survivors again at full depth, which is one more arm of the cap.
  */
-export const secondsFor = (base: boolean, cap: number = CAP) => (base ? 2 * cap + 300 : cap + 180);
+export const secondsFor = (base: boolean, cap: number = CAP, rechecked = false) =>
+  (base ? 2 * cap + 300 : cap + 180) + (rechecked ? cap : 0);
 
 /**
  * How long one Docker call may take before it is stopped. On 2026-11-10 a `docker ps` in gc never
@@ -121,6 +136,15 @@ export const secondsFor = (base: boolean, cap: number = CAP) => (base ? 2 * cap 
  * timed took 81 s (field note 2026-11-10-01), so `build` is 600 s. `prune` deletes image layers and
  * has no timing: 120 s is a guess. `docker run` keeps its own bound, secondsFor.
  */
+/** How old a build-cache layer must be, in hours, before gc drops it. */
+export const CACHE_HOURS = 24;
+
+/**
+ * The box's own buildx builder (ticket 1306). The image is built on it and gc prunes only its cache, so nothing here touches the
+ * build cache of any other project's builds on this machine.
+ */
+export const BUILDER = "mutbox";
+
 export const DOCKER_SECONDS = { call: 30, prune: 120, build: 600 } as const;
 
 /** After SIGTERM, a stopped command's time to exit before SIGKILL: a hung client may ignore TERM. */
@@ -226,6 +250,8 @@ export const runArgs = (ask: {
   readonly ci: string | null;
   /** run.sh's time cap on Stryker, in seconds, or `null` for run.sh's own default. */
   readonly cap: number | null;
+  /** The most cases a property law draws in the box (`MUTATE_RUNS`, depth.ts), or `null` for each law's own count. */
+  readonly runs: number | null;
 }): Array<string> => [
   "run",
   "--rm",
@@ -266,6 +292,7 @@ export const runArgs = (ask: {
   `RELATED=${Arr.join(ask.related, ",")}`,
   ...(ask.ci === null ? [] : ["--env", `CI=${ask.ci}`]),
   ...(ask.cap === null ? [] : ["--env", `CAP_SECONDS=${ask.cap}`]),
+  ...(ask.runs === null ? [] : ["--env", `MUTATE_RUNS=${ask.runs}`]),
   ask.image,
   "nice",
   "-n",
@@ -392,6 +419,23 @@ type Arm = typeof Arm.Type;
 
 const Named = Schema.Struct({ path: Schema.String, reason: Schema.String });
 
+/**
+ * The full-depth recheck of the mutants that lived at the capped depth (ticket 1306): only a mutant that lives there too is
+ * reported. `cleared` are the ones that died at full depth.
+ */
+const Recheck = Schema.Struct({
+  /** Mutants that lived at the cap (`Survived` or `NoCoverage`) and were to be run again. */
+  asked: Schema.Finite,
+  /** Died at full depth: not reported. */
+  cleared: Schema.Array(Row),
+  /** Still lived at full depth, or were not run again (`unreached`). These are the survivors. */
+  confirmed: Schema.Finite,
+  /** Of the confirmed, those the second run did not reach (its time cap, or it left no answer). */
+  unreached: Schema.Finite,
+});
+
+export type Recheck = typeof Recheck.Type;
+
 export const Summary = Schema.Struct({
   outcome: Schema.Literals(["done", "skip", "stuck"]),
   reason: Schema.String,
@@ -429,6 +473,8 @@ export const Summary = Schema.Struct({
   narrowing: Schema.NullOr(Schema.Union([Schema.Array(Row), Schema.Literal("unknown")])),
   /** With a base: each related test left out of arm a, and why. */
   armA: Schema.NullOr(Schema.Struct({ dropped: Schema.Array(Named) })),
+  /** With a depth: what the full-depth recheck of arm b's survivors came to; `null` with no depth or no survivor. */
+  recheck: Schema.NullOr(Recheck),
 });
 
 export type Summary = typeof Summary.Type;
@@ -475,6 +521,47 @@ export const tally = (exit: number, from: Arm["from"], rows: ReadonlyArray<Row>,
   };
 };
 
+/**
+ * Arm b after the full-depth recheck: a mutant that lived at the cap (`survivors`, `uncovered`) and died in arm c is no survivor, and
+ * is named in `cleared`. The counts stay the cap's own. `c` is arm c's rows, or `null` when it left no answer, which clears none.
+ * `null` when nothing lived. Pure.
+ */
+export const confirm = (
+  b: Arm,
+  c: ReadonlyArray<Row> | null,
+): { readonly b: Arm; readonly recheck: Recheck | null } => {
+  const lived = [...b.survivors, ...b.uncovered];
+
+  if (lived.length === 0) {
+    return { b, recheck: null };
+  }
+
+  const wanted = new Set(Arr.map(lived, mutantKey));
+  const answered = new Map(Arr.map(c ?? [], (r) => [mutantKey(r), r] as const));
+
+  const cleared = Arr.filter(
+    Arr.flatMap(lived, (r) => {
+      const got = answered.get(mutantKey(r));
+
+      return got === undefined ? [] : [got];
+    }),
+    (r) => wanted.has(mutantKey(r)) && (r.status === "Killed" || r.status === "Timeout"),
+  );
+
+  const gone = new Set(Arr.map(cleared, mutantKey));
+  const stays = (r: Row) => !gone.has(mutantKey(r));
+
+  return {
+    b: { ...b, survivors: Arr.filter(b.survivors, stays), uncovered: Arr.filter(b.uncovered, stays) },
+    recheck: {
+      asked: lived.length,
+      cleared,
+      confirmed: lived.length - cleared.length,
+      unreached: Arr.filter(lived, (r) => stays(r) && !answered.has(mutantKey(r))).length,
+    },
+  };
+};
+
 /** The mutants arm a kills that arm b lets live. Pure. */
 export const narrowed = (a: ReadonlyArray<Row>, b: ReadonlyArray<Row>): Array<Row> => {
   const killed = new Set(
@@ -491,6 +578,8 @@ export const narrowed = (a: ReadonlyArray<Row>, b: ReadonlyArray<Row>): Array<Ro
 /** What the run comes to, from what the container left. Pure. */
 export const judge = (seen: {
   readonly exit: number;
+  /** What the container itself said, docker's last lines: the only trace of a script that died before it wrote any file. */
+  readonly said?: string;
   readonly sample: typeof Sample.Type | null;
   readonly b: Arm | null;
   readonly failed: ReadonlyArray<string>;
@@ -518,6 +607,15 @@ export const judge = (seen: {
     };
   }
 
+  if (seen.exit === 73) {
+    return {
+      outcome: "stuck",
+      reason: "no_depth",
+      detail:
+        "a run depth was asked (--runs) and the build has no depth.config.ts: merge main into it, or run with no depth",
+    };
+  }
+
   if (seen.exit === 137) {
     return {
       outcome: "stuck",
@@ -538,7 +636,11 @@ export const judge = (seen: {
     return {
       outcome: "stuck",
       reason: "no_report",
-      detail: `the container exited ${seen.exit} and left no sample or report; see box/b/run.txt`,
+      detail: `the container exited ${seen.exit} and left no sample or report; ${
+        seen.said === undefined || seen.said === ""
+          ? "it said nothing (box/container.txt is empty)"
+          : `it said: ${seen.said} (all of it in box/container.txt)`
+      }; box/b/run.txt exists only when the run got as far as run.sh`,
     };
   }
 
@@ -755,14 +857,15 @@ const docker = (args: ReadonlyArray<string>, seconds: number = DOCKER_SECONDS.ca
 
 const tail = (s: string) => pipe(Arr.join(pipe(s, Str.trim, Str.split("\n")).slice(-3), " | "), Str.slice(-400));
 
-const alive = (pid: number) =>
+/** Whether a process with this pid is running. */
+export const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
     Effect.as(true),
     Effect.orElseSucceed(() => false),
   );
 
-/** Whether a live process holds the lock; a lock whose owner is dead is removed. */
-const heldBy = Effect.fnUntraced(function* (lock: string) {
+/** The pid of the live process that holds the lock, or `null`; a lock whose owner is dead is removed. */
+export const heldBy = Effect.fnUntraced(function* (lock: string) {
   const fs = yield* FileSystem.FileSystem;
   const owner = Number(yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => "")));
 
@@ -799,6 +902,51 @@ const takeLock = Effect.fnUntraced(function* (lock: string) {
       ),
     ),
     () => fs.remove(lock, { force: true }).pipe(Effect.ignore),
+  );
+});
+
+/**
+ * The Docker box. 0 `wait` takes the lock or is stuck `docker_busy` at once, as drive's mutation step
+ * wants (it refuses at the lock before it starts mutbox) and as the hourly run on CI does, with a lock of
+ * its own on a disposable runner. More is the longest this run waits for its turn: it takes a place in
+ * `docker.queue` beside the lock, says its place each minute on stderr, and takes the lock when it is first
+ * live in line and the lock is free, so it never jumps a run that waited longer (`gatequeue.ts`). A wait that
+ * runs out is stuck `docker_busy`, as a busy box always was.
+ */
+const takeBox = Effect.fnUntraced(function* (ask: Pick<Ask, "lock" | "ticket" | "checkout">, wait: number) {
+  if (wait === 0) {
+    return yield* takeLock(ask.lock);
+  }
+
+  const path = yield* Path.Path;
+
+  const queue: Line = {
+    dir: path.join(path.dirname(ask.lock), "docker.queue"),
+    pid: process.pid,
+    label: `mutbox, ticket ${ask.ticket}, ${path.basename(ask.checkout)}`,
+    holder: heldBy(ask.lock),
+    alive,
+    say: (note) => Console.error(`mutbox: ${noteLine(note)}`),
+    poll: 5,
+    every: 60,
+    limit: wait,
+  };
+
+  const taken = takeLock(ask.lock).pipe(
+    Effect.as(Option.some<void>(undefined)),
+    Effect.catchIf(
+      (stuck) => stuck.reason === "docker_busy",
+      () => Effect.succeed(Option.none<void>()),
+    ),
+  );
+
+  yield* held(queue, Effect.succeed(Option.none<void>()), taken).pipe(
+    Effect.catchTag("Waited", (waited) =>
+      Stuck.make({
+        reason: "docker_busy",
+        detail: `waited ${waited.seconds} s in line for the Docker box (MUTATE_WAIT_SECONDS); one at a time`,
+      }),
+    ),
   );
 });
 
@@ -860,7 +1008,7 @@ const decoded = <S extends Schema.Top>(schema: S, raw: string | null) =>
     ? Effect.succeed(null)
     : Schema.decodeEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.orElseSucceed(() => null));
 
-const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selected: number) {
+const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b" | "c", selected: number) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const exit = Number((yield* readOut(box, `${name}/exit`)) ?? Number.NaN);
@@ -916,8 +1064,12 @@ interface Ask {
   readonly seconds: number | undefined;
   /** run.sh's time cap on Stryker, in seconds; none is run.sh's own default, CAP. */
   readonly cap: number | undefined;
+  /** The most cases a property law draws in the box; none is each law's own count (depth.ts). */
+  readonly runs: number | undefined;
   /** The approved plan, from the current folder, as drive reads it; its build-owned files must get a mutant. */
   readonly plan: string | undefined;
+  /** Seconds this run waits in line for the box; none or 0 takes no place in line. */
+  readonly wait: number | undefined;
 }
 
 /** A run that ended before the container answered: what was asked, and why it is stuck. */
@@ -930,7 +1082,7 @@ const stuckSummary = (ask: Ask, started: number, ended: number, reason: string, 
   base: ask.base ?? null,
   image: null,
   network: "none",
-  limits: { ...LIMITS, seconds: ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap) },
+  limits: { ...LIMITS, seconds: ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap, ask.runs !== undefined) },
   seconds: Math.round((ended - started) / 1000),
   usage: null,
   related: [],
@@ -942,6 +1094,7 @@ const stuckSummary = (ask: Ask, started: number, ended: number, reason: string, 
   a: null,
   narrowing: null,
   armA: null,
+  recheck: null,
 });
 
 /** The whole run. Fails with `Stuck` before the container answers; else gives the summary. */
@@ -949,7 +1102,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const here = import.meta.dirname;
-  const limit = ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap);
+  const limit = ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap, ask.runs !== undefined);
   const all = parseRelated(ask.related);
 
   if (all === null || !/^\d+$/.test(ask.ticket)) {
@@ -992,7 +1145,8 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   }
 
   yield* dockerReady();
-  yield* takeLock(ask.lock);
+
+  yield* takeBox(ask, ask.wait ?? 0);
   yield* sweepContainers(ask.lock);
 
   // The copy that goes in: the build commit and its parent, fetched with git's own plumbing into
@@ -1148,9 +1302,36 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
       yield* fs.writeFileString(path.join(context, file), (yield* show(file)) ?? "");
     }
 
-    // The only step with a network: Docker's builder, reading the lockfile's exact versions.
+    // The box's own builder, made once. It keeps its cache apart from every other build on this machine.
+    if ((yield* docker(["buildx", "inspect", BUILDER])).code !== 0) {
+      const made = yield* docker(
+        ["buildx", "create", "--name", BUILDER, "--driver", "docker-container"],
+        DOCKER_SECONDS.build,
+      );
+
+      if (made.code !== 0) {
+        return yield* Stuck.make({ reason: "image_build_failed", detail: tail(made.err) });
+      }
+    }
+
+    // The only step with a network: the builder, reading the lockfile's exact versions. `--load` puts the image in the daemon's store, where `docker run` finds it.
     const built = yield* docker(
-      ["build", "--platform", PLATFORM, "--build-arg", `PNPM=${pnpm}`, "--label", LABEL, "--tag", image, context],
+      [
+        "buildx",
+        "build",
+        "--builder",
+        BUILDER,
+        "--load",
+        "--platform",
+        PLATFORM,
+        "--build-arg",
+        `PNPM=${pnpm}`,
+        "--label",
+        LABEL,
+        "--tag",
+        image,
+        context,
+      ],
       DOCKER_SECONDS.build,
     );
 
@@ -1177,6 +1358,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
       lock: ask.lock,
       ci: process.env.CI === undefined || process.env.CI === "" ? null : process.env.CI,
       cap: ask.cap ?? null,
+      runs: ask.runs ?? null,
     }),
   ).pipe(Effect.timeoutOption(`${limit} seconds`));
 
@@ -1194,9 +1376,16 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     return yield* Stuck.make({ reason: "docker_run_failed", detail: tail(ran.value.err) });
   }
 
+  // The container's own words, kept beside its other files: a run that dies in the entry script, before it writes
+  // `b/`, leaves nothing else (ticket 1306: two Git files died in 3 s and 5 s with this the only trace).
+  yield* fs.writeFileString(path.join(box, "container.txt"), `${ran.value.out}${ran.value.err}`);
+
   const sample = yield* decoded(Sample, yield* readOut(box, "b/sample.json"));
   const b = yield* readArm(box, "b", sample?.selected ?? 0);
   const a = yield* readArm(box, "a", sample?.selected ?? 0);
+  // Arm c, the recheck of arm b's survivors at full depth, only when a depth was asked.
+  const c = ask.runs === undefined ? null : yield* readArm(box, "c", 0);
+  const confirmed = b === null || ask.runs === undefined ? null : confirm(b.arm, c?.rows ?? null);
   const baseline = yield* decoded(Baseline, yield* readOut(box, "baseline.json"));
 
   const tests = Arr.flatMap(baseline?.testResults ?? [], (file) =>
@@ -1212,6 +1401,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
 
   const ended = judge({
     exit: ran.value.code,
+    said: tail(`${ran.value.out}${ran.value.err}`),
     sample,
     b: b?.arm ?? null,
     failed: pipe(
@@ -1239,8 +1429,9 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     ),
     sample,
     reach: sample?.files === undefined ? null : reachLine(sample.files),
-    b: b?.arm ?? null,
+    b: confirmed?.b ?? b?.arm ?? null,
     a: a?.arm ?? null,
+    recheck: confirmed?.recheck ?? null,
     narrowing: narrowingUnknown(ended.reason) ? "unknown" : a === null || b === null ? null : narrowed(a.rows, b.rows),
     armA: base === null ? null : { dropped: droppedFromArmA(related, onBase, kept, aBaseline) },
   };
@@ -1262,7 +1453,9 @@ const run = Command.make(
     base: Flag.String("base").pipe(Flag.withDefault(undefined)),
     seconds: Flag.Int("seconds").pipe(Flag.withDefault(undefined)),
     cap: Flag.Int("cap").pipe(Flag.withDefault(undefined)),
+    runs: Flag.Int("runs").pipe(Flag.withDefault(undefined)),
     plan: Flag.String("plan").pipe(Flag.withDefault(undefined)),
+    wait: Flag.Int("wait").pipe(Flag.withDefault(undefined)),
   },
   Effect.fn("mutbox.run")(function* (ask) {
     const fs = yield* FileSystem.FileSystem;
@@ -1296,7 +1489,7 @@ const run = Command.make(
 );
 
 /**
- * The lead's gc calls this: no container, and no image older than a week, is left to grow. It is
+ * The lead's gc calls this: no container, no image older than a week and no build-cache layer older than a day is left to grow. It is
  * best effort: a Docker call past its bound ends it with one line and exit 0, so the chain goes on.
  */
 const gc = Command.make(
@@ -1319,6 +1512,15 @@ const gc = Command.make(
       // Docker's own cleanup: images with our label that no container uses, made over a week ago.
       const pruned = yield* docker(
         ["image", "prune", "--all", "--force", "--filter", `label=${LABEL}`, "--filter", "until=168h"],
+        DOCKER_SECONDS.prune,
+      );
+
+      // The box's own build cache, past a day old, and no other builder's. Each image build leaves layers of its own, and a week of builds
+      // filled Docker's disk (20 GB of cache beside 30 GB of images, ticket 1306): the next build, then two runs' container, died with
+      // `No space left on device`. Safe here, since no run holds the lock and so no build is under way; a layer cut is fetched again. With
+      // no such builder yet the call fails, and gc goes on.
+      yield* docker(
+        ["buildx", "prune", "--builder", BUILDER, "--filter", `until=${CACHE_HOURS}h`, "--force"],
         DOCKER_SECONDS.prune,
       );
 

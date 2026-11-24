@@ -1714,3 +1714,157 @@ describe("a commit that names a .ts file runs its package's typecheck, as CI doe
     }
   });
 });
+
+describe("a slice PR opens with a signed lead commit, today's tooling", () => {
+  const empty = (r: Repo, step: Step, flags: string[], ...paths: string[]) =>
+    r.call("sh", [script, ...flags, step, "321", "T321 lead: open the slice", ...paths]);
+
+  const survivor = "Survivor: src/owned.ts:1 a help line only -- no law reads the string: grep of the tests finds none";
+
+  // Each opens as a Survivor: line and answers nothing: no line and no reason, then one bare word of evidence.
+  const malformed = ["Survivor: foo.ts", "Survivor: src/owned.ts:1 a help line only -- unreachable"];
+
+  /** An empty commit that carries `body`, as a build or fix step makes one for its Survivor: lines. */
+  const carry = (r: Repo, step: Step, body: string, flags: string[] = []) => {
+    const bodyFile = join(r.dir, "carry.md");
+    put(bodyFile, body);
+
+    return r.call("sh", [script, ...flags, "--empty", "--body-file", bodyFile, step, "321", `T321 ${step}: answers`]);
+  };
+
+  // Plants: let --empty commit nothing (no --allow-empty), sign with --commit-only, skip the signer or the push without it, or make more than one commit.
+  it("--empty makes one commit with no files; with --commit-only it signs nothing, without it it signs and publishes", () => {
+    each([true, false], (only) =>
+      withRepo([], (r) => {
+        const got = empty(r, "lead", [...(only ? ["--commit-only"] : []), "--empty"]);
+        expect(got.code, got.text).toBe(0);
+        expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
+        expect(r.git("diff", "--name-only", `${r.base}..HEAD`).trim()).toBe("");
+        expect(r.git("log", "-1", "--format=%s").trim()).toBe("T321 lead: open the slice");
+        expect(r.signs().map((s) => s.slice(0, 5))).toEqual(
+          only ? [] : [["commits", "sign", "--step", "lead", "--ticket"]],
+        );
+        expect(r.published()).toHaveLength(only ? 0 : 1);
+      }),
+    );
+  });
+
+  // Plants: allow --empty for another step, allow it with named files, or drop the lead ticket gate.
+  it("--empty is refused for tests and mutation, with named files, and for a ticket that is not open; nothing is committed", () => {
+    withRepo([["src/owned.ts", "build"]], (r) => {
+      r.changed("src/owned.ts");
+
+      const cases: Array<[Step, string[], string[], string]> = [
+        ["build", ["--commit-only", "--empty"], ["src/owned.ts"], "no files"],
+        ["lead", ["--commit-only", "--empty"], ["src/owned.ts"], "no files"],
+      ];
+
+      for (const [step, flags, paths, said] of cases) {
+        const got = empty(r, step, flags, ...paths);
+        expect(got.code, got.text).toBe(2);
+        expect(got.text).toContain(said);
+        expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      }
+
+      for (const step of ["tests", "mutation"] satisfies Step[]) {
+        const got = carry(r, step, survivor, ["--commit-only"]);
+        expect(got.code, got.text).toBe(2);
+        expect(got.text).toContain("Survivor: lines");
+        expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      }
+
+      r.env.T_TICKETS = "999";
+      const unknown = empty(r, "lead", ["--empty"]);
+      expect(unknown.code, unknown.text).toBe(5);
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+    });
+  });
+
+  // Plant: let a lead commit with no files and no --empty through as an empty commit.
+  it("a commit that names no files still needs --empty", () => {
+    withRepo([], (r) => {
+      const got = empty(r, "lead", ["--commit-only"]);
+      expect(got.code, got.text).toBe(2);
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+    });
+  });
+
+  // Plants: refuse --empty for build or fix, commit nothing (no --allow-empty), drop the signer for build or sign for fix, skip the push, or leave the lines out of the body.
+  it("an empty build or fix commit carries its Survivor: lines, signed like that step's other commits", () => {
+    each(
+      [
+        ["build", false],
+        ["build", true],
+        ["fix", false],
+        ["fix", true],
+      ] satisfies Array<[Step, boolean]>,
+      ([step, only]) =>
+        withRepo([], (r) => {
+          const lines = `${survivor}\n\n${survivor.replace(":1 ", ":2 ")}`;
+          const got = carry(r, step, lines, only ? ["--commit-only"] : []);
+          expect(got.code, got.text).toBe(0);
+          expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
+          expect(r.git("diff", "--name-only", `${r.base}..HEAD`).trim()).toBe("");
+          expect(r.git("log", "-1", "--format=%B").trim()).toContain(lines);
+          expect(r.signs().map((s) => s.slice(0, 5))).toEqual(
+            only || step === "fix" ? [] : [["commits", "sign", "--step", "build", "--ticket"]],
+          );
+          expect(r.published()).toHaveLength(only ? 0 : 1);
+        }),
+    );
+  });
+
+  // Plants: allow an empty body, allow a line that is no Survivor: line, check only that a line opens with `Survivor:`, or leave the bad line out of the refusal.
+  it("an empty build or fix commit with no Survivor: line, or with anything else in the body, is refused; nothing is committed", () => {
+    each(["build", "fix"] satisfies Step[], (step) =>
+      withRepo([], (r) => {
+        const bodies = [
+          "",
+          "\n  \n",
+          "Plant: holds: broke it: red",
+          `${survivor}\nreworded a help line`,
+          `note\n${survivor}`,
+          `${survivor}\n${malformed[0]}`,
+          malformed[1] ?? "",
+        ];
+
+        for (const body of bodies) {
+          const got = carry(r, step, body, ["--commit-only"]);
+          expect(got.code, got.text).toBe(2);
+          expect(got.text).toContain("Survivor: lines and nothing else");
+
+          for (const line of malformed) {
+            if (body.includes(line)) {
+              expect(got.text).toContain(line);
+            }
+          }
+
+          expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+        }
+
+        const none = r.call("sh", [script, "--commit-only", "--empty", step, "321", "T321 answers"]);
+        expect(none.code, none.text).toBe(2);
+        expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      }),
+    );
+  });
+
+  // Plant: drop the check that the last commit is already empty.
+  it("an empty commit right after an empty one is refused, since two on one tree break the chain; a commit that changes a file is not", () => {
+    each(["build", "lead"] satisfies Step[], (step) =>
+      withRepo([["src/owned.ts", "build"]], (r) => {
+        const body = step === "lead" ? [] : ["--body-file", join(r.dir, "carry.md")];
+        put(join(r.dir, "carry.md"), survivor);
+        const again = () => r.call("sh", [script, "--commit-only", "--empty", ...body, step, "321", "T321: again"]);
+
+        r.changed("src/owned.ts");
+        expect(r.commit("build", ["src/owned.ts"], true).code).toBe(0);
+        expect(again().code).toBe(0);
+        const second = again();
+        expect(second.code, second.text).toBe(4);
+        expect(second.text).toContain("already empty");
+        expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("2");
+      }),
+    );
+  });
+});

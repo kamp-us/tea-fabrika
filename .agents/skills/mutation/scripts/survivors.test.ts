@@ -1,21 +1,33 @@
-import { Array as Arr, Result } from "effect";
+import { it as effect } from "@effect/vitest";
+import { Array as Arr, Effect, FileSystem, Layer, Option, Path, PlatformError, Result, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { answer, File, memory, Row } from "./gate.test-support.ts";
+import * as Saved from "./gatecache.ts";
 import {
+  answersIn,
   changed,
   coverage,
+  exitCode,
+  isAnswered,
+  judge,
   lawFolder,
   leftOut,
   mutable,
   normal,
+  notAnswers,
   parentEntries,
   pick,
+  readAnswers,
   reach,
   resolve,
+  recheckText,
+  runsFlag,
   staticLines,
   survivorLines,
   testsIn,
 } from "./survivors.ts";
+import type { Run } from "./survivors.ts";
 
 // Today's tooling: the guard check's pure parts. The run itself starts Docker, so it is tried by hand.
 const options = { seed: 119120, numRuns: 200 };
@@ -397,4 +409,327 @@ describe("survivors, what a mutant changed", () => {
       options,
     );
   });
+});
+
+describe("survivors, which mutants a Survivor: line answers", () => {
+  const words = (min: number) =>
+    fc.array(fc.stringMatching(/^[a-z]{1,8}$/), { minLength: min, maxLength: 5 }).map((parts) => Arr.join(parts, " "));
+
+  const answer = fc.record({
+    file: anyFile,
+    line: fc.option(fc.integer({ min: 1, max: 400 }), { nil: null }),
+    reason: words(1),
+    evidence: words(2),
+  });
+
+  const row = (a: { file: string; line: number | null; reason: string; evidence: string }) =>
+    `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- ${a.evidence}`;
+
+  // A line that gives no answer: a missing reason, no ` -- `, no evidence, or one bare word of it.
+  const unsound = fc
+    .tuple(answer, fc.constantFrom("no reason", "no dashes", "no evidence", "one word"))
+    .map(([a, flaw]) =>
+      flaw === "no reason"
+        ? `Survivor: ${a.file}:${a.line ?? "*"} -- ${a.evidence}`
+        : flaw === "no dashes"
+          ? `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} ${a.evidence}`
+          : flaw === "no evidence"
+            ? `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- `
+            : `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- unreachable`,
+    );
+
+  const noise = fc.constantFrom(
+    "",
+    "Plant: a: b: c",
+    "tests: add a law",
+    "survivor: lower case",
+    "  Survivor: indented a.ts:1 r -- e f",
+  );
+
+  // Plants: accept a line with no evidence; accept one bare word of evidence; read `*` as a number; match a
+  // line by file only; let a file's own `*` answer a different file.
+  it("a Survivor: line with a reason and evidence answers its mutant, and nothing else does", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.tuple(answer, fc.array(fc.oneof(unsound, noise), { maxLength: 3 })), { maxLength: 6 }),
+        fc.nat(),
+        (rows, pick) => {
+          const text = Arr.join(
+            Arr.flatMap(rows, ([a, other]) => [...other, row(a)]),
+            "\n",
+          );
+
+          const got = answersIn(text);
+          expect(got).toEqual(Arr.map(rows, ([a]) => ({ file: a.file, line: a.line })));
+
+          for (const [a] of rows) {
+            // A file's own line is answered, and a `*` answers any line of its file and the file no law loads.
+            expect(isAnswered(got, a.file, a.line ?? pick)).toBe(true);
+            expect(isAnswered(got, a.file, null)).toBe(Arr.some(got, (g) => g.file === a.file && g.line === null));
+          }
+
+          expect(isAnswered(got, "nowhere/else.ts", pick)).toBe(false);
+          expect(isAnswered(got, "nowhere/else.ts", null)).toBe(false);
+
+          const lines = Arr.filter(got, (g) => g.line !== null);
+
+          for (const g of lines) {
+            expect(isAnswered(got, g.file, 1000)).toBe(Arr.some(got, (h) => h.file === g.file && h.line === null));
+          }
+        },
+      ),
+      options,
+    );
+  });
+
+  // Plants: list a row that answers; leave out a blank-free row that answers nothing; list a blank row; list rows by their first word alone.
+  it("notAnswers lists the nonblank rows that answer nothing, in order", () => {
+    fc.assert(
+      fc.property(fc.array(fc.oneof(answer.map(row), unsound, noise), { maxLength: 8 }), (rows) => {
+        expect(notAnswers(Arr.join(rows, "\n"))).toEqual(
+          Arr.filter(rows, (r) => r.trim() !== "" && answersIn(r).length === 0),
+        );
+      }),
+      options,
+    );
+  });
+
+  // Plants: let a text of no Survivor: line answer anything; take a line without its evidence.
+  it("lines that carry no evidence, or no reason, answer nothing", () => {
+    fc.assert(
+      fc.property(fc.array(fc.oneof(unsound, noise), { maxLength: 8 }), (rows) => {
+        expect(answersIn(Arr.join(rows, "\n"))).toEqual([]);
+      }),
+      options,
+    );
+  });
+});
+
+describe("survivors, the exit code and the answers file", () => {
+  // Zero is as likely as any count, so the case with nothing left to answer is always reached.
+  const count = fc.oneof(fc.constant(0), fc.nat({ max: 20 }));
+
+  // Plants: always 0; always 1; count only the mutants that lived and not the files no law loads (or the reverse).
+  it("the exit code is 1 while any mutant or any unloaded file has no answer, and 0 otherwise", () => {
+    fc.assert(
+      fc.property(count, count, (open, unloaded) => {
+        expect(exitCode(open, unloaded)).toBe(open === 0 && unloaded === 0 ? 0 : 1);
+      }),
+      options,
+    );
+  });
+
+  const disk = (files: Readonly<Record<string, string>>) =>
+    Layer.mergeAll(
+      Path.layer,
+      FileSystem.layerNoop({
+        readFileString: (path) =>
+          path in files
+            ? Effect.succeed(files[path] ?? "")
+            : Effect.fail(
+                PlatformError.systemError({
+                  _tag: "NotFound",
+                  module: "FileSystem",
+                  method: "readFileString",
+                  pathOrDescriptor: path,
+                }),
+              ),
+      }),
+    );
+
+  // Plants: let a read that failed give no answers; name the wrong file in the refusal; read a different file.
+  effect.effect.prop(
+    "--answers reads the Survivor: lines of its file, and a file that cannot be read is a refusal naming it",
+    {
+      dir: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)),
+      name: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)),
+      lines: Schema.Array(
+        Schema.Literals([
+          "Survivor: a/b.ts:3 log text -- the line only words a message and no input changes what runs",
+          "Survivor: a/b.ts:* thin glue -- no law loads it, and a call of it only forwards",
+          "Plant: a law: a break: red",
+        ]),
+      ),
+    },
+    ({ dir, name, lines }) =>
+      Effect.gen(function* () {
+        const file = `/${dir}/${name}.txt`;
+        const text = Arr.join(lines, "\n");
+
+        expect(yield* readAnswers(file).pipe(Effect.provide(disk({ [file]: text })))).toEqual(answersIn(text));
+
+        const refused = yield* readAnswers(file).pipe(Effect.flip, Effect.provide(disk({})));
+
+        expect(refused._tag).toBe("Refused");
+        expect(refused.detail).toContain(file);
+      }),
+    { arbitrary: { seed: options.seed, runs: options.numRuns } },
+  );
+});
+
+describe("survivors, the run depth it hands the box", () => {
+  // Ticket 1306. Plants: pass `--runs full`; pass no flag for a number; pass the number under another flag.
+  it("a depth is mutbox's --runs flag, and full is no flag, so the box leaves each law its own count", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 5000 }), (n) => {
+        expect(runsFlag(n)).toEqual(["--runs", String(n)]);
+      }),
+      options,
+    );
+    expect(runsFlag("full")).toEqual([]);
+  });
+
+  // Plants: print a recheck when none ran; leave out how many died, or how many lived, at full depth.
+  it("the last line gives the counts at both depths: none when no recheck ran, else how many died and how many lived at full depth", () => {
+    expect(recheckText(null, 25)).toBe("");
+
+    const text = recheckText({ asked: 5, cleared: [], confirmed: 2, unreached: 1 }, 25);
+    expect(text).toContain("0 of the 5 that lived at 25 cases died there");
+    expect(text).toContain("2 lived there too (1 not reached)");
+    expect(recheckText({ asked: 1, cleared: [], confirmed: 1, unreached: 0 }, 25)).not.toContain("not reached");
+  });
+});
+
+describe("survivors, a saved run", () => {
+  const key = (files: ReadonlyArray<string>) =>
+    Saved.key({ base: "b0", tree: "t0", files, version: "v0", seconds: 300, runs: 10 });
+
+  /** The wait for a turn with nobody in line: the box is free, and a box taken in that moment is not looked for. */
+  const direct = <E, R>(turn: { readonly use: Effect.Effect<Option.Option<Run>, E, R> }) =>
+    Effect.flatMap(turn.use, (got) => (Option.isSome(got) ? Effect.succeed(got.value) : Effect.die("busy")));
+
+  // Plants: skip the look at the saved runs (a hit starts a box); leave the files out of the key (a
+  // changed file hits); never save the box's answer (a second call starts a box).
+  effect.effect.prop(
+    "a call with a key already saved starts no box, and a call with a changed file starts one",
+    {
+      calls: Schema.Array(Schema.Array(File).check(Schema.isMaxLength(3))).check(
+        Schema.isMinLength(1),
+        Schema.isMaxLength(8),
+      ),
+    },
+    ({ calls }) =>
+      Effect.gen(function* () {
+        const disk = memory();
+        let started = 0;
+
+        for (const files of calls) {
+          const before = started;
+
+          const got = yield* judge({
+            dir: "/gate",
+            key: key(files),
+            days: 7,
+            answers: Effect.succeed([]),
+            start: Effect.sync(() => {
+              started += 1;
+
+              return Option.some(answer("done", [], 1));
+            }),
+            line: direct,
+          }).pipe(Effect.provide(disk.layer));
+
+          const seen = calls.slice(0, calls.indexOf(files)).some((earlier) => key(earlier) === key(files));
+          expect(started - before, "a box starts for a key not seen before, and for no other").toBe(seen ? 0 : 1);
+          expect(got.reused).toBe(seen);
+        }
+
+        expect(started).toBe(new Set(calls.map(key)).size);
+      }),
+    { arbitrary: { seed: options.seed, runs: options.numRuns } },
+  );
+
+  const body = (rows: ReadonlyArray<typeof Row.Type>) =>
+    Arr.join(
+      Arr.map(rows, (row) => `Survivor: ${row.file}:${row.line} a log line -- no input changes what runs here`),
+      "\n",
+    );
+
+  // Plants: on a hit, read no answers (every survivor is open again); on a hit, use the answers of the
+  // run that made the saved result; read the answers before the lookup and not after it.
+  effect.effect.prop(
+    "on a saved run the Survivor: lines are read again from the commit bodies as they are now",
+    {
+      rows: Schema.Array(Row).check(Schema.isMinLength(1), Schema.isMaxLength(6)),
+      mask: Schema.Array(Schema.Boolean),
+    },
+    ({ rows, mask }) =>
+      Effect.gen(function* () {
+        const disk = memory();
+        let started = 0;
+        let read = 0;
+        const saved = answer("done", rows, 1);
+
+        const call = (bodies: ReadonlyArray<typeof Row.Type>) =>
+          judge({
+            dir: "/gate",
+            key: "k1",
+            days: 7,
+            answers: Effect.sync(() => {
+              read += 1;
+
+              return answersIn(body(bodies));
+            }),
+            start: Effect.sync(() => {
+              started += 1;
+
+              return Option.some(saved);
+            }),
+            line: direct,
+          }).pipe(Effect.provide(disk.layer));
+
+        const first = yield* call([]);
+        expect(first.open, "no line answers anything").toEqual(rows);
+
+        const written = rows.filter((_, i) => mask[i] === true);
+        const second = yield* call(written);
+        const answered = new Set(written.map((row) => `${row.file}:${row.line}`));
+
+        expect(second.reused).toBe(true);
+        expect(started, "the second call started no box").toBe(1);
+        expect(read, "the lines were read on each call").toBe(2);
+        expect(second.open).toEqual(rows.filter((row) => !answered.has(`${row.file}:${row.line}`)));
+        expect(Option.isSome(yield* Saved.find("/gate", "k1").pipe(Effect.provide(disk.layer)))).toBe(true);
+      }),
+    { arbitrary: { seed: options.seed, runs: options.numRuns } },
+  );
+
+  // Plants: save after the place in line is given up (a run waiting for the same key takes the box and
+  // starts a second one); save a run when the box was busy (nothing to save).
+  effect.effect.prop(
+    "the answer is saved before the place in line is given up, and a busy box saves nothing",
+    { rows: Schema.Array(Row).check(Schema.isMaxLength(3)), busy: Schema.Boolean },
+    ({ rows, busy }) =>
+      Effect.gen(function* () {
+        const events: Array<string> = [];
+
+        const disk = memory((path) => {
+          if (path.endsWith(".json")) {
+            events.push("saved");
+          }
+        });
+
+        yield* judge({
+          dir: "/gate",
+          key: "k2",
+          days: 7,
+          answers: Effect.succeed([]),
+          start: Effect.sync(() => {
+            events.push("started");
+
+            return busy ? Option.none() : Option.some(answer("done", rows, 1));
+          }),
+          // The line of one run: its turn once, then the place given back.
+          line: ({ use }) =>
+            Effect.map(use, (got) => {
+              events.push(Option.isSome(got) ? "released" : "busy");
+
+              return Option.getOrElse(got, () => ({ summary: answer("done", [], 1), reused: false, savedAt: null }));
+            }),
+        }).pipe(Effect.provide(disk.layer));
+
+        expect(events).toEqual(busy ? ["started", "busy"] : ["started", "saved", "released"]);
+      }),
+    { arbitrary: { seed: options.seed, runs: options.numRuns } },
+  );
 });

@@ -63,3 +63,7 @@ _Avoid_: create, mint, issue
 **Rotate**:
 Replacing a secret's value, or making a new version of a signing key, under the same secret name. An old secret value stops working at once. Kalfa rotates only a generated signing key, gated as generate is; a person rotates a secret or a given signing key in its store, and Secrets records the change when it sees it.
 _Avoid_: renew, refresh, roll
+
+**Recorder**:
+The slot that takes a fact each time a secret is used: the name, the store and the version of the use, never the value. An app fills it with the ledger; the memory store fills it with a list, for tests.
+_Avoid_: logger, audit log, journal

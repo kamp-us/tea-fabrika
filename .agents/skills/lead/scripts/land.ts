@@ -53,8 +53,10 @@
 //   land.ts check <pr>
 //     the lead session, after it writes a pull request's body and before `queue`: runs exactly the body checks `queue`
 //     runs (Queue.body: the leak grep on the title and description, each new exported name named under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket),
-//     one function shared with `queue`. Changes nothing. Prints each missing name with the file it comes from and exits 1
-//     on any refusal; else prints one line and exits 0.
+//     one function shared with `queue`. It also checks that every commit on the branch since main is signed (a note on
+//     refs/notes/fabrika, or a person's own signature) or made by `stepcommit.sh` (a `--commit-only` commit, signed at
+//     `land.ts run`, and a fix round's, which signs nothing), and names each one that is neither. Changes nothing but the refs it
+//     fetches. Prints each missing name with the file it comes from and exits 1 on any refusal; else prints one line and exits 0.
 //
 //   land.ts arm <pr>
 //     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips; pr/Arm.ts): refuses
@@ -181,7 +183,10 @@ class Ready extends Schema.Class<Ready>("Ready")({
  */
 const ReadyJson = Schema.fromJsonString(Schema.Union([Ready, Ready.pipe(Schema.encodeKeys({ quest: "lane" }))]));
 
-const BOT = ["-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com"];
+/** The identity `stepcommit.sh` commits as; a commit with this author is one of its own. */
+const BOT_EMAIL = "353269643+fabrikalfa[bot]@users.noreply.github.com";
+
+const BOT = ["-c", "user.name=fabrikalfa[bot]", "-c", `user.email=${BOT_EMAIL}`];
 
 type Ran = { readonly code: number; readonly out: string; readonly err: string };
 
@@ -441,11 +446,33 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ quest, ready, env 
   return { title: posted.title, file };
 });
 
+/**
+ * Fetches origin's main into a ref of this call alone and gives back its commit, then removes the ref. Never FETCH_HEAD
+ * (every fetch in a checkout writes it, and a session that fetched there at once swapped it before the read: "the fetched
+ * main is not a commit") and never a shared ref. Writes no FETCH_HEAD, so it takes none from anyone else.
+ */
+const fetchedMain = Effect.fnUntraced(function* (tree: string, check: typeof Check.Type) {
+  const git = gitIn(tree);
+  const ref = `refs/land-fetch/${process.pid}-${globalThis.crypto.randomUUID()}`;
+
+  return yield* Effect.acquireUseRelease(
+    git(
+      check,
+      "origin main could not be fetched",
+      "fetch",
+      "-q",
+      "--no-write-fetch-head",
+      "origin",
+      `+refs/heads/main:${ref}`,
+    ),
+    () => git(check, "the fetched main is not a commit", "rev-parse", `${ref}^{commit}`),
+    () => sh(tree, "git", ["update-ref", "-d", ref]),
+  );
+});
+
 /** Fetches main and merges it in as the bot, never a rebase; a conflict names each file's step. */
 export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: Quest) {
-  const git = gitIn(ready.tree);
-  yield* git("fetch", "origin main could not be fetched", "fetch", "-q", "origin", "main");
-  const main = yield* git("fetch", "the fetched main is not a commit", "rev-parse", "FETCH_HEAD^{commit}");
+  const main = yield* fetchedMain(ready.tree, "fetch");
   const behind = (yield* sh(ready.tree, "git", ["merge-base", "--is-ancestor", main, "HEAD"])).code !== 0;
 
   if (behind) {
@@ -780,6 +807,46 @@ const waitCommand = Command.make(
   }),
 );
 
+/**
+ * The commits on the branch since main (merges of main included, oldest first) that no tool vouches for: no note on
+ * refs/notes/fabrika, no signature of a person's own, and not made by `stepcommit.sh` (a fix round's, which signs nothing, or a `--commit-only` commit, which `land.ts` signs later; its author is the bot's). A plain
+ * `git commit` is the one that slips; CI never reads signatures on a PR branch, so this is where it is found. Fetches
+ * main and, when the head is not here, the head; changes nothing else.
+ */
+export const unsignedCommits = Effect.fn("land.unsignedCommits")(function* (tree: string, head: string) {
+  const git = gitIn(tree);
+  const main = yield* fetchedMain(tree, "check");
+
+  if ((yield* sh(tree, "git", ["cat-file", "-e", `${head}^{commit}`])).code !== 0) {
+    yield* git(
+      "check",
+      `the pull request head ${head.slice(0, 8)} could not be fetched`,
+      "fetch",
+      "-q",
+      "--no-write-fetch-head",
+      "origin",
+      head,
+    );
+  }
+
+  const listed = yield* git("check", "the branch's commits do not read", "rev-list", "--reverse", `${main}..${head}`);
+  const unsigned: Array<string> = [];
+
+  for (const sha of listed.split("\n").filter((line) => line !== "")) {
+    const noted = yield* sh(tree, "git", ["notes", "--ref=fabrika", "list", sha]);
+    const raw = yield* git("check", `${sha} does not read`, "cat-file", "commit", sha);
+
+    const author = yield* git("check", `${sha} does not read`, "log", "-1", "--format=%ae", sha);
+
+    if (noted.code !== 0 && author !== BOT_EMAIL && !/^gpgsig /m.test(raw.split("\n\n")[0] ?? "")) {
+      const subject = yield* git("check", `${sha} does not read`, "log", "-1", "--format=%s", sha);
+      unsigned.push(`${sha.slice(0, 8)} ${subject}`);
+    }
+  }
+
+  return unsigned;
+});
+
 // The body checks `queue` runs, alone: the leak grep on the title and description, each new exported name named
 // under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket. A lead runs it after writing a body and before `queue`; it asks GitHub for reads only and changes nothing.
 const checkCommand = Command.make(
@@ -809,8 +876,18 @@ const checkCommand = Command.make(
       return yield* new Refused({ check: "body", reason: `pr ${pr}: ${checked.refusal}`, output: "" });
     }
 
+    const unsigned = yield* unsignedCommits(env.MAIN, checked.found.oid);
+
+    if (unsigned.length > 0) {
+      return yield* new Refused({
+        check: "body",
+        reason: `pr ${pr}: ${unsigned.length} commit(s) since main are not signed or made by stepcommit.sh: ${unsigned.join("; ")}. Make it with \`stepcommit.sh --commit-only lead <ticket> "<subject>" <files>\` (\`--empty\` for no files), not a plain git commit.`,
+        output: "",
+      });
+    }
+
     yield* Console.log(
-      `pr ${pr}: the body checks pass (leak grep on the title and description, ## New names, fabrika close ticket lines)`,
+      `pr ${pr}: the body checks pass (leak grep on the title and description, ## New names, fabrika close ticket lines, every commit since main signed)`,
     );
   }),
 );

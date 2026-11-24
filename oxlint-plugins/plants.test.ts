@@ -254,6 +254,19 @@ const PLANTS: readonly Plant[] = [
   },
   DATA_TAGGEDERROR,
   {
+    code: "fabrika(no-declare-in-tests)",
+    file: "planted.test.ts",
+    prelude: [],
+    lines: [
+      ["declare const a: number;", true],
+      ["declare let b: number;", true],
+      ["declare var c: number;", true],
+      ["export declare const d: number;", true],
+      ["declare function e(): number;", false],
+      ["export const f = 1;", false],
+    ],
+  },
+  {
     code: "fabrika(no-effect-promise)",
     prelude: [EFFECT, "declare const p: () => Promise<number>;", "declare const c: () => string;"],
     lines: [
@@ -575,6 +588,10 @@ describe("each rule refuses what it is there to refuse", () => {
     expect(new Set(codes).size).toBe(codes.length);
   });
 
+  it("a test file is the only place no-declare-in-tests looks", () => {
+    expect(firesInPlanted(notATest, "fabrika(no-declare-in-tests)")).toEqual([]);
+  });
+
   it("a test file is the only place no-expect-in-if looks", () => {
     expect(firesInPlanted(notATest, "fabrika(no-expect-in-if)")).toEqual([]);
   });
@@ -646,6 +663,9 @@ describe("each rule refuses what it is there to refuse", () => {
         // The real-resource rule is on for next/'s and kalfa/'s test files only: integration-test-name.test.ts plants a plain
         // and a named file under each and runs oxlint over them with the real lint config.
         "integration-test-name",
+        // Ticket 1311's rule reads test files and test kits only: no-sleep-on-test-clock.test.ts plants generated
+        // test bodies at those paths and at product paths, with the real lint config.
+        "no-sleep-on-test-clock",
         // Ticket 1029's rule reads only next/'s test files, suites and test kits: test-database.test.ts
         // plants generated lines at those paths, and at product and outside paths it must pass.
         "test-database",

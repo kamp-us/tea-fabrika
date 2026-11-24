@@ -19,6 +19,8 @@
 //   failing-stream line compiles, so its `@ts-expect-error` is unused; (b) build the receiver through `start`: the layer's
 //   requirements gain `FileSystem` and `Path`, so the exact-services line fails; (c) give the `restart` update a `value`
 //   field: the `@ts-expect-error` on it is unused.
+// - X4 (ticket 1846, slice 1): type `jsonSchema`'s `file` as `string`: the `@ts-expect-error` line compiles, so its
+//   directive is unused; type its answer or `reference`'s as `unknown`: the exact-type lines fail.
 // - T7 (ticket 1843, slice 2): type `SettingGroup.edit`'s `set` as taking `setting: Setting.Any`, so the
 //   `@ts-expect-error` for another group's setting is unused.
 // - T9 (ticket 1843, slice 3): type the disk `set`'s value as `unknown`, so the `@ts-expect-error` for a wrong value is
@@ -338,6 +340,23 @@ it("SN12 type: `layerFromSnapshots(group, s)` is exactly a layer of the group's 
   expectTypeOf<Layer.Services<typeof received>>().toEqualTypeOf<Carrier | Digest.Digest>();
   expectTypeOf<Effect.Success<Effect.Effect<Effect.Success<typeof group>>>>().toEqualTypeOf<Values>();
   expectTypeOf<keyof Restart>().toEqualTypeOf<"_tag" | "name">();
+});
+
+// X4: the two text calls answer a string, and the file is the repo's or the user's. The lines are in a function that is
+// never called, so this file runs under Vitest as well as compiling, with no call made at load; the types are of the real
+// calls on the real group above.
+const texts = () => [
+  // @ts-expect-error X4: a file is the repo's or the user's, never a person's
+  SettingGroup.jsonSchema(group, "person"),
+];
+
+it("X4 type: `jsonSchema(group, file)` and `reference(group)` answer a string, and a file other than the repo's or the user's does not compile", () => {
+  expectTypeOf(texts).toBeFunction();
+  expectTypeOf<ReturnType<typeof SettingGroup.jsonSchema<"demo", typeof group.settings>>>().toEqualTypeOf<string>();
+  expectTypeOf<ReturnType<typeof SettingGroup.reference<"demo", typeof group.settings>>>().toEqualTypeOf<string>();
+  expectTypeOf<
+    Parameters<typeof SettingGroup.jsonSchema<"demo", typeof group.settings>>[1]
+  >().toEqualTypeOf<Setting.File>();
 });
 
 // T6: a setting's value is plain data. The lines that must compile are in `plain`, the lines that must not are in
