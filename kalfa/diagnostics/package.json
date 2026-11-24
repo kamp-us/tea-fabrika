@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "rslib build",
+    "prepack": "rslib build",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

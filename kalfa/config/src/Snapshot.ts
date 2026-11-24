@@ -5,6 +5,7 @@
  *
  * Paths are sorted before hashing, and origins stay out of it, so equal settings have one hash whatever source gave them.
  */
+import * as Hidden from "@kalfa/diagnostics/Hidden";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
@@ -40,7 +41,7 @@ export type Snapshot = typeof Snapshot.Type;
  *
  * **Details**
  *
- * Two cases build it in `read`: the saved input fails the strict decode, re-decode or re-encode, which carries a redacted `cause`, and the saved hash does not match the values, which carries none. The cause is redacted because decoder details can repeat the input.
+ * Two cases build it in `read`: the saved input fails the strict decode, re-decode or re-encode, which carries a hidden `cause`, and the saved hash does not match the values, which carries none. The cause is a `Hidden.Cause` (`@kalfa/diagnostics/Hidden`) because decoder details can repeat the input: no rendering shows it, and every codec writes it as `<redacted>`.
  *
  * @category errors
  */
@@ -48,7 +49,7 @@ export class SnapshotError extends Schema.TaggedError<SnapshotError, { readonly 
   "SnapshotError",
   {
     message: Schema.String,
-    cause: Schema.optional(Schema.Defect()),
+    cause: Schema.optional(Hidden.Cause),
   },
 ) {}
 

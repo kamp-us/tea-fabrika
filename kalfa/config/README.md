@@ -121,8 +121,9 @@ A `read` refusal says why the read failed, from the failure's kind and its POSIX
   demo did not start.
 ```
 
-The error's `cause` is kept, hidden in a `Redacted`, since a platform error prints the path it failed on. Code that must
-see it reads it on purpose with `Redacted.value`. Every refusal ends the span of its call: `config.layer`, `config.set`,
+The error's `cause` is kept, as a `Hidden.Cause` (`@kalfa/diagnostics/Hidden`), since a platform error prints the path it failed on:
+no rendering shows it, and every codec, `Schema.toCodecJson` included, writes it as `<redacted>`. `SnapshotError`'s cause is held the same
+way. Code that must see a cause reads it on purpose with `Redacted.value`. Every refusal ends the span of its call: `config.layer`, `config.set`,
 `config.remove`, `config.edit` or the command's own.
 
 ## Change one setting in a file's text
@@ -352,7 +353,7 @@ For example, `@kalfa/config/Reference` reads rows from a loaded snapshot, and
 `@kalfa/config/Print` prints those rows. `internal/` and test files are private.
 
 Workspace imports read `src/`. The archive exports ESM JavaScript and declarations from `dist/`.
-Its runtime dependencies are the TOML parser and serializer. Effect is a peer supplied by the caller.
+Its runtime dependencies are the TOML parser and serializer, and `@kalfa/diagnostics`, for the hidden cause its errors hold. Effect is a peer supplied by the caller.
 
 ## Build an archive from source
 
