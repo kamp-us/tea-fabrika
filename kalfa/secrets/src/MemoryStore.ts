@@ -5,8 +5,8 @@
  * **Details**
  *
  * It imports no other kalfa package. It is the store `memory`, in the place `memory`, and it counts versions for each item from 1:
- * each put makes the next one. The empty text is nothing, so a put of it leaves the item without a value. A value is kept as a
- * `Redacted`, so nothing the store, its contents or its facts show holds one.
+ * each put makes the next one. The empty text is nothing, so a put of it leaves the item without a value. A value is handed out as a
+ * `Redacted` labeled with the name asked for, and kept behind a function, so nothing the store, its contents or its facts show holds one.
  */
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import * as Name from "./Name.ts";
@@ -23,14 +23,14 @@ export class Contents extends Context.Service<
   {
     readonly put: (item: string, value: string) => Effect.Effect<void>;
     readonly remove: (item: string) => Effect.Effect<void>;
-    readonly read: (item: string) => Effect.Effect<Store.Held>;
+    readonly read: (item: string, name: typeof Name.SecretName.Type) => Effect.Effect<Store.Held>;
   }
 >()("@kalfa/secrets/memory/Contents") {}
 
-/** One item: how many puts it has had, and the value the last one left, if any. */
+/** One item: how many puts it has had, and how to hand out the value the last one left, if any, hidden and labeled for a name. */
 interface Shelf {
   readonly puts: number;
-  readonly value: Redacted.Redacted<string> | undefined;
+  readonly value: ((name: typeof Name.SecretName.Type) => Redacted.Redacted<string>) | undefined;
 }
 
 const contents = (seed: Readonly<Record<string, string>>): Context.Context<Contents> => {
@@ -39,7 +39,7 @@ const contents = (seed: Readonly<Record<string, string>>): Context.Context<Conte
   const put = (item: string, text: string) => {
     shelves.set(item, {
       puts: (shelves.get(item)?.puts ?? 0) + 1,
-      value: text === "" ? undefined : Redacted.make(text),
+      value: text === "" ? undefined : (label) => Redacted.make(text, { label }),
     });
   };
 
@@ -57,13 +57,13 @@ const contents = (seed: Readonly<Record<string, string>>): Context.Context<Conte
           shelves.set(item, { puts: shelf.puts, value: undefined });
         }
       }),
-    read: (item) =>
+    read: (item, name) =>
       Effect.sync(() => {
         const shelf = shelves.get(item);
 
         return shelf?.value === undefined
           ? new Store.Missing({ reason: "absent" })
-          : new Store.Found({ value: { value: shelf.value, version: Name.Version.make(String(shelf.puts)) } });
+          : new Store.Found({ value: { value: shelf.value(name), version: Name.Version.make(String(shelf.puts)) } });
       }),
   });
 };
@@ -86,7 +86,7 @@ export const store = Store.make({
   id: "memory",
   item: Schema.NonEmptyString,
   place: "memory",
-  holds: { read: (item: string) => Contents.use((held) => held.read(item)) },
+  holds: { read: (item: string, name) => Contents.use((held) => held.read(item, name)) },
 });
 
 /**

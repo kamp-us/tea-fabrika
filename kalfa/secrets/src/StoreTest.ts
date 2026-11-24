@@ -1,4 +1,4 @@
-// The laws every secret store passes (M1a to M1g), exported as `/test`. A runner gives a `Subject`: how to make an empty store of its own kind
+// The laws every secret store passes (M1a to M1h), exported as `/test`. A runner gives a `Subject`: how to make an empty store of its own kind
 // and how a person puts a value into it or takes one out. The suite draws a texture, makes one value for every class the plan names, puts
 // each into the store and asks the store's `holds` port. A store that passes these answers as every other one does. Later parts of the
 // suite check a store's other ports, which a store that has them passes too.
@@ -6,7 +6,9 @@ import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Array as Arr, Effect, type Layer, Option, Schema } from "effect";
 import * as Name from "./Name.ts";
 import {
+  acceptedNames,
   between,
+  nameTexture,
   findable,
   found,
   holder,
@@ -22,6 +24,9 @@ import {
   type Value,
 } from "./Secrets.test-support.ts";
 import type * as Store from "./Store.ts";
+
+/** The name the laws that are not about a label ask for. */
+const NAME = Schema.decodeUnknownSync(Name.SecretName)("transport/turn-key");
 
 /** A kind of secret store, as the laws reach it: how to make an empty one and how a person fills it. */
 export interface Subject<Item, R> {
@@ -85,7 +90,9 @@ const OPENING: ReadonlyArray<Step> = [
 
 export const suite = <Item, R>(name: string, subject: Subject<Item, R>, options: SuiteOptions): void => {
   const run = { arbitrary: { runs: options.runs, seed: SEED }, timeout: options.timeout };
-  const read = holder(subject.store).read;
+  const readNamed = holder(subject.store).read;
+  // The laws that are not about the label ask for one fixed name.
+  const read = (item: Item) => readNamed(item, NAME);
 
   describe(`${name}: the shared laws of a secret store`, () => {
     // Plant: answer `Found` with the value cut at 4 KB, or trimmed (c, d, e); decode base64 inside a PEM armor (e); answer a plain text in place of
@@ -346,6 +353,45 @@ export const suite = <Item, R>(name: string, subject: Subject<Item, R>, options:
               }
             }
           }).pipe(Effect.provide(subject.empty));
+        }),
+      run,
+    );
+
+    // Plant: answer a value with no label; label it with the item's text; label it with the first name asked for, on every later read; give a
+    // value the label of the store's id.
+    it.effect.prop(
+      "M1h label: the value a read gives for a name carries that name as its label and shows only its label, for every name and every value, and a read for another name gives that name",
+      { texture: valueTexture, names: nameTexture },
+      ({ texture, names }) =>
+        Effect.gen(function* () {
+          const values = findable(valueClasses(texture));
+          expect(classIds(values), "the generator reaches every value class").toBe("cde");
+
+          const asked = [...new Set(acceptedNames(names).map((each) => each.text))].map((text) =>
+            Schema.decodeUnknownSync(Name.SecretName)(text),
+          );
+
+          expect(asked.length, "the generator reaches several names").toBeGreaterThanOrEqual(2);
+
+          for (const value of values) {
+            const labels = yield* Effect.gen(function* () {
+              yield* subject.put(itemAt(subject, 0), value.text);
+
+              return yield* Effect.forEach(
+                asked,
+                (name) => Effect.map(readNamed(itemAt(subject, 0), name), (held) => ({ name, held })),
+                { concurrency: 1 },
+              );
+            }).pipe(Effect.provide(subject.empty));
+
+            for (const { name, held } of labels) {
+              const hidden = Option.getOrUndefined(Option.map(found(held), (each) => each.value));
+
+              expect(hidden?.label, `${value.id}: labeled with the name asked for`).toBe(name);
+              expect(String(hidden), `${value.id}: shows only the label`).toBe(`<redacted:${name}>`);
+              expect(reading(held, value.text)?.exact, `${value.id}: and still the value, byte for byte`).toBe(true);
+            }
+          }
         }),
       run,
     );

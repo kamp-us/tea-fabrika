@@ -76,6 +76,10 @@
       "imports": [],
       "pure": false
     },
+    "kalfa-permissions": {
+      "imports": [],
+      "pure": false
+    },
     "kalfa-transport": {
       "imports": [],
       "pure": false
@@ -106,6 +110,7 @@
     "kalfa/github": "kalfa-github",
     "kalfa/secrets": "kalfa-secrets",
     "kalfa/ledger": "kalfa-ledger",
+    "kalfa/permissions": "kalfa-permissions",
     "kalfa/transport": "kalfa-transport"
   },
   "libraryRoots": ["next", "kalfa"],

@@ -238,7 +238,7 @@ it.effect.prop(
           readonly name: string;
           readonly run: Effect.Effect<unknown, Errors.StoreFailed | Errors.RecordFailed>;
         }> = [
-          { name: "the store", run: holder(failingStore(value.text)).read("app-key") },
+          { name: "the store", run: holder(failingStore(value.text)).read("app-key", NAME) },
           {
             name: "the recorder",
             run: Recorder.Recorder.use((recorder) =>

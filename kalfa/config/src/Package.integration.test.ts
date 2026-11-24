@@ -2,6 +2,9 @@
 // compiles their declarations; the package's exports do not change (the manifest check below). Plant: leave
 // `internal/toml.ts` out of the build, so the consumer's edit fails.
 // T1076 P2. Plants: ship a source export, omit parser JS/declarations, or keep a workspace runtime dependency.
+// Ticket 1846 P1 (slice 2): the entry `./Cli` ships beside them, with the `config` command: the consumer runs `config list`
+// on one group over an in-memory file through `Command.runWith`, reads the listing, and compiles the declaration. Plant:
+// leave `./Cli` out of `publishConfig.exports`, so the consumer's import fails and the export list differs.
 // Ticket 1839 P1: the root entry `.` ships beside the twelve modules, mapped to `dist/index`. Plant: drop `.` from the
 // published exports, so the manifest check below and the consumer's import of `@kalfa/config` fail.
 // scenario: only a real build, archive and installation prove installed Node and compiler resolution.
@@ -24,6 +27,7 @@ const modules = [
   "Print",
   "Snapshot",
   "Load",
+  "Cli",
 ] as const;
 
 /** The root entry: `import { Setting, SettingGroup } from "@kalfa/config"`. */
@@ -255,6 +259,8 @@ it.effect(
             private: Schema.Literal("passed"),
             // Ticket 1843 P1: the installed archive runs `SettingGroup.edit(...).set` and `.remove`.
             edit: Schema.Literal("passed"),
+            // Ticket 1846 P1: the installed archive runs `config list` through `@kalfa/config/Cli`.
+            config: Schema.Literal("passed"),
           }),
         ),
       )(yield* command(consumer, "node", ["consumer.mjs"]));

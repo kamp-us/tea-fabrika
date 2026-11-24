@@ -44,12 +44,13 @@ export type Held =
   | Missing;
 
 /**
- * The port of a store that holds values: it reads an item.
+ * The port of a store that holds values: it reads an item, for the secret `name` that was asked for. The store hands the value out
+ * already hidden and labeled with that name, so no one downstream has to open it to label it.
  *
  * @category models
  */
 export interface Holds<Item, R> {
-  readonly read: (item: Item) => Effect.Effect<Held, Errors.StoreFailed, R>;
+  readonly read: (item: Item, name: typeof Name.SecretName.Type) => Effect.Effect<Held, Errors.StoreFailed, R>;
 }
 
 /**

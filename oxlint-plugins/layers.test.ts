@@ -707,6 +707,7 @@ describe("the real rule file on planted trees", () => {
       "next-repositories": 2,
       "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
       "next-telemetry": 1,
+      "kalfa-config-cli": 2, // ticket 1846's approved plan: the `config` command imports kalfa-config (1), and the root entry never imports it
       "kalfa-config": 1, // kalfa-config-PLAN.md:318: it imports next-vitest (0), and next-settings (2) imports it
       "kalfa-markdown": 0, // ticket 1926: it imports no other package, so it ranks with the lowest
       "next-shared": 0,
@@ -717,6 +718,7 @@ describe("the real rule file on planted trees", () => {
       "kalfa-cli": 2, // T2076's approved plan: it imports kalfa-diagnostics (0) only today, and kalfa-config (1) joins in ticket 2081, so it ranks above both
       "kalfa-secrets": 2, // T2053's approved plan: its settings read through kalfa-config (1), so secrets ranks one above it, beside github
       "kalfa-ledger": 0, // T2082's approved plan: the Ledger imports no kalfa package, so it ranks lowest, beside source control and Markdown
+      "kalfa-permissions": 0, // T2092's approved plan, slice 1: it imports no other package, so it ranks with the lowest (slice 2 makes it 1, above the Ledger's error classes)
       "kalfa-transport": 0, // T2066's approved plan: transport imports no package of ours, so it ranks with the lowest
     });
   });

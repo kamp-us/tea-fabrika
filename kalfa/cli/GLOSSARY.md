@@ -30,6 +30,11 @@ What a subcommand ends with: 0 when it reported no error, 1 when it reported one
 printed), 2 when it could not finish.
 _Avoid_: status, return code
 
+**Readable line**:
+How the command prints one diagnostic by default: one line on standard error with its place, severity, code, message and
+hint, with no line break in it.
+_Avoid_: pretty output, human format, log line
+
 **Write command**:
 A subcommand that changes something. It sends one message to a process the app runs, and the app decides and
 writes. A subcommand that only reads stays on the device.

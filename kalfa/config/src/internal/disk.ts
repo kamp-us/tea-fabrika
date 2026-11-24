@@ -152,26 +152,31 @@ const onDisk = Effect.fnUntraced(function* (call: Call, place: Place) {
   );
 });
 
+/** The two files' names a person reads, and the one file a call is about. */
+export interface Located {
+  readonly names: Names;
+  readonly place: Place & { readonly name: string };
+}
+
 /**
- * One disk call: finds the file as the start does and changes it. Annotates the span the caller made with whether the text changed.
+ * Finds both files as the start does and picks the one a call is about, named as a write names it: `.<app>/<app>.toml`, `~/.<app>/<app>.toml` or `$<APP>_HOME/<app>.toml`. No file is known before the environment is read, so a failure to read it ends `The <file> configuration was not changed.`
  */
-const write = Effect.fnUntraced(function* (
-  group: Group,
-  format: Format,
-  file: Setting.File,
-  repo: string,
-  kind: "set" | "remove",
-  edit: Call["edit"],
-) {
-  const { app } = group;
+export const locate = Effect.fnUntraced(function* (app: string, format: Format, file: Setting.File, repo: string) {
   const provider = yield* ConfigProvider.ConfigProvider;
-  // No file is known before the environment is read, so a failure to read it names the configuration.
   const closing = `The ${file === "repo" ? "repo" : "user"} configuration was not changed.`;
   const found = { repo: yield* repoPlace(app, format, repo), user: yield* userPlace(app, format, provider, closing) };
   const names = { repo: found.repo.name, user: found.user.name };
   // A file name cast past the types reaches the user configuration, never a key that `Object` holds.
   const place = file === "repo" ? found.repo : found.user;
 
+  return { names, place } satisfies Located;
+});
+
+/**
+ * One disk call: changes the file `found` names. Annotates the current span with whether the text changed.
+ */
+const write = Effect.fnUntraced(function* (app: string, found: Located, kind: "set" | "remove", edit: Call["edit"]) {
+  const { names, place } = found;
   const changed = yield* onDisk({ app, kind, name: place.name, names, edit }, place);
 
   yield* Effect.annotateCurrentSpan("kalfa.config.changed", changed);
@@ -185,31 +190,31 @@ const attributes = (group: Group, setting: Setting.Any, file: Setting.File) =>
     "kalfa.config.file": file,
   });
 
-/** Sets one setting in the file `file` of `group`, on disk, in a span `config.set`. */
-export const set = Effect.fn("config.set")(function* (
+/** Sets one setting in the file `file` of `group`, which `found` locates, on disk, in the caller's span. */
+export const set = Effect.fnUntraced(function* (
   group: Group,
   format: Format,
   setting: Setting.Any,
   value: unknown,
   file: Setting.File,
-  repo: string,
+  found: Located,
 ) {
   yield* attributes(group, setting, file);
-  yield* write(group, format, file, repo, "set", (text, names) =>
+  yield* write(group.app, found, "set", (text, names) =>
     change.set(group, format, { file, names }, text, setting, value),
   );
 });
 
-/** Takes one setting out of the file `file` of `group`, on disk, in a span `config.remove`. */
-export const remove = Effect.fn("config.remove")(function* (
+/** Takes one setting out of the file `file` of `group`, which `found` locates, on disk, in the caller's span. */
+export const remove = Effect.fnUntraced(function* (
   group: Group,
   format: Format,
   setting: Setting.Any,
   file: Setting.File,
-  repo: string,
+  found: Located,
 ) {
   yield* attributes(group, setting, file);
-  yield* write(group, format, file, repo, "remove", (text, names) =>
+  yield* write(group.app, found, "remove", (text, names) =>
     change.remove(group, format, { file, names }, text, setting),
   );
 });
