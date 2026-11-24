@@ -237,7 +237,7 @@ export const hiddenCause: CreateRule = {
       if (node.type === "MemberExpression") {
         const name = written(node.property, node.computed);
 
-        return isSchema(node.object) && name !== null && REDACTED_NAMES.includes(name);
+        return isSchema(node.object) && REDACTED_NAMES.some((each) => each === name);
       }
 
       if (node.type === "Identifier" && isUse(node)) {

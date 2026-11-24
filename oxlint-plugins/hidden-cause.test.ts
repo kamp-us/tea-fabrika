@@ -356,6 +356,8 @@ const PASSING_LINES: ReadonlyArray<(s: Spelling, h: Hiding, i: number) => string
   (s, _, i) =>
     `import { Redacted as Kept${i} } from "effect/Schema"; ${klass(s, i, `{ Kept${i}: ${s.module}.String, y: other.Kept${i} }`)}`,
   (s, _, i) => klass(s, i, `{ x: ${s.module}[unbound${i}](1) }`),
+  // A member of a call is no member of the Schema module.
+  (s, _, i) => klass(s, i, `{ x: make(${s.module}.String).y, z: make().Redacted(1) }`),
   // Names that lead to each other end the walk.
   (s, _, i) => `const A${i} = B${i}; const B${i} = A${i}; ${klass(s, i, `{ x: A${i} }`)}`,
   // The key `Redacted` is no use of the import, and neither is the name of a member; a `Redacted` of another module is no Schema's.
