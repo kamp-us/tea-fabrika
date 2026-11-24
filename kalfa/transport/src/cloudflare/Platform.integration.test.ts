@@ -24,6 +24,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
 import {
   Arbitrary,
+  Cause,
   Console,
   Context,
   Deferred,
@@ -42,7 +43,7 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 import type { Socket } from "effect/socket";
 import { SEED } from "../Transport.test-support.ts";
 import { Attachment, Command, Report, ReportText } from "./platform-wire.test-support.ts";
-import { CLOSE_CLASSES, closesFrom, connect, freePort, platformCloses } from "./Platform.test-support.ts";
+import { CLOSE_CLASSES, closesFrom, connect, dial, freePort, platformCloses } from "./Platform.test-support.ts";
 import type { Client, Close } from "./Platform.test-support.ts";
 
 /** How long the objects are left alone: the platform says 10 seconds with no event, and this is 2 more. */
@@ -142,6 +143,11 @@ const deployed = Layer.effect(
     yield* HttpClient.get(`http://127.0.0.1:${port}/ready`).pipe(
       Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
     );
+
+    // What a plain upgrade request gets from the Worker, printed once whatever follows, so a refused open is told with its answer.
+    for (const role of ["main", "log"]) {
+      yield* Console.log(`R0 DIAL /diag/${role}: ${yield* dial(`ws://127.0.0.1:${port}/diag/${role}`)}`);
+    }
 
     return { port };
   }).pipe(Effect.provide([NodeServices.layer, FetchHttpClient.layer])),
@@ -373,7 +379,10 @@ layer(deployed, { excludeTestServices: true, timeout: "120 seconds" })("R0 the p
             `${close.id}: exactly one close event comes, with the client's code and reason`,
           ).toEqual([[String(close.code), close.reason]]);
         }
-      }),
+      }).pipe(
+        // A run that fails before it has any fact still says where, so a red run is never silent.
+        Effect.tapCause((cause) => Console.log(`R0 FAILED: ${Cause.pretty(cause)}`)),
+      ),
     { arbitrary: { seed: SEED, runs: 1 } },
   );
 });

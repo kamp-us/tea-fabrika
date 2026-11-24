@@ -2,9 +2,10 @@
 // talks to the probe Worker (`platform-worker.test-support.ts`) over a real WebSocket. Every generator is an Effect Arbitrary,
 // built on the pieces `../Transport.test-support.ts` exports, which this file imports and never edits. Each law makes, from
 // each draw, one input for every class it names, so every class is reached in every run.
+import { request } from "node:http";
 import { createServer } from "node:net";
 import { NodeSocket } from "@effect/platform-node";
-import { Arbitrary, Deferred, Effect, Predicate, Queue } from "effect";
+import { Arbitrary, Console, Deferred, Effect, Formatter, Option, Predicate, Queue } from "effect";
 import type { Scope } from "effect";
 import { Socket } from "effect/socket";
 import { between, word } from "../Transport.test-support.ts";
@@ -86,12 +87,66 @@ export interface Client {
   readonly ended: Deferred.Deferred<Socket.SocketError>;
 }
 
-/** Connects to `url` and reads it in the background until the scope ends. */
+/**
+ * What a server answers to a WebSocket upgrade request for `url`, in words: the status, the headers and the start of the body when
+ * it is no upgrade, or that it upgraded. A WebSocket client says only that the handshake failed, and this says why.
+ */
+export const dial = (url: string): Effect.Effect<string> =>
+  Effect.callback<string>((resume) => {
+    const asked = request(url.replace(/^ws/, "http"), {
+      headers: {
+        connection: "Upgrade",
+        upgrade: "websocket",
+        "sec-websocket-version": "13",
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+      },
+    });
+
+    asked.on("upgrade", (response, socket) => {
+      socket.destroy();
+      resume(
+        Effect.succeed(
+          `upgraded with status ${response.statusCode} and headers ${Formatter.formatJson(response.headers)}`,
+        ),
+      );
+    });
+    asked.on("response", (response) => {
+      let body = "";
+
+      response.setEncoding("utf8");
+      response.on("data", (chunk: string) => {
+        body += chunk;
+      });
+      response.on("end", () => {
+        resume(
+          Effect.succeed(
+            `no upgrade: status ${response.statusCode}, headers ${Formatter.formatJson(response.headers)}, body ${Formatter.formatJson(body.slice(0, 600))}`,
+          ),
+        );
+      });
+    });
+    asked.on("error", (error) => resume(Effect.succeed(`the request failed: ${error.message}`)));
+    asked.end();
+
+    return Effect.sync(() => asked.destroy());
+  }).pipe(Effect.timeoutOption("5 seconds"), Effect.map(Option.getOrElse(() => "no answer in 5 seconds")));
+
+/** Connects to `url` and reads it in the background until the scope ends. A failed open is told, with what the server answers. */
 export const connect = (url: string): Effect.Effect<Client, Socket.SocketError, Scope.Scope> =>
   Effect.gen(function* () {
     const socket = yield* Effect.provide(Socket.Socket, NodeSocket.layerWebSocket(url));
     const writer = yield* socket.writer;
-    const { pull } = yield* socket.reader;
+
+    const { pull } = yield* socket.reader.pipe(
+      Effect.tapError((error) =>
+        Effect.flatMap(dial(url), (answered) =>
+          Console.log(
+            `R0 OPEN FAILED dialing ${url}: ${Formatter.format(error.reason)}; a plain upgrade request gets ${answered}`,
+          ),
+        ),
+      ),
+    );
+
     const inbox = yield* Queue.unbounded<string>();
     const ended = yield* Deferred.make<Socket.SocketError>();
     const decoder = new TextDecoder();
