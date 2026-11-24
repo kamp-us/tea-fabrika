@@ -14,7 +14,7 @@
 // The two facts of (2) are printed as `R0 FACT` lines; the stand-in's two constants are written from them. A later round of
 // this slice makes this law fail when either differs from those constants.
 //
-// The three draws of `platformCloses` hold fifteen closes, each on an object of its own, all idle together, so the 12 seconds
+// The three draws of `platformCloses` hold twelve closes, each on an object of its own, all idle together, so the 12 seconds
 // are waited once: three runs one after another could not fit the 60 seconds a test has. The objects are told apart by name.
 //
 // Plant: keep the probe object busy with an open outbound call (a `fetch` that never answers, held in the object's constructor),

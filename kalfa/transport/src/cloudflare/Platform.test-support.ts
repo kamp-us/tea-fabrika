@@ -22,7 +22,11 @@ interface CloseSeed {
 
 /**
  * The generator `platformCloses`, the class (r) of the plan: a seed from which a server close (1000, and 3000 to 4999 with a
- * reason) and a client close (1000, 1001, and 3000 to 4999) are made, each with a reason of up to 123 bytes of UTF-8.
+ * reason) and a client close (1000, and 3000 to 4999) are made, each with a reason of up to 123 bytes of UTF-8.
+ *
+ * A client close has no 1001 (the plan had one): the client of these laws is the platform's `WebSocket`, whose `close(code)` accepts
+ * only 1000 and 3000 to 4999 and throws `InvalidAccessError` for any other, 1001 included, which a browser sends only of its
+ * own accord when a page ends. See `clientMayClose`.
  */
 export const platformCloses: Arbitrary.Arbitrary<CloseSeed> = Arbitrary.all({
   high: between(3000, 4999),
@@ -41,13 +45,15 @@ export interface Close {
 }
 
 /** The classes of (r) a law must reach, in order. */
-export const CLOSE_CLASSES = [
-  "server 1000",
-  "server 3000 to 4999",
-  "client 1000",
-  "client 1001",
-  "client 3000 to 4999",
-] as const;
+export const CLOSE_CLASSES = ["server 1000", "server 3000 to 4999", "client 1000", "client 3000 to 4999"] as const;
+
+/**
+ * Whether a platform `WebSocket` may close with `code`: 1000, or 3000 to 4999, as the WHATWG WebSocket standard says ("validate close code
+ * and reason") and as undici writes it, in `validateCloseCodeAndReason` of `lib/web/websocket/util.js`, lines 290 to 295 of undici
+ * 8.12.4: `if (code !== 1000 && (code < 3000 || code > 4999)) throw new DOMException('invalid code', 'InvalidAccessError')`. Node 26 carries
+ * undici 8.12.2 inside it, and `new WebSocket(url).close(1001)` throws that error there too.
+ */
+export const clientMayClose = (code: number): boolean => code === 1000 || (code >= 3000 && code <= 4999);
 
 /**
  * One close for each class of (r), for each seed. The reasons are empty, ASCII, and letters past ASCII, each far under the 123
@@ -70,7 +76,6 @@ export const closesFrom = (seeds: ReadonlyArray<CloseSeed>): ReadonlyArray<Close
       made("server 1000", "server", 1000),
       made("server 3000 to 4999", "server", seed.high),
       made("client 1000", "client", 1000),
-      made("client 1001", "client", 1001),
       made("client 3000 to 4999", "client", seed.low),
     ];
   });
