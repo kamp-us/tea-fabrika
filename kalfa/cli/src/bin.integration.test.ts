@@ -90,7 +90,8 @@ const FLOOD_ENDS = [
 ] as const;
 
 for (const [end, code, last] of FLOOD_ENDS) {
-  it.effect(
+  // `it.live`: the late reader sleeps, and `it.effect` runs on a TestClock that never moves on its own, so the law would wait for ever.
+  it.live(
     `K20 scenario: ${ERROR_LINES} lines on standard error are all read by a late reader when the command ends ${code}`,
     () =>
       Effect.gen(function* () {
