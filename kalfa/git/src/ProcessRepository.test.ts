@@ -2408,7 +2408,9 @@ const STAGES = ["cat-file", "ls-tree", "hash-object", "mktree"];
 
 // Plant: pass an untouched line decoded and encoded again, (v) red; run `hash-object` before the checks, so a refused edit writes; write
 // the top folder before the folder below it, red; write a folder whose entries came out the same, so an edit that changes nothing runs
-// `mktree`, (l) red; list a folder the edit does not touch; pass a changed folder's old line beside its new one; give a command a path.
+// `mktree`, (l) red; list a folder the edit does not touch; pass a changed folder's old line beside its new one; give a command a path. Order the folders by the characters
+// of their paths, not the folders above them (`folder.split("")` for `folder.split("/")`), red. Take the path of a name that is not UTF-8 as
+// `<folder>/undefined`, so an edit of a file named `undefined` changes that entry, red.
 it.effect.prop(
   "P22 editTree on the stand-in: cat-file --batch-check, the ls-tree -z listings top down, one hash-object per new content with its bytes byte for byte, then one mktree -z per changed folder, deepest first, whose stdin holds each untouched listed line byte for byte; a refused edit runs no hash-object and no mktree; an edit that changes nothing runs no mktree",
   EDIT_SPEC,
@@ -2420,6 +2422,7 @@ it.effect.prop(
       const held = (k: number): Uint8Array => Uint8Array.of(k, 0xb0);
       const fresh = (k: number): Uint8Array => Uint8Array.of(k, 0xf0, 7);
       const root = hexId("e", 0);
+      const long = `l${"x".repeat(60)}${p}`;
 
       const normal: ReadonlyArray<FileSpec> = [
         { path: `a${p}`, mode: "100644", content: held(0) },
@@ -2429,6 +2432,8 @@ it.effect.prop(
         { path: `f${p}/g${p}/h${p}`, mode: "100644", content: held(4) },
         { path: `n${p}/k`, mode: "100644", content: held(5) },
         { path: `ex${p}/inner`, mode: "100644", content: held(6) },
+        // A shallow folder whose name is longer than the path of a deeper one: "deepest first" is by folders above, never by characters.
+        { path: `${long}/m`, mode: "100644", content: held(7) },
       ];
 
       // What the base also holds that no `Path` can name, or that no edit touches: names that are not UTF-8, a submodule, an odd mode.
@@ -2502,6 +2507,18 @@ it.effect.prop(
           [`c${p}/e${p}`, held(3)],
           [`nof${p}/q`, "absent"],
           [`f${p}/zz`, "absent"],
+        ],
+        // The long shallow folder and the deeper one change together: the deeper is made first.
+        [
+          [`${long}/m`, fresh(2)],
+          [`f${p}/g${p}/i${p}`, fresh(4)],
+        ],
+        // A file named `undefined` beside a name that is not UTF-8, at the top and in a folder: only that file changes.
+        [[`undefined`, fresh(11)]],
+        [[`n${p}/undefined`, fresh(12)]],
+        [
+          [`undefined`, "absent"],
+          [`n${p}/undefined`, "absent"],
         ],
       ];
 
