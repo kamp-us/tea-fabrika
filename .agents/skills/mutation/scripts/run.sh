@@ -46,6 +46,7 @@ child.once("exit", (code) => {
   try { kill("SIGKILL"); }
   finally {
     rmSync("vitest.mutation.config.ts", {force: true});
+    rmSync("vitest.depth.config.ts", {force: true});
     process.exitCode = stopped ? 124 : code ?? 1;
   }
 });
@@ -70,22 +71,32 @@ export TEST_LIMIT
 cat > vitest.mutation.config.ts <<'TS'
 import {testConfig as base} from "./vitest.config.ts";
 import {defineConfig} from "vitest/config";
-import {depth, depthConfig} from "./.agents/skills/mutation/scripts/depth.ts";
 const include = process.env.RELATED?.split(",").map(p => p.trim()).filter(Boolean);
 if (!include?.length) throw new Error("RELATED must list the test paths");
 const limit = Number(process.env.TEST_LIMIT || 10_000);
 const names = process.env.TEST_NAMES;
-export default defineConfig({...base, test: {...base.test, ...depthConfig(depth), include, maxWorkers: 1,
+export default defineConfig({...base, test: {...base.test, include, maxWorkers: 1,
   ...(names ? {testNamePattern: names} : {}),
   testTimeout: limit, hookTimeout: limit,
 	exclude: [...(base.test?.exclude ?? []), "**/node_modules/**", "**/dist/**",
 		"packages/pipeline/src/stages/mutation/stryker*.test.ts",
 		"packages/pipeline/src/stages/pipeline/{program,github}.test.ts"]}});
 TS
+# With a depth, Stryker reads a config that adds depth.ts's pieces to the one above. It is a second file so that a run with
+# no depth reads nothing of depth.ts (a toy repo without it loads the first config as it is).
+CONFIG=vitest.mutation.config.ts
+if [ -n "${MUTATE_RUNS:-}" ]; then
+  CONFIG=vitest.depth.config.ts
+  cat > "$CONFIG" <<'TS'
+import base from "./vitest.mutation.config.ts";
+import {depth, depthConfig} from "./.agents/skills/mutation/scripts/depth.ts";
+export default {...base, test: {...base.test, ...depthConfig(depth)}};
+TS
+fi
 # Stryker parses tsconfigFile with TypeScript's JS API only when it is one of the project's
 # files; TypeScript 7 has none. Nothing writes this path, so it is never a project file.
 cat > "$M/stryker.json" <<JSON
-{"testRunner": "vitest", "vitest": {"configFile": "vitest.mutation.config.ts", "related": false},
+{"testRunner": "vitest", "vitest": {"configFile": "$CONFIG", "related": false},
  "plugins": ["$PWD/$S/vitest-runner/dist/src/index.js"], "coverageAnalysis": "perTest",
  "mutate": [$ranges], "inPlace": $IN_PLACE, "ignoreStatic": true, "timeoutMS": 5000, "concurrency": 1,
  "incremental": true, "incrementalFile": "$M/incremental.json",

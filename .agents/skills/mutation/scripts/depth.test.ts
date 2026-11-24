@@ -162,6 +162,9 @@ describe("the box's scripts carry the depth", () => {
     expect(entry).toContain(`[ -f ${config} ] || exit 73`);
     expect(entry).toContain(`depth=--config=${config}`);
     expect(runSh).toContain("...depthConfig(depth)");
+    expect(runSh).toContain(`"configFile": "$CONFIG"`);
+    const first = runSh.split("<<'TS'\n")[1]?.split("\nTS\n")[0] ?? "";
+    expect(first, "the first config reads nothing of depth.ts").not.toContain("depth");
   });
 
   // Plants: run arm c under the cap (the recheck would repeat the capped run), leave the cap on for arm a after it, read no plan, or let run.sh
