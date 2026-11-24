@@ -400,28 +400,60 @@ export const staticLines = (rows: ReadonlyArray<Row>): ReadonlyArray<string> => 
  * - `rg: <search> => <result>`: a search that shows no reader, with what it found;
  * - `law: <id>`: the id of a law that already catches it, as the plan's laws table names it (`H1`, `RF2`).
  * Other words may come with it. Evidence with none of the three answers nothing.
+ *
+ * The newest row for a file and line wins: a commit can never be rewritten, so an older row with no proof stands down once a newer
+ * row on the same place has one, and a newer row with none takes the answer away. Texts are read oldest first, and rows in order.
  */
 export type Answer = { readonly file: string; readonly line: number | null };
 
-const PROOF = String.raw`(?:\b(?:plant|rg):[ \t]*\S.*?=>[ \t]*\S|\blaw:[ \t]*[A-Z][A-Za-z]*\d+\b)`;
+// A command the arrow does not open with, so `plant: => y` has a result and no command.
+const PROOF = String.raw`(?:\b(?:plant|rg):[ \t]*(?!=>)\S.*?=>[ \t]*\S|\blaw:[ \t]*[A-Z][A-Za-z]*\d+\b)`;
 
 const ANSWER = new RegExp(String.raw`^Survivor:[ \t]+(\S+):(\d+|\*)[ \t]+\S.*?[ \t]+--[ \t]+(?:\S.*?)?${PROOF}`);
 
-/** The `Survivor:` lines of a text that carry a proof; a line with no reason, or with evidence that names no plant, search or law, is no answer. Pure. */
-export const answersIn = (text: string): ReadonlyArray<Answer> =>
-  Arr.flatMap(Str.split(text, "\n"), (row) => {
-    const found = ANSWER.exec(row);
+/** The place a `Survivor:` row answers, `file:line` or `file:*`; `null` for a row too broken to say. */
+const PLACE = /^Survivor:[ \t]+(\S+:(?:\d+|\*))(?=[ \t])/;
 
-    return found === null ? [] : [{ file: found[1] ?? "", line: found[2] === "*" ? null : Number(found[2]) }];
+type Said = { readonly text: string; readonly place: string | null; readonly answer: Answer | null };
+
+/** The `Survivor:` rows of a text, oldest first, and of each place only the last: the rest stand down. Pure. */
+const standing = (text: string): ReadonlyArray<Said> => {
+  const rows = Arr.flatMap(Str.split(text, "\n"), (text): ReadonlyArray<Said> => {
+    if (!text.startsWith("Survivor:")) {
+      return [];
+    }
+
+    const found = ANSWER.exec(text);
+
+    return [
+      {
+        text,
+        place: PLACE.exec(text)?.[1] ?? null,
+        answer: found === null ? null : { file: found[1] ?? "", line: found[2] === "*" ? null : Number(found[2]) },
+      },
+    ];
   });
+
+  const last = new Map(Arr.map(rows, (row, i) => [row.place, i] as const));
+
+  return Arr.filter(rows, (row, i) => row.place === null || last.get(row.place) === i);
+};
+
+/** The answers of the `Survivor:` rows that stand and carry a proof; a row with no reason, or evidence naming no plant, search or law, answers nothing. Pure. */
+export const answersIn = (text: string): ReadonlyArray<Answer> =>
+  Arr.flatMap(standing(text), (row) => (row.answer === null ? [] : [row.answer]));
 
 /** The nonblank rows of a text that answer nothing: a commit that only carries answers (stepcommit.sh --empty) holds none. Pure. */
 export const notAnswers = (text: string): ReadonlyArray<string> =>
   Arr.filter(Str.split(text, "\n"), (row) => Str.trim(row) !== "" && !ANSWER.test(row));
 
-/** The `Survivor:` rows of a text that answer nothing, the ones the check refuses by name. A row that does not start with `Survivor:` is not one. Pure. */
+/** The `Survivor:` rows that stand and answer nothing, the ones the check refuses by name. A newer row on the same place with a proof clears an older one. Pure. */
 export const refusedIn = (text: string): ReadonlyArray<string> =>
-  Arr.filter(Str.split(text, "\n"), (row) => /^Survivor:/.test(row) && !ANSWER.test(row));
+  Arr.flatMap(standing(text), (row) => (row.answer === null ? [row.text] : []));
+
+/** The commit bodies `git log --format=%B%x00` gives, newest first, as one text with the oldest first, so a newer row wins. Pure. */
+export const oldestFirst = (log: string): string =>
+  Arr.join(Arr.reverse(Arr.filter(Str.split(log, "\0"), (body) => Str.trim(body) !== "")), "\n");
 
 /** Whether a mutant on a line, or a file no law loads (`line` null), has an answer. Pure. */
 export const isAnswered = (answers: ReadonlyArray<Answer>, file: string, line: number | null): boolean =>
@@ -812,19 +844,24 @@ const check = Effect.fnUntraced(function* (ask: {
   // now too: a --answers file that cannot be read is refused before any wait.
   const texts = Effect.gen(function* () {
     return [
-      ...(ask.answered ? [yield* ok(root, ["log", "--format=%B", `${base}..${ask.head ?? "HEAD"}`])] : []),
+      ...(ask.answered
+        ? [oldestFirst(yield* ok(root, ["log", "--format=%B%x00", `${base}..${ask.head ?? "HEAD"}`]))]
+        : []),
       ...(ask.answers === undefined ? [] : [yield* readAnswerText(ask.answers)]),
     ];
   });
 
-  const current = Effect.map(texts, (all) => Arr.flatMap(all, answersIn));
+  // One text, oldest first and the answers file last (the commit about to be written), so the newest row of a place wins.
+  const current = Effect.map(texts, (all) => answersIn(Arr.join(all, "\n")));
   const answers = yield* current;
 
   // A `Survivor:` line with no plant, search or law in its evidence answers nothing, and is named: the build fixes the line.
-  const refused = Arr.flatMap(yield* texts, refusedIn);
+  const refused = refusedIn(Arr.join(yield* texts, "\n"));
 
   for (const line of refused) {
-    yield* Console.log(`refused  ${line}  (its evidence names no plant:, rg: or law:)`);
+    yield* Console.log(
+      `refused  ${line}  (its evidence names no plant:, rg: or law:; re-answer it with proof in an empty commit: \`stepcommit.sh --empty <step> ...\`)`,
+    );
   }
 
   if (files.length === 0) {

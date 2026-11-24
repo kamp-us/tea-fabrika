@@ -66,8 +66,9 @@ for the product code.
    - `law: <id>`: a law of the plan's laws table already catches it, so the box missed it.
      `law: R3 fails with the line planted`
 
-   A claim without one of the three ("equivalent", "never", "covered") is a guess, and review has
-   found each such line wrong. A mutant that does not type-check is a kill, since the box type-checks
+   A claim without one of the three ("equivalent", "never", "covered") is a guess. The newest row
+   for a file and line wins, so a refused row is fixed by writing it again with proof in one more
+   empty commit. A mutant that does not type-check is a kill, since the box type-checks
    every survivor and counts the ones `tsc` refuses as `CompileError`, so such a mutant needs no line.
    Leave the `static` lines as they are:
    code that runs as the module loads, which Stryker skips and the reviewer plants by hand.

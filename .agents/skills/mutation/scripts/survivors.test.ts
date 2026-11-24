@@ -16,6 +16,7 @@ import {
   mutable,
   normal,
   notAnswers,
+  oldestFirst,
   refusedIn,
   parentEntries,
   pick,
@@ -451,6 +452,8 @@ describe("survivors, which mutants a Survivor: line answers", () => {
         "prose only",
         "plant without result",
         "rg without result",
+        "plant without command",
+        "rg without command",
         "law without id",
         "no colon",
       ),
@@ -474,6 +477,10 @@ describe("survivors, which mutants a Survivor: line answers", () => {
           return `${at} ${a.reason} -- plant: ${prose}`;
         case "rg without result":
           return `${at} ${a.reason} -- rg: ${prose} =>`;
+        case "plant without command":
+          return `${at} ${a.reason} -- plant: => ${prose} => ${prose}`;
+        case "rg without command":
+          return `${at} ${a.reason} -- rg:=> ${prose} => ${prose}`;
         case "law without id":
           return `${at} ${a.reason} -- law: ${prose}`;
         default:
@@ -489,6 +496,10 @@ describe("survivors, which mutants a Survivor: line answers", () => {
     "  Survivor: indented a.ts:1 r -- plant: e => f",
   );
 
+  /** Rows with a place of their own each (the index in front of the file), so no row stands down for another. */
+  const distinct = (rows: ReadonlyArray<string>) =>
+    Arr.map(rows, (text, i) => text.replace(/^Survivor: /, `Survivor: ${i}/`));
+
   // Plants: accept a line with no evidence; accept one bare word of evidence; accept evidence that names no proof; read `*` as a number; match a
   // line by file only; let a file's own `*` answer a different file.
   it("a Survivor: line with a reason and a plant, search or law answers its mutant, and nothing else does", () => {
@@ -497,15 +508,21 @@ describe("survivors, which mutants a Survivor: line answers", () => {
         fc.array(fc.tuple(answer, fc.array(fc.oneof(unsound, noise), { maxLength: 3 })), { maxLength: 6 }),
         fc.nat(),
         (rows, pick) => {
-          const text = Arr.join(
-            Arr.flatMap(rows, ([a, other]) => [...other, row(a)]),
-            "\n",
+          const entries = Arr.flatMap(rows, ([a, other]) => [
+            ...Arr.map(other, (text) => ({ text, a: null })),
+            { text: row(a), a },
+          ]);
+
+          const text = Arr.join(distinct(Arr.map(entries, (e) => e.text)), "\n");
+
+          const want = Arr.flatMap(entries, (e, i) =>
+            e.a === null ? [] : [{ file: `${i}/${e.a.file}`, line: e.a.line }],
           );
 
           const got = answersIn(text);
-          expect(got).toEqual(Arr.map(rows, ([a]) => ({ file: a.file, line: a.line })));
+          expect(got).toEqual(want);
 
-          for (const [a] of rows) {
+          for (const a of want) {
             // A file's own line is answered, and a `*` answers any line of its file and the file no law loads.
             expect(isAnswered(got, a.file, a.line ?? pick)).toBe(true);
             expect(isAnswered(got, a.file, null)).toBe(Arr.some(got, (g) => g.file === a.file && g.line === null));
@@ -523,6 +540,61 @@ describe("survivors, which mutants a Survivor: line answers", () => {
       ),
       options,
     );
+  });
+
+  // Plants: let the oldest row of a place win; let any row with a proof win; keep every row of a place; let a newer row with no proof leave an older proof standing;
+  // treat `file:*` and `file:12` as one place.
+  it("the newest row of a place wins: an older row with no proof stands down for a newer one with it, and a newer one with none takes the answer away", () => {
+    fc.assert(
+      fc.property(
+        answer,
+        fc.array(fc.boolean(), { minLength: 1, maxLength: 5 }),
+        fc.array(fc.oneof(unsound, noise), { maxLength: 3 }),
+        (a, proven, other) => {
+          const here = (ok: boolean, i: number) =>
+            ok ? row({ ...a, reason: `r${i}` }) : `Survivor: ${a.file}:${a.line ?? "*"} r${i} -- unreachable`;
+
+          const mine = Arr.map(proven, here);
+
+          const elsewhere = Arr.map(distinct(other), (text) =>
+            text.replace(/^Survivor: (\d+)\//, "Survivor: elsewhere$1/"),
+          );
+
+          const text = Arr.join([...elsewhere, ...mine], "\n");
+          const last = proven.at(-1) === true;
+
+          expect(Arr.filter(answersIn(text), (x) => x.file === a.file && x.line === a.line)).toEqual(
+            last ? [{ file: a.file, line: a.line }] : [],
+          );
+
+          expect(Arr.filter(refusedIn(text), (r) => r.startsWith(`Survivor: ${a.file}:${a.line ?? "*"} `))).toEqual(
+            last ? [] : [here(false, proven.length - 1)],
+          );
+
+          // Another place is its own: a `*` row does not stand in for a line row.
+          const star = `Survivor: ${a.file}:* r -- unreachable`;
+          const line = `Survivor: ${a.file}:7 r -- unreachable`;
+          expect(refusedIn(`${star}\n${line}`)).toEqual([star, line]);
+        },
+      ),
+      options,
+    );
+  });
+
+  // Plants: read the log newest first (an older row without proof then wins); keep the empty piece after the last separator as a body.
+  it("the commit bodies of git log are read oldest first, so a newer commit's proof clears an older commit's bare row", () => {
+    const old = "Survivor: a/b.ts:3 r -- unreachable";
+    const fresh = "Survivor: a/b.ts:3 r -- plant: sed -i s/x/y/ a/b.ts => still green";
+    const log = `${fresh}\n\u0000${old}\n\u0000`;
+
+    expect(answersIn(oldestFirst(log))).toEqual([{ file: "a/b.ts", line: 3 }]);
+    expect(refusedIn(oldestFirst(log))).toEqual([]);
+
+    // The other order: the proof is older and a newer commit says it with none.
+    const back = `${old}\n\u0000${fresh}\n\u0000`;
+    expect(answersIn(oldestFirst(back))).toEqual([]);
+    expect(refusedIn(oldestFirst(back))).toEqual([old]);
+    expect(oldestFirst("")).toBe("");
   });
 
   // The three forms by example, as the build skill shows them. Plants: refuse one form; accept the same line with its marker, its result or its id cut.
@@ -546,6 +618,9 @@ describe("survivors, which mutants a Survivor: line answers", () => {
       "the laws never call it, rg found one caller",
       "law:  fails with the line planted",
       "law: three",
+      "plant: => 12 passed => still green",
+      "rg: => one caller => none reads it",
+      "rg:=> one caller => none reads it",
     ];
 
     for (const form of cut) {
@@ -568,7 +643,9 @@ describe("survivors, which mutants a Survivor: line answers", () => {
   // Plants: list a Survivor: row that answers; leave out one that answers nothing; list a row that is no Survivor: row; list the rows out of order.
   it("refusedIn lists the Survivor: rows that answer nothing, in order, and no other row", () => {
     fc.assert(
-      fc.property(fc.array(fc.oneof(answer.map(row), unsound, noise), { maxLength: 8 }), (rows) => {
+      fc.property(fc.array(fc.oneof(answer.map(row), unsound, noise), { maxLength: 8 }), (all) => {
+        const rows = distinct(all);
+
         expect(refusedIn(Arr.join(rows, "\n"))).toEqual(
           Arr.filter(rows, (r) => r.startsWith("Survivor:") && answersIn(r).length === 0),
         );
@@ -581,7 +658,7 @@ describe("survivors, which mutants a Survivor: line answers", () => {
   it("lines that carry no proof, or no reason, answer nothing", () => {
     fc.assert(
       fc.property(fc.array(fc.oneof(unsound, noise), { maxLength: 8 }), (rows) => {
-        expect(answersIn(Arr.join(rows, "\n"))).toEqual([]);
+        expect(answersIn(Arr.join(distinct(rows), "\n"))).toEqual([]);
       }),
       options,
     );
