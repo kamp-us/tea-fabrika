@@ -71,6 +71,9 @@
 // 25. `--runs <n>` caps the cases a property law   `--env MUTATE_RUNS=<n>` is passed, and the baseline and Stryker's own
 //     draws in the box (ticket 1306)                config run through depth.ts's cap; no `--runs` passes none, each law keeps its count; a build with no
 //                                                   depth.config.ts is stuck no_depth, never a full-depth answer under a depth label
+// 26. the image is built on the box's own buildx   `docker buildx create --name mutbox` once, `buildx build --builder mutbox --load`; gc prunes
+//     builder, and gc prunes only that cache        `buildx prune --builder mutbox` (never `docker builder prune`, which is every project's cache) and
+//                                                   `image prune` with the box's label (ticket 1306)
 // Every report carries `reach`, the line "the sample reached N of M changed files", naming each
 // file with zero mutants (ticket 655).
 
@@ -135,6 +138,12 @@ export const secondsFor = (base: boolean, cap: number = CAP, rechecked = false) 
  */
 /** How old a build-cache layer must be, in hours, before gc drops it. */
 export const CACHE_HOURS = 24;
+
+/**
+ * The box's own buildx builder (ticket 1306). The image is built on it and gc prunes only its cache, so nothing here touches the
+ * build cache of any other project's builds on this machine.
+ */
+export const BUILDER = "mutbox";
 
 export const DOCKER_SECONDS = { call: 30, prune: 120, build: 600 } as const;
 
@@ -1293,9 +1302,36 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
       yield* fs.writeFileString(path.join(context, file), (yield* show(file)) ?? "");
     }
 
-    // The only step with a network: Docker's builder, reading the lockfile's exact versions.
+    // The box's own builder, made once. It keeps its cache apart from every other build on this machine.
+    if ((yield* docker(["buildx", "inspect", BUILDER])).code !== 0) {
+      const made = yield* docker(
+        ["buildx", "create", "--name", BUILDER, "--driver", "docker-container"],
+        DOCKER_SECONDS.build,
+      );
+
+      if (made.code !== 0) {
+        return yield* Stuck.make({ reason: "image_build_failed", detail: tail(made.err) });
+      }
+    }
+
+    // The only step with a network: the builder, reading the lockfile's exact versions. `--load` puts the image in the daemon's store, where `docker run` finds it.
     const built = yield* docker(
-      ["build", "--platform", PLATFORM, "--build-arg", `PNPM=${pnpm}`, "--label", LABEL, "--tag", image, context],
+      [
+        "buildx",
+        "build",
+        "--builder",
+        BUILDER,
+        "--load",
+        "--platform",
+        PLATFORM,
+        "--build-arg",
+        `PNPM=${pnpm}`,
+        "--label",
+        LABEL,
+        "--tag",
+        image,
+        context,
+      ],
       DOCKER_SECONDS.build,
     );
 
@@ -1479,10 +1515,14 @@ const gc = Command.make(
         DOCKER_SECONDS.prune,
       );
 
-      // The build cache too, past a day old. Each image build leaves layers of its own, and a week of builds filled Docker's disk
-      // (20 GB of cache beside 30 GB of images, ticket 1306): the next build, then two runs' container, died with `No space left on device`.
-      // Safe here, since no run holds the lock and so no build is under way; a layer cut is fetched again.
-      yield* docker(["builder", "prune", "--force", "--filter", `until=${CACHE_HOURS}h`], DOCKER_SECONDS.prune);
+      // The box's own build cache, past a day old, and no other builder's. Each image build leaves layers of its own, and a week of builds
+      // filled Docker's disk (20 GB of cache beside 30 GB of images, ticket 1306): the next build, then two runs' container, died with
+      // `No space left on device`. Safe here, since no run holds the lock and so no build is under way; a layer cut is fetched again. With
+      // no such builder yet the call fails, and gc goes on.
+      yield* docker(
+        ["buildx", "prune", "--builder", BUILDER, "--filter", `until=${CACHE_HOURS}h`, "--force"],
+        DOCKER_SECONDS.prune,
+      );
 
       const images = Arr.filter(Str.split(pruned.out, "\n"), (l) => pipe(l, Str.startsWith("untagged: "))).length;
       yield* Console.log(`mutbox gc: removed ${containers} containers and ${images} images`);

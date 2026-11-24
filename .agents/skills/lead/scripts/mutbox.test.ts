@@ -39,6 +39,7 @@ import dockerfile from "./mutbox.Dockerfile?raw";
 import {
   baseNode,
   bounded,
+  BUILDER,
   buildOwns,
   CallTimeout,
   confirm,
@@ -607,7 +608,10 @@ case "$1 $2" in
 "rm "*|"kill "*) : ;;
 "image inspect") [ -e "$FAKE/image" ] || exit 1; echo id ;;
 "image prune") echo "untagged: fabrika-mutbox:old" ;;
-"build "*) for a; do last=$a; done; (cd "$last" && find . -type f | sort) > "$FAKE/context.txt"; touch "$FAKE/image" ;;
+"buildx inspect") [ -e "$FAKE/builder" ] || exit 1 ;;
+"buildx create") touch "$FAKE/builder" ;;
+"buildx build") for a; do last=$a; done; (cd "$last" && find . -type f | sort) > "$FAKE/context.txt"; touch "$FAKE/image" ;;
+"buildx prune") : ;;
 "run "*)
 	for a; do case $a in type=bind,src=*,dst=/out) out=\${a#type=bind,src=}; out=\${out%,dst=/out} ;; esac; done
 	for a; do case $a in type=bind,src=*,dst=/in,readonly) in=\${a#type=bind,src=}; in=\${in%,dst=/in,readonly} ;; esac; done
@@ -658,6 +662,8 @@ git --git-dir "$IN/repo.git" log --format=%s refs/heads/build > "$FAKE/commits.t
 type Setup = {
   run?: string;
   image?: boolean;
+  /** The box's own builder already exists. */
+  builder?: boolean;
   env?: Record<string, string>;
   docker?: boolean;
   lockPid?: number;
@@ -735,6 +741,10 @@ const run = (setup: Setup = {}) => {
 
   if (setup.image !== false) {
     writeFileSync(join(fake, "image"), "");
+  }
+
+  if (setup.builder === true) {
+    writeFileSync(join(fake, "builder"), "");
   }
 
   if (setup.lockPid !== undefined) {
@@ -864,7 +874,7 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(runCall).toContain("--network none");
     expect(runCall).toContain(`src=${join(got.dir, "out", "box")},dst=/out`);
     expect(got.calls.at(-1)).toMatch(/^rm -f fabrika-mutbox-483-\d+$/);
-    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("build ")))).toBe(false);
+    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("buildx build ")))).toBe(false);
   });
 
   // Q18's edge, through the real script and the stand-in docker: the host's own `CI`, when set and not
@@ -921,7 +931,7 @@ describe("mutbox, the run against a stand-in docker", () => {
   it("a missing image is built from the commit's own lockfile, and a changed lockfile is a new image", () => {
     const first = run({ image: false });
     expect(first.code, first.text).toBe(0);
-    const built = firstCall(first.calls, "build");
+    const built = firstCall(first.calls, "buildx build");
     expect(built).toContain("--build-arg PNPM=12.16.1");
     expect(built).toContain(`--label ${LABEL}`);
     // The build's folder holds the lockfile, workspace file, patches and our two files only.
@@ -932,7 +942,7 @@ describe("mutbox, the run against a stand-in docker", () => {
       "./pnpm-lock.yaml",
       "./pnpm-workspace.yaml",
     ]);
-    const tag = (calls: string[]) => /--tag (fabrika-mutbox:[0-9a-f]{16})/.exec(firstCall(calls, "build"))?.[1];
+    const tag = (calls: string[]) => /--tag (fabrika-mutbox:[0-9a-f]{16})/.exec(firstCall(calls, "buildx build"))?.[1];
     const again = run({ image: false });
     const other = run({ image: false, lockfile: "lockfileVersion: '9.0'\n# changed\n" });
     expect(tag(again.calls)).toBe(tag(first.calls));
@@ -945,9 +955,9 @@ describe("mutbox, the run against a stand-in docker", () => {
     const got = run({ node: "20.0.0", image: false });
     expect(got.code, got.text).toBe(30);
     expect(got.summary).toMatchObject({ outcome: "stuck", reason: "node_mismatch" });
-    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("build ")) || pipe(c, Str.startsWith("run ")))).toBe(
-      false,
-    );
+    expect(
+      Arr.some(got.calls, (c) => pipe(c, Str.startsWith("buildx build ")) || pipe(c, Str.startsWith("run "))),
+    ).toBe(false);
   });
 
   // Plant: wait for the container for ever, or leave it running after the limit.
@@ -1191,6 +1201,24 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(plain.summary.b.survivors).toHaveLength(2);
   });
 
+  // Ticket 1306. Plants: build on the default builder, or make the builder every run, or never.
+  it("the image is built on the box's own builder, made once when missing", () => {
+    const first = run({ image: false });
+    expect(first.code, first.text).toBe(0);
+    const verbs = Arr.map(first.calls, (c) => c.split(" ").slice(0, 2).join(" "));
+    expect(verbs.indexOf("buildx create")).toBeGreaterThan(verbs.indexOf("buildx inspect"));
+    expect(verbs.indexOf("buildx build")).toBeGreaterThan(verbs.indexOf("buildx create"));
+    expect(first.calls.find((c) => c.startsWith("buildx create "))).toBe(
+      `buildx create --name ${BUILDER} --driver docker-container`,
+    );
+    expect(first.calls.find((c) => c.startsWith("buildx build "))).toContain(`--builder ${BUILDER} --load`);
+
+    const made = run({ image: false, builder: true });
+    expect(made.code, made.text).toBe(0);
+    expect(Arr.some(made.calls, (c) => c.startsWith("buildx create "))).toBe(false);
+    expect(Arr.some(made.calls, (c) => c.startsWith("buildx build "))).toBe(true);
+  });
+
   // Ticket 1306. Plants: pass no MUTATE_RUNS for `--runs`, or pass it with none asked (the hourly run would lose its full depth);
   // call exit 73 (the build has no depth.config.ts) done, or any other word than no_depth.
   it("--runs reaches the container as MUTATE_RUNS, none asked passes none, and a build that cannot cap is stuck no_depth", () => {
@@ -1299,9 +1327,23 @@ describe("mutbox gc against a stand-in docker", () => {
     expect(swept.calls).toContain("rm -f abc123");
     expect(swept.calls).toContain(`image prune --all --force --filter label=${LABEL} --filter until=168h`);
     expect(swept.text).toContain("removed 1 containers and 1 images");
-    expect(swept.calls, "the build cache past a day goes too (ticket 1306: it filled Docker's disk)").toContain(
-      "builder prune --force --filter until=24h",
-    );
+    expect(
+      swept.calls,
+      "the box's own build cache past a day goes too (ticket 1306: it filled Docker's disk)",
+    ).toContain("buildx prune --builder mutbox --filter until=24h --force");
+
+    // Plants: a prune with no `--builder mutbox` (it would clear every project's build cache on this machine), an image prune with no
+    // label filter, or a `docker builder prune` / `docker system prune` of any kind.
+    const prunes = Arr.filter(swept.calls, (c) => / prune\b/.test(c) || pipe(c, Str.startsWith("system ")));
+    expect(prunes).toHaveLength(2);
+
+    for (const c of prunes) {
+      expect(c, "every prune names the box's own builder, or the box's own label").toSatisfy(
+        (text: string) =>
+          (pipe(text, Str.startsWith("buildx prune ")) && text.includes("--builder mutbox")) ||
+          (pipe(text, Str.startsWith("image prune ")) && text.includes(`--filter label=${LABEL}`)),
+      );
+    }
 
     const live = gc({ leftover: "abc123", lockPid: process.pid });
     expect(live.code, live.text).toBe(0);
@@ -1312,7 +1354,7 @@ describe("mutbox gc against a stand-in docker", () => {
         (c) =>
           pipe(c, Str.startsWith("rm ")) ||
           pipe(c, Str.startsWith("image prune")) ||
-          pipe(c, Str.startsWith("builder prune")),
+          pipe(c, Str.startsWith("buildx prune")),
       ),
     ).toBe(false);
 
