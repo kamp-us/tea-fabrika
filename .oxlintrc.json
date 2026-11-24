@@ -750,6 +750,7 @@
         "kalfa/git/src/**",
         "kalfa/github/src/**",
         "kalfa/markdown/src/**",
+        "kalfa/permissions/src/**",
         "kalfa/transport/src/**"
       ],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
@@ -6513,6 +6514,198 @@
                 "message": "MemorySocket.ts is a socket and knows no format: it imports neither the JSON-RPC frame, Format.ts nor Transport.ts."
               }
             ]
+          }
+        ]
+      }
+    },
+    {
+      // @kalfa/permissions (ticket 2092) declares a model of what a subject may do, and checks a permission against relationships. Slice 1 (the model) imports no kalfa or repo package (decision 0047: it is usable alone; slice 2 lets through the Ledger's error classes by name, decision 0091), no Telemetry (its spans are made with Effect's own), no Node module and no platform package, and prints nothing. `node:*` holds `node:fs` and not `node:fs/promises`, so both spellings are listed, and every name of Node 26's
+      // `require("node:module").builtinModules` is written bare below, subpaths included (regenerate the list with that call when Node moves). Its tests and test support are left out. An override replaces a rule's options, so this repeats the base entries.
+      "files": ["kalfa/permissions/src/**"],
+      "excludeFiles": ["kalfa/permissions/src/**/*.test.ts", "kalfa/permissions/src/**/*.test-support.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "../../**"],
+                "message": "@kalfa/permissions imports no kalfa package and nothing of this repo in this slice (decision 0047): it is usable alone."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/permissions imports no Telemetry: its spans are made with Effect's own."
+              },
+              {
+                "group": ["node:*", "node:*/**", "@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/permissions takes values and does no IO: no Node module and no platform package."
+              },
+              {
+                "group": [
+                  "_http_agent",
+                  "_http_agent/**",
+                  "_http_client",
+                  "_http_client/**",
+                  "_http_common",
+                  "_http_common/**",
+                  "_http_incoming",
+                  "_http_incoming/**",
+                  "_http_outgoing",
+                  "_http_outgoing/**",
+                  "_http_server",
+                  "_http_server/**",
+                  "_tls_common",
+                  "_tls_common/**",
+                  "_tls_wrap",
+                  "_tls_wrap/**",
+                  "assert",
+                  "assert/**",
+                  "assert/strict",
+                  "async_hooks",
+                  "async_hooks/**",
+                  "buffer",
+                  "buffer/**",
+                  "child_process",
+                  "child_process/**",
+                  "cluster",
+                  "cluster/**",
+                  "console",
+                  "console/**",
+                  "constants",
+                  "constants/**",
+                  "crypto",
+                  "crypto/**",
+                  "dgram",
+                  "dgram/**",
+                  "diagnostics_channel",
+                  "diagnostics_channel/**",
+                  "dns",
+                  "dns/**",
+                  "dns/promises",
+                  "domain",
+                  "domain/**",
+                  "events",
+                  "events/**",
+                  "fs",
+                  "fs/**",
+                  "fs/promises",
+                  "http",
+                  "http/**",
+                  "http2",
+                  "http2/**",
+                  "https",
+                  "https/**",
+                  "inspector",
+                  "inspector/**",
+                  "inspector/promises",
+                  "module",
+                  "module/**",
+                  "net",
+                  "net/**",
+                  "os",
+                  "os/**",
+                  "path",
+                  "path/**",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "perf_hooks/**",
+                  "process",
+                  "process/**",
+                  "punycode",
+                  "punycode/**",
+                  "querystring",
+                  "querystring/**",
+                  "readline",
+                  "readline/**",
+                  "readline/promises",
+                  "repl",
+                  "repl/**",
+                  "stream",
+                  "stream/**",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "string_decoder/**",
+                  "sys",
+                  "sys/**",
+                  "timers",
+                  "timers/**",
+                  "timers/promises",
+                  "tls",
+                  "tls/**",
+                  "trace_events",
+                  "trace_events/**",
+                  "tty",
+                  "tty/**",
+                  "url",
+                  "url/**",
+                  "util",
+                  "util/**",
+                  "util/types",
+                  "v8",
+                  "v8/**",
+                  "vm",
+                  "vm/**",
+                  "wasi",
+                  "wasi/**",
+                  "worker_threads",
+                  "worker_threads/**",
+                  "zlib",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/permissions takes values and does no IO: no Node module, written without its node: prefix either."
+              }
+            ]
+          }
+        ],
+        "eslint/no-console": "error",
+        "eslint/no-new-func": "error",
+        "eslint/no-restricted-globals": [
+          "error",
+          { "name": "console", "message": "@kalfa/permissions prints nothing." },
+          { "name": "process", "message": "@kalfa/permissions reads no process and no environment." },
+          { "name": "Buffer", "message": "@kalfa/permissions uses no Node global." },
+          {
+            "name": "globalThis",
+            "message": "A ban on `process` alone misses `globalThis.process`: no global object here."
+          },
+          { "name": "global", "message": "@kalfa/permissions uses no Node global." },
+          { "name": "self", "message": "@kalfa/permissions uses no global object." },
+          { "name": "window", "message": "@kalfa/permissions uses no global object." },
+          { "name": "Function", "message": "@kalfa/permissions builds no function from text." },
+          {
+            "name": "fetch",
+            "message": "@kalfa/permissions does no IO: no network of its own."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "@kalfa/permissions does no IO: no network of its own."
+          },
+          {
+            "name": "WebSocket",
+            "message": "@kalfa/permissions does no IO: no network of its own."
           }
         ]
       }
