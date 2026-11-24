@@ -169,25 +169,27 @@ interface Outcome {
   readonly stderr: string;
 }
 
-/** Reads a stream whole, as text, waiting `pause` after each part when a reader is slow. */
-const readAll = (stream: Stream.Stream<Uint8Array, unknown>, pause: Duration.Input | undefined) =>
-  stream.pipe(
-    Stream.decodeText(),
-    Stream.tap(() => (pause === undefined ? Effect.void : Effect.sleep(pause))),
-    Stream.runFold(
-      () => "",
-      (text, part) => text + part,
+/** Reads a stream whole, as text; a slow reader reads nothing for `delay` first, so the process meets its exit with its output unread. */
+const readAll = (stream: Stream.Stream<Uint8Array, unknown>, delay: Duration.Input | undefined) =>
+  Effect.andThen(
+    delay === undefined ? Effect.void : Effect.sleep(delay),
+    stream.pipe(
+      Stream.decodeText(),
+      Stream.runFold(
+        () => "",
+        (text, part) => text + part,
+      ),
     ),
   );
 
 /** Runs a command and reads every byte of both streams and the exit code. */
-const spawnRead = (command: ChildProcess.Command, pause?: Duration.Input) =>
+const spawnRead = (command: ChildProcess.Command, delay?: Duration.Input) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const handle = yield* spawner.spawn(command);
 
     const [stdout, stderr, code] = yield* Effect.all(
-      [readAll(handle.stdout, pause), readAll(handle.stderr, pause), handle.exitCode],
+      [readAll(handle.stdout, delay), readAll(handle.stderr, delay), handle.exitCode],
       { concurrency: "unbounded" },
     );
 
@@ -202,12 +204,12 @@ const node = (folder: string, args: ReadonlyArray<string>, bin: string) =>
     env: { NODE_PATH: undefined, NODE_OPTIONS: undefined },
   });
 
-/** Runs `node bin.ts <args>` in a folder and reads every byte of both streams and the exit code; a slow reader waits `pause` after each part. */
-export const kalfa = (folder: string, args: ReadonlyArray<string>, pause?: Duration.Input) =>
+/** Runs `node bin.ts <args>` in a folder and reads every byte of both streams and the exit code; a slow reader starts `delay` late. */
+export const kalfa = (folder: string, args: ReadonlyArray<string>, delay?: Duration.Input) =>
   Effect.gen(function* () {
     const located = yield* workspace;
 
-    return yield* spawnRead(node(folder, args, located.bin), pause);
+    return yield* spawnRead(node(folder, args, located.bin), delay);
   });
 
 /** What a run did when the reader of one stream closed before it wrote. */

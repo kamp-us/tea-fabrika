@@ -75,7 +75,7 @@ for (const [end, code] of [
 }
 
 // K20, standard error. `bin.ts` waits for standard error as it waits for standard output, so a handler that writes a few
-// megabytes there, to a reader that is slow, meets the exit with most of it unread. One more line than K20's: the count
+// megabytes there, to a reader that starts late, meets the exit with most of it unread. One more line than K20's: the count
 // is not a round number. Plant: leave out the wait for standard error in `bin.ts` (the `process.stderr.write` inside the
 // callback of the standard output's), and on macOS the reader gets less than was written.
 const ERROR_LINES = 60_001;
@@ -91,12 +91,12 @@ const FLOOD_ENDS = [
 
 for (const [end, code, last] of FLOOD_ENDS) {
   it.effect(
-    `K20 scenario: ${ERROR_LINES} lines on standard error are all read by a slow reader when the command ends ${code}`,
+    `K20 scenario: ${ERROR_LINES} lines on standard error are all read by a late reader when the command ends ${code}`,
     () =>
       Effect.gen(function* () {
         // scenario: only a real process, a real pipe and a reader that waits show whether output is cut at exit.
         const folder = yield* makeRepo(["leak"]);
-        const run = yield* kalfa(folder, ["leak", "flood-err", String(ERROR_LINES), end], "2 millis");
+        const run = yield* kalfa(folder, ["leak", "flood-err", String(ERROR_LINES), end], "1 second");
 
         expect(run.code).toBe(code);
         expect(run.stdout).toBe("");
