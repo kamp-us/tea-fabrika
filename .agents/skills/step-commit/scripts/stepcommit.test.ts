@@ -1842,12 +1842,14 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
         // text after an answer and one bare-word line: another body would be read by the same pattern and refused alike.
         const stopped = ["", "\n  \n"];
         const noLine = "Plant: holds: broke it: red";
+
         const read = [
           `${survivor}\nreworded a help line`,
           `note\n${survivor}`,
           `${survivor}\n${malformed[0]}`,
           ...malformed.slice(1),
         ];
+
         const bodies = [
           ...stopped,
           noLine,
