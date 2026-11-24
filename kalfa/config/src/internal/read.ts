@@ -77,6 +77,9 @@ const supported = Effect.fnUntraced(function* (setup: Setup, repo: Loaded) {
   }
 });
 
+/** A text read as a variable's text is: one value, answered at every path the schema asks about. */
+export const textSource = (text: string) => ConfigProvider.make(() => Effect.succeed(ConfigProvider.makeValue(text)));
+
 /** The first source that holds the setting. */
 const holder = (setup: Setup, s: Setting.Any, sources: ReadonlyArray<Source>) =>
   Effect.findFirst(sources, (source) =>
@@ -114,7 +117,7 @@ const resolve = Effect.fnUntraced(function* (
 
   // A flag's text is read as a variable's is: one value, answered at every path the schema asks about.
   const flag = Option.map(given, (text): Source => ({
-    provider: ConfigProvider.make(() => Effect.succeed(ConfigProvider.makeValue(text))),
+    provider: textSource(text),
     origin: () => Origin.cases.flag.make({ name: `--${s.name}` }),
   }));
 

@@ -43,21 +43,20 @@ export const running = Effect.fnUntraced(function* (settled: ReadonlyArray<Settl
   return { values: Object.freeze(values), lives };
 });
 
+/** How a read of a group goes: the running app's version, the folder of the repo configuration and the flags given. */
+interface Options {
+  readonly version: string;
+  readonly repo?: string;
+  readonly flags?: Readonly<Record<string, Option.Option<string> | undefined>>;
+}
+
 /**
- * Starts a group: reads and checks both files, then resolves every setting, and fails with the first fault. A group with a live setting goes on watching its files, in the layer's scope.
+ * The start's own steps, which a command that only reads shares so the two cannot drift: finds both files, reads the repo configuration, checks its minimum version, checks both files whole and resolves every setting. Fails with the first fault, ending `closing`.
  */
-export const start = Effect.fnUntraced(function* (
-  group: Group,
-  format: Format,
-  options: {
-    readonly version: string;
-    readonly repo?: string;
-    readonly flags?: Readonly<Record<string, Option.Option<string> | undefined>>;
-  },
-) {
+export const load = Effect.fnUntraced(function* (group: Group, format: Format, options: Options, closing: string) {
   const { app } = group;
   const provider = yield* ConfigProvider.ConfigProvider;
-  const user = yield* userPlace(app, format, provider);
+  const user = yield* userPlace(app, format, provider, closing);
   const repo = yield* repoPlace(app, format, options.repo ?? ".");
 
   const setup: Setup = {
@@ -68,11 +67,20 @@ export const start = Effect.fnUntraced(function* (
     places: { repo, user },
     names: { repo: repo.name, user: user.name },
     version: options.version,
-    closing: `${app} did not start.`,
+    closing,
   };
 
   const taken = { repo: yield* readRepo(setup), user: yield* readUser(setup) };
   const held: Held = { ...taken, settled: yield* settle(setup, taken.repo, taken.user) };
+
+  return { setup, held };
+});
+
+/**
+ * Starts a group: reads and checks both files, then resolves every setting, and fails with the first fault. A group with a live setting goes on watching its files, in the layer's scope.
+ */
+export const start = Effect.fnUntraced(function* (group: Group, format: Format, options: Options) {
+  const { setup, held } = yield* load(group, format, options, `${group.app} did not start.`);
 
   const { values, lives } = yield* running(held.settled);
   const started = new Map(held.settled.map(({ setting, origin }) => [setting.name, Object.freeze(origin)]));

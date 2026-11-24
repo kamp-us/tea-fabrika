@@ -707,6 +707,7 @@ describe("the real rule file on planted trees", () => {
       "next-repositories": 2,
       "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
       "next-telemetry": 1,
+      "kalfa-config-cli": 2, // ticket 1846's approved plan: the `config` command imports kalfa-config (1), and the root entry never imports it
       "kalfa-config": 1, // kalfa-config-PLAN.md:318: it imports next-vitest (0), and next-settings (2) imports it
       "kalfa-markdown": 0, // ticket 1926: it imports no other package, so it ranks with the lowest
       "next-shared": 0,

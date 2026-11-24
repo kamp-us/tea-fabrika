@@ -438,6 +438,12 @@
       "imports": ["next-shared"]
     },
     {
+      "name": "kalfa-config-cli",
+      "layer": 2,
+      "paths": ["kalfa/config/src/Cli*.ts", "kalfa/config/src/internal/cli"],
+      "imports": ["kalfa-config", "next-vitest"]
+    },
+    {
       "name": "kalfa-config",
       "layer": 1,
       "paths": ["kalfa/config/src"],
