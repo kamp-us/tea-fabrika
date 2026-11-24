@@ -349,14 +349,39 @@ export const moreCases = (draw: RuleDraw): ReadonlyArray<Omit<RuleCase, "id"> & 
   ];
 };
 
-/** The message of a file that gives a value to a name that is a table of settings: the line of the key, and the table's own name. */
-export const tableMessage = (draw: RuleDraw) => {
-  const [table] = settingName(draw).split(".");
+/** A setting three words deep, beside the plain one, so the group holds a table the file's value may name and settings it may not. */
+const deep = (draw: RuleDraw) =>
+  Setting.make(`q${draw.words[8]}.q${draw.words[9]}.q${draw.words[10]}`, Schema.Finite).pipe(
+    Setting.withDescription("A setting."),
+    Setting.withDefault(1),
+  );
 
-  return {
-    text: `${Array.from({ length: draw.pad }, (_, n) => `# note ${n}\n`).join("")}${table} = 3\n`,
-    message: `${repoName(draw)}, line ${draw.pad + 1}: ${table} is a table of settings, not a value.\n  ${draw.app} did not start.`,
-  };
+export type TableId = "t" | "t2";
+
+export const TABLE_IDS: ReadonlyArray<TableId> = ["t", "t2"];
+
+/** A file that gives a value to a name that is a table of settings, in a group of two settings: the table's own name, at the key's line. (t) is a table one word deep, (t2) two. */
+export const tableCases = (draw: RuleDraw) => {
+  const notes = Array.from({ length: draw.pad }, (_, n) => `# note ${n}\n`).join("");
+  const [table] = settingName(draw).split(".");
+  const upper = `q${draw.words[8]}`;
+  const lower = `q${draw.words[9]}`;
+  const closing = `${draw.app} did not start.`;
+
+  return [
+    {
+      id: "t" as const,
+      settings: [plain(draw), deep(draw)],
+      text: `${notes}${table} = 3\n`,
+      message: `${repoName(draw)}, line ${draw.pad + 1}: ${table} is a table of settings, not a value.\n  ${closing}`,
+    },
+    {
+      id: "t2" as const,
+      settings: [plain(draw), deep(draw)],
+      text: `${notes}[${upper}]\n${lower} = 3\n`,
+      message: `${repoName(draw)}, line ${draw.pad + 2}: ${upper}.${lower} is a table of settings, not a value.\n  ${closing}`,
+    },
+  ];
 };
 
 /** A file of a table and a key: `pad` comment lines, the table's header, then the key, which sits on line `pad + 2`. */
