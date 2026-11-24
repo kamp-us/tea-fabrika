@@ -5,7 +5,7 @@
 import { request } from "node:http";
 import { createServer } from "node:net";
 import { NodeSocket } from "@effect/platform-node";
-import { Arbitrary, Console, Deferred, Effect, Formatter, Option, Predicate, Queue } from "effect";
+import { Arbitrary, Clock, Console, Deferred, Effect, Formatter, Option, Predicate, Queue } from "effect";
 import type { Scope } from "effect";
 import { Socket } from "effect/socket";
 import { between, word } from "../Transport.test-support.ts";
@@ -83,8 +83,17 @@ export interface Client {
   readonly close: (code: number, reason: string) => Effect.Effect<void, Socket.SocketError>;
   /** The text frames the server sent, in order. */
   readonly inbox: Queue.Queue<string>;
-  /** Set once, with the error the socket ended with: Effect's reader ends every socket with one, a clean close included. */
-  readonly ended: Deferred.Deferred<Socket.SocketError>;
+  /** Set once, with the error the socket ended with (Effect's reader ends every socket with one, a clean close included) and when. */
+  readonly ended: Deferred.Deferred<Ended>;
+  /** The socket's address and the time it opened, in milliseconds, for a line that says which socket and how long it lived. */
+  readonly url: string;
+  readonly opened: number;
+}
+
+/** How a client's socket ended, and the clock's milliseconds when it did. */
+interface Ended {
+  readonly error: Socket.SocketError;
+  readonly at: number;
 }
 
 /**
@@ -148,7 +157,8 @@ export const connect = (url: string): Effect.Effect<Client, Socket.SocketError, 
     );
 
     const inbox = yield* Queue.unbounded<string>();
-    const ended = yield* Deferred.make<Socket.SocketError>();
+    const ended = yield* Deferred.make<Ended>();
+    const opened = yield* Clock.currentTimeMillis;
     const decoder = new TextDecoder();
 
     yield* Effect.forkScoped(
@@ -159,14 +169,26 @@ export const connect = (url: string): Effect.Effect<Client, Socket.SocketError, 
             chunks.map((chunk) => (Predicate.isString(chunk) ? chunk : decoder.decode(chunk))),
           ),
         ),
-      ).pipe(Effect.catch((error) => Deferred.succeed(ended, error))),
+      ).pipe(
+        Effect.catch((error) =>
+          Effect.flatMap(Clock.currentTimeMillis, (at) => Deferred.succeed(ended, { error, at })),
+        ),
+      ),
     );
 
+    // A write that fails says which socket and why: Effect's own message is only "An error occurred during Write".
+    const told = <A>(call: string, written: Effect.Effect<A, Socket.SocketError>) =>
+      Effect.tapError(written, (error) =>
+        Console.log(`R0 WRITE FAILED on ${url} (${call}): ${Formatter.format(error.reason)}`),
+      );
+
     return {
-      send: (text) => writer.write(text),
-      close: (code, reason) => writer.write(new Socket.CloseEvent(code, reason)),
+      send: (text) => told("send", writer.write(text)),
+      close: (code, reason) => told("close", writer.write(new Socket.CloseEvent(code, reason))),
       inbox,
       ended,
+      url,
+      opened,
     };
   });
 

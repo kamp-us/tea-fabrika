@@ -229,6 +229,43 @@ interface Seen {
   readonly clientSaw: Option.Option<Socket.SocketError>;
 }
 
+/** How a client's socket ended, when it has. */
+const whenEnded = (client: Client) =>
+  Effect.flatMap(Deferred.isDone(client.ended), (done) =>
+    done ? Effect.asSome(Deferred.await(client.ended)) : Effect.succeedNone,
+  );
+
+/** What a client's socket is doing, in words: open, or how long it lived and what it ended with (the close code and reason). */
+const sayState = (client: Client) =>
+  Effect.map(
+    whenEnded(client),
+    Option.match({
+      onNone: () => "open",
+      onSome: ({ error, at }) =>
+        `ended after ${at - client.opened} ms with ${
+          Predicate.isTagged(error.reason, "SocketCloseError")
+            ? `close ${error.reason.code} ${Formatter.formatJson(error.reason.closeReason ?? "")}`
+            : Formatter.format(error.reason)
+        }`,
+    }),
+  );
+
+/** One line for each object: the state of its two sockets, said before and after the idle wait, so a drop is told even when it fails the law. */
+const states = (when: string, opened: ReadonlyArray<Opened>) =>
+  Effect.flatMap(
+    Effect.forEach(
+      opened,
+      (one) =>
+        Effect.zipWith(
+          sayState(one.main),
+          sayState(one.log),
+          (main, log) => `${one.close.id}: main ${main}, log ${log}`,
+        ),
+      { concurrency: 1 },
+    ),
+    (lines) => Console.log(`R0 STATE ${when}:\n${lines.join("\n")}`),
+  );
+
 /** The part of one object's run that comes after the idle wait: read, then close, then watch. */
 const observe = (opened: Opened) =>
   Effect.gen(function* () {
@@ -262,9 +299,7 @@ const observe = (opened: Opened) =>
       after,
       closedByServer,
       events,
-      clientSaw: yield* Deferred.isDone(main.ended).pipe(
-        Effect.flatMap((done) => (done ? Effect.asSome(Deferred.await(main.ended)) : Effect.succeedNone)),
-      ),
+      clientSaw: Option.map(yield* whenEnded(main), ({ error }) => error),
     } satisfies Seen;
   });
 
@@ -337,8 +372,12 @@ layer(deployed, { excludeTestServices: true, timeout: "120 seconds" })("R0 the p
 
         const opened = yield* Effect.forEach(closes, open(port, run), { concurrency: "unbounded" });
 
+        yield* states("before the idle wait", opened);
+
         // The one wait: every object is left alone together.
         yield* Effect.sleep(IDLE);
+
+        yield* states(`after ${IDLE} idle`, opened);
 
         const seen = yield* Effect.forEach(opened, observe, { concurrency: "unbounded" });
 
