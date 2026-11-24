@@ -1836,20 +1836,23 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
   it("an empty tests, build or fix commit with no Survivor: line, or with anything else in the body, is refused; nothing is committed", () => {
     each(["tests", "build", "fix"] satisfies Step[], (step) =>
       withRepo([], (r) => {
-        // Every body with no Survivor: line is stopped before the answers are read, so those cost nothing: each step gets them all.
-        // The rest are read by one node process each. The step does not change how a line is read, only whether --empty is allowed
-        // (the none case below), so the build step reads every form and the tests and fix steps one extra-text body and one malformed
-        // line (the bare word): a body another step would add is read by the same pattern as the build step's, and refused alike.
-        const stopped = ["", "\n  \n", "Plant: holds: broke it: red"];
-
+        // An empty or blank body is stopped before the answers are read, so those cost nothing. Every other body is read by one node
+        // process, the cost of this law. The step does not change how a line is read, only whether --empty is allowed (the none case
+        // below), so the build step reads every form, and the tests and fix steps read a body with no Survivor: line, one with extra
+        // text after an answer and one bare-word line: another body would be read by the same pattern and refused alike.
+        const stopped = ["", "\n  \n"];
+        const noLine = "Plant: holds: broke it: red";
         const read = [
           `${survivor}\nreworded a help line`,
           `note\n${survivor}`,
           `${survivor}\n${malformed[0]}`,
           ...malformed.slice(1),
         ];
-
-        const bodies = [...stopped, ...(step === "build" ? read : [...read.slice(0, 1), ...malformed.slice(1, 2)])];
+        const bodies = [
+          ...stopped,
+          noLine,
+          ...(step === "build" ? read : [...read.slice(0, 1), ...malformed.slice(1, 2)]),
+        ];
 
         for (const body of bodies) {
           const got = carry(r, step, body, ["--commit-only"]);
