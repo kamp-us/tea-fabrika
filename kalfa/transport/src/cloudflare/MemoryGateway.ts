@@ -150,21 +150,18 @@ export const make = (
           const { pull } = yield* accepted.server.reader;
 
           return yield* Effect.forever(
-            Effect.flatMap(pull, (chunks) =>
-              Effect.forEach(
-                chunks,
-                (chunk) =>
-                  later(
-                    event((gateway) =>
-                      gateway.webSocketMessage(
-                        held(accepted),
-                        Predicate.isString(chunk) ? chunk : Uint8Array.from(chunk).buffer,
-                      ),
+            Effect.gen(function* () {
+              for (const chunk of yield* pull) {
+                yield* later(
+                  event((gateway) =>
+                    gateway.webSocketMessage(
+                      held(accepted),
+                      Predicate.isString(chunk) ? chunk : Uint8Array.from(chunk).buffer,
                     ),
                   ),
-                { concurrency: 1, discard: true },
-              ),
-            ),
+                );
+              }
+            }),
           );
         }),
       ).pipe(
