@@ -194,6 +194,7 @@ These hold in every tests round, so the brief does not repeat them.
   `stepcommit.sh` leak-checks and pushes. No force push. A refused push is reported with its
   exact command, never worked around. When `drive.ts` runs you in a box, commit nothing: drive
   commits.
+  The tests step may also carry `Survivor:` answers on their own: `stepcommit.sh --empty --body-file <file> tests <ticket> "<subject>"`, as [the build skill](../build/SKILL.md#steps) shows.
 - **Public repo:** no secrets, no absolute paths from anyone's machine, no personal names in
   committed text.
 - **Report** for a reader who saw none of the work, the answer first: every planned law written,

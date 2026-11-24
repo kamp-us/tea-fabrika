@@ -1719,10 +1719,18 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
   const empty = (r: Repo, step: Step, flags: string[], ...paths: string[]) =>
     r.call("sh", [script, ...flags, step, "321", "T321 lead: open the slice", ...paths]);
 
-  const survivor = "Survivor: src/owned.ts:1 a help line only -- no law reads the string: grep of the tests finds none";
+  const survivor = "Survivor: src/owned.ts:1 a help line only -- rg: rg -n help src tests => no test reads the string";
 
-  // Each opens as a Survivor: line and answers nothing: no line and no reason, then one bare word of evidence.
-  const malformed = ["Survivor: foo.ts", "Survivor: src/owned.ts:1 a help line only -- unreachable"];
+  // Each opens as a Survivor: line and answers nothing: no line and no reason, one bare word of evidence, then words of evidence that name
+  // no plant:, rg: or law: (ticket 1309), and each proof marker without its result or its id.
+  const malformed = [
+    "Survivor: foo.ts",
+    "Survivor: src/owned.ts:1 a help line only -- unreachable",
+    "Survivor: src/owned.ts:1 a help line only -- no law reads the string, grep of the tests finds none",
+    "Survivor: src/owned.ts:1 a help line only -- plant: sed -i s/a/b/ src/owned.ts",
+    "Survivor: src/owned.ts:1 a help line only -- rg: rg -n help =>",
+    "Survivor: src/owned.ts:1 a help line only -- law: none",
+  ];
 
   /** An empty commit that carries `body`, as a build or fix step makes one for its Survivor: lines. */
   const carry = (r: Repo, step: Step, body: string, flags: string[] = []) => {
@@ -1749,8 +1757,8 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
     );
   });
 
-  // Plants: allow --empty for another step, allow it with named files, or drop the lead ticket gate.
-  it("--empty is refused for tests and mutation, with named files, and for a ticket that is not open; nothing is committed", () => {
+  // Plants: allow --empty for another step (mutation), allow it with named files, or drop the lead ticket gate.
+  it("--empty is refused for mutation, with named files, and for a ticket that is not open; nothing is committed", () => {
     withRepo([["src/owned.ts", "build"]], (r) => {
       r.changed("src/owned.ts");
 
@@ -1766,7 +1774,7 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
         expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
       }
 
-      for (const step of ["tests", "mutation"] satisfies Step[]) {
+      for (const step of ["mutation"] satisfies Step[]) {
         const got = carry(r, step, survivor, ["--commit-only"]);
         expect(got.code, got.text).toBe(2);
         expect(got.text).toContain("Survivor: lines");
@@ -1789,10 +1797,13 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
     });
   });
 
-  // Plants: refuse --empty for build or fix, commit nothing (no --allow-empty), drop the signer for build or sign for fix, skip the push, or leave the lines out of the body.
-  it("an empty build or fix commit carries its Survivor: lines, signed like that step's other commits", () => {
+  // Plants: refuse --empty for tests, build or fix, commit nothing (no --allow-empty), drop the signer for tests or build or sign for fix, ask a tests
+  // commit of Survivor: lines for its plant record, skip the push, or leave the lines out of the body.
+  it("an empty tests, build or fix commit carries its Survivor: lines, signed like that step's other commits", () => {
     each(
       [
+        ["tests", false],
+        ["tests", true],
         ["build", false],
         ["build", true],
         ["fix", false],
@@ -1800,14 +1811,21 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
       ] satisfies Array<[Step, boolean]>,
       ([step, only]) =>
         withRepo([], (r) => {
-          const lines = `${survivor}\n\n${survivor.replace(":1 ", ":2 ")}`;
+          // One line of each proof: a plant run with its result, a search with what it found, a law's id.
+          const lines = [
+            survivor,
+            "",
+            "Survivor: src/owned.ts:2 a help line only -- plant: sed -i s/help/x/ src/owned.ts; vitest run owned.test.ts => 3 passed, still green",
+            "Survivor: src/owned.ts:* thin glue -- law: H12 (owned.test.ts) already fails with it planted",
+          ].join("\n");
+
           const got = carry(r, step, lines, only ? ["--commit-only"] : []);
           expect(got.code, got.text).toBe(0);
           expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
           expect(r.git("diff", "--name-only", `${r.base}..HEAD`).trim()).toBe("");
           expect(r.git("log", "-1", "--format=%B").trim()).toContain(lines);
           expect(r.signs().map((s) => s.slice(0, 5))).toEqual(
-            only || step === "fix" ? [] : [["commits", "sign", "--step", "build", "--ticket"]],
+            only || step === "fix" ? [] : [["commits", "sign", "--step", step, "--ticket"]],
           );
           expect(r.published()).toHaveLength(only ? 0 : 1);
         }),
@@ -1815,8 +1833,8 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
   });
 
   // Plants: allow an empty body, allow a line that is no Survivor: line, check only that a line opens with `Survivor:`, or leave the bad line out of the refusal.
-  it("an empty build or fix commit with no Survivor: line, or with anything else in the body, is refused; nothing is committed", () => {
-    each(["build", "fix"] satisfies Step[], (step) =>
+  it("an empty tests, build or fix commit with no Survivor: line, or with anything else in the body, is refused; nothing is committed", () => {
+    each(["tests", "build", "fix"] satisfies Step[], (step) =>
       withRepo([], (r) => {
         const bodies = [
           "",
@@ -1825,7 +1843,7 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
           `${survivor}\nreworded a help line`,
           `note\n${survivor}`,
           `${survivor}\n${malformed[0]}`,
-          malformed[1] ?? "",
+          ...malformed.slice(1),
         ];
 
         for (const body of bodies) {

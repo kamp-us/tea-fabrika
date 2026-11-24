@@ -497,6 +497,12 @@
       "imports": []
     },
     {
+      "name": "kalfa-permissions",
+      "layer": 0,
+      "paths": ["kalfa/permissions/src"],
+      "imports": []
+    },
+    {
       "name": "kalfa-transport",
       "layer": 0,
       "paths": ["kalfa/transport/src"],
@@ -557,6 +563,7 @@
     "kalfa/git/src",
     "kalfa/github/src",
     "kalfa/markdown/src",
+    "kalfa/permissions/src",
     "kalfa/secrets/src",
     "kalfa/transport/src"
   ],

@@ -4,7 +4,7 @@
 import { type ConfigProvider, Effect, FileSystem, Path } from "effect";
 import * as Result from "effect/Result";
 import type * as Setting from "../Declaration.ts";
-import { stop } from "./error.ts";
+import { stop, unread } from "./error.ts";
 import type { Document, Format } from "./format.ts";
 
 /** Where a file is read from, and the name a person reads. */
@@ -24,7 +24,7 @@ export type Names = Readonly<Record<Setting.File, string>>;
 const lookup = (app: string, provider: ConfigProvider.ConfigProvider, name: string, closing?: string) =>
   provider.load([name]).pipe(
     Effect.map((node) => node?.value),
-    Effect.mapError((cause) => stop(app, "read", `${name} could not be read.`, undefined, cause, closing)),
+    Effect.mapError((cause) => unread(app, cause, { subject: name, closing })),
   );
 
 /** The folder and the file name of an app's configuration, `.<app>` and `<app>.<extension>`: the one rule for a path and for the name a person reads. */
@@ -105,7 +105,7 @@ export const contents = Effect.fnUntraced(function* (app: string, place: Place, 
       Effect.catchTag("PlatformError", (cause) =>
         cause.reason._tag === "NotFound"
           ? Effect.succeed("")
-          : Effect.fail(stop(app, "read", "could not be read.", { file: place.name }, cause, closing)),
+          : Effect.fail(unread(app, cause, { position: { file: place.name }, closing })),
       ),
     );
 });
