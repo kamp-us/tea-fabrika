@@ -24,7 +24,7 @@ export class Packages extends Context.Service<
     /** The `package.json` text of an installed package, found from the repo's folder; none when it is not installed. */
     readonly manifest: (name: string) => Effect.Effect<Option.Option<string>, Refused>;
     /** The exports of the module a specifier resolves to, found from the repo's folder; `Unloaded` when Node refuses it. */
-    readonly load: (pkg: string, specifier: string) => Effect.Effect<Record<string, unknown>, Unloaded | Refused>;
+    readonly load: (pkg: string, specifier: string) => Effect.Effect<Record<string, unknown>, Unloaded>;
   }
 >()("@kalfa/cli/Packages") {}
 
