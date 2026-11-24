@@ -163,6 +163,9 @@ export type RuleId =
   | "i4"
   | "i5"
   | "j"
+  | "m1"
+  | "m2"
+  | "m3"
   | "n"
   | "w";
 
@@ -183,6 +186,9 @@ export const RULE_IDS: ReadonlyArray<RuleId> = [
   "i4",
   "i5",
   "j",
+  "m1",
+  "m2",
+  "m3",
   "n",
   "w",
 ];
@@ -211,6 +217,10 @@ const notes = (draw: RuleDraw) => Array.from({ length: draw.pad }, (_, n) => `# 
 const table = (draw: RuleDraw) => `${draw.words[0]}`;
 
 const key = (draw: RuleDraw) => `${draw.words[1]}`;
+
+/** An author's message with the word "Expected" at its start (n = 0), in its middle (1) and at its end (2). */
+const said = (draw: RuleDraw, n: number) =>
+  [`Expected ${draw.words[7]}`, `use the Expected ${draw.words[7]}`, `use ${draw.words[7]} Expected`][n] ?? "";
 
 const odd = (n: number) => (n % 2 === 0 ? n + 1 : n);
 
@@ -414,6 +424,15 @@ export const ruleCases = (draw: RuleDraw): ReadonlyArray<RuleCase> => {
       tail: "a valid value. Its schema names no rule.",
       needles: forms(draw.other),
     },
+    ...(["m1", "m2", "m3"] as const).map((id, n) => ({
+      // (m1) to (m3) a schema whose author wrote the `message` the formatter would give, with the word "Expected" at its start, in its middle and at its end: the refusal says that sentence as written, as it says a description.
+      id,
+      setting: made(draw, Schema.String.annotate({ message: said(draw, n) })),
+      raw: "1",
+      text: "1",
+      tail: `a valid value. ${said(draw, n)}`,
+      needles: [],
+    })),
     {
       // (w) a value that is forbidden to decode, with a message that quotes it.
       id: "w",
