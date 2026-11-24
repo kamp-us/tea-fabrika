@@ -1,4 +1,4 @@
-// Ticket 1310, slice 2: C3 of the approved plan (.kalfa/quests/kalfa-hidden-cause-PLAN.md), the types of Configuration's two hidden causes. A hidden cause is a
+// Ticket 1310, slice 2: C3 of the approved plan (here HC3, since Cli.test.ts holds the id C3) (.kalfa/quests/kalfa-hidden-cause-PLAN.md), the types of Configuration's two hidden causes. A hidden cause is a
 // `Redacted`, so a raw error, a text or a missing cause (where one is needed) is no cause. Only the compiler judges them (`tsc`, and the root `typecheck`): each
 // `@ts-expect-error` is a mistake that must stay a compile error, and the body holds type checks only, so the file also runs under vitest by path.
 //
@@ -24,7 +24,7 @@ const hiddenTypes = (raw: Error) => {
   expectTypeOf([none, hidden, rawSnapshot, rawSettings]).toBeArray();
 };
 
-it("C3 type: a hidden cause of SnapshotError and SettingsError is a Redacted, and a raw error is no cause", () => {
+it("HC3 type: a hidden cause of SnapshotError and SettingsError is a Redacted, and a raw error is no cause", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
   expectTypeOf(hiddenTypes).toBeFunction();
 });

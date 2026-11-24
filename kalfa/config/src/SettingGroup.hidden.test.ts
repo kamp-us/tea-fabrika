@@ -1,4 +1,4 @@
-// Ticket 1310, slice 2: C1 to C3 of the approved plan (.kalfa/quests/kalfa-hidden-cause-PLAN.md), folded into the first slice's pull request because
+// Ticket 1310, slice 2: C1 to C3 of the approved plan (here HC1 to HC3, since Cli.test.ts holds the ids C1 to C3) (.kalfa/quests/kalfa-hidden-cause-PLAN.md), folded into the first slice's pull request because
 // the new lint rule `fabrika/hidden-cause` refuses the bare `Schema.Redacted` cause that `SettingsError` holds (internal/error.ts). The laws are the codec
 // legs of Configuration's two hidden causes: `SettingsError`'s, which `stop` and `unread` fill with the failure underneath, and `SnapshotError`'s, which the
 // older strict read fills with the decoder's issue. A cause may quote a value, so no codec may write it: not the JSON codec, the string-tree codec or the
@@ -98,12 +98,12 @@ const makers = (app: string, id: Class, secret: string) => {
   ] as const;
 };
 
-// C1, the codecs write the placeholder. Plant: put the bare `Schema.optional(Schema.Redacted(Schema.Defect()))` back on `SettingsError`'s `cause`
+// HC1, the codecs write the placeholder. Plant: put the bare `Schema.optional(Schema.Redacted(Schema.Defect()))` back on `SettingsError`'s `cause`
 // (internal/error.ts): the JSON codec writes the failure in full, so its text holds the secret and its `cause` is no placeholder, red; the same on
 // `SnapshotError` (Snapshot.ts): red; write the cause with `Redacted.value`: red; write an `Error` cause's message as the placeholder's text: red; keep
-// `Schema.optional(Schema.Defect())` on `SnapshotError`: the read gives the text back, and its read-back law (C2) is red.
+// `Schema.optional(Schema.Defect())` on `SnapshotError`: the read gives the text back, and its read-back law (HC2) is red.
 it.effect.prop(
-  "C1 [secrets] hidden cause: every codec writes the placeholder for the cause of a SettingsError and of a SnapshotError, and no text of any codec, alone or inside an Exit, holds the secret the cause quotes",
+  "HC1 [secrets] hidden cause: every codec writes the placeholder for the cause of a SettingsError and of a SnapshotError, and no text of any codec, alone or inside an Exit, holds the secret the cause quotes",
   { input: HiddenDraw },
   ({ input: { draw, secret } }) =>
     Effect.sync(() => {
@@ -141,10 +141,10 @@ it.effect.prop(
   check,
 );
 
-// C2, a read gives back an empty hidden cause. Plant: keep `Schema.optional(Schema.Defect())` on `SnapshotError`, or the bare `Schema.Redacted(Schema.Defect())`
+// HC2, a read gives back an empty hidden cause. Plant: keep `Schema.optional(Schema.Defect())` on `SnapshotError`, or the bare `Schema.Redacted(Schema.Defect())`
 // on either: the cause read back holds the text `<redacted>`, not nothing, red; read back `Redacted.make(placeholder)`: red.
 it.effect.prop(
-  "C2 hidden cause: the JSON a SettingsError and a SnapshotError were written as reads back with their message and a hidden cause that holds nothing, and a SnapshotError with no cause writes none",
+  "HC2 hidden cause: the JSON a SettingsError and a SnapshotError were written as reads back with their message and a hidden cause that holds nothing, and a SnapshotError with no cause writes none",
   { input: HiddenDraw },
   ({ input: { draw, secret } }) =>
     Effect.sync(() => {
