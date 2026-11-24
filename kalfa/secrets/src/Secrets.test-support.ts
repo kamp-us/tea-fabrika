@@ -460,7 +460,7 @@ export const failingStore = (text: string) =>
 /** The ways a store's read can throw: while it runs, as a defect it makes, and before it returns an Effect at all. */
 export const THROW_WAYS = ["inside the Effect", "as a defect", "when called"] as const;
 
-export type ThrowWay = (typeof THROW_WAYS)[number];
+type ThrowWay = (typeof THROW_WAYS)[number];
 
 /** What a store's own parser throws when it quotes what it read: the value in the message, and in the error under it. */
 const parsing = (text: string): Error =>
