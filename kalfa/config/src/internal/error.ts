@@ -61,7 +61,7 @@ export const stop = (
 const POSIX = /^E[A-Z0-9]+$/u;
 
 /** Why a read failed, as the end of a sentence. It reads the failure's kind and its POSIX code, never its message, its path or its description. */
-export const because = (cause: PlatformError.PlatformError | ConfigProvider.SourceError): string => {
+const because = (cause: PlatformError.PlatformError | ConfigProvider.SourceError): string => {
   if (cause._tag === "SourceError") {
     return "the environment did not answer";
   }
@@ -88,3 +88,18 @@ export const because = (cause: PlatformError.PlatformError | ConfigProvider.Sour
       return `the system gave the error ${reason._tag}${named}`;
   }
 };
+
+/** The one error of a read that failed: what could not be read (a name, or nothing when `position` names the file), why, and the failure beneath, hidden. */
+export const unread = (
+  app: string,
+  cause: PlatformError.PlatformError | ConfigProvider.SourceError,
+  options: { readonly subject?: string; readonly position?: Position; readonly closing?: string | undefined } = {},
+) =>
+  stop(
+    app,
+    "read",
+    `${options.subject === undefined ? "" : `${options.subject} `}could not be read, because ${because(cause)}.`,
+    options.position,
+    cause,
+    options.closing,
+  );

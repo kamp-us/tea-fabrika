@@ -7,7 +7,9 @@ import * as Result from "effect/Result";
 import type * as Setting from "../Declaration.ts";
 import { Origin } from "../Sources.ts";
 import { distance, drop, leaf, lineAt, type Path, same } from "./document.ts";
+import { prefix } from "./edit.ts";
 import { type Position, type SettingsError, stop } from "./error.ts";
+import type { Document } from "./format.ts";
 import { segments, variable } from "./names.ts";
 import type { Loaded, Names } from "./place.ts";
 
@@ -88,6 +90,20 @@ export const near = (names: ReadonlyArray<string>, typed: string): Option.Option
 /** Whether `path` is the setting's own name or one of its tables. */
 const under = (s: Setting.Any, path: ReadonlyArray<string>) => path.every((word, n) => segments(s.name)[n] === word);
 
+/** The line of the fault at `path`: its own key's, else the nearest table's above it, else the first line of anything below the nearest table that has one, since a table written only by deeper headers has no line of its own. */
+const faultLine = (document: Document, path: Path): number | undefined => {
+  for (let n = path.length; n > 0; n--) {
+    const above = path.slice(0, n);
+    const span = document.spans.find((s) => same(s.path, above)) ?? document.spans.find((s) => prefix(above, s.path));
+
+    if (span !== undefined) {
+      return span.line;
+    }
+  }
+
+  return undefined;
+};
+
 /** Whether `path` is the setting's own name or goes on inside its value: a member of a record, a field of a table. */
 const reaches = (s: Setting.Any, path: ReadonlyArray<string>) => segments(s.name).every((word, n) => path[n] === word);
 
@@ -119,9 +135,11 @@ const explain = (
   const holder = own.find((s) => reaches(s, path));
 
   if (holder !== undefined) {
-    const line = lineAt(found.document, segments(holder.name)) ?? 0;
+    const line = faultLine(found.document, path);
 
-    return refused(app, holder, Origin.cases.file.make({ file: found.name, line }), issue, closing);
+    return line === undefined
+      ? unfit(app, holder, found.name, issue, closing)
+      : refused(app, holder, Origin.cases.file.make({ file: found.name, line }), issue, closing);
   }
 
   if (own.some((s) => under(s, path))) {
@@ -211,7 +229,7 @@ export const refused = (app: string, s: Setting.Any, origin: Origin, issue: Sche
   );
 
 /** The `invalid` error for a value an edit was asked to write that its setting's schema refuses: the file is named, no line, and never the value. */
-export const unfit = (app: string, s: Setting.Any, file: string, issue: SchemaIssue.Issue, closing: string) =>
+export const unfit = (app: string, s: Setting.Any, file: string, issue: SchemaIssue.Issue, closing?: string) =>
   stop(app, "invalid", wanted(s, s.name, issue), { file }, undefined, closing);
 
 /** How a check of one file differs from the start's: the closing sentence, and one key left out. */

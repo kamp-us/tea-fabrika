@@ -84,8 +84,7 @@ const change = Effect.fnUntraced(function* (
   const written = yield* Option.match(value, {
     onNone: () => Effect.succeed(Option.none<unknown>()),
     onSome: (given) =>
-      Schema.decodeUnknownEffect(Schema.toType(own.schema))(given).pipe(
-        Effect.andThen(() => Schema.encodeUnknownEffect(Schema.toCodecJson(own.schema))(given)),
+      Schema.encodeUnknownEffect(Schema.toCodecJson(own.schema))(given).pipe(
         Effect.asSome,
         Effect.mapError((error) => unfit(app, own, file, error.issue, closing)),
       ),

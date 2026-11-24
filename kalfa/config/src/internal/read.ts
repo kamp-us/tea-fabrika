@@ -7,7 +7,7 @@ import type * as Setting from "../Declaration.ts";
 import { Origin, type Source } from "../Sources.ts";
 import * as Sources from "../Sources.ts";
 import { check, type Group, places, refused, version } from "./check.ts";
-import { because, stop } from "./error.ts";
+import { stop, unread } from "./error.ts";
 import type { Format } from "./format.ts";
 import { frozen } from "./frozen.ts";
 import { segments, variable } from "./names.ts";
@@ -85,16 +85,7 @@ const holder = (setup: Setup, s: Setting.Any, sources: ReadonlyArray<Source>) =>
   Effect.findFirst(sources, (source) =>
     source.provider.load(segments(s.name)).pipe(
       Effect.map((node) => node !== undefined),
-      Effect.mapError((cause) =>
-        stop(
-          setup.group.app,
-          "read",
-          `${s.name} could not be read, because ${because(cause)}.`,
-          undefined,
-          cause,
-          setup.closing,
-        ),
-      ),
+      Effect.mapError((cause) => unread(setup.group.app, cause, { subject: s.name, closing: setup.closing })),
     ),
   );
 
@@ -177,14 +168,7 @@ const resolve = Effect.fnUntraced(function* (
       Effect.mapError((error) =>
         error.cause instanceof Schema.SchemaError
           ? refused(app, s, origin, error.cause.issue, closing)
-          : stop(
-              app,
-              "read",
-              `${s.name} could not be read, because ${because(error.cause)}.`,
-              undefined,
-              error.cause,
-              closing,
-            ),
+          : unread(app, error.cause, { subject: s.name, closing }),
       ),
     );
 

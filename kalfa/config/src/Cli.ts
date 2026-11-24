@@ -9,7 +9,7 @@ import { type Group, near, unfit } from "./internal/check.ts";
 import { join } from "./internal/cli/join.ts";
 import { line, listing } from "./internal/cli/listing.ts";
 import * as disk from "./internal/disk.ts";
-import { because, type SettingsError, stop } from "./internal/error.ts";
+import { type SettingsError, stop, unread } from "./internal/error.ts";
 import { segments } from "./internal/names.ts";
 import { textSource } from "./internal/read.ts";
 import * as references from "./internal/reference.ts";
@@ -134,14 +134,10 @@ export const config = <const App extends string>(
           Effect.mapError((error) =>
             error.cause instanceof Schema.SchemaError
               ? unfit(app, setting, found.place.name, error.cause.issue, `The ${chosen} configuration was not changed.`)
-              : stop(
-                  app,
-                  "read",
-                  `${setting.name} could not be read, because ${because(error.cause)}.`,
-                  undefined,
-                  error.cause,
-                  `The ${chosen} configuration was not changed.`,
-                ),
+              : unread(app, error.cause, {
+                  subject: setting.name,
+                  closing: `The ${chosen} configuration was not changed.`,
+                }),
           ),
         );
 
