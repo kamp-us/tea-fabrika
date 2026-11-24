@@ -16,24 +16,24 @@ interface Shaped {
 /** A value of no known type: what a body typed as `unknown` is. */
 type Opaque = Schema.Unknown["Type"];
 
-/** A new entry with its body and its metadata taken out: what is left holds the tag. */
-type Tagged = Omit<Entry.NewEntry, "body" | "metadata">;
+/** A new entry with its body and its metadata taken out: what is left holds the type. */
+type Typed = Omit<Entry.NewEntry, "body" | "metadata">;
 
-/** An entry as a writer may have it in hand: a tag and a body, and no metadata. */
-type Bare = Tagged & { readonly body: null };
+/** An entry as a writer may have it in hand: a type and a body, and no metadata. */
+type Bare = Typed & { readonly body: null };
 
 // A place that asks for a new entry, the way a call to append does.
 const handed = (entry: Entry.NewEntry): Entry.NewEntry => entry;
 
-// D4. Plant: add `sentAt` to `Entry` (the key lines fail); type `body` as `unknown` (the `unknown` line compiles); make `metadata` `Schema.optional` (the
+// D4. Plant: add `sentAt` to `Entry` (the key lines fail); name the writer's field `_tag` (the key lines fail); type it as a closed set (the `string` line fails); type `body` as `unknown` (the `unknown` line compiles); make `metadata` `Schema.optional` (the
 // `undefined` line compiles); make `metadata` required on `NewEntry` (the left-out line fails); give `Revision` and `Position` one brand (the position line compiles);
 // let a plain number be a `Revision`.
 const entryTypes = (
   bare: Bare,
-  aliased: Tagged & { readonly body: Doc },
-  slotted: Tagged & { readonly body: Doc; readonly metadata: Entry.Metadata },
-  tagless: Omit<Bare, keyof Tagged>,
-  bodiless: Tagged,
+  aliased: Typed & { readonly body: Doc },
+  slotted: Typed & { readonly body: Doc; readonly metadata: Entry.Metadata },
+  typeless: Omit<Bare, keyof Typed>,
+  bodiless: Typed,
   shaped: Shaped,
   anything: Opaque,
   revision: Entry.Revision,
@@ -42,7 +42,7 @@ const entryTypes = (
 ) => {
   // An entry as read has exactly these eight keys, and none of today's sender fields.
   expectTypeOf<keyof Entry.Entry>().toEqualTypeOf<
-    "id" | "stream" | "revision" | "position" | "arrivedAt" | "_tag" | "body" | "metadata"
+    "id" | "stream" | "revision" | "position" | "arrivedAt" | "type" | "body" | "metadata"
   >();
   expectTypeOf<Entry.Entry>().not.toHaveProperty("by");
   expectTypeOf<Entry.Entry>().not.toHaveProperty("for");
@@ -52,6 +52,11 @@ const entryTypes = (
   expectTypeOf<Entry.Entry>().not.toHaveProperty("traceId");
   expectTypeOf<Entry.Entry>().not.toHaveProperty("build");
   expectTypeOf<Entry.Entry["metadata"]>().toEqualTypeOf<Entry.Metadata>();
+  // The writer's own field is `type`, open text it picks; `_tag` is for a closed set Effect writes, so neither an entry nor a new entry has it.
+  expectTypeOf<Entry.Entry["type"]>().toEqualTypeOf<string>();
+  expectTypeOf<Entry.NewEntry["type"]>().toEqualTypeOf<string>();
+  expectTypeOf<Entry.Entry>().not.toHaveProperty("_tag");
+  expectTypeOf<Entry.NewEntry>().not.toHaveProperty("_tag");
 
   // Every way a new entry can be written and be right: metadata left out, with metadata, and a body that is a type alias of JSON.
   const ok = [handed(bare), handed(slotted), handed(aliased)];
@@ -63,8 +68,8 @@ const entryTypes = (
   const unknownBody = handed({ ...bare, body: anything });
   // @ts-expect-error a body typed as an interface has no index signature, so a caller encodes it with its own schema first
   const interfaceBody = handed({ ...bare, body: shaped });
-  // @ts-expect-error an entry has its tag
-  const noTag = handed(tagless);
+  // @ts-expect-error an entry has its type
+  const noType = handed(typeless);
   // @ts-expect-error an entry has its body
   const noBody = handed(bodiless);
   // @ts-expect-error an entry the writer hands in names nothing a sender field would
@@ -87,7 +92,7 @@ const entryTypes = (
     undefinedMetadata,
     unknownBody,
     interfaceBody,
-    noTag,
+    noType,
     noBody,
     sender,
     plainRevision,

@@ -403,12 +403,12 @@ export const errorTexture = Arbitrary.all({
 type ErrorTexture = Drawn<typeof errorTexture>;
 
 /** The nine errors a package may answer with, as a union a test can list. */
-export type AnyError = Errors.Refusal | Errors.EmptyTags | Errors.Failure;
+export type AnyError = Errors.Refusal | Errors.EmptyTypes | Errors.Failure;
 
 /** The tags of the five refusals, of the one error a read has of its own, and of the three failures, in the order `eachError` gives them. */
 export const REFUSAL_TAGS = ["BadEntry", "IdReused", "TooBig", "AdmissionRefused", "RevisionConflict"] as const;
 
-export const READ_TAGS = ["EmptyTags"] as const;
+export const READ_TAGS = ["EmptyTypes"] as const;
 
 export const FAILURE_TAGS = ["Unreachable", "BadRow", "StorageFailed"] as const;
 
@@ -434,7 +434,7 @@ export const eachError = (texture: ErrorTexture): ReadonlyArray<Made> => {
     { error: new Errors.TooBig(big), fields: big },
     { error: new Errors.AdmissionRefused(refused), fields: refused },
     { error: new Errors.RevisionConflict(conflict), fields: conflict },
-    { error: new Errors.EmptyTags({}), fields: {} },
+    { error: new Errors.EmptyTypes({}), fields: {} },
     { error: new Errors.Unreachable({ cause }), fields: { cause } },
     { error: new Errors.BadRow({ cause }), fields: { cause } },
     { error: new Errors.StorageFailed({ cause }), fields: { cause } },

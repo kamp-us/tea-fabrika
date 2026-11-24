@@ -6,13 +6,13 @@ import { expectTypeOf, it } from "@effect/vitest";
 import type { Array as Arr, Effect, Stream } from "effect";
 import type { Entry, NewEntry, Placed, Revision } from "./Entry.ts";
 import type { EntryId } from "./EntryId.ts";
-import type { EmptyTags, Failure, Refusal } from "./Errors.ts";
+import type { EmptyTypes, Failure, Refusal } from "./Errors.ts";
 import type * as Ledger from "./Ledger.ts";
 
 type Service = Ledger.Ledger["Service"];
 
 // D1. Plant: add an overload of `append` with no id (the no-id line compiles); type the id as `string` (the plain-string line compiles); widen `read`'s error to
-// `Refusal | Failure`; leave `EmptyTags` out of `read`'s error (the exact-type line fails); put `EmptyTags` in `append`'s error; give `append` an error of `unknown`; add a third call to the service; type `after` as `number` (the plain-number line compiles).
+// `Refusal | Failure`; leave `EmptyTypes` out of `read`'s error (the exact-type line fails); put `EmptyTypes` in `append`'s error; give `append` an error of `unknown`; add a third call to the service; type `after` as `number` (the plain-number line compiles).
 const callTypes = (
   ledger: Service,
   stream: string,
@@ -24,8 +24,8 @@ const callTypes = (
 ) => {
   // An append answers a `Placed`, or a refusal or a failure.
   expectTypeOf(ledger.append(stream, id, entry)).toEqualTypeOf<Effect.Effect<Placed, Refusal | Failure>>();
-  // A read gives entries and fails as a failure, or as the one error of its own, an empty list of tags: a refusal is an answer to an append.
-  expectTypeOf(ledger.read(stream, after)).toEqualTypeOf<Stream.Stream<Entry, EmptyTags | Failure>>();
+  // A read gives entries and fails as a failure, or as the one error of its own, an empty list of types: a refusal is an answer to an append.
+  expectTypeOf(ledger.read(stream, after)).toEqualTypeOf<Stream.Stream<Entry, EmptyTypes | Failure>>();
 
   // There is no append without an id, and the id is an `EntryId`, never plain text.
   // @ts-expect-error an append names its id
@@ -51,13 +51,13 @@ const callTypes = (
   return [noId, textId, swapped, numberAfter, noStream];
 };
 
-it("D1 type: append takes a stream, an id and an entry and answers a Placed or a refusal or a failure, read answers entries or an empty-tags error or a failure, and a call with no id or a plain-text id is no call", () => {
+it("D1 type: append takes a stream, an id and an entry and answers a Placed or a refusal or a failure, read answers entries or an empty-types error or a failure, and a call with no id or a plain-text id is no call", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(callTypes).toBeFunction();
 });
 
-// D2. Plant: type `expectedRevision` as `number` (the plain-number line compiles); type `tags` as `ReadonlyArray<string>` (the empty-list line compiles); add
-// `| undefined` to `expectedRevision`; make `expectedRevision` required (the left-out lines fail); make `tags` required; type `tags` as `Array<string>`.
+// D2. Plant: type `expectedRevision` as `number` (the plain-number line compiles); type `types` as `ReadonlyArray<string>` (the empty-list line compiles); add
+// `| undefined` to `expectedRevision`; make `expectedRevision` required (the left-out lines fail); make `types` required; type `types` as `Array<string>`; name the option `tags`.
 const optionTypes = (
   ledger: Service,
   stream: string,
@@ -68,7 +68,7 @@ const optionTypes = (
   maybe: Revision | undefined,
   options: Ledger.AppendOptions,
   maybeOptions: Ledger.AppendOptions | undefined,
-  tags: Arr.NonEmptyReadonlyArray<string>,
+  types: Arr.NonEmptyReadonlyArray<string>,
   names: Array<string>,
   readOptions: Ledger.ReadOptions,
 ) => {
@@ -91,30 +91,30 @@ const optionTypes = (
   // @ts-expect-error the option is named `expectedRevision`
   const otherName = ledger.append(stream, id, entry, { revision: head });
 
-  // Every way the read's options can be written and be right: left out, empty, one tag, a non-empty list in a variable, and a variable of the options.
+  // Every way the read's options can be written and be right: left out, empty, one type, a non-empty list in a variable, and a variable of the options.
   const reads = [
     ledger.read(stream, after),
     ledger.read(stream, after, {}),
-    ledger.read(stream, after, { tags: ["A"] }),
-    ledger.read(stream, after, { tags }),
+    ledger.read(stream, after, { types: ["A"] }),
+    ledger.read(stream, after, { types }),
     ledger.read(stream, after, readOptions),
   ];
 
   // Every way it can be written and be wrong.
-  // @ts-expect-error a list of no tags is a type hole: a read asks for tags, or for no tags by leaving them out
-  const emptyTags = ledger.read(stream, after, { tags: [] });
+  // @ts-expect-error a list of no types is a type hole: a read asks for types, or for no types by leaving them out
+  const emptyTypes = ledger.read(stream, after, { types: [] });
   // @ts-expect-error a list of text that may be empty is not a non-empty list
-  const mayBeEmpty = ledger.read(stream, after, { tags: names });
-  // @ts-expect-error `undefined` is "every tag", and "every tag" is the key left out
-  const undefinedTags = ledger.read(stream, after, { tags: undefined });
+  const mayBeEmpty = ledger.read(stream, after, { types: names });
+  // @ts-expect-error `undefined` is "every type", and "every type" is the key left out
+  const undefinedTypes = ledger.read(stream, after, { types: undefined });
 
   expectTypeOf<Ledger.AppendOptions>().toEqualTypeOf<{ readonly expectedRevision?: Revision }>();
-  expectTypeOf<Ledger.ReadOptions>().toEqualTypeOf<{ readonly tags?: Arr.NonEmptyReadonlyArray<string> }>();
+  expectTypeOf<Ledger.ReadOptions>().toEqualTypeOf<{ readonly types?: Arr.NonEmptyReadonlyArray<string> }>();
 
-  return [ok, plainNumber, undefinedRevision, maybeRevision, otherName, reads, emptyTags, mayBeEmpty, undefinedTags];
+  return [ok, plainNumber, undefinedRevision, maybeRevision, otherName, reads, emptyTypes, mayBeEmpty, undefinedTypes];
 };
 
-it("D2 type: expectedRevision is a Revision left out when there is no check, and tags a non-empty list left out when there is no filter, written every way they can be", () => {
+it("D2 type: expectedRevision is a Revision left out when there is no check, and types a non-empty list left out when there is no filter, written every way they can be", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(optionTypes).toBeFunction();
 });

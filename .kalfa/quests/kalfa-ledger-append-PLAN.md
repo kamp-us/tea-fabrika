@@ -13,7 +13,7 @@ https://github.com/kamp-us/tea-fabrika/issues/1864#issuecomment-7075107537. `kal
 today. Today's ledger in `next/packages/libfabrika/src/ledger/` is read as a map and left alone (issue 1866).
 
 Words: `kalfa/ledger/GLOSSARY.md` (log, stream, entry, entry id, metadata, slot, revision, position, head, append,
-read) and the Shared names, `kalfa/GLOSSARY.md` (tag). New words are under `## New names`.
+read) and the Shared names, `kalfa/GLOSSARY.md` (tag, which an entry's `type` is not). New words are under `## New names`.
 
 ```ts
 // The whole idea, a sketch. Calls named here were read in Effect 4.1.3; nothing was type-checked.
@@ -26,10 +26,10 @@ const request = EntryId.make("req-7f3a")                            // the write
 const program = Effect.gen(function* () {
   const ledger = yield* Ledger.Ledger
   const placed = yield* ledger.append("ci/requests", request,
-    { _tag: "Requested", body: { commit: "abc123" } },
+    { type: "Requested", body: { commit: "abc123" } },
     { expectedRevision: Revision.make(0) })                         // kept only while the stream is empty
   // placed: Placed { revision: 1, position: 1 }
-  const entries = yield* Stream.runCollect(ledger.read("ci/requests", Revision.make(0), { tags: ["Requested"] }))
+  const entries = yield* Stream.runCollect(ledger.read("ci/requests", Revision.make(0), { types: ["Requested"] }))
   const owed = EntryId.child(EntryName.make("owed"), request)       // "owed:req-7f3a", pure, never fails
   return { placed, entries, owed }
 }).pipe(Effect.provide(MemoryLedger.layer()))                       // limits.bytes defaults to 2,000,000
@@ -61,9 +61,9 @@ Each is a call this plan takes and builds on. Each is under 80% sure, so it says
   provider (2087) would store them changed, and the memory ledger must behave as that one will. A long name goes into
   the span whole; OpenTelemetry caps attribute length in the exporter, as a setting there. What settles it: the first
   package that lists streams by prefix (2086's `streams`), which may want a grammar.
-- **An empty `tags` list is a defect (70%).** The type asks for a non-empty list, so an empty one is a type hole. A
-  read with no tags to match could also give nothing, quietly. Loud is chosen, as the plan rules ask of a type hole.
-  What settles it: the first caller that builds its tags at run time.
+- **An empty `types` list is a defect (70%).** The type asks for a non-empty list, so an empty one is a type hole. A
+  read with no types to match could also give nothing, quietly. Loud is chosen, as the plan rules ask of a type hole.
+  What settles it: the first caller that builds its types at run time.
 - **The memory `read` takes its entries at the call (75%).** It is `Stream.unwrap` over one `Effect.fn("ledger.read")`
   step that copies the entries after `after`, so the span covers taking them, and an append made while the stream is
   consumed is not in it. Today's referee reads in pages instead. The laws hold only "after, oldest first, once", which
@@ -237,7 +237,7 @@ export const Metadata = Schema.Record(Schema.String, Schema.Json)
 
 /** An entry as its writer hands it to append. */
 export const NewEntry = Schema.Struct({
-  _tag: Schema.NonEmptyString,                    // the writer's case, well-formed text
+  type: Schema.NonEmptyString,                    // the writer's case, well-formed text
   body: Schema.Json,
   metadata: Schema.optionalKey(Metadata),         // {} when left out
 })
@@ -246,7 +246,7 @@ export const NewEntry = Schema.Struct({
 export const Entry = Schema.Struct({
   id: EntryId, stream: Schema.NonEmptyString, revision: Revision, position: Position,
   arrivedAt: Schema.Int,                          // the ledger's clock, ms since 1970
-  _tag: Schema.NonEmptyString, body: Schema.Json, metadata: Metadata,
+  type: Schema.NonEmptyString, body: Schema.Json, metadata: Metadata,
 })
 
 export class Placed extends Schema.TaggedClass<Placed>()("Placed", { revision: Revision, position: Position }) {}
@@ -262,7 +262,7 @@ README says so.
 // kalfa/ledger/src/Errors.ts, a sketch. Each is a Schema.TaggedError, so it crosses a wire as data.
 // Refusals: the ledger will not keep this entry.
 export class BadEntry extends Schema.TaggedError<BadEntry>()("BadEntry", {
-  part: Schema.Literals(["stream", "id", "entry", "tag", "body", "metadata", "expectedRevision"]),
+  part: Schema.Literals(["stream", "id", "entry", "type", "body", "metadata", "expectedRevision"]),
 }) {}
 export class IdReused extends Schema.TaggedError<IdReused>()("IdReused", {}) {}
 export class TooBig extends Schema.TaggedError<TooBig>()("TooBig", { bytes: Schema.Int, limit: Schema.Int }) {}
@@ -313,7 +313,7 @@ a defect that names `limits.bytes` (80%): it is the code's mistake, not a failur
 ```ts
 // kalfa/ledger/src/Ledger.ts, a sketch.
 export interface AppendOptions { readonly expectedRevision?: Revision }
-export interface ReadOptions { readonly tags?: Arr.NonEmptyReadonlyArray<string> }
+export interface ReadOptions { readonly types?: Arr.NonEmptyReadonlyArray<string> }
 
 export class Ledger extends Context.Service<Ledger, {
   readonly append: (stream: string, id: EntryId, entry: NewEntry, options?: AppendOptions)
@@ -333,17 +333,17 @@ Every provider keeps this order. The first refusal wins, and a refused append ke
 inside Effect.fn("ledger.append"), so a refusal leaves its span too:
  1. stream: non-empty, well-formed text                          else BadEntry "stream"            class (e)
  2. id: decodes as EntryId                                       else BadEntry "id"                class (f)
- 3. entry: a plain object whose own keys are _tag, body and,
+ 3. entry: a plain object whose own keys are type, body and,
     maybe, metadata; nothing read from its prototype             else BadEntry "entry"             class (g)
- 4. _tag: non-empty, well-formed text                            else BadEntry "tag"               class (h)
+ 4. type: non-empty, well-formed text                            else BadEntry "type"               class (h)
  5. body: Schema.Json                                            else BadEntry "body"              class (c)
  6. metadata: Metadata                                           else BadEntry "metadata"          class (i)
  7. expectedRevision, when given: decodes as Revision            else BadEntry "expectedRevision"  class (j)
- 8. bytes = UTF-8 bytes of stream + id + _tag + JSON text of body + JSON text of metadata
+ 8. bytes = UTF-8 bytes of stream + id + type + JSON text of body + JSON text of metadata
     bytes <= settings.limits.bytes                               else TooBig { bytes, limit }      class (k)
 in one synchronous step, so nothing runs between the check and the keep:
- 9. the stream holds this id: same _tag and same body as JSON    -> the first Placed               class (l)
-                              another _tag or another body       -> IdReused                       class (m)
+ 9. the stream holds this id: same type and same body as JSON    -> the first Placed               class (l)
+                              another type or another body       -> IdReused                       class (m)
 10. expectedRevision given and the head's revision differs       -> RevisionConflict { expected, actual }  (r), (s)
 11. keep: revision = head + 1, position = log head + 1,
     arrivedAt = max(clock now, last arrivedAt)                   -> Placed { revision, position }  (o), (q)
@@ -352,8 +352,8 @@ in one synchronous step, so nothing runs between the check and the keep:
 - Step 8 counts what today's referee counts, mapped to the new entry: the slots in metadata take the place of `by`,
   `for`, `sentAt`, `traceId` and `build` (85%). It does not count the revision, position or clock, so a resend counts
   the same bytes wherever it lands. At the limit is kept; one byte over is refused, as today's `size > ROW_BYTES`.
-- Step 9 compares `_tag` and body, and never metadata (85%): the protocol's "same body" means what the writer wrote, and
-  a different `_tag` with the same fields is another entry. Equality is `Equal.equals` on the JSON round trip, so key
+- Step 9 compares `type` and body, and never metadata (85%): the protocol's "same body" means what the writer wrote, and
+  a different `type` with the same fields is another entry. Equality is `Equal.equals` on the JSON round trip, so key
   order, `-0` and a null-prototype object do not make a body different.
 - Step 9 runs before step 10, as the ticket says: a writer that lost its answer and sends again is never refused by
   its own entry, even with a stale `expectedRevision`.
@@ -366,7 +366,7 @@ in one synchronous step, so nothing runs between the check and the keep:
 // kalfa/ledger/src/MemoryLedger.ts, a sketch.
 export const layer: (settings?: Settings.Settings) => Layer.Layer<Ledger.Ledger>
 // state, built fresh for each build of the layer:
-//   log: Array<{ stream, id, revision, position, arrivedAt, tag, body: string, metadata: string }>
+//   log: Array<{ stream, id, revision, position, arrivedAt, type, body: string, metadata: string }>
 //   byStream: Map<string, { head: Revision, ids: Map<EntryId, number> }>   // number: the entry's index in log
 ```
 
@@ -375,9 +375,9 @@ export const layer: (settings?: Settings.Settings) => Layer.Layer<Ledger.Ledger>
   `-0` reads back `0` here exactly as it will from SQLite.
 - `append` runs steps 1 to 8 as plain code, then steps 9 to 11 in one `Effect.sync`. `arrivedAt` reads Effect's
   `Clock`, so a test moves it with `TestClock`.
-- `read(stream, after, { tags })` is `Stream.unwrap` of one `Effect.fn("ledger.read")` step that copies the entries with
-  revision above `after` and, with tags, a `_tag` among them, oldest first; then `Stream.fromIterable`.
-- A bad `after` through a cast (`-1`, `1.5`) or an empty `tags` list is a defect, the guard behind the types. A stream
+- `read(stream, after, { types })` is `Stream.unwrap` of one `Effect.fn("ledger.read")` step that copies the entries with
+  revision above `after` and, with types, a `type` among them, oldest first; then `Stream.fromIterable`.
+- A bad `after` through a cast (`-1`, `1.5`) or an empty `types` list is a defect, the guard behind the types. A stream
   name that step 1 would refuse reads nothing, since nothing can be kept there.
 - It logs nothing.
 
@@ -388,17 +388,17 @@ An attribute is set only once the check for its value has passed, so a refused s
 
 | Span | Always | Once checked | On the answer |
 |---|---|---|---|
-| `ledger.append` | `messaging.system` `kalfa.ledger`, `messaging.operation.name` `append`, `messaging.operation.type` `send` | `messaging.destination.name` (step 1), `messaging.message.id` (2), `kalfa.ledger.tag` (4), `kalfa.ledger.expected_revision` (7), `kalfa.ledger.bytes` (8) | `kalfa.ledger.answer` `placed` or `resent` with `kalfa.ledger.revision` and `kalfa.ledger.position`; for a refusal `error.type` its `_tag`, `kalfa.ledger.limit` for `TooBig`, `kalfa.ledger.actual_revision` for `RevisionConflict`, and the span ends failed with the refusal |
-| `ledger.read` | `messaging.system`, `messaging.operation.name` `read`, `messaging.operation.type` `receive`, `messaging.destination.name`, `kalfa.ledger.after` | `kalfa.ledger.tags` (the names, when given) | `messaging.batch.message_count` |
+| `ledger.append` | `messaging.system` `kalfa.ledger`, `messaging.operation.name` `append`, `messaging.operation.type` `send` | `messaging.destination.name` (step 1), `messaging.message.id` (2), `kalfa.ledger.type` (4), `kalfa.ledger.expected_revision` (7), `kalfa.ledger.bytes` (8) | `kalfa.ledger.answer` `placed` or `resent` with `kalfa.ledger.revision` and `kalfa.ledger.position`; for a refusal `error.type` its `type`, `kalfa.ledger.limit` for `TooBig`, `kalfa.ledger.actual_revision` for `RevisionConflict`, and the span ends failed with the refusal |
+| `ledger.read` | `messaging.system`, `messaging.operation.name` `read`, `messaging.operation.type` `receive`, `messaging.destination.name`, `kalfa.ledger.after` | `kalfa.ledger.types` (the names, when given) | `messaging.batch.message_count` |
 
-Stream names, ids and tags are names: they go into spans, and the README says no secret may be one. A body, metadata
+Stream names, ids and types are names: they go into spans, and the README says no secret may be one. A body, metadata
 and a slot never do.
 
 ## One value traced: CI records a request, a second caller loses the race, the first sends again
 
 1. The log holds 4 entries on other streams. CI read `ci/requests` and found it empty, so it appends
-   `("ci/requests", "req-7f3a", { _tag: "Requested", body: { commit: "abc123" } }, { expectedRevision: 0 })`.
-2. Steps 1 to 7 pass. Step 8 counts `11 + 8 + 9 + 19 + 2 = 49` bytes (stream, id, tag, `{"commit":"abc123"}`, `{}`),
+   `("ci/requests", "req-7f3a", { type: "Requested", body: { commit: "abc123" } }, { expectedRevision: 0 })`.
+2. Steps 1 to 7 pass. Step 8 counts `11 + 8 + 9 + 19 + 2 = 49` bytes (stream, id, type, `{"commit":"abc123"}`, `{}`),
    under 2,000,000.
 3. In one step: the stream holds no `req-7f3a`; its head is 0, equal to the expected 0; it keeps revision 1,
    position 5, `arrivedAt` the clock's now. The span says `placed`, revision 1, position 5. The answer is
@@ -408,9 +408,9 @@ and a slot never do.
    span ends failed with `error.type` `RevisionConflict` and `kalfa.ledger.actual_revision` 1. It reads again, sees
    `req-7f3a`, decides there is nothing to do, and stops.
 5. CI lost its first answer and sends step 1 again, still with `expectedRevision: 0`. Step 9 finds `req-7f3a` with the
-   same tag and body and answers `Placed { revision: 1, position: 5 }`, keeping nothing. The span says `resent`.
-6. `read("ci/requests", 0, { tags: ["Requested"] })` gives one entry: `{ id: "req-7f3a", stream: "ci/requests",
-   revision: 1, position: 5, arrivedAt, _tag: "Requested", body: { commit: "abc123" }, metadata: {} }`.
+   same type and body and answers `Placed { revision: 1, position: 5 }`, keeping nothing. The span says `resent`.
+6. `read("ci/requests", 0, { types: ["Requested"] })` gives one entry: `{ id: "req-7f3a", stream: "ci/requests",
+   revision: 1, position: 5, arrivedAt, type: "Requested", body: { commit: "abc123" }, metadata: {} }`.
 7. CI's later entry for the same request is `EntryId.child(EntryName.make("chosen"), "req-7f3a")`, which is
    `"chosen:req-7f3a"`. A 250-character request id would give `"chosen.h:<43 characters>"` instead.
 
@@ -429,19 +429,19 @@ so every class is reached in every run. A class aimed at one check passes every 
   instance, a `Map`; (d) the caller changes its body and metadata objects after the append, and changes an entry it read.
 - `shapes`, each right in every part checked before it: (e) a stream that is empty or holds a lone surrogate; (f) an id
   through a cast that is empty, 256 characters, or holds a space, `/`, `é` or a NUL; (g) an entry that is `null`, an
-  array or text, has an extra own key (`by`, `seen`, `sentAt`), or has `_tag` and `body` only on its prototype; (h) a
-  `_tag` that is empty, not text, or holds a lone surrogate; (i) metadata that is not a record, or a slot that is no JSON;
+  array or text, has an extra own key (`by`, `seen`, `sentAt`), or has `type` and `body` only on its prototype; (h) a
+  `type` that is empty, not text, or holds a lone surrogate; (i) metadata that is not a record, or a slot that is no JSON;
   (j) an `expectedRevision` through a cast of `-1`, `1.5`, `NaN` or text.
 - `sizes`: (k) under a drawn small limit of 64 to 4,096 bytes, entries counting exactly the limit minus one, the limit,
-  and the limit plus one, built from 1-, 2-, 3- and 4-byte characters and JSON escapes, spread over stream, id, tag,
+  and the limit plus one, built from 1-, 2-, 3- and 4-byte characters and JSON escapes, spread over stream, id, type,
   body and metadata, so characters never equal bytes.
-- `histories`: (l) a resend of a kept entry, same stream, id, tag and body, after 0 to 50 other appends to the same and
+- `histories`: (l) a resend of a kept entry, same stream, id, type and body, after 0 to 50 other appends to the same and
   other streams, with other metadata, and with no option, the right `expectedRevision` or a stale one; (m) the same
-  stream and id with one changed leaf deep in the body, or another `_tag`, each also with a stale `expectedRevision`;
+  stream and id with one changed leaf deep in the body, or another `type`, each also with a stale `expectedRevision`;
   (n) the same id and body on another stream.
 - `interleavings`: (o) 2 to 40 appends over 2 to 5 streams in a drawn order, so a stream's revisions and positions part
   after the first append to another stream; (p) reads after 0, after a middle revision, after the head and past it,
-  with no tags, one tag, several, and a tag no entry has; (q) the clock moved forward, held still, and set back between
+  with no types, one type, several, and a type no entry has; (q) the clock moved forward, held still, and set back between
   appends with `TestClock.setTime`.
 - `conditions`: (r) `expectedRevision` equal to the head, below it, above it, and `0` on an empty and on a non-empty
   stream; (s) 2 to 6 callers that read the same head and append at once with it, each under its own new id, on an empty
@@ -494,7 +494,7 @@ calls.
 | D1, the calls' types: `append` takes `(string, EntryId, NewEntry, AppendOptions?)` and gives `Effect<Placed, Refusal \| Failure>`; `read` takes `(string, Revision, ReadOptions?)` and gives `Stream<Entry, Failure>`; a call with no id, or with a plain string for the id, does not compile; the service has exactly `append` and `read` | type | type | add an overload with no id: the no-id line compiles, red; type the id as `string`: red; widen `read`'s error to `Refusal \| Failure`: red | kalfa/ledger/src/Ledger.types.test.ts |
 | D2, the options' types, every way they can be typed: `append` with the options left out, `{}`, `{ expectedRevision: Revision.make(0) }`, a variable typed `AppendOptions`, and a value typed `AppendOptions \| undefined` all compile; `{ expectedRevision: 0 }` (a plain number), `{ expectedRevision: undefined }` and `{ expectedRevision: n as Revision \| undefined }` do not; `read` with the options left out, `{}`, `{ tags: ["A"] }` and a `NonEmptyReadonlyArray<string>` compile, and `{ tags: [] }`, `{ tags: names as string[] }` and `{ tags: undefined }` do not | type | type | type `expectedRevision` as `number`: the plain-number line compiles, red; type `tags` as `ReadonlyArray<string>`: the empty-list line compiles, red; add `\| undefined` to `expectedRevision`: red | kalfa/ledger/src/Ledger.types.test.ts |
 | D3, the settings' types, every way they can be typed: `Settings` decodes `defaults`; a literal `{ limits: { bytes: 64 } }`, a variable typed `Settings.Settings` and `{ limits: { bytes: n } }` with a widened `number` compile where a `Settings.Settings` is asked for; `{}`, `{ limits: {} }`, `{ limits: { bytes: "64" } }` and `{ limits: { bytes: undefined } }` do not | type | type | make `limits` optional: the `{}` line compiles, red; make `bytes` `Schema.optional`: the `undefined` line compiles, red | kalfa/ledger/src/Settings.types.test.ts |
-| D4, the entries' types: `keyof Entry` is exactly `id \| stream \| revision \| position \| arrivedAt \| _tag \| body \| metadata`, none of `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`, `build`; a `NewEntry` with metadata left out, with metadata, and with a body typed as a type alias of JSON compile; `metadata: undefined`, a body typed `unknown`, and a body typed as an `interface` do not (the README's reason) | type | type | add `sentAt` to `Entry`: red; type `body` as `unknown`: the `unknown` line compiles, red; make `metadata` `Schema.optional`: red | kalfa/ledger/src/Entry.types.test.ts |
+| D4, the entries' types: `keyof Entry` is exactly `id \| stream \| revision \| position \| arrivedAt \| type \| body \| metadata`, none of `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`, `build`; a `NewEntry` with metadata left out, with metadata, and with a body typed as a type alias of JSON compile; `metadata: undefined`, a body typed `unknown`, and a body typed as an `interface` do not (the README's reason) | type | type | add `sentAt` to `Entry`: red; type `body` as `unknown`: the `unknown` line compiles, red; make `metadata` `Schema.optional`: red | kalfa/ledger/src/Entry.types.test.ts |
 | D5, the ids' types: `EntryId.child` takes `(EntryName, EntryId)` and gives `EntryId`, not an `Effect`, `Result` or `Option`; a plain string is neither an `EntryId` nor an `EntryName`; with `type ReplyId = EntryId`, a decoded reply id goes to `append` with no mapping | type | type | make `child` give `Effect<EntryId>`: red; type `child`'s name as `string`: the plain-string line compiles, red | kalfa/ledger/src/EntryId.types.test.ts |
 | D6, the errors' types: `Refusal` is exactly the five and `Failure` exactly the three; each failure's `cause` is `Redacted<unknown>`, so a failure made with a plain cause does not compile; a test-support wrapper with `reason: Ledger.Failure` and `cause = this.reason` compiles, and `Effect.catchTag` on each member compiles | type | type | type a failure's cause as `Schema.Defect()`: the plain-cause line compiles, red; drop `AdmissionRefused` from `Refusal`: red | kalfa/ledger/src/Errors.types.test.ts |
 | I1, the id shape: a text is an `EntryId` exactly when it is 1 to 255 characters of `A-Z a-z 0-9 - _ . :`, and an `EntryName` exactly when it is 1 to 209 characters of `A-Z a-z 0-9 - _`. 300 runs | test | Effect Arbitrary: children | allow `/` in `EntryId`: (f) red; let `EntryId` take 256 characters: (f) red; allow `.` in `EntryName`: (w) red; let `EntryName` take 210 characters: (w) red | kalfa/ledger/src/EntryId.test.ts |
@@ -509,14 +509,14 @@ calls.
 | P2, the manifest after slice 2: P1, plus exports `./memory` and `./test`, each a file, and the peers `@effect/vitest` and `vitest`, both optional | test | scenario: the package's own manifest at head | drop `./test`: red; make `vitest` a required peer: red | kalfa/ledger/src/Package.test.ts |
 | A1, placed and read back: each append under a new id answers `Placed` whose revision is the count of entries in its stream and whose position is the count in the log; read gives the entry back with exactly the eight keys, its body and metadata equal to the JSON round trip of what was sent, and metadata `{}` when none was sent. 300 runs | test | Effect Arbitrary: bodies | store `String(body)`: (a) red; keep `metadata` as `undefined` when none was sent: red; add `sentAt` to each entry read: red | kalfa/ledger/src/LedgerTest.ts |
 | A2, revision and position: over any interleaving of appends to several streams, each stream's revisions are 1 to n with no gap, positions only go up across the log in the order of the appends, and `read(stream, after)` gives that stream's entries with revision above `after`, never chosen by position (today's code has the two swapped). 300 runs | test | Effect Arbitrary: interleavings | filter reads by position above `after`: (o) red; count revisions across the log: (o) red; count positions inside a stream: (o) red | kalfa/ledger/src/LedgerTest.ts |
-| A3, read: oldest first, each entry once, only above `after`; with tags, only entries whose `_tag` is one of them; a tag no entry has gives nothing; after the head gives nothing. 300 runs | test | Effect Arbitrary: interleavings | read from `after` inclusive: (p) red; keep an entry whose `_tag` matches every tag only: (p) red; give the newest first: (p) red | kalfa/ledger/src/LedgerTest.ts |
+| A3, read: oldest first, each entry once, only above `after`; with types, only entries whose `type` is one of them; a type no entry has gives nothing; after the head gives nothing. 300 runs | test | Effect Arbitrary: interleavings | read from `after` inclusive: (p) red; keep an entry whose `type` matches every type only: (p) red; give the newest first: (p) red | kalfa/ledger/src/LedgerTest.ts |
 | A4, the clock: as the position goes up, `arrivedAt` never goes down, whatever the clock does between appends. 200 runs | test | Effect Arbitrary: interleavings | take the clock as is with no max over the last `arrivedAt`: (q) red | kalfa/ledger/src/LedgerTest.ts |
 | A5, the ledger keeps its own copy: a change the caller makes to its body or metadata after an append, or to an entry it read, changes nothing that a later read gives. 200 runs | test | Effect Arbitrary: bodies | keep the caller's objects by reference: (d) red | kalfa/ledger/src/LedgerTest.ts |
 | B1, a badly shaped entry: each entry of (e) to (j) and (c) fails with `BadEntry` naming its part, never a defect; nothing is kept (a read shows no new entry and the next append takes the next position) | test, 300 runs | Effect Arbitrary: shapes | skip the well-formed check on the stream: (e) red; check the id's length only: (f) red; read `_tag` through the prototype: (g) red; let an extra key through: (g) red; let an empty tag through: (h) red; skip the `Schema.Json` check, so a `BigInt` throws in `JSON.stringify`: (c) red, a defect; skip the metadata check: (i) red; skip the option's check: (j) red | kalfa/ledger/src/LedgerTest.ts |
-| B2, the size limit is the setting: under a small drawn limit, an entry whose count (UTF-8 bytes of stream, id, tag, the body's JSON text and the metadata's JSON text) is at the limit is kept, and one byte over fails with `TooBig` carrying the count and the limit, keeping nothing. 300 runs | test | Effect Arbitrary: sizes | count UTF-16 units with `.length`: (k) red; refuse at the limit with `>=`: (k) red; leave metadata out of the count: (k) red; read the default in place of the setting: (k) red | kalfa/ledger/src/LedgerTest.ts |
+| B2, the size limit is the setting: under a small drawn limit, an entry whose count (UTF-8 bytes of stream, id, type, the body's JSON text and the metadata's JSON text) is at the limit is kept, and one byte over fails with `TooBig` carrying the count and the limit, keeping nothing. 300 runs | test | Effect Arbitrary: sizes | count UTF-16 units with `.length`: (k) red; refuse at the limit with `>=`: (k) red; leave metadata out of the count: (k) red; read the default in place of the setting: (k) red | kalfa/ledger/src/LedgerTest.ts |
 | B3, a bad setting fails loudly: building the memory ledger with each limit of (x) dies with a defect that names `limits.bytes`, and appends nothing | test | Effect Arbitrary: settings | build with no check, so a limit of `1.5` runs: (x) red | kalfa/ledger/src/MemoryLedger.test.ts |
-| C1, a resend: the same stream, id, tag and body, sent again after any other appends, with other metadata, with a JSON-equal body, and with a stale `expectedRevision`, gets the first `Placed`, keeps nothing new, and the entry keeps its first metadata. 300 runs | test | Effect Arbitrary: histories | compare bodies by their JSON text: (b) red, keys in another order; check the revision before the id: (l) red, a stale option is a conflict; keep the newest metadata: (l) red | kalfa/ledger/src/LedgerTest.ts |
-| C2, a reused id: the same stream and id with another body or another `_tag` fails with `IdReused`, also with a stale `expectedRevision`, and keeps nothing. 300 runs | test | Effect Arbitrary: histories | leave `_tag` out of the comparison: (m) red; check the revision before the id: (m) red, a conflict comes back | kalfa/ledger/src/LedgerTest.ts |
+| C1, a resend: the same stream, id, type and body, sent again after any other appends, with other metadata, with a JSON-equal body, and with a stale `expectedRevision`, gets the first `Placed`, keeps nothing new, and the entry keeps its first metadata. 300 runs | test | Effect Arbitrary: histories | compare bodies by their JSON text: (b) red, keys in another order; check the revision before the id: (l) red, a stale option is a conflict; keep the newest metadata: (l) red | kalfa/ledger/src/LedgerTest.ts |
+| C2, a reused id: the same stream and id with another body or another `type` fails with `IdReused`, also with a stale `expectedRevision`, and keeps nothing. 300 runs | test | Effect Arbitrary: histories | leave `type` out of the comparison: (m) red; check the revision before the id: (m) red, a conflict comes back | kalfa/ledger/src/LedgerTest.ts |
 | C3, an id per stream: the same id and body on another stream is another entry, with its own `Placed`. 200 runs | test | Effect Arbitrary: histories | keep ids in one table for the whole log: (n) red | kalfa/ledger/src/LedgerTest.ts |
 | R1, the expected revision: an append with `expectedRevision` equal to the head's revision is kept; below or above it fails with `RevisionConflict { expected, actual }`, `actual` the head's revision now, keeps nothing, and leaves no gap: the next append with `actual` is kept at `actual + 1`. 300 runs | test | Effect Arbitrary: conditions | keep when expected is at or below the head: (r) red; take `0` as "any": (r) red, a non-empty stream keeps it | kalfa/ledger/src/LedgerTest.ts |
 | R2, two callers at the same head: 2 to 6 callers read the same head and append at once, each with that head as its `expectedRevision`; exactly one entry is kept, every other caller gets `RevisionConflict` with `actual` one above the head, and a read after it shows the winner's entry. 200 runs | test | Effect Arbitrary: conditions | in the memory ledger, yield between the revision check and the keep: (s) red, two are kept | kalfa/ledger/src/LedgerTest.ts |
@@ -524,7 +524,7 @@ calls.
 | R4, an empty stream: `expectedRevision` `0` keeps the first entry, and another caller's `0` on the same stream then fails with `RevisionConflict { expected: 0, actual: 1 }`. 200 runs | test | Effect Arbitrary: conditions | treat `0` as "no check": (r) red | kalfa/ledger/src/LedgerTest.ts |
 | M1, the memory ledger itself: `layer()` keeps an entry that counts exactly 2,000,000 bytes and refuses 2,000,001 as `TooBig` with that limit; `arrivedAt` is the `TestClock`'s time whenever the clock moved forward; each build of the layer starts empty; it passes `LedgerTest.suite` and `LedgerTest.spans` | test | scenario: the default limit and the clock are one value each; the suites carry the generated laws | make the default 2,000,001: red; keep state between builds: red; read `Date.now()`: red | kalfa/ledger/src/MemoryLedger.test.ts |
 | S1, the append span: each append ends exactly one span named `ledger.append`, also when it is refused, with the attributes of the table under "Spans" for its answer and no other `kalfa.ledger.*` key; a refusal's span ends failed with that refusal. 300 runs | test | Effect Arbitrary: histories | check the shape before entering the span: (e) red, a refusal leaves none; drop `kalfa.ledger.expected_revision`: (r) red; name it `ledger.write`: red | kalfa/ledger/src/LedgerTest.ts |
-| S2, the read span: each read run to its end ends exactly one span named `ledger.read`, with the stream, `after`, the tags when given, and the count of entries given. 200 runs | test | Effect Arbitrary: interleavings | count the stream's entries, not the ones given: (p) red | kalfa/ledger/src/LedgerTest.ts |
+| S2, the read span: each read run to its end ends exactly one span named `ledger.read`, with the stream, `after`, the types when given, and the count of entries given. 200 runs | test | Effect Arbitrary: interleavings | count the stream's entries, not the ones given: (p) red | kalfa/ledger/src/LedgerTest.ts |
 | S3, the tracer off: appends and reads under `Effect.withTracerEnabled(false)` leave the tracer held in memory empty, while the same calls with it on make spans. 100 runs | test | Effect Arbitrary: interleavings | turn tracing on again inside `append` with `Effect.withTracerEnabled(true)`: red | kalfa/ledger/src/LedgerTest.ts |
 | X1, [secrets] spans hold no body or metadata: for every flow of (y), no span name, attribute, event, or failure text as Effect's tracer keeps it (the error's message and `Cause.pretty` with its stack) holds the secret in any form. 300 runs | test | Effect Arbitrary: secretFlows | annotate the span with the body's JSON: (y) red; annotate a refused entry's metadata: (y) red | kalfa/ledger/src/LedgerTest.ts |
 | X2, [secrets] logs hold no body or metadata: for every flow of (y), no line at any level of a recording logger holds the secret in any form. 300 runs | test | Effect Arbitrary: secretFlows | `Effect.logDebug` the entry on `IdReused`: (y) red | kalfa/ledger/src/LedgerTest.ts |
@@ -545,7 +545,7 @@ The laws in `LedgerTest.ts` are run by `MemoryLedger.test.ts` through `suite` an
 | an empty stream: `0` keeps the first, another `0` conflicts | R4 |
 | `EntryId`: letters, digits and `-_.:`, up to 255; another package's id is an `EntryId` with no mapping | I1, D5 |
 | `EntryName` and `EntryId.child`: plain or hashed, both valid; two names give two ids; kinds never meet; a 255-character parent hashes, never fails (that other packages use it and never hash alone is their reviews' to hold; Chat's ticket names it) | I1, I2, D5 |
-| `read(stream, after, { tags? })`: after a revision, oldest first, once; tags filter | A3, D2 |
+| `read(stream, after, { types? })`: after a revision, oldest first, once; types filter | A3, D2 |
 | an entry read back has exactly the eight keys and none of today's sender fields | A1, D4 |
 | revisions from 1 with no gaps, positions only up; read goes by revision, never by position | A2 |
 | `arrivedAt` is the ledger's clock and never goes back as the position goes up | A4, M1 |
@@ -673,7 +673,7 @@ ranks lowest.
   300 lines.
 - The check order of "One append, step by step" (90%): it is today's order with the ticket's two rules (the id before the
   revision, the entry id before any admission).
-- `_tag` counts in the same-body rule, metadata never (85%).
+- `type` counts in the same-body rule, metadata never (85%).
 - The byte count of step 8 (85%): today's count, mapped.
 - `BadEntry` names its part, and only its part (80%).
 - `RevisionConflict` carries `expected` and `actual` (80%), as KurrentDB's error does; the ticket's name is kept.
@@ -710,7 +710,7 @@ Estimate: 8 steps, $82
 ## New names
 
 - `append`, `read`, `Placed`, `Refusal`, `Failure`, `BadEntry`, `IdReused`, `TooBig`, `AdmissionRefused`, `Unreachable`,
-  `BadRow`, `StorageFailed`, `RevisionConflict`, `EntryId`, `EntryName`, `child`, `expectedRevision`, `tags`: the
+  `BadRow`, `StorageFailed`, `RevisionConflict`, `EntryId`, `EntryName`, `child`, `expectedRevision`, `types`: the
   protocol's, 1864's and the ticket's.
 - `expectedRevision`: EventStoreDB's and KurrentDB's word.
 - `messaging.*`, `error.type`: OpenTelemetry's. `kalfa.ledger.*`: decision 0063's form.
@@ -763,8 +763,18 @@ read settles it, and none goes to the owner.
 ## Lead's calls at signing (2026-11-23)
 
 - Kept, each with its law: `Revision` and `Position` are branded (`Revision.make(0)`); `AdmissionRefused.reason` is text until https://github.com/kamp-us/tea-fabrika/issues/2085; `fast-sha256` 1.3.0 for a synchronous SHA-256 (already in the store, offline install works); stream names are non-empty, well-formed text with no grammar yet; memory `read` copies entries on call; the three failures always take a `Redacted` cause, as `@kalfa/secrets` does.
-- Changed: an empty `tags` list is caller input, so it is a typed refusal with exact text, not a defect.
+- Changed: an empty `types` list is caller input, so it is a typed refusal with exact text, not a defect.
 - Permissions (https://github.com/kamp-us/tea-fabrika/pull/2313) needs `Unreachable`, `StorageFailed`, `BadRow` and the `Failure` union from slice 1, as `Schema.TaggedError`s buildable from their fields, plus the package's layer and boundary rows. Slice 1 lands those first.
+
+## Amendments after review round 1
+
+- The owner named the field a writer picks for an entry `type`, and the read option that filters by it `types`. The reason: Effect's `_tag` names one
+  of a fixed set, and this is open text a writer chooses. `_tag` stays for real tagged classes only. The sketch, the check order, the laws and the
+  telemetry names above are written to match, and `BadEntry`'s part is `"type"`.
+- A read that names no types fails with `EmptyTypes`, an error of the read's own. It is no refusal, since a refusal says the Ledger will not keep an
+  entry, and a read keeps none. `Refusal` is the five refusals. The text is "types must hold at least one type: leave types out to read every entry".
+- A failure's cause is written to JSON as the text `<redacted>` and read back as `Redacted.make(undefined)`, so a failure, and an `Exit` that failed with
+  one, crosses the transport's JSON codec without the cause's value leaving the process.
 
 ## Findings
 

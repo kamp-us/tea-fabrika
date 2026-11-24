@@ -34,7 +34,7 @@ import {
 } from "./Ledger.test-support.ts";
 
 /** Every one of the nine, as a wire carries them, and as JSON text carries them. */
-const Every = Schema.Union([...Errors.Refusal.members, Errors.EmptyTags, ...Errors.Failure.members]);
+const Every = Schema.Union([...Errors.Refusal.members, Errors.EmptyTypes, ...Errors.Failure.members]);
 
 const Json = Schema.toCodecJson(Every);
 
@@ -60,10 +60,10 @@ const failedWith = (exit: Exit.Exit<unknown, unknown>): Option.Option<unknown> =
 /** A JSON value read back from its text. */
 const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
 
-// F1. Plant: give `TooBig` a `Schema.Number` field written as text (a wire that sends `"3"` is no `3`); put `BadRow` in `Refusal`; put `EmptyTags` in `Refusal`;
+// F1. Plant: give `TooBig` a `Schema.Number` field written as text (a wire that sends `"3"` is no `3`); put `BadRow` in `Refusal`; put `EmptyTypes` in `Refusal`;
 // drop `StorageFailed` from `Failure`; give two errors one tag; leave `AdmissionRefused`'s `reason` out of the class (a field lost on the wire); write a
 // failure's cause as its value, as other text, or not at all; decode a failure's cause as a value; give `Revision` a smaller range (the drawn revisions fail
-// to cross); leave `EmptyTags` out of the outcome's wire form.
+// to cross); leave `EmptyTypes` out of the outcome's wire form.
 it.effect.prop(
   "F1 errors: each of the nine errors encodes and decodes back to the same tag and fields as data and as JSON text, a failure writes its cause as a fixed placeholder and reads it back hidden and empty, an outcome that failed with one crosses too, and Refusal and Failure hold exactly their own members",
   { texture: errorTexture },
@@ -285,7 +285,9 @@ it.effect.prop(
 
 // F3. Plant: change a word of the text; leave the text out (the message is empty); make the text depend on a field; write the text in another
 // letter case.
-it("F3 format: the error of a read that names no tags says exactly why, and how to ask for every entry", () => {
+it("F3 format: the error of a read that names no types says exactly why, and how to ask for every entry", () => {
   // format: the text is what a caller reads, so it must be written exactly as the plan's call gives it.
-  expect(new Errors.EmptyTags({}).message).toBe("tags must hold at least one tag: leave tags out to read every entry");
+  expect(new Errors.EmptyTypes({}).message).toBe(
+    "types must hold at least one type: leave types out to read every entry",
+  );
 });
