@@ -51,7 +51,7 @@ const quoting = (id: Class, secret: string): unknown => {
 };
 
 /** Every text a codec gives for an error: the JSON codec, the string-tree codec and the Go-style JSON codec, each alone, and the JSON codec over an `Exit` that fails with it and an `Exit` that dies of it. An encode that throws gives its message, so a refused encode is read too. */
-const written = <S extends Schema.Top>(schema: S, error: unknown): string => {
+const written = <S extends Schema.Top & { readonly EncodingServices: never }>(schema: S, error: unknown): string => {
   const exit = Schema.toCodecJson(Schema.Exit(Schema.Void, schema, Schema.Defect()));
 
   const attempts: ReadonlyArray<() => unknown> = [
@@ -173,7 +173,10 @@ it.effect.prop(
       const wire = Schema.encodeUnknownSync(Schema.toCodecJson(OldSnapshotError))(none);
       const back = Schema.decodeUnknownSync(Schema.toCodecJson(OldSnapshotError))(wire);
 
-      expect(Object.keys(wire).toSorted(), "no cause key is written").toEqual(["_tag", "message"]);
+      expect(
+        Object.keys(Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(wire)).toSorted(),
+        "no cause key is written",
+      ).toEqual(["_tag", "message"]);
       expect(back.cause, "none is read back").toBeUndefined();
 
       reach.done();
