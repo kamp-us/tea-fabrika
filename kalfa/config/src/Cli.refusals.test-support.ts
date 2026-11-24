@@ -9,7 +9,6 @@ import { inspect } from "node:util";
  * drawn seeds, never the cross product, and `Reach.done` fails when a class was not reached.
  */
 import { expect } from "@effect/vitest";
-import type { Option } from "effect";
 import {
   Cause,
   ConfigProvider,
@@ -17,6 +16,7 @@ import {
   Exit,
   Layer,
   Logger,
+  Option,
   PlatformError,
   References,
   Schema,
@@ -146,12 +146,49 @@ export const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1),
 // RF1: the classes of schema, each as a setting, the value the file holds and the tail the message ends with
 // ---------------------------------------------------------------------------------------------
 
-export type RuleId = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "n";
+export type RuleId =
+  | "a"
+  | "b"
+  | "c"
+  | "c2"
+  | "c3"
+  | "d"
+  | "e"
+  | "f"
+  | "g"
+  | "h"
+  | "i"
+  | "i2"
+  | "i3"
+  | "i4"
+  | "j"
+  | "n"
+  | "w";
 
-export const RULE_IDS: ReadonlyArray<RuleId> = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "n"];
+export const RULE_IDS: ReadonlyArray<RuleId> = [
+  "a",
+  "b",
+  "c",
+  "c2",
+  "c3",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "i2",
+  "i3",
+  "i4",
+  "j",
+  "n",
+  "w",
+];
 
 interface RuleCase {
   readonly id: RuleId;
+  /** The whole file and the line of the fault in it, where the value is not one `key = value` line. */
+  readonly placed?: { readonly text: string; readonly line: number };
   readonly setting: Setting.Any;
   /** The value as the file writes it. */
   readonly raw: string;
@@ -166,6 +203,12 @@ interface RuleCase {
 /** A setting of the drawn name over a schema of plain data, with the description every setting needs. */
 const made = <C extends Schema.Codec<any, unknown>>(draw: RuleDraw, schema: Setting.PlainSchema<C>): Setting.Any =>
   Setting.make(settingName(draw), schema).pipe(Setting.withDescription("A setting."));
+
+const notes = (draw: RuleDraw) => Array.from({ length: draw.pad }, (_, n) => `# note ${n}\n`).join("");
+
+const table = (draw: RuleDraw) => `${draw.words[0]}`;
+
+const key = (draw: RuleDraw) => `${draw.words[1]}`;
 
 const odd = (n: number) => (n % 2 === 0 ? n + 1 : n);
 
@@ -286,8 +329,93 @@ export const ruleCases = (draw: RuleDraw): ReadonlyArray<RuleCase> => {
       tail: "a valid value. Expected a table with every key it needs.",
       needles: [],
     },
+    {
+      // (c2) a check with no text that is not the schema's last, and (c3) one inside a table's field: Effect gives such a filter no annotations at all.
+      id: "c2",
+      setting: made(draw, Schema.Finite.check(even, Schema.isGreaterThan(draw.bound))),
+      raw: String(odd(own)),
+      text: String(odd(own)),
+      tail: "a valid value. Its schema names no rule.",
+      needles: [String(odd(own))],
+    },
+    {
+      id: "c3",
+      setting: made(draw, Schema.Struct({ [first(draw)]: Schema.Finite.check(even) })),
+      raw: `{ ${first(draw)} = ${odd(own)} }`,
+      text: "",
+      tail: "a valid value. Its schema names no rule.",
+      needles: [String(odd(own))],
+    },
+    {
+      // (i2) a record written with dotted keys, the bad member on a line of its own.
+      id: "i2",
+      setting: made(draw, Schema.Record(Schema.String, Schema.Finite)),
+      raw: "",
+      text: draw.secret,
+      placed: {
+        text: `${notes(draw)}[${table(draw)}]\n${key(draw)}."ok" = 1\n${key(draw)}.${JSON.stringify(draw.other)} = ${text}\n`,
+        line: draw.pad + 3,
+      },
+      tail: "a valid value. Expected number.",
+      needles: [...refused, ...forms(draw.other)],
+    },
+    {
+      // (i3) a record written only under item headers, with no header for the table above them.
+      id: "i3",
+      setting: made(draw, Schema.Record(Schema.String, Schema.Struct({ [first(draw)]: Schema.Finite }))),
+      raw: "",
+      text: draw.secret,
+      placed: {
+        text: `${notes(draw)}[${table(draw)}.${key(draw)}."ok"]\n${first(draw)} = 1\n[${table(draw)}.${key(draw)}.${JSON.stringify(draw.other)}]\n${first(draw)} = ${text}\n`,
+        line: draw.pad + 4,
+      },
+      tail: "a valid value. Expected number.",
+      needles: [...refused, ...forms(draw.other)],
+    },
+    {
+      // (i4) an item with a key missing, whose own header is implicit: only a deeper header names it, so the line is that header's.
+      id: "i4",
+      setting: made(
+        draw,
+        Schema.Record(
+          Schema.String,
+          Schema.Struct({ [first(draw)]: Schema.Finite, [second(draw)]: Schema.Struct({ z: Schema.Finite }) }),
+        ),
+      ),
+      raw: "",
+      text: "",
+      placed: {
+        text: `${notes(draw)}[${table(draw)}.${key(draw)}.${JSON.stringify(draw.other)}.${second(draw)}]\nz = 1\n`,
+        line: draw.pad + 1,
+      },
+      tail: "a valid value. Expected a table with every key it needs.",
+      needles: forms(draw.other),
+    },
+    {
+      // (w) a value that is forbidden to decode, with a message that quotes it.
+      id: "w",
+      setting: made(
+        draw,
+        Schema.String.pipe(
+          Schema.decodeTo(Schema.String, {
+            decode: SchemaGetter.forbidden(
+              (found: Option.Option<string>) => `${Option.getOrElse(found, () => "")} is forbidden`,
+            ),
+            encode: SchemaGetter.passthrough(),
+          }),
+        ),
+      ),
+      raw: text,
+      text: draw.secret,
+      tail: "a valid value. Its schema names no rule.",
+      needles: refused,
+    },
   ];
 };
+
+/** The file of a case and the line its fault is on. */
+export const placement = (draw: RuleDraw, one: RuleCase) =>
+  one.placed ?? { text: fileText(draw, one.raw), line: keyLine(draw) };
 
 export const makeGroup = (draw: RuleDraw, settings: ReadonlyArray<Setting.Any>): AnyGroup =>
   SettingGroup.make(draw.app, ...settings);
@@ -588,9 +716,9 @@ export const printed = (observed: Observed): ReadonlyArray<string> => {
 // RF3: the read faults, each as the error a disk answers and the reason the message must give
 // ---------------------------------------------------------------------------------------------
 
-export type FaultId = "p" | "o" | "u" | "q" | "x" | "y" | "w";
+export type FaultId = "p" | "o" | "u" | "q" | "x" | "y" | "s" | "w";
 
-export const FAULT_IDS: ReadonlyArray<FaultId> = ["p", "o", "u", "q", "x", "y", "w"];
+export const FAULT_IDS: ReadonlyArray<FaultId> = ["p", "o", "u", "q", "x", "y", "s", "w"];
 
 /** A system error of a tag, as the read of `path` fails with it. */
 const system = (tag: PlatformError.SystemErrorTag, path: string, cause?: unknown) =>
@@ -652,6 +780,12 @@ export const plant = (id: FaultId, draw: FaultDraw, path: string): Fault => {
       };
     case "y":
       return { id, error: system(draw.anyTag, path, { code: `${draw.code}${draw.home}` }), because: kind(draw.anyTag) };
+    case "s":
+      return {
+        id,
+        error: system(draw.anyTag, path, { code: `${draw.home}/${draw.code}` }),
+        because: kind(draw.anyTag),
+      };
     case "w":
       return {
         id,

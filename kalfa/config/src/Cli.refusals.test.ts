@@ -33,6 +33,7 @@ import {
   failing,
   plant,
   fileText,
+  placement,
   forms,
   makeGroup,
   MORE_IDS,
@@ -92,9 +93,10 @@ it.effect.prop(
 
       for (const one of ruleCases(draw)) {
         const group = makeGroup(draw, [one.setting]);
+        const placed = placement(draw, one);
 
         const observed = yield* startOn(group, {
-          files: { [repoPath(draw)]: fileText(draw, one.raw) },
+          files: { [repoPath(draw)]: placed.text },
           env: { HOME: draw.home },
           repo: draw.repo,
         });
@@ -103,9 +105,9 @@ it.effect.prop(
 
         expect(found.reason, `(${one.id}) the reason`).toBe("invalid");
         expect(found.file, `(${one.id}) the file`).toBe(repoName(draw));
-        expect(found.line, `(${one.id}) the line`).toBe(keyLine(draw));
+        expect(found.line, `(${one.id}) the line is the fault's own, never 0`).toBe(placed.line);
         expect(found.message, `(${one.id}) the message`).toBe(
-          `${repoName(draw)}, line ${keyLine(draw)}: ${settingName(draw)} is not ${one.tail}\n  ${draw.app} did not start.`,
+          `${repoName(draw)}, line ${placed.line}: ${settingName(draw)} is not ${one.tail}\n  ${draw.app} did not start.`,
         );
 
         for (const needle of one.needles) {
@@ -390,25 +392,26 @@ const hidden = (label: string, observed: Observed, planted: unknown) => {
   expect(Redacted.value(cause), `${label}: the cause is the planted failure`).toBe(planted);
 };
 
+/** The flows of RF1 whose value or key is a secret: a value of the wrong type, a message that quotes it, and a record's member. */
+const SECRET_FLOWS: ReadonlyArray<RuleId> = ["a", "d", "i", "i2", "i3", "w"];
+
 // Plants: (x) keep the cause raw (`Schema.optional(Schema.Defect())` and no `Redacted.make` in `stop`): the
 // `PlatformError`'s message prints the path in `Cause.pretty`; (z) keep the cause raw: the `SourceError`'s message shows;
 // hide an empty cause (`Redacted.make(undefined)`): the identity fails; (d) as in RF1.
 it.effect.prop(
-  "RF5 [secrets] nothing private in any rendering, and the cause is kept hidden: for the flows of RF1's (a), (d) and (i), of RF3's every class at the start and the disk set, and of RF4's every site, no needle appears raw, JSON-escaped or URL-encoded in the message, `String(error)`, `JSON.stringify(error)`, `inspect`, `Cause.pretty`, any span or any log line, and each read's cause is a `Redacted` of the very failure planted",
+  "RF5 [secrets] nothing private in any rendering, and the cause is kept hidden: for the flows of RF1's (a), (d), (i), (i2), (i3) and (w), of RF3's every class at the start and the disk set, and of RF4's every site, no needle appears raw, JSON-escaped or URL-encoded in the message, `String(error)`, `JSON.stringify(error)`, `inspect`, `Cause.pretty`, any span or any log line, and each read's cause is a `Redacted` of the very failure planted",
   { draw: FaultDraw, secret: EnvironmentDraw },
   ({ draw, secret }) =>
     Effect.gen(function* () {
       const reach = new Reach<string>([
-        "a",
-        "d",
-        "i",
+        ...SECRET_FLOWS,
         ...FAULT_IDS.flatMap((id) => ["repo", "home", "app-home", "disk-set"].map((site) => `${site}:${id}`)),
         ...ENVIRONMENT_SITES.map((site) => `env:${site}`),
       ]);
 
-      for (const one of ruleCases(draw).filter(({ id }) => id === "a" || id === "d" || id === "i")) {
+      for (const one of ruleCases(draw).filter(({ id }) => SECRET_FLOWS.includes(id))) {
         const observed = yield* startOn(makeGroup(draw, [one.setting]), {
-          files: { [repoPath(draw)]: fileText(draw, one.raw) },
+          files: { [repoPath(draw)]: placement(draw, one).text },
           env: { HOME: draw.home },
           repo: draw.repo,
         });
