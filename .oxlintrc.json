@@ -1567,6 +1567,12 @@
       "rules": { "fabrika/test-database": "error" }
     },
     {
+      // Ticket 1311: `it.effect` runs on Effect's `TestClock`, which moves only when a test adjusts it, so a real wait inside it never ends and the test
+      // hangs until its timeout. A test waits in `it.live`, or moves the clock with `TestClock.adjust` in the same body.
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*Test.ts", "**/*.test-support.ts"],
+      "rules": { "fabrika/no-sleep-on-test-clock": "error" }
+    },
+    {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
       // error or a killed test can skip (anything that holds a resource is acquired in a scope, so the scope releases it). Setup hooks stay.
       "files": ["next/**/*.ts", "kalfa/**/*.ts", "next/**/*.tsx", "kalfa/**/*.tsx"],
