@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds issues 1310; body e6459f849ecc
 Plancheck-Version: 3
 
 # Plan: an error's hidden cause stays hidden when the error is written as JSON (ticket 1310)
@@ -518,3 +518,14 @@ Estimate: 8 steps, $64
 - Effect has no option for a `Redacted` that writes a fixed placeholder. A small upstream proposal (a
   `Schema.Redacted(x, { json: "placeholder" })`-style option) would let this repo drop its own declaration; this plan
   did not file it.
+
+## Lead's calls at signing (2026-11-23)
+
+- (a) The Ledger imports `@kalfa/diagnostics` for `Hidden.Cause` and moves to layer 1. This answers the open question
+  above: yes. The rank order puts Diagnostics below the Ledger, and decision 0084 gave Configuration the same edge, so
+  there is one copy and no new package. The lead's call, 85%.
+- (b) Slice 1 goes first: it is the leak fix.
+- (c) The Ledger branch (PR 2314) and the Configuration refusals plan (PR 2319) take `Hidden.Cause` after slice 1 lands,
+  as "Branches in flight" says.
+- The approval line names `issues 1310`: ticket 1310 is a tracker ticket with no GitHub parent, and the existing
+  signed plans write a ticket number after `issues`.
