@@ -66,6 +66,11 @@
 // own `related` walks every test file of the repo through Vite, and the laptop refuses a run that
 // names no test file (`vitest.hostrun.ts`).
 //
+// A second way to a law, by name (ticket 1314): for a file `oxlint-plugins/<rule>.ts`, the test `oxlint-plugins/<rule>.test.ts` beside it
+// is a law too. Its cases lint through `plant.ts`, which runs oxlint in another process, so no import reaches the rule. The output
+// says which laws were found by import and which by name (outside.ts). In the box, `outside.setup.ts` hands that process the
+// mutant and covers the rule's mutants for the test, since Stryker sees only the test's own process.
+//
 // What it cannot see: a law in another package that loads the file through a workspace link, and a
 // fault no Stryker mutator makes (code moved or unwrapped, a race between two calls).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
@@ -91,6 +96,7 @@ import { alive, bounded, DOCKER_SECONDS, heldBy, loads, secondsFor, Summary } fr
 import * as Saved from "./gatecache.ts";
 import { inLine, noteLine } from "./gatequeue.ts";
 import type { Line } from "./gatequeue.ts";
+import { lawNamedFor } from "./outside.ts";
 import { inScope, product } from "./scope.ts";
 
 // ---------------------------------------------------------------- the settings
@@ -329,6 +335,44 @@ export const coverage = (files: ReadonlyArray<string>, reached: ReadonlyMap<stri
   return {
     laws: unique(Arr.flatMap(Rec.values(by), (tests) => tests)),
     bare: Arr.filter(files, (file) => (by[file] ?? []).length === 0),
+  };
+};
+
+/**
+ * The laws of the files, by how each was found, and the files no law loads. A law is picked by import, when it reaches a file
+ * (`coverage`), or by name, when it is the test named after a lint rule's file (`outside.ts`): its cases lint through another
+ * process, so no import reaches the rule. One found both ways counts as by import. Pure.
+ */
+export const picked = (
+  files: ReadonlyArray<string>,
+  reached: ReadonlyMap<string, ReadonlySet<string>>,
+  tests: ReadonlyArray<string>,
+) => {
+  const imported = coverage(files, reached).laws;
+
+  const named = unique(
+    Arr.filter(
+      Arr.flatMap(files, (file) => {
+        const law = lawNamedFor(file);
+
+        return law === null ? [] : [law];
+      }),
+      (law) => Arr.contains(tests, law) && !Arr.contains(imported, law),
+    ),
+  );
+
+  return {
+    imported,
+    named,
+    laws: unique([...imported, ...named]),
+    bare: Arr.filter(files, (file) => {
+      const law = lawNamedFor(file);
+
+      return (
+        !Arr.some(imported, (test) => reached.get(test)?.has(file) === true) &&
+        (law === null || !Arr.contains(tests, law))
+      );
+    }),
   };
 };
 
@@ -691,7 +735,7 @@ const lawsFor = Effect.fnUntraced(function* (
   }
 
   const step = (file: string) => edges.get(file) ?? [];
-  const { laws, bare } = coverage(files, reach(tests, step));
+  const { laws, imported, named, bare } = picked(files, reach(tests, step), tests);
 
   // A test left out is named only when it loads a file in scope: those are the laws that did not run.
   const missed = coverage(
@@ -702,7 +746,7 @@ const lawsFor = Effect.fnUntraced(function* (
     ),
   ).laws;
 
-  return { laws, bare, left: Arr.filter(left, (test) => Arr.contains(missed, test.path)), show };
+  return { laws, imported, named, bare, left: Arr.filter(left, (test) => Arr.contains(missed, test.path)), show };
 });
 
 /** The tree of the working tree as `git add -A` would take it, through an index of our own. */
@@ -873,7 +917,7 @@ const check = Effect.fnUntraced(function* (ask: {
   }
 
   yield* Console.log(`survivors: ${files.length} files in scope: ${Arr.join(files, ", ")}`);
-  const { laws, bare, left, show } = yield* lawsFor(root, tree, list, files);
+  const { laws, imported, named, bare, left, show } = yield* lawsFor(root, tree, list, files);
 
   for (const test of left) {
     yield* Console.log(`left out  ${test.path}: ${test.reason}`);
@@ -892,6 +936,8 @@ const check = Effect.fnUntraced(function* (ask: {
   }
 
   yield* Console.log(`survivors: ${laws.length} laws: ${Arr.join(laws, ", ")}`);
+  yield* Console.log(`  by import (${imported.length}): ${Arr.join(imported, ", ")}`);
+  yield* Console.log(`  by name (${named.length}): ${Arr.join(named, ", ")}`);
 
   // The parent: the head's tree, with each file in scope at its base version, or gone.
   const index = path.join(out, "parent-index");

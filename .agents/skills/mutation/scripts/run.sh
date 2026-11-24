@@ -75,7 +75,10 @@ const include = process.env.RELATED?.split(",").map(p => p.trim()).filter(Boolea
 if (!include?.length) throw new Error("RELATED must list the test paths");
 const limit = Number(process.env.TEST_LIMIT || 10_000);
 const names = process.env.TEST_NAMES;
-export default defineConfig({...base, test: {...base.test, include, maxWorkers: 1,
+// outside.setup.ts: a lint rule's own test runs oxlint in another process, so the setup hands that process the active mutant
+// and covers the rule's mutants for the test (outside.ts, ticket 1314).
+const setupFiles = [...(base.test?.setupFiles ?? []), "./.agents/skills/mutation/scripts/outside.setup.ts"];
+export default defineConfig({...base, test: {...base.test, include, setupFiles, maxWorkers: 1,
   ...(names ? {testNamePattern: names} : {}),
   testTimeout: limit, hookTimeout: limit,
 	exclude: [...(base.test?.exclude ?? []), "**/node_modules/**", "**/dist/**",
