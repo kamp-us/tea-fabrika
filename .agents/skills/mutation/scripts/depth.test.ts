@@ -53,9 +53,8 @@ describe("the run depth, its pure parts", () => {
   // Plant: always give the aliases, which would send every run through the cap.
   it("with no depth the config adds nothing, and with one it swaps effect/Arbitrary and has vitest load @effect/vitest", () => {
     expect(depthConfig(undefined)).toEqual({});
-    expect(depthConfig("")).toEqual({});
 
-    const set = depthConfig("6");
+    const set = depthConfig(6);
     expect(set.server).toEqual({ deps: { inline: ["@effect/vitest"] } });
     expect(set.alias?.map((a) => String(a.find))).toEqual(["/^effect\\/Arbitrary$/", "/^effect-real\\/Arbitrary$/"]);
   });
@@ -83,8 +82,8 @@ describe("the run depth, through a real vitest", () => {
     join(folder, "config.ts"),
     [
       'import { defineConfig } from "vitest/config";',
-      `import { depthConfig } from ${JSON.stringify(join(here, "depth.ts"))};`,
-      'export default defineConfig({ test: { include: ["law.test.ts"], ...depthConfig(process.env.MUTATE_RUNS) } });',
+      `import { depth, depthConfig } from ${JSON.stringify(join(here, "depth.ts"))};`,
+      'export default defineConfig({ test: { include: ["law.test.ts"], ...depthConfig(depth) } });',
       "",
     ].join("\n"),
   );
@@ -162,6 +161,17 @@ describe("the box's scripts carry the depth", () => {
     expect(existsSync(join(here, "../../../../", config))).toBe(true);
     expect(entry).toContain(`[ -f ${config} ] || exit 73`);
     expect(entry).toContain(`depth=--config=${config}`);
-    expect(runSh).toContain("...depthConfig(process.env.MUTATE_RUNS)");
+    expect(runSh).toContain("...depthConfig(depth)");
+  });
+
+  // Plants: run arm c under the cap (the recheck would repeat the capped run), leave the cap on for arm a after it, read no plan, or let run.sh
+  // ignore RANGES or TEST_NAMES (the recheck would run the sample again, and every law).
+  it("the recheck is arm c: in a subshell with no MUTATE_RUNS, from recheck.ts's plan, and run.sh takes its ranges and test names", () => {
+    expect(entry).toMatch(/\(\n\t+unset MUTATE_RUNS\n[\s\S]*?arm c "\$\{T\}c" ""\n\t+\)/);
+    expect(entry).toContain("recheck.ts");
+    expect(entry.indexOf(`arm c "\${T}c"`)).toBeLessThan(entry.indexOf("# Arm a:"));
+    expect(runSh).toContain(`if [ -n "\${RANGES:-}" ]; then ranges=$RANGES`);
+    expect(runSh).toContain("testNamePattern: names");
+    expect(runSh).toContain("TEST_LIMIT=" + "$" + "{TEST_LIMIT:-10000}");
   });
 });

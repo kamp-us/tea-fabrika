@@ -6,8 +6,10 @@
 // each law three times over (the plain baseline, Stryker's dry run, then once per mutant a law covers),
 // so on `@kalfa/git` a full-depth gate spent 285 s on the baseline and 251 s on the dry run before it
 // tested one mutant. `MUTATE_RUNS` caps the count: a law that asks for more draws this many, and a law
-// that asks for fewer keeps its own. The seed stays each law's own, so a capped run draws the first
-// cases of the full run's sequence and nothing random is new.
+// that asks for fewer keeps its own. The seed stays each law's own, but a capped run is not a prefix of the
+// full run: effect sizes case `i` as `round(i * size / (runs - 1))`, so a count of 25 reaches the largest
+// size at its 25th case and a count of 100 at its 100th, and the same seed draws other cases. A mutant can
+// die at one depth and live at the other, which is why the gate rechecks what lives at the cap (recheck.ts).
 //
 // How it reaches the laws: `@effect/vitest` runs a property through `effect/Arbitrary`'s `checkEffect`.
 // The config this file builds sends that import to `depth.arbitrary.ts`, which gives the same module
@@ -17,7 +19,8 @@
 // is not touched.
 //
 // The depth is in the container only: `mutbox.ts run --runs <n>` passes it as `MUTATE_RUNS`, and with no
-// `--runs` nothing here is read (the hourly run on CI keeps full depth).
+// `--runs` nothing here is read (the hourly run on CI keeps full depth). `MUTATE_RUNS` is read once, here,
+// as `depth`; the config, the shim and the config files all take their cap from it.
 import { fileURLToPath } from "node:url"; // edge: the one path the real module is reached by
 
 /** The count effect's `checkEffect` uses when neither a law nor the global defaults name one. */
@@ -48,13 +51,16 @@ export const depthFrom = (value: string | undefined): number | undefined => {
   return Number(value);
 };
 
+/** This process's cap: `MUTATE_RUNS`, parsed once when this module loads. A bad value stops the process that loads it. */
+export const depth: number | undefined = depthFrom(process.env.MUTATE_RUNS);
+
 /**
  * The part of a vitest config that caps property laws, `{}` when no depth is set: send `effect/Arbitrary`
  * to the capping module, keep the real one reachable under another name, and let vitest load
- * `@effect/vitest`. Merge it into `test`.
+ * `@effect/vitest`. Merge it into `test`; the cap is this process's `depth`.
  */
-export const depthConfig = (value: string | undefined) =>
-  depthFrom(value) === undefined
+export const depthConfig = (cap: number | undefined) =>
+  cap === undefined
     ? {}
     : {
         alias: [

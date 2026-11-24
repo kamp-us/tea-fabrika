@@ -58,6 +58,34 @@ fi
 arm b "$T" /out/baseline.json
 b=$(cat /out/b/exit)
 
+# The recheck (ticket 1306, recheck.ts): a mutant that lived at the capped depth is run again at full depth, in only
+# the tests that cover it, so the gate reports it only when it lives there too. Arm c is that run: no MUTATE_RUNS,
+# the survivors' own ranges, and the vitest limit at its ceiling, since the plain baseline ran capped and says
+# nothing of full-depth times. It runs in a subshell so arm a below keeps the cap. A plan that cannot be made leaves
+# no arm c, and every mutant that lived stays reported.
+if [ -n "${MUTATE_RUNS:-}" ] && [ -f /out/b/report.json ]; then
+	node --input-type=module -e '
+import { readFileSync, writeFileSync } from "node:fs";
+import { planFrom } from "./.agents/skills/mutation/scripts/recheck.ts";
+const plan = planFrom(readFileSync("/out/b/report.json", "utf8"), (process.env.RELATED ?? "").split(","));
+if (plan !== null) {
+  writeFileSync("/out/c-ranges", plan.ranges.map((r) => JSON.stringify(r)).join(","));
+  writeFileSync("/out/c-related", plan.related.join(","));
+  writeFileSync("/out/c-names", plan.names ?? "");
+}' || :
+	if [ -s /out/c-ranges ]; then
+		(
+			unset MUTATE_RUNS
+			RANGES=$(cat /out/c-ranges)
+			RELATED=$(cat /out/c-related)
+			TEST_NAMES=$(cat /out/c-names)
+			TEST_LIMIT=60000
+			export RANGES RELATED TEST_NAMES TEST_LIMIT
+			arm c "${T}c" ""
+		) || :
+	fi
+fi
+
 # Arm a: the same sample against the related tests as the base has them. A test the base lacks
 # is left out of that arm. Stryker stops when a test fails in its dry run, so arm a first runs the
 # base's tests on the build and keeps only the files that pass; /out/a-kept names them, and

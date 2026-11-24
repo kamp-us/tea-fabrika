@@ -28,7 +28,9 @@
 //   MUTATE_FILES         8     the most product files one run takes; more is refused, naming the count
 //   MUTATE_RUNS          25    the most cases a property law draws in the box, or `full` for each law's own count
 //                              (ticket 1306: the laws run three times over, and at full depth they alone cost more
-//                              than the 300 s; depth.ts says how the cap reaches a law, and what it cannot reach)
+//                              than the 300 s; depth.ts says how the cap reaches a law, and what it cannot reach). A
+//                              mutant that lives at the cap is run again at full depth, in the laws that cover it, and
+//                              is listed only if it lives there too (recheck.ts); that run has its own MUTATE_SECONDS
 //   MUTATE_WAIT_SECONDS  7200  the longest a run waits in line for the box; then it gives up its place (exit 2)
 //   MUTATE_KEEP_DAYS     7     how long a saved run is kept: each save drops the ones older than this
 //   BOXES                the boxes folder beside the main checkout, as env.sh finds it; the one Docker
@@ -471,6 +473,15 @@ export const judge = <E, R, E2, R2>(ask: {
 
 // ---------------------------------------------------------------- the run
 
+/**
+ * The recheck's part of the last line: the counts above are the capped run's, and this says how many of the mutants that lived there
+ * died at full depth, so a reader sees both. Empty with no recheck. Pure.
+ */
+export const recheckText = (recheck: Summary["recheck"], runs: number | "full"): string =>
+  recheck === null
+    ? ""
+    : `; rechecked at full depth: ${recheck.cleared.length} of the ${recheck.asked} that lived at ${runs} cases died there and are not listed, ${recheck.confirmed} lived there too${recheck.unreached > 0 ? ` (${recheck.unreached} not reached)` : ""}`;
+
 /** mutbox's flag for the run depth: the cap as `--runs <n>`, and none for `full`, which leaves each law its own count. Pure. */
 export const runsFlag = (runs: number | "full"): ReadonlyArray<string> =>
   runs === "full" ? [] : ["--runs", String(runs)];
@@ -866,7 +877,7 @@ const check = Effect.fnUntraced(function* (ask: {
         String(seconds),
         ...runsFlag(runs),
       ],
-      secondsFor(false, seconds) + DOCKER_SECONDS.build + 6 * DOCKER_SECONDS.call,
+      secondsFor(false, seconds, runs !== "full") + DOCKER_SECONDS.build + 6 * DOCKER_SECONDS.call,
     );
 
     const answer = yield* Schema.decodeEffect(Schema.fromJsonString(Summary))(
@@ -940,6 +951,7 @@ const check = Effect.fnUntraced(function* (ask: {
     Arr.join(
       [
         `survivors: ${lines.length} to kill or explain; ${counts}`,
+        recheckText(summary.recheck, runs),
         explained > 0 ? `; ${explained} answered by a Survivor: line` : "",
         summary.sample === null ? "" : `; ${summary.sample.selected} of ${summary.sample.total} mutants sampled`,
         runs === "full" ? "" : `; property laws drew at most ${runs} cases (MUTATE_RUNS)`,

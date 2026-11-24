@@ -2,6 +2,6 @@
 // lead tooling. The box's plain baseline run names it with `--config` when a depth is set; depth.ts says why.
 import { defineConfig } from "vitest/config";
 import { testConfig } from "../../../../vitest.config.ts";
-import { depthConfig } from "./depth.ts";
+import { depth, depthConfig } from "./depth.ts";
 
-export default defineConfig({ ...testConfig, test: { ...testConfig.test, ...depthConfig(process.env.MUTATE_RUNS) } });
+export default defineConfig({ ...testConfig, test: { ...testConfig.test, ...depthConfig(depth) } });

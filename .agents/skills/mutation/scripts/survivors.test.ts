@@ -20,6 +20,7 @@ import {
   readAnswers,
   reach,
   resolve,
+  recheckText,
   runsFlag,
   staticLines,
   survivorLines,
@@ -563,6 +564,16 @@ describe("survivors, the run depth it hands the box", () => {
       options,
     );
     expect(runsFlag("full")).toEqual([]);
+  });
+
+  // Plants: print a recheck when none ran; leave out how many died, or how many lived, at full depth.
+  it("the last line gives the counts at both depths: none when no recheck ran, else how many died and how many lived at full depth", () => {
+    expect(recheckText(null, 25)).toBe("");
+
+    const text = recheckText({ asked: 5, cleared: [], confirmed: 2, unreached: 1 }, 25);
+    expect(text).toContain("0 of the 5 that lived at 25 cases died there");
+    expect(text).toContain("2 lived there too (1 not reached)");
+    expect(recheckText({ asked: 1, cleared: [], confirmed: 1, unreached: 0 }, 25)).not.toContain("not reached");
   });
 });
 

@@ -118,9 +118,11 @@ const CAP = 300;
 
 /**
  * The container's time limit: one arm is run.sh's cap plus 180 s for the install and the baseline;
- * with a base, two arms and 300 s. The default cap gives the measured 480 s and 900 s.
+ * with a base, two arms and 300 s. The default cap gives the measured 480 s and 900 s. A run with a depth
+ * (`rechecked`) may run its survivors again at full depth, which is one more arm of the cap.
  */
-export const secondsFor = (base: boolean, cap: number = CAP) => (base ? 2 * cap + 300 : cap + 180);
+export const secondsFor = (base: boolean, cap: number = CAP, rechecked = false) =>
+  (base ? 2 * cap + 300 : cap + 180) + (rechecked ? cap : 0);
 
 /**
  * How long one Docker call may take before it is stopped. On 2026-11-10 a `docker ps` in gc never
@@ -408,6 +410,23 @@ type Arm = typeof Arm.Type;
 
 const Named = Schema.Struct({ path: Schema.String, reason: Schema.String });
 
+/**
+ * The full-depth recheck of the mutants that lived at the capped depth (ticket 1306): only a mutant that lives there too is
+ * reported. `cleared` are the ones that died at full depth.
+ */
+const Recheck = Schema.Struct({
+  /** Mutants that lived at the cap (`Survived` or `NoCoverage`) and were to be run again. */
+  asked: Schema.Finite,
+  /** Died at full depth: not reported. */
+  cleared: Schema.Array(Row),
+  /** Still lived at full depth, or were not run again (`unreached`). These are the survivors. */
+  confirmed: Schema.Finite,
+  /** Of the confirmed, those the second run did not reach (its time cap, or it left no answer). */
+  unreached: Schema.Finite,
+});
+
+export type Recheck = typeof Recheck.Type;
+
 export const Summary = Schema.Struct({
   outcome: Schema.Literals(["done", "skip", "stuck"]),
   reason: Schema.String,
@@ -445,6 +464,8 @@ export const Summary = Schema.Struct({
   narrowing: Schema.NullOr(Schema.Union([Schema.Array(Row), Schema.Literal("unknown")])),
   /** With a base: each related test left out of arm a, and why. */
   armA: Schema.NullOr(Schema.Struct({ dropped: Schema.Array(Named) })),
+  /** With a depth: what the full-depth recheck of arm b's survivors came to; `null` with no depth or no survivor. */
+  recheck: Schema.NullOr(Recheck),
 });
 
 export type Summary = typeof Summary.Type;
@@ -488,6 +509,47 @@ export const tally = (exit: number, from: Arm["from"], rows: ReadonlyArray<Row>,
     survivors: Arr.filter(rows, (r) => r.status === "Survived"),
     uncovered: Arr.filter(rows, (r) => r.status === "NoCoverage"),
     ignored: Arr.filter(rows, (r) => r.status === "Ignored"),
+  };
+};
+
+/**
+ * Arm b after the full-depth recheck: a mutant that lived at the cap (`survivors`, `uncovered`) and died in arm c is no survivor, and
+ * is named in `cleared`. The counts stay the cap's own. `c` is arm c's rows, or `null` when it left no answer, which clears none.
+ * `null` when nothing lived. Pure.
+ */
+export const confirm = (
+  b: Arm,
+  c: ReadonlyArray<Row> | null,
+): { readonly b: Arm; readonly recheck: Recheck | null } => {
+  const lived = [...b.survivors, ...b.uncovered];
+
+  if (lived.length === 0) {
+    return { b, recheck: null };
+  }
+
+  const wanted = new Set(Arr.map(lived, mutantKey));
+  const answered = new Map(Arr.map(c ?? [], (r) => [mutantKey(r), r] as const));
+
+  const cleared = Arr.filter(
+    Arr.flatMap(lived, (r) => {
+      const got = answered.get(mutantKey(r));
+
+      return got === undefined ? [] : [got];
+    }),
+    (r) => wanted.has(mutantKey(r)) && (r.status === "Killed" || r.status === "Timeout"),
+  );
+
+  const gone = new Set(Arr.map(cleared, mutantKey));
+  const stays = (r: Row) => !gone.has(mutantKey(r));
+
+  return {
+    b: { ...b, survivors: Arr.filter(b.survivors, stays), uncovered: Arr.filter(b.uncovered, stays) },
+    recheck: {
+      asked: lived.length,
+      cleared,
+      confirmed: lived.length - cleared.length,
+      unreached: Arr.filter(lived, (r) => stays(r) && !answered.has(mutantKey(r))).length,
+    },
   };
 };
 
@@ -937,7 +999,7 @@ const decoded = <S extends Schema.Top>(schema: S, raw: string | null) =>
     ? Effect.succeed(null)
     : Schema.decodeEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.orElseSucceed(() => null));
 
-const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selected: number) {
+const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b" | "c", selected: number) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const exit = Number((yield* readOut(box, `${name}/exit`)) ?? Number.NaN);
@@ -1011,7 +1073,7 @@ const stuckSummary = (ask: Ask, started: number, ended: number, reason: string, 
   base: ask.base ?? null,
   image: null,
   network: "none",
-  limits: { ...LIMITS, seconds: ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap) },
+  limits: { ...LIMITS, seconds: ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap, ask.runs !== undefined) },
   seconds: Math.round((ended - started) / 1000),
   usage: null,
   related: [],
@@ -1023,6 +1085,7 @@ const stuckSummary = (ask: Ask, started: number, ended: number, reason: string, 
   a: null,
   narrowing: null,
   armA: null,
+  recheck: null,
 });
 
 /** The whole run. Fails with `Stuck` before the container answers; else gives the summary. */
@@ -1030,7 +1093,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const here = import.meta.dirname;
-  const limit = ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap);
+  const limit = ask.seconds ?? secondsFor(ask.base !== undefined, ask.cap, ask.runs !== undefined);
   const all = parseRelated(ask.related);
 
   if (all === null || !/^\d+$/.test(ask.ticket)) {
@@ -1284,6 +1347,9 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const sample = yield* decoded(Sample, yield* readOut(box, "b/sample.json"));
   const b = yield* readArm(box, "b", sample?.selected ?? 0);
   const a = yield* readArm(box, "a", sample?.selected ?? 0);
+  // Arm c, the recheck of arm b's survivors at full depth, only when a depth was asked.
+  const c = ask.runs === undefined ? null : yield* readArm(box, "c", 0);
+  const confirmed = b === null || ask.runs === undefined ? null : confirm(b.arm, c?.rows ?? null);
   const baseline = yield* decoded(Baseline, yield* readOut(box, "baseline.json"));
 
   const tests = Arr.flatMap(baseline?.testResults ?? [], (file) =>
@@ -1327,8 +1393,9 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     ),
     sample,
     reach: sample?.files === undefined ? null : reachLine(sample.files),
-    b: b?.arm ?? null,
+    b: confirmed?.b ?? b?.arm ?? null,
     a: a?.arm ?? null,
+    recheck: confirmed?.recheck ?? null,
     narrowing: narrowingUnknown(ended.reason) ? "unknown" : a === null || b === null ? null : narrowed(a.rows, b.rows),
     armA: base === null ? null : { dropped: droppedFromArmA(related, onBase, kept, aBaseline) },
   };

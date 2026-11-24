@@ -129,7 +129,8 @@ skipped, then the counts and seconds. A scope past `MUTATE_FILES` is refused bef
 `MUTATE_RUNS` is the most cases a property law draws in the box, or `full` for each law's own count: the laws run
 three times over (the plain baseline, Stryker's dry run, then once per mutant they cover), so at full depth the slow
 ones alone passed the five minutes on `@kalfa/git`. A law that asks for fewer keeps its own count, the seed stays its
-own, and `depth.ts` says what the cap reaches. The depth is in the saved-run key, and the last line says it. The hourly
+own, and `depth.ts` says what the cap reaches. A mutant that lives at the cap is run again at full depth, in only the laws that cover it, and is listed only if it lives there too:
+the cap is the fast path and full depth the fallback (`recheck.ts`). The last line gives the counts at both depths. The depth is in the saved-run key. The hourly
 run on CI passes none and keeps full depth.
 A call whose base, tree, files and scripts match a saved run reads it and starts no box, and a call that
 needs the box waits its turn in line, one box at a time; its header holds the settings and says how.

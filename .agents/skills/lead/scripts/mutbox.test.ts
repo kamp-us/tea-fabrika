@@ -41,6 +41,7 @@ import {
   bounded,
   buildOwns,
   CallTimeout,
+  confirm,
   DOCKER_SECONDS,
   droppedFromArmA,
   exitCode,
@@ -331,6 +332,65 @@ describe("mutbox, the pure parts", () => {
             const killedInA = Arr.some(a, (x) => same(x, r) && (x.status === "Killed" || x.status === "Timeout"));
             expect(list.includes(r)).toBe(lives && killedInA);
           }
+        },
+      ),
+      options,
+    );
+  });
+
+  // Ticket 1306. Plants: report a mutant that died at full depth, clear one that lived there too, clear one the recheck never reached,
+  // clear every survivor when the recheck left no answer, or change the counts of the cap's own run.
+  it("a mutant that dies only at full depth is not reported, and one that lives there, or was not run again, still is", () => {
+    const key = (r: object) => JSON.stringify({ ...r, status: "" });
+
+    fc.assert(
+      fc.property(
+        fc.array(row, { maxLength: 12 }),
+        fc.array(fc.constantFrom("Killed", "Survived", "Timeout", "NoCoverage"), { maxLength: 12 }),
+        (every, fullStatuses) => {
+          const b = Arr.dedupeWith(every, (x, y) => key(x) === key(y));
+          const arm = tally(0, "report", b, b.length);
+          const lived = [...arm.survivors, ...arm.uncovered];
+
+          // Arm c: the first of them, each with the status it got at full depth.
+          const c = Arr.map(Arr.take(lived, fullStatuses.length), (r, i) => ({
+            ...r,
+            status: fullStatuses[i] ?? "Killed",
+          }));
+
+          const got = confirm(arm, c);
+
+          const died = new Set(
+            Arr.map(
+              Arr.filter(c, (r) => r.status === "Killed" || r.status === "Timeout"),
+              key,
+            ),
+          );
+
+          const reported = [...got.b.survivors, ...got.b.uncovered];
+
+          expect(got.b.counts, "the counts stay the cap's own").toEqual(arm.counts);
+          expect(
+            Arr.some(reported, (r) => died.has(key(r))),
+            "a mutant that died at full depth is not reported",
+          ).toBe(false);
+          expect(
+            Arr.every(lived, (r) => died.has(key(r)) || reported.includes(r)),
+            "every other one still is",
+          ).toBe(true);
+
+          if (lived.length === 0) {
+            expect(got.recheck).toBeNull();
+          } else {
+            expect(got.recheck?.asked).toBe(lived.length);
+            expect(got.recheck?.cleared.length).toBe(died.size);
+            expect(got.recheck?.confirmed).toBe(reported.length);
+            expect(got.recheck?.unreached).toBe(Arr.filter(reported, (r) => !c.some((x) => key(x) === key(r))).length);
+          }
+
+          // No answer from arm c: nothing is cleared.
+          const none = confirm(arm, null);
+          expect([...none.b.survivors, ...none.b.uncovered]).toEqual(lived);
         },
       ),
       options,
@@ -1099,6 +1159,36 @@ describe("mutbox, the run against a stand-in docker", () => {
 
     const quiet = run({ run: "exit 1\n" });
     expect(quiet.summary.detail).toContain("it said nothing");
+  });
+
+  // Ticket 1306, through the real script and the stand-in docker: arm b leaves two survivors at the cap and arm c, the full-depth
+  // recheck, kills one. The summary reports the other, names the one that died at full depth, and keeps the cap's own counts.
+  // Plants: leave arm c unread; clear both; clear none.
+  it("a mutant that lives at the cap and dies at full depth is cleared in the summary, and the one that lives there too is reported", () => {
+    const both = JSON.stringify({ files: { "src/a.ts": { mutants: [mutant("Survived", 1), mutant("Survived", 2)] } } });
+    const full = JSON.stringify({ files: { "src/a.ts": { mutants: [mutant("Killed", 1), mutant("Survived", 2)] } } });
+    const armB = `${DONE}\necho '${both}' > "$OUT/b/report.json"\n`;
+    const armC = `mkdir -p "$OUT/c"\necho 0 > "$OUT/c/exit"\necho '${full}' > "$OUT/c/report.json"\n`;
+
+    const got = run({ run: `${armB}${armC}`, args: () => ["--runs", "25"] });
+
+    expect(got.code, got.text).toBe(0);
+    expect(got.summary.b.counts).toEqual({ Survived: 2 });
+    expect(got.summary.b.survivors.map((r: { line: number }) => r.line)).toEqual([2]);
+    expect(got.summary.recheck).toMatchObject({ asked: 2, confirmed: 1, unreached: 0 });
+    expect(got.summary.recheck.cleared.map((r: { line: number; status: string }) => [r.line, r.status])).toEqual([
+      [1, "Killed"],
+    ]);
+
+    // No arm c (the recheck left nothing): both are reported, and none is called cleared.
+    const none = run({ run: armB, args: () => ["--runs", "25"] });
+    expect(none.summary.b.survivors).toHaveLength(2);
+    expect(none.summary.recheck).toMatchObject({ asked: 2, confirmed: 2, unreached: 2, cleared: [] });
+
+    // No depth asked: no recheck, and both are reported.
+    const plain = run({ run: `${armB}${armC}` });
+    expect(plain.summary.recheck).toBeNull();
+    expect(plain.summary.b.survivors).toHaveLength(2);
   });
 
   // Ticket 1306. Plants: pass no MUTATE_RUNS for `--runs`, or pass it with none asked (the hourly run would lose its full depth);
