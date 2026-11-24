@@ -671,6 +671,7 @@ Estimate: 7 steps, $88
 - `kalfa.transport.event`, `kalfa.transport.connection`, `kalfa.transport.frames`, and the span events
   `transport.send.dropped` and `transport.close.after`: under decision 0063's names.
 - `MemoryGateway`, `make`, `connect`, `sleep`, `stranger`: the stand-in's code names.
+- `drop`: the stand-in's one call the platform has no word for, which says the platform reports a socket broken (an error event, and the client's end closes with 1006). `transport.upgrade`: the span of `Hibernation.upgrade`, made by `Hibernation.layer` and by the stand-in alike, under decision 0063's `<package>.<call>` name.
 
 ## Records
 

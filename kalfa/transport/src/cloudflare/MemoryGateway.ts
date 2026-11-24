@@ -3,7 +3,7 @@
  *
  * **Details**
  *
- * It keeps the platform's rules, each one proved on real workerd by the same laws. Each socket's client end is one end of `MemorySocket.pair`. A message is delivered as soon as the client writes it, even while an earlier slot call still runs. An attachment is stored as a `structuredClone` of its value and refused above 16,384 bytes of its JSON text in UTF-8. Attachments live through `sleep`, and memory does not. A socket is a new object for each event. `send` throws once the server has sent its Close frame, and the close event that comes after a server close is the one real workerd gave: it comes later, in an event of its own, with the code of the server's own Close frame, no reason, and the attachment still readable.
+ * It keeps the platform's rules, each one proved on real workerd by the same laws. Each socket's client end is one end of `MemorySocket.pair`. A message is delivered as soon as the client writes it, even while an earlier slot call still runs. An attachment is stored as a `structuredClone` of its value and refused above 16,384 bytes of its JSON text in UTF-8. Attachments live through `sleep`, and memory does not. A socket is a new object for each event. `send` throws once the server has sent its Close frame, and the close event that comes after a server close is the one real workerd gave: it comes later, in an event of its own, with the code of the server's own Close frame, no reason, and the attachment still readable, once the calls running on that socket have ended. A second close is ignored, and a close that answers the client's own Close frame sends the Close frame and gives no second event. A null or undefined attachment reads back as missing, as Alchemy reads it, and a value read is a clone too.
  */
 import { WebSocketAttachmentError } from "@alchemy.run/cloudflare";
 import type { Scope } from "effect";
@@ -25,21 +25,24 @@ const refused = (reason: WebSocketAttachmentError["reason"]) => (cause: unknown)
   new WebSocketAttachmentError({ reason, message: `Could not ${reason} WebSocket attachment`, cause });
 
 /**
- * The server's end of one socket the object accepted, and what the platform keeps for it: its attachment, and whether the server has sent
- * its Close frame.
+ * The server's end of one socket the object accepted, and what the platform keeps for it: its attachment, whether the server has sent its
+ * Close frame, whether the client has, and the events running on it now with the ones that wait for them to end.
  */
 class Accepted {
   readonly server: Socket.Socket;
   readonly write: Socket.Writer["write"];
   attachment: Option.Option<unknown> = Option.none();
   closed = false;
+  clientClosed = false;
+  running = 0;
+  after: Array<Effect.Effect<void>> = [];
 
   constructor(server: Socket.Socket, write: Socket.Writer["write"]) {
     this.server = server;
     this.write = write;
   }
 
-  /** Keeps a clone of `encoded`. A value the platform cannot clone or holds too many bytes of is refused, and the value kept before stays. */
+  /** Keeps a clone of `encoded`; null and undefined keep nothing to read. A value the platform cannot clone or holds too many bytes of is refused, and the value kept before stays. */
   keep<A>(encoded: A): Effect.Effect<void, WebSocketAttachmentError> {
     return Effect.try({ try: () => structuredClone(encoded), catch: refused("write") }).pipe(
       Effect.filterOrFail(
@@ -48,7 +51,7 @@ class Accepted {
       ),
       Effect.flatMap((clone) =>
         Effect.sync(() => {
-          this.attachment = Option.some(clone);
+          this.attachment = Option.fromNullishOr(clone);
         }),
       ),
     );
@@ -95,12 +98,40 @@ export const make = (
     const accepting = (server: Socket.Socket) =>
       Effect.map(server.writer, (writer) => new Accepted(server, writer.write));
 
-    /** One event of the platform, handled by the gateway as it is now built. */
-    const event = (use: (gateway: Gateway["Service"]) => Effect.Effect<void>) =>
-      Effect.flatMap(Gateway, use).pipe(Effect.provide(wake.get));
-
     /** Starts an effect as its own event, which the platform runs apart from the call that caused it. */
     const later = (effect: Effect.Effect<void>) => Effect.asVoid(Effect.forkIn(effect, object));
+
+    /** Runs a call on a socket, and starts what waited for the calls on it to end once the last one has. */
+    const during = (accepted: Accepted, call: Effect.Effect<void>) =>
+      Effect.ensuring(
+        Effect.andThen(
+          Effect.sync(() => {
+            accepted.running += 1;
+          }),
+          call,
+        ),
+        Effect.suspend(() => {
+          accepted.running -= 1;
+
+          return accepted.running === 0
+            ? Effect.forEach(accepted.after.splice(0), later, { concurrency: 1, discard: true })
+            : Effect.void;
+        }),
+      );
+
+    /** Starts an effect as its own event once the calls running on the socket now have ended, or at once when none runs. */
+    const afterCalls = (accepted: Accepted, event: Effect.Effect<void>) =>
+      Effect.suspend(() =>
+        accepted.running === 0
+          ? later(event)
+          : Effect.sync(() => {
+              accepted.after.push(event);
+            }),
+      );
+
+    /** One event of the platform on a socket, handled by the gateway as it is now built. */
+    const event = (accepted: Accepted, use: (gateway: Gateway["Service"]) => Effect.Effect<void>) =>
+      during(accepted, Effect.flatMap(Gateway, use).pipe(Effect.provide(wake.get)));
 
     /** A socket as an event gets it: a new object each time, over the one the object accepted. */
     const held = (accepted: Accepted): HeldSocket => ({
@@ -116,16 +147,19 @@ export const make = (
 
           accepted.closed = true;
 
-          // The client's Close frame comes back later, as an event of its own: with the server's code and no reason, whatever the server sent.
-          return Effect.andThen(
-            Effect.orDie(accepted.write(new Socket.CloseEvent(code, reason))),
-            later(
-              Effect.andThen(
-                Effect.yieldNow,
-                event((gateway) => gateway.webSocketClose(held(accepted), code, "", true)),
-              ),
-            ),
-          );
+          const sent = Effect.orDie(accepted.write(new Socket.CloseEvent(code, reason)));
+
+          // The client's Close frame comes back as an event of its own, once the call that closed has ended: with the server's code and no
+          // reason, whatever the server sent. When the client's Close frame came first, it was that event, and this is only the answer.
+          return accepted.clientClosed
+            ? sent
+            : Effect.andThen(
+                sent,
+                afterCalls(
+                  accepted,
+                  event(accepted, (gateway) => gateway.webSocketClose(held(accepted), code, "", true)),
+                ),
+              );
         }),
       setAttachment: (schema, value) =>
         Schema.encodeEffect(schema)(value).pipe(
@@ -153,7 +187,7 @@ export const make = (
             Effect.gen(function* () {
               for (const chunk of yield* pull) {
                 yield* later(
-                  event((gateway) =>
+                  event(accepted, (gateway) =>
                     gateway.webSocketMessage(
                       held(accepted),
                       Predicate.isString(chunk) ? chunk : Uint8Array.from(chunk).buffer,
@@ -169,7 +203,12 @@ export const make = (
         Effect.catchReason("SocketError", "SocketCloseError", ({ code, closeReason }) =>
           accepted.closed
             ? Effect.void
-            : event((gateway) => gateway.webSocketClose(held(accepted), code, closeReason ?? "", true)),
+            : Effect.andThen(
+                Effect.sync(() => {
+                  accepted.clientClosed = true;
+                }),
+                event(accepted, (gateway) => gateway.webSocketClose(held(accepted), code, closeReason ?? "", true)),
+              ),
         ),
         Effect.orDie,
         Effect.forkIn(object),
@@ -204,9 +243,14 @@ export const make = (
         Effect.gen(function* () {
           const [client, accepted] = yield* open;
 
-          yield* Effect.flatMap(Gateway, (gateway) => gateway.upgrade(options)).pipe(
-            Effect.provideService(Incoming, accepted),
-            Effect.provide(wake.get),
+          yield* during(
+            accepted,
+            Effect.asVoid(
+              Effect.flatMap(Gateway, (gateway) => gateway.upgrade(options)).pipe(
+                Effect.provideService(Incoming, accepted),
+                Effect.provide(wake.get),
+              ),
+            ),
           );
 
           return client;
@@ -225,7 +269,9 @@ export const make = (
 
           accepted.closed = true;
           yield* Effect.orDie(accepted.write(new Socket.CloseEvent(1006, "")));
-          yield* later(event((gateway) => gateway.webSocketError(held(accepted), new Error("the connection broke"))));
+          yield* later(
+            event(accepted, (gateway) => gateway.webSocketError(held(accepted), new Error("the connection broke"))),
+          );
         }),
     };
   });
