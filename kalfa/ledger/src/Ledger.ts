@@ -9,7 +9,7 @@
 import { type Array as Arr, Context, type Effect, type Stream } from "effect";
 import type { Entry, NewEntry, Placed, Revision } from "./Entry.ts";
 import type { EntryId } from "./EntryId.ts";
-import type { Failure, Refusal } from "./Errors.ts";
+import type { EmptyTags, Failure, Refusal } from "./Errors.ts";
 
 /**
  * What an append may be told: the revision of the stream's head the writer read. The entry is kept only while the head is still there. Left out, there is no check.
@@ -21,7 +21,7 @@ export interface AppendOptions {
 }
 
 /**
- * What a read may be told: the tags to keep. Left out, every entry; given, at least one.
+ * What a read may be told: the tags to keep. Left out, every entry; given, at least one. A list that is empty anyway, from a caller that no type holds, fails the read with `EmptyTags`.
  *
  * @category models
  */
@@ -43,6 +43,10 @@ export class Ledger extends Context.Service<
       entry: NewEntry,
       options?: AppendOptions,
     ) => Effect.Effect<Placed, Refusal | Failure>;
-    readonly read: (stream: string, after: Revision, options?: ReadOptions) => Stream.Stream<Entry, Failure>;
+    readonly read: (
+      stream: string,
+      after: Revision,
+      options?: ReadOptions,
+    ) => Stream.Stream<Entry, EmptyTags | Failure>;
   }
 >()("@kalfa/ledger/Ledger") {}

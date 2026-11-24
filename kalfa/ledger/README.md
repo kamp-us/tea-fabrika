@@ -28,14 +28,14 @@ const program = Effect.gen(function* () {
 
   return { placed, owed, read: ledger.read("ci/requests", Revision.make(0), { tags: ["Requested"] }) };
 });
-// Effect<..., Refusal | Failure>, with the Ledger in its requirements
+// the append is an Effect<..., Refusal | Failure>, and the read a Stream<Entry, EmptyTags | Failure>, with the Ledger in their requirements
 ```
 
 - **`append(stream, id, entry, options?)`** answers a `Placed`, the revision and position the entry was given. There is no append without an id:
   a writer that lost its answer sends the same entry again and gets the first answer. `options.expectedRevision` is the revision of the head the writer
   read, `0` for an empty stream. Left out, there is no check.
 - **`read(stream, after, options?)`** is a stream of the entries with a revision above `after`, oldest first, once. `options.tags` keeps the entries whose
-  `_tag` is one of them. It is a non-empty list, or it is left out: a read that asks for tags and names none is refused as `EmptyTags`.
+  `_tag` is one of them. It is a non-empty list, or it is left out: a read that asks for tags and names none fails as `EmptyTags`, which keeps no entry, so it is no refusal.
 
 A body and every slot of metadata are JSON (`Schema.Json`), so a body typed as a TypeScript `interface` does not compile, since an interface has no index
 signature. A caller encodes its value with its own schema first, such as `Schema.toCodecJson`.
@@ -51,13 +51,14 @@ is its name and a hashed one's is `<name>.h`; no name holds `.`, so the two neve
 
 ## Errors
 
-A refusal says the Ledger will not keep this entry, and a failure says it could not answer. Each is a `Schema.TaggedError`, so it crosses a wire as data.
+A refusal says the Ledger will not keep this entry, and a failure says it could not answer. Each is a `Schema.TaggedError`, so it crosses a wire as data, and so does an `Exit` that failed with one.
 
 - **Refusals**, as `Refusal`: `BadEntry` (says which part was bad, never its content), `IdReused`, `TooBig` (the bytes and the limit), `AdmissionRefused`,
-  `RevisionConflict` (the revision expected and the head's now) and `EmptyTags`.
+  `RevisionConflict` (the revision expected and the head's now).
+- **`EmptyTags`**, the one error of a read of its own: it asked for entries by tag and named no tag. It is neither a refusal nor a failure.
 - **Failures**, as `Failure`: `Unreachable`, `BadRow` and `StorageFailed`. Each holds its cause as a `Redacted`, since a driver's own error can quote a row:
-  make it with `Redacted.make(cause)`, read it on purpose with `Redacted.value(error.cause)`. A failure is never written as JSON with its cause: the JSON
-  form refuses it, so a wire carries the tag and never the value.
+  make it with `Redacted.make(cause)`, read it on purpose with `Redacted.value(error.cause)`. In JSON a failure is its tag and its cause written as the
+  text `<redacted>`, and it reads back with an empty hidden cause: a wire carries that a cause was held and never what it was.
 
 No error carries a body or metadata. A package above wraps the unions as its own errors, `class ChatUnavailable { reason: Failure }` with
 `override readonly cause = this.reason`, and `class ChatRefused { reason: Refusal }`, so it needs no list of its own. Only the Ledger says `Unreachable`.

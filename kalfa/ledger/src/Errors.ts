@@ -1,14 +1,16 @@
 /**
- * What the Ledger answers with when it does not keep an entry: six refusals, and three failures, and the two unions a package above wraps.
+ * What the Ledger answers with when it does not do what it was asked: five refusals, one error of a read's own, three failures, and the two unions a package
+ * above wraps.
  *
  * **Details**
  *
- * A refusal says the Ledger will not keep this entry: the writer sent something it should not have. A failure says the Ledger could not answer. No error
- * carries a body or metadata, since an entry's content never rides in an error. A failure holds its cause as a `Redacted`, which no rendering shows, since
- * a driver's own error can quote a row: a caller makes it with `Redacted.make(cause)`, and code that needs the cause reads it on purpose with
- * `Redacted.value(error.cause)`. A failure is never written as JSON with its cause, so a wire carries the tag and not the value.
+ * A refusal says the Ledger will not keep this entry: the writer sent something it should not have. `EmptyTags` is no refusal, since a read keeps no entry:
+ * it says a read asked for entries by tag and named no tag. A failure says the Ledger could not answer. No error carries a body or metadata, since an
+ * entry's content never rides in an error. A failure holds its cause as a `Redacted`, which no rendering shows, since a driver's own error can quote a row:
+ * a caller makes it with `Redacted.make(cause)`, and code that needs the cause reads it on purpose with `Redacted.value(error.cause)`. A failure crosses a
+ * wire with its tag and its cause written as the text `<redacted>`, and is read back with an empty hidden cause: the value never leaves the process.
  */
-import { Schema } from "effect";
+import { Redacted, Schema, SchemaGetter } from "effect";
 import { Revision } from "./Entry.ts";
 
 /**
@@ -58,9 +60,9 @@ export class RevisionConflict extends Schema.TaggedError<RevisionConflict, { rea
 ) {}
 
 /**
- * A read that asked for entries by tag and named no tag. A caller who wants every entry leaves `tags` out.
+ * A read that asked for entries by tag and named no tag. A caller who wants every entry leaves `tags` out. It is the read's own error, and no refusal.
  *
- * @category refusals
+ * @category read errors
  */
 export class EmptyTags extends Schema.TaggedError<EmptyTags, { readonly brand: unique symbol }>()("EmptyTags", {}) {
   override get message(): string {
@@ -68,8 +70,18 @@ export class EmptyTags extends Schema.TaggedError<EmptyTags, { readonly brand: u
   }
 }
 
-// A failure's cause is hidden twice: held as a `Redacted`, and never written to JSON, which refuses it.
-const Hidden = Schema.Redacted(Schema.Defect(), { disallowJsonEncode: true });
+// What a failure's cause is written as in JSON: a fixed text, so a wire shows that a cause was held and never what it was.
+const PLACEHOLDER = "<redacted>";
+
+// A failure's cause is hidden twice: held as a `Redacted`, and written to JSON as the placeholder. It is read back as a hidden `undefined`: the value stays
+// in the process that made it.
+const Hidden = Schema.declare((candidate): candidate is Redacted.Redacted<unknown> => Redacted.isRedacted(candidate), {
+  toCodecJson: () =>
+    Schema.link<Redacted.Redacted<unknown>>()(Schema.Literal(PLACEHOLDER), {
+      decode: SchemaGetter.transform(() => Redacted.make(undefined)),
+      encode: SchemaGetter.transform((): typeof PLACEHOLDER => PLACEHOLDER),
+    }),
+});
 
 /**
  * The Ledger could not be reached. Its cause is hidden.
@@ -104,7 +116,7 @@ export class StorageFailed extends Schema.TaggedError<StorageFailed, { readonly 
  *
  * @category refusals
  */
-export const Refusal = Schema.Union([BadEntry, IdReused, TooBig, AdmissionRefused, RevisionConflict, EmptyTags]);
+export const Refusal = Schema.Union([BadEntry, IdReused, TooBig, AdmissionRefused, RevisionConflict]);
 
 export type Refusal = typeof Refusal.Type;
 
