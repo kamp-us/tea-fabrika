@@ -9,7 +9,7 @@ import { noTracking, scopedEnv } from "./env.test-support.ts";
 
 import { heldPort } from "./port.test-support.ts";
 
-it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call lookup plant fails (A2, real workerd)", () =>
+it.live("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call lookup plant fails (A2, real workerd)", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
