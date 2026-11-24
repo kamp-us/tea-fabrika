@@ -74,7 +74,7 @@ it.effect.prop(
       ).toEqual(["Ended", "Ended"]);
 
       // A close of each code: the span fails with the SocketError of a close other than 1000, and not for 1000.
-      for (const code of [1000, 3000, 3999, 4999, 3000 + extra]) {
+      for (const code of [1000, 1001, 1006, 1011, 3000 + extra]) {
         const closed = yield* watching;
         const exit = yield* closedWith(left, code).pipe(Effect.withTracer(closed.tracer));
 

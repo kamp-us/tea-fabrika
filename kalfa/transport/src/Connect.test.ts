@@ -218,8 +218,7 @@ it.effect.prop(
   { arbitrary: { seed: SEED, runs: 200 } },
 );
 
-// The codes a browser lets a client write, which the memory pair keeps: a gateway's own 1001 or 1011 cannot be written through it.
-const CLOSE_CODES = [1000, 3000, 4999] as const;
+const CLOSE_CODES = [1000, 1001, 1006, 1011] as const;
 
 // H7. Plant: end the read cleanly on the close 1000, as `socket` does (connect hangs on its next frame).
 it.effect.prop(

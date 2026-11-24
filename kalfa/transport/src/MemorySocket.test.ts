@@ -77,10 +77,11 @@ const closedByEvent = (
   frames: ReadonlyArray<string | Uint8Array>,
   more: string | Uint8Array,
   close: Socket.CloseEvent,
+  by: "client" | "gateway",
 ) =>
   Effect.gen(function* () {
-    const [near, far] = yield* MemorySocket.pair;
-    const writer = yield* near.writer;
+    const [client, gateway] = yield* MemorySocket.pair;
+    const writer = yield* (by === "client" ? client : gateway).writer;
 
     for (const frame of frames) {
       yield* writer.write(frame);
@@ -89,7 +90,7 @@ const closedByEvent = (
     yield* writer.write(close);
     const refused = yield* writeRefused(writer.write(more));
 
-    return { refused, read: yield* drained(far) };
+    return { refused, read: yield* drained(by === "client" ? gateway : client) };
   }).pipe(Effect.scoped);
 
 /** A CloseEvent a browser refuses: the write fails, nothing closes, and a close that is allowed still closes with its own code. */
@@ -132,7 +133,6 @@ const closedByFar = (
     return { written, writtenAll, readByNear: yield* drained(near), readByFar: yield* drained(far) };
   }).pipe(Effect.scoped);
 
-// M1 holds the close codes a browser lets a client write: 1000 and 3000 to 4999.
 // M1. Plant: let a write after close succeed and drop the frame; leave a waiting pull blocked when its scope closes; give the far end
 // code 1006 for a closed scope; hand an end's own writes to its own reader; drop the frames waiting when the close came.
 it.effect.prop(
@@ -180,14 +180,16 @@ it.effect.prop(
         "a far end that closed: the far end reads what the near end wrote before, and not the dropped write",
       );
 
-      // A CloseEvent: the far end reads what was waiting, then the code and the reason.
-      const code = [1000, 3000, 4000, 4999, 3000 + extra][which] ?? 1000;
+      // A CloseEvent: the other end reads what was waiting, then the code and the reason. The gateway's end writes any code a server
+      // sends; the client's end only those a browser lets a client send, which are 1000 and 3000 to 4999.
+      const code = [1000, 1001, 1006, 1011, 3000 + extra][which] ?? 1000;
+      const ends = code === 1000 || code >= 3000 ? (["client", "gateway"] as const) : (["gateway"] as const);
 
-      for (const reasoned of [false, true]) {
-        const name = `a CloseEvent of ${code}${reasoned ? " with a reason" : ""}`;
+      for (const [end, reasoned] of ends.flatMap((each) => [[each, false] as const, [each, true] as const])) {
+        const name = `a CloseEvent of ${code} from the ${end}${reasoned ? " with a reason" : ""}`;
 
         const byEvent = finished(
-          yield* settled(closedByEvent(frames, more, new Socket.CloseEvent(code, reasoned ? reason : undefined))),
+          yield* settled(closedByEvent(frames, more, new Socket.CloseEvent(code, reasoned ? reason : undefined), end)),
           name,
         );
 
@@ -201,7 +203,7 @@ it.effect.prop(
   { arbitrary: { seed: SEED, runs: 200 } },
 );
 
-// M2. Plant: let a CloseEvent of any code close the pair; refuse a code of 3000 to 4999 or 1000; fail with a different error than
+// M2. Plant: let a CloseEvent of any code close the pair, the client's end (the first of the pair) only; refuse a code of 3000 to 4999 or 1000; fail with a different error than
 // InvalidAccessError; close the pair when the refused write comes.
 it.effect.prop(
   "M2 the memory pair refuses the close codes a browser refuses, as `WebSocket.close` does: a CloseEvent of any code but 1000 and 3000 to 4999 fails the write with a SocketWriteError holding an InvalidAccessError and closes nothing, so the later frames and a close that is allowed come through",
@@ -245,6 +247,39 @@ it.effect.prop(
       expect(exitClose(run.read.exit), `${code}: and the close that is allowed closes with its own code`).toEqual(
         Option.some({ code: allowed, reason: undefined }),
       );
+    }),
+  { arbitrary: { seed: SEED, runs: 200 } },
+);
+
+// M3. Plant: check the code on both ends of the pair, as the first version of M2 did; check it on the gateway's end only.
+it.effect.prop(
+  "M3 the gateway's end of the memory pair sends any code a server sends: a CloseEvent of 1001, 1006, 1011 or any other code written by the second end reaches the client with its code and its reason, after the frames written before",
+  {
+    low: between(0, 999),
+    middle: between(1001, 2999),
+    high: between(5000, 65_535),
+    which: pick([0, 1, 2, 3, 4, 5]),
+    reason: word,
+    reasoned: Arbitrary.schema(Schema.Boolean),
+    frames: Arbitrary.array(chunk, { maxLength: 10 }),
+    more: chunk,
+  },
+  ({ low, middle, high, which, reason, reasoned, frames, more }) =>
+    Effect.gen(function* () {
+      const code = [1001, 1006, 1011, low, middle, high][which] ?? 1011;
+
+      const run = finished(
+        yield* settled(
+          closedByEvent(frames, more, new Socket.CloseEvent(code, reasoned ? reason : undefined), "gateway"),
+        ),
+        `a close of ${code} from the gateway`,
+      );
+
+      assert.deepStrictEqual(run.read.frames, frames, `${code}: the client reads every frame written before`);
+      expect(exitClose(run.read.exit), `${code}: then the code and the reason, as sent`).toEqual(
+        Option.some({ code, reason: reasoned ? reason : undefined }),
+      );
+      expect(run.refused, `${code}: a later write to the closed end fails`).toBe(true);
     }),
   { arbitrary: { seed: SEED, runs: 200 } },
 );
