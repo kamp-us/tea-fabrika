@@ -15,7 +15,7 @@ with a reason.
   ranked order: the ledger sits below Program, and Markdown sits below Records, which reads and writes its records' frontmatter
   through it ([0087](../.kalfa/decisions/0087-a-record-is-data-on-top-and-free-text-below.md)).
   Diagnostics ranks below Configuration, and Configuration below CLI. Secrets (`@kalfa/secrets`) ranks just above
-  Configuration and imports only it. Source control (`@kalfa/git`) imports no kalfa
+  Configuration and imports Configuration and Diagnostics. Source control (`@kalfa/git`) imports no kalfa
   package and ranks lowest; CI, Code hosting, Delivery and Reconciliation rank above it. GitHub (`@kalfa/github`) ranks above Secrets
   and Configuration and below Code hosting, CI, Conversation and Identity, which reach GitHub through it
   ([0050](../.kalfa/decisions/0050-a-vendor-client-is-its-own-package.md)).

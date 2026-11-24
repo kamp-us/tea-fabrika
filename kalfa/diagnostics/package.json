@@ -26,6 +26,7 @@
   "exports": {
     "./Diagnostic": "./src/Diagnostic.ts",
     "./Diagnostics": "./src/Diagnostics.ts",
+    "./Hidden": "./src/Hidden.ts",
     "./TestDiagnostics": "./src/TestDiagnostics.ts",
     "./package.json": "./package.json"
   },
@@ -38,6 +39,10 @@
       "./Diagnostics": {
         "types": "./dist/Diagnostics.d.ts",
         "default": "./dist/Diagnostics.js"
+      },
+      "./Hidden": {
+        "types": "./dist/Hidden.d.ts",
+        "default": "./dist/Hidden.js"
       },
       "./TestDiagnostics": {
         "types": "./dist/TestDiagnostics.d.ts",

@@ -80,15 +80,16 @@ what its ports need. `Store.Needs` of a store, or of a union of stores, is what 
 - **`holds`** reads an item, for the secret `name` that was asked for. It answers `Found`, with the value as a `Redacted` that the store has already labeled with that name, and a `Version`, or `Missing`, with a reason:
   `absent` (nothing is there; an empty text is nothing), `kind` (the other kind of secret is) or `algorithm` (a key of another
   algorithm). It fails with `StoreFailed` when the store cannot answer. A store's own client may quote a value it read, so the
-  failure holds its cause as a `Redacted`, which no rendering shows: make it with `Redacted.make(cause)`, and read it on purpose
-  with `Redacted.value(error.cause)`. A cause that is not a `Redacted` does not compile.
+  failure holds its cause as a `Hidden.Cause` (`@kalfa/diagnostics/Hidden`), a `Redacted` that no rendering shows and that every
+  codec writes as `<redacted>`: make it with `Redacted.make(cause)`, and read it on purpose with `Redacted.value(error.cause)`. A
+  cause that is not a `Redacted` does not compile.
 - **`place`** is where a signing key's private key sits while it signs: `store`, `runtime` or `memory`, tight to loose.
 
 ## The Recorder
 
 A use of a secret leaves a fact. `Fetched` holds the name, the store and the version of one fetch, and nothing else; it is a Schema,
 so a ledger saves exactly those and refuses a name, a store id or a version that is none. The `Recorder` service takes a fact and
-fails with `RecordFailed` when it cannot write, which holds its cause as a `Redacted`, as `StoreFailed` does.
+fails with `RecordFailed` when it cannot write, which holds its cause as a `Hidden.Cause`, as `StoreFailed` does.
 
 ## The memory store
 
@@ -115,5 +116,6 @@ a value.
 ## What never shows a value
 
 A value is a `Redacted` from the moment a store hands it out. Nothing this package makes holds it as text: not an answer's display,
-a fact, the contents of the memory store, a log line or a span. A failure's cause may quote a value, so it is a `Redacted`
-and no rendering of the failure, its properties or the error under it shows it.
+a fact, the contents of the memory store, a log line or a span. A failure's cause may quote a value, so it is a `Hidden.Cause`
+and no rendering of the failure, its properties or the error under it shows it. That holds through every codec: `Schema.toCodecJson` of a
+failure, alone or inside an `Exit`, writes the cause as `<redacted>`, so a failure that crosses a socket carries no cause.
