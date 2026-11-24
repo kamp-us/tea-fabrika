@@ -6,8 +6,8 @@
 // the store of every flow, so a leak has one to show. The scenarios of slice 1 (`Leak.test.ts`) stay as they were.
 import { inspect } from "node:util";
 import { expect, it } from "@effect/vitest";
-import type { Redacted } from "effect";
-import { Cause, Effect, Exit, Formatter, Layer, Option, Predicate, Result, Schema } from "effect";
+import { Cause, Effect, Exit, Formatter, Layer, Option, Predicate, Redacted, Result, Schema } from "effect";
+import * as Errors from "./Errors.ts";
 import {
   type Built,
   built,
@@ -25,6 +25,7 @@ import {
 import * as Recorder from "./Recorder.ts";
 import {
   findable,
+  parsing,
   THROW_WAYS,
   throwingStore,
   needles,
@@ -331,11 +332,13 @@ it.effect.prop(
 
       for (const value of values) {
         for (const way of THROW_WAYS) {
+          const thrown = parsing(value.text);
+
           const { exit, spans, logs } = yield* watched(
             Effect.scoped(
               Effect.gen(function* () {
                 const secret = declare(FLOW_NAME);
-                const store = throwingStore(value.text, way);
+                const store = throwingStore(thrown, way);
 
                 const context = yield* Layer.build(
                   environment([store], [secret], [{ name: FLOW_NAME, store: store.id, item: ITEM }], memoryDeps()),
@@ -358,6 +361,14 @@ it.effect.prop(
           ).toBe(true);
 
           const defects = failures(result);
+
+          // The defect is a StoreFailed that holds the store's own thrown error, hidden, so a person who must read it can.
+          expect(
+            defects.map((defect) =>
+              Schema.is(Errors.StoreFailed)(defect) ? Redacted.value(defect.cause) === thrown : defect,
+            ),
+            `${value.id}: ${way}: the defect keeps the store's thrown error, hidden`,
+          ).toEqual([true]);
 
           const texts = [
             ...(Exit.isFailure(result) ? [Cause.pretty(result.cause), ...reachable(result.cause)] : []),
