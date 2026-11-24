@@ -191,12 +191,9 @@ describe("K2, a refused start", () => {
           expect(run.err[0]?.includes("\n"), label).toBe(false);
           expect((yield* Ref.get(found.ran)) - before, `${label}: no handler ran`).toBe(0);
 
-          if (found.message !== undefined) {
-            expect(run.err[0], label).toBe(modelFailure(found.message));
-          } else {
-            expect(run.err[0]?.startsWith("kalfa: "), label).toBe(true);
-            expect(run.err[0]?.includes(found.names ?? ""), label).toBe(true);
-          }
+          // Every refusal's message is pinned, word for word, in the table of the plan or in the build's own text for it.
+          expect(found.message, `${label}: a refusal has a message`).toBeDefined();
+          expect(run.err[0], label).toBe(modelFailure(found.message ?? ""));
         }
 
         const made = buildSubcommand(subcommandSpec(drawn, 0, []), yield* Ref.make(0));

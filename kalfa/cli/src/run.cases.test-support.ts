@@ -462,10 +462,8 @@ interface Refusal {
   readonly ran: Ran;
   /** Whether the start is refused, or the class is a near miss that must go on. */
   readonly refused: boolean;
-  /** The message of the table, before it is escaped; none when the plan fixes only that the line names a package. */
+  /** The message the line must hold, before it is escaped; none for a class that goes on. */
   readonly message: string | undefined;
-  /** The package the line must name, for a class whose message the plan does not fix. */
-  readonly names: string | undefined;
 }
 
 /** The text of a manifest that is not a JSON object `kalfa` can read, in each way the plan names. */
@@ -505,6 +503,30 @@ const subpaths = (seed: Seed): ReadonlyArray<string> => {
     `../${words[0]}`,
     `.${words[0]}`,
     "./",
+  ];
+};
+
+/** Values for a `kalfa` field that is not an object: text, a path, numbers, both booleans, `null`, and arrays, each with words of the seed. */
+const notObjects = (seed: Seed): ReadonlyArray<unknown> => {
+  const word = at(seed.words, 3);
+  const num = at(seed.nums, 3);
+
+  return [
+    word,
+    `./${word}`,
+    "",
+    num,
+    -num,
+    num / 7,
+    0,
+    true,
+    false,
+    null,
+    [],
+    [word],
+    [`./${word}`],
+    [{ cli: `./${word}` }],
+    [[]],
   ];
 };
 
@@ -556,7 +578,6 @@ export const refusals = (seed: Seed): Effect.Effect<ReadonlyArray<Refusal>> =>
         ran: world.ran,
         refused,
         message: undefined,
-        names: undefined,
         ...extra,
       });
 
@@ -611,9 +632,11 @@ export const refusals = (seed: Seed): Effect.Effect<ReadonlyArray<Refusal>> =>
       });
     }
 
-    // `kalfa` itself is not an object: the field that is off is not one of its own, so the line need only name the package.
-    for (const value of ["./cli", ["./cli"], 7, null]) {
-      add("bad-field/kalfa", withBad({ lists: ["dependencies"], kalfa: value }), true, { names: bad });
+    // `kalfa` itself is not an object: the field that is off is not one of its own, so the line says that and names the package.
+    for (const value of notObjects(seed)) {
+      add("bad-field/kalfa", withBad({ lists: ["dependencies"], kalfa: value }), true, {
+        message: `${bad}'s kalfa field must be an object.`,
+      });
     }
 
     add("not-exported", withBad({ lists: ["dependencies"], kalfa: { cli: subpath }, entry: Entry.NoDefault() }), true, {

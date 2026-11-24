@@ -2,6 +2,7 @@
 // with the installed packages it names, and one function that runs `node bin.ts` in it and reads standard output, standard
 // error and the exit code. The repo's `node_modules` holds links to this workspace's own folders, so the fixture imports
 // the source, and one copy of Effect is shared by the command and the subcommand, as an install gives it.
+import type { Duration } from "effect";
 import { Effect, FileSystem, Path, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
@@ -27,11 +28,11 @@ const check = Command.make("check", {}, () =>
   }),
 );
 
-// Writes \`lines\` lines of fixed text to standard output, then ends as the second argument says.
-const flood = Command.make("flood", { lines: Argument.Int("lines"), end: Argument.String("end") }, ({ lines, end }) =>
+// Writes \`lines\` lines of fixed text with \`write\`, then ends as the second argument says.
+const flooding = (write) => ({ lines, end }) =>
   Effect.gen(function* () {
     for (let index = 0; index < lines; index++) {
-      yield* Console.log(\`\${"x".repeat(60)} \${index}\`);
+      yield* write(\`\${"x".repeat(60)} \${index}\`);
     }
 
     if (end === "fail") {
@@ -44,10 +45,29 @@ const flood = Command.make("flood", { lines: Argument.Int("lines"), end: Argumen
       place: Diagnostic.Place.cases.repo.make({ path: "docs/setup.md" }),
       hint: "Remove the key and rotate it.",
     });
+  });
+
+const flooded = { lines: Argument.Int("lines"), end: Argument.String("end") };
+
+const flood = Command.make("flood", flooded, flooding(Console.log));
+
+// The same, on standard error.
+const floodErr = Command.make("flood-err", flooded, flooding(Console.error));
+
+// A run that writes one line to standard error and still ends 0: a warning is not a failure.
+const warn = Command.make("warn", {}, () =>
+  Diagnostics.report(KeyShape, {
+    severity: "warning",
+    message: "A line has the shape of a private key.",
+    place: Diagnostic.Place.cases.repo.make({ path: "docs/setup.md", line: 3 }),
+    hint: "Remove the key and rotate it.",
   }),
 );
 
-export const subcommand = Subcommand.make(Command.make("leak").pipe(Command.withSubcommands([check, flood])), {
+// Says it is ready, then waits to be stopped.
+const hold = Command.make("hold", {}, () => Effect.andThen(Console.log("ready"), Effect.never));
+
+export const subcommand = Subcommand.make(Command.make("leak").pipe(Command.withSubcommands([check, flood, floodErr, warn, hold])), {
   layer: Layer.empty,
   diagnostics: [KeyShape],
 });
@@ -149,34 +169,111 @@ interface Outcome {
   readonly stderr: string;
 }
 
-/** Runs `node bin.ts <args>` in a folder and reads every byte of both streams and the exit code. */
-export const kalfa = (folder: string, args: ReadonlyArray<string>) =>
+/** Reads a stream whole, as text, waiting `pause` after each part when a reader is slow. */
+const readAll = (stream: Stream.Stream<Uint8Array, unknown>, pause: Duration.Input | undefined) =>
+  stream.pipe(
+    Stream.decodeText(),
+    Stream.tap(() => (pause === undefined ? Effect.void : Effect.sleep(pause))),
+    Stream.runFold(
+      () => "",
+      (text, part) => text + part,
+    ),
+  );
+
+/** Runs a command and reads every byte of both streams and the exit code. */
+const spawnRead = (command: ChildProcess.Command, pause?: Duration.Input) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const handle = yield* spawner.spawn(command);
+
+    const [stdout, stderr, code] = yield* Effect.all(
+      [readAll(handle.stdout, pause), readAll(handle.stderr, pause), handle.exitCode],
+      { concurrency: "unbounded" },
+    );
+
+    return { code, stdout, stderr } satisfies Outcome;
+  }).pipe(Effect.scoped);
+
+/** `node bin.ts <args>` in a folder, with the environment the fixture wants. */
+const node = (folder: string, args: ReadonlyArray<string>, bin: string) =>
+  ChildProcess.make(process.execPath, [bin, ...args], {
+    cwd: folder,
+    extendEnv: true,
+    env: { NODE_PATH: undefined, NODE_OPTIONS: undefined },
+  });
+
+/** Runs `node bin.ts <args>` in a folder and reads every byte of both streams and the exit code; a slow reader waits `pause` after each part. */
+export const kalfa = (folder: string, args: ReadonlyArray<string>, pause?: Duration.Input) =>
+  Effect.gen(function* () {
     const located = yield* workspace;
 
-    const handle = yield* spawner.spawn(
-      ChildProcess.make(process.execPath, [located.bin, ...args], {
+    return yield* spawnRead(node(folder, args, located.bin), pause);
+  });
+
+/** What a run did when the reader of one stream closed before it wrote. */
+interface Closed {
+  /** The exit code of `kalfa` itself, not the shell's. */
+  readonly code: number;
+  /** What `kalfa` wrote to the stream whose reader stayed. */
+  readonly kept: string;
+}
+
+// `head -n 1` reads one line and ends, so the read end of the pipe is closed while `kalfa` still has things to write: the way
+// `kalfa --help | head -n 1` runs. The subshell keeps the exit code of `kalfa` in a file, since a pipeline's own code is its
+// last command's. In `stdout` the subshell's standard error goes to a file; in `stderr` its standard error goes down the pipe,
+// and its standard output goes to the file.
+const CLOSED = {
+  stdout: '("$@" 2>"$KEPT"; echo $? >"$CODE") | head -n 1 >/dev/null',
+  stderr: '("$@" 2>&1 >"$KEPT"; echo $? >"$CODE") | head -n 1 >/dev/null',
+} as const;
+
+/** Runs `node bin.ts <args>` where the reader of `closed` goes after one line: the way `kalfa --help | head -n 1` runs it. */
+export const closedPipe = (folder: string, args: ReadonlyArray<string>, closed: keyof typeof CLOSED) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const located = yield* workspace;
+    const notes = yield* fs.makeTempDirectoryScoped({ prefix: "kalfa-pipe-" });
+    const code = path.join(notes, "code");
+    const kept = path.join(notes, "kept");
+
+    yield* spawnRead(
+      ChildProcess.make("sh", ["-c", CLOSED[closed], "sh", process.execPath, located.bin, ...args], {
         cwd: folder,
         extendEnv: true,
-        env: { NODE_PATH: undefined, NODE_OPTIONS: undefined },
+        env: { CODE: code, KEPT: kept, NODE_PATH: undefined, NODE_OPTIONS: undefined },
       }),
     );
 
-    const read = (stream: Stream.Stream<Uint8Array, unknown>) =>
-      stream.pipe(
-        Stream.decodeText(),
-        Stream.runFold(
-          () => "",
-          (text, part) => text + part,
-        ),
-      );
+    return {
+      code: Number((yield* fs.readFileString(code)).trim()),
+      kept: yield* fs.readFileString(kept),
+    } satisfies Closed;
+  });
 
-    const [stdout, stderr, code] = yield* Effect.all([read(handle.stdout), read(handle.stderr), handle.exitCode], {
+/** What a run did that was stopped by a signal. */
+interface Stopped {
+  readonly ready: string;
+  readonly stderr: string;
+  readonly code: number;
+}
+
+/** Starts `leak hold`, waits until it says it is ready, sends it a signal, and reads what is left of its streams and its exit code. */
+export const stopped = (folder: string, signal: "SIGINT" | "SIGTERM") =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const located = yield* workspace;
+    const handle = yield* spawner.spawn(node(folder, ["leak", "hold"], located.bin));
+
+    const first = yield* handle.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.take(1), Stream.runCollect);
+
+    yield* handle.kill({ killSignal: signal });
+
+    const [stderr, code] = yield* Effect.all([readAll(handle.stderr, undefined), handle.exitCode], {
       concurrency: "unbounded",
     });
 
-    return { code, stdout, stderr } satisfies Outcome;
+    return { ready: first.join(""), stderr, code } satisfies Stopped;
   }).pipe(Effect.scoped);
 
 /** The text `flood` writes for a count of lines: what a reader of the pipe must get back, every byte. */
