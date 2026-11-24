@@ -7,11 +7,26 @@
 import { inspect } from "node:util";
 import { expect, it } from "@effect/vitest";
 import type { Redacted } from "effect";
-import { Cause, Effect, Exit, Formatter, Option, Predicate, Result, Schema } from "effect";
-import { type Built, built, type Carrier, fetchAs, FLOW_IDS, type FlowId } from "./Fetch.test-support.ts";
+import { Cause, Effect, Exit, Formatter, Layer, Option, Predicate, Result, Schema } from "effect";
+import {
+  type Built,
+  built,
+  type Carrier,
+  declare,
+  environment,
+  FLOW_IDS,
+  FLOW_NAME,
+  type FlowId,
+  fetchAs,
+  ITEM,
+  memoryDeps,
+  proofFor,
+} from "./Fetch.test-support.ts";
 import * as Recorder from "./Recorder.ts";
 import {
   findable,
+  THROW_WAYS,
+  throwingStore,
   needles,
   reachable,
   SEED,
@@ -298,6 +313,65 @@ it.effect.prop(
               `${value.id}: ${each.id}: ${name}`,
             ).toEqual([]);
           }
+        }
+      }
+    }),
+  run,
+);
+
+// X12. Plant: pass the store's defect through untouched (the fetch dies with the store's own error, which quotes the value); keep the store's error
+// as the cause of a new defect; write the store's message into the new defect's message; turn the defect into a typed failure (the fetch no longer dies).
+it.effect.prop(
+  "X12 defects: [secrets] a fetch from a store whose read throws an error that quotes a value still dies, and shows no value through Cause.pretty, String, message, stack, JSON, Formatter, inspect with hidden properties, its properties and cause chain, the spans or the logs",
+  { texture: valueTexture },
+  ({ texture }) =>
+    Effect.gen(function* () {
+      const values = findable(valueClasses(texture));
+      expect(classIds(values), "the generator reaches every value class").toBe("cde");
+
+      for (const value of values) {
+        for (const way of THROW_WAYS) {
+          const { exit, spans, logs } = yield* watched(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const secret = declare(FLOW_NAME);
+                const store = throwingStore(value.text, way);
+
+                const context = yield* Layer.build(
+                  environment([store], [secret], [{ name: FLOW_NAME, store: store.id, item: ITEM }], memoryDeps()),
+                ).pipe(Effect.orDie);
+
+                return yield* fetchAs(secret, proofFor(FLOW_NAME)).pipe(Effect.provide(context), Effect.exit);
+              }),
+            ),
+          );
+
+          if (Exit.isFailure(exit)) {
+            return yield* Effect.die(`${value.id}: ${way}: the program itself failed`);
+          }
+
+          const result = exit.value;
+
+          expect(
+            Exit.isFailure(result) && Cause.hasDies(result.cause) && !Cause.hasFails(result.cause),
+            `${value.id}: ${way}: the fetch still dies, a defect stays a defect`,
+          ).toBe(true);
+
+          const defects = failures(result);
+
+          const texts = [
+            ...(Exit.isFailure(result) ? [Cause.pretty(result.cause), ...reachable(result.cause)] : []),
+            ...defects.flatMap((defect) => [
+              ...(Predicate.isObject(defect)
+                ? [...displays(defect), ...reachable(defect)]
+                : [shown(() => String(defect))]),
+              ...(defect instanceof Error ? [defect.message, defect.stack ?? "", Cause.pretty(Cause.die(defect))] : []),
+            ]),
+            ...spans.map(spanText),
+            ...logs,
+          ];
+
+          expect(showsAny(texts, needles(value)), `${value.id}: ${way}`).toEqual([]);
         }
       }
     }),

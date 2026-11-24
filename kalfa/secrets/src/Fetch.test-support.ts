@@ -368,7 +368,7 @@ export interface Built {
 }
 
 /** The flow's declared name. */
-const FLOW_NAME = "transport/turn-key";
+export const FLOW_NAME = "transport/turn-key";
 
 /**
  * Builds one flow for a value the person put in the store: a decoy under another item when there is nothing to find, a failing store or a failing

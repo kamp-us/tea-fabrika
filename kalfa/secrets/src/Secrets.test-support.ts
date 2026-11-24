@@ -457,6 +457,37 @@ export const failingStore = (text: string) =>
     holds: { read: (_item: string) => Effect.fail(new Errors.StoreFailed({ cause: Redacted.make(quoting(text)) })) },
   });
 
+/** The ways a store's read can throw: while it runs, as a defect it makes, and before it returns an Effect at all. */
+export const THROW_WAYS = ["inside the Effect", "as a defect", "when called"] as const;
+
+export type ThrowWay = (typeof THROW_WAYS)[number];
+
+/** What a store's own parser throws when it quotes what it read: the value in the message, and in the error under it. */
+const parsing = (text: string): Error =>
+  new Error(`parse failed near ${text}`, { cause: new Error(`near ${text}`, { cause: text }) });
+
+/** A store whose every read throws, in the way given, an error that quotes `text`, a value the store holds: a fault no `StoreFailed` carries. */
+export const throwingStore = (text: string, way: ThrowWay) =>
+  Store.make({
+    id: "throwing",
+    item: Schema.NonEmptyString,
+    place: "store",
+    holds: {
+      read: (_item: string): Effect.Effect<Store.Held, Errors.StoreFailed> => {
+        switch (way) {
+          case "inside the Effect":
+            return Effect.sync(() => {
+              throw parsing(text);
+            });
+          case "as a defect":
+            return Effect.die(parsing(text));
+          case "when called":
+            throw parsing(text);
+        }
+      },
+    },
+  });
+
 /** A recorder whose every write fails as `RecordFailed`, with an error that quotes `text`, a value the caller held. */
 export const failingRecorder = (text: string): Layer.Layer<Recorder.Recorder> =>
   Layer.succeed(Recorder.Recorder, {
