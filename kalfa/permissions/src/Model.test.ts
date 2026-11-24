@@ -7,20 +7,26 @@ import {
   MISTAKE_IDS,
   mistakes,
   modelFrom,
+  NAME_CLASSES,
+  nameClasses,
   refusal,
   SEED,
+  spare,
   start,
   textures,
 } from "./Permissions.test-support.ts";
 
 const check = (runs: number) => ({ arbitrary: { runs, seed: SEED } });
 
-// M2. Plant: delete the name rule, and every `name:` class is red; delete the twice check, and `twice:` is red; delete the `change` check, and
+// M2. Plant: make the name rule need two letters (`*` to `+`), and the one-letter names of the valid model are refused, so every run is red; make it
+// need an `_`, and the names with none are refused, red the same way; delete the name rule, and every `name:` class is red; delete the twice check, and `twice:` is red; delete the `change` check, and
 // `change:` is red; delete the shared-name check, and `shared:` is red; delete the empty-list check, and `empty: a subject list` is red, and the
 // empty-union check, and `empty: a union`; accept a subject written `type#relation` as declared, and the two spelled classes are red; stop
-// checking a subject against the declared types, and `subject:` is red.
+// checking a subject against the declared types, and `subject:` is red; delete the check of a union's names, and every `union:` class is red; check them against
+// every type's names and not the type's own, and the two `another type` classes are red; check them against the permissions declared so far only, and the
+// valid model, whose first permission names a later one, is refused.
 it.prop(
-  "M2 declaration: a declaration that gets past the types throws, at once, with its exact message, and a valid one throws nothing",
+  "M2 declaration: a declaration that gets past the types throws, at once, with its exact message, and a valid one, whatever name the name rule allows, throws nothing",
   { texture: textures },
   ({ texture }) => {
     const spec = modelFrom(texture);
@@ -30,6 +36,8 @@ it.prop(
       made.map((each) => each.id),
       "the generator reaches every class of mistake",
     ).toEqual(MISTAKE_IDS);
+
+    expect(nameClasses(spec), "the generator reaches every shape of name the rule allows").toEqual(NAME_CLASSES);
 
     const model = declareAll(start(spec.name), spec.types);
 
@@ -53,7 +61,7 @@ it.prop(
   { texture: textures },
   ({ texture }) => {
     const spec = modelFrom(texture);
-    const [shared, onlyA, onlyB] = [`${texture.word}_shared`, `${texture.word}_a`, `${texture.word}_b`];
+    const [shared, onlyA, onlyB] = [spare(spec, 0), spare(spec, 1), spare(spec, 2)];
     const known = spec.first;
 
     const holding = (name: string, subject: string) => ({
@@ -63,7 +71,7 @@ it.prop(
     });
 
     const none = { relations: [], permissions: [] };
-    const held = `${texture.word}_holds`;
+    const held = spare(spec, 3);
 
     const earlier = declareAll(start(spec.name), spec.types);
     const left = declare(earlier, { name: onlyA, ...none });
