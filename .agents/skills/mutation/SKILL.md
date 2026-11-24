@@ -130,7 +130,11 @@ skipped, then the counts and seconds. A scope past `MUTATE_FILES` is refused bef
 three times over (the plain baseline, Stryker's dry run, then once per mutant they cover), so at full depth the slow
 ones alone passed the five minutes on `@kalfa/git`. A law that asks for fewer keeps its own count, the seed stays its
 own, and `depth.ts` says what the cap reaches. A mutant that lives at the cap is run again at full depth, in only the laws that cover it, and is listed only if it lives there too:
-the cap is the fast path and full depth the fallback (`recheck.ts`). The last line gives the counts at both depths. The depth is in the saved-run key. The hourly
+the cap is the fast path and full depth the fallback (`recheck.ts`). The last line gives the counts at both depths.
+Before that recheck, the box type-checks each mutant that lived, in its own package (`recheck.ts`, `tsc --noEmit`, 90 s in all): the vitest
+runner strips types, so a mutant `tsc` refuses would otherwise live. One that does not compile is a kill (`CompileError`), is not listed and is
+not run again at full depth, and the last line counts them. A package that fails `tsc` as it is, or a file in no package, is not judged.
+A `Survivor:` line answers only with a proof in its evidence (`plant:`, `rg:` or `law:`), as [the build skill](../build/SKILL.md) shows. The depth is in the saved-run key. The hourly
 run on CI passes none and keeps full depth.
 A call whose base, tree, files and scripts match a saved run reads it and starts no box, and a call that
 needs the box waits its turn in line, one box at a time; its header holds the settings and says how.

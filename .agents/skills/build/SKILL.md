@@ -57,8 +57,19 @@ for the product code.
    (`<file>:*` for a whole file), the whole line on one line: the check reads one line. After step
    9's commit, when the gate finds survivors on committed code, carry all the answers in one empty
    commit: `stepcommit.sh --empty --body-file <file> build <ticket> "<subject>"`
-   ([the rule](../step-commit/SKILL.md)). The evidence is the input or plant you tried and why it cannot
-   reach the line, or one sentence on why the mutant is equivalent: "unreachable" alone answers nothing. Leave the `static` lines as they are:
+   ([the rule](../step-commit/SKILL.md)). The evidence names its proof, one of three, and the check
+   refuses a line that names none, printing it as `refused`:
+   - `plant: <command> => <result>`: you ran the mutant or the input and a command printed this.
+     `plant: sed -i 's/=== 0/!== 0/' kalfa/git/src/Ref.ts && pnpm exec vitest run kalfa/git/src/Ref.test.ts => 12 passed, still green`
+   - `rg: <search> => <result>`: a search shows no reader.
+     `rg: rg -n "parseRef\(" kalfa --glob '*.ts' => one caller, Repository.ts:40, which never passes a bare name`
+   - `law: <id>`: a law of the plan's laws table already catches it, so the box missed it.
+     `law: R3 fails with the line planted`
+
+   A claim without one of the three ("equivalent", "never", "covered") is a guess, and review has
+   found each such line wrong. A mutant that does not type-check is a kill, since the box type-checks
+   every survivor and counts the ones `tsc` refuses as `CompileError`, so such a mutant needs no line.
+   Leave the `static` lines as they are:
    code that runs as the module loads, which Stryker skips and the reviewer plants by hand.
    The step is done when the same command with `--answered --answers <your commit body file>` exits 0:
    every survivor is killed by a law or carried as a `Survivor:` line. A second call on the same

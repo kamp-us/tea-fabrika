@@ -1719,10 +1719,18 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
   const empty = (r: Repo, step: Step, flags: string[], ...paths: string[]) =>
     r.call("sh", [script, ...flags, step, "321", "T321 lead: open the slice", ...paths]);
 
-  const survivor = "Survivor: src/owned.ts:1 a help line only -- no law reads the string: grep of the tests finds none";
+  const survivor = "Survivor: src/owned.ts:1 a help line only -- rg: rg -n help src tests => no test reads the string";
 
-  // Each opens as a Survivor: line and answers nothing: no line and no reason, then one bare word of evidence.
-  const malformed = ["Survivor: foo.ts", "Survivor: src/owned.ts:1 a help line only -- unreachable"];
+  // Each opens as a Survivor: line and answers nothing: no line and no reason, one bare word of evidence, then words of evidence that name
+  // no plant:, rg: or law: (ticket 1309), and each proof marker without its result or its id.
+  const malformed = [
+    "Survivor: foo.ts",
+    "Survivor: src/owned.ts:1 a help line only -- unreachable",
+    "Survivor: src/owned.ts:1 a help line only -- no law reads the string, grep of the tests finds none",
+    "Survivor: src/owned.ts:1 a help line only -- plant: sed -i s/a/b/ src/owned.ts",
+    "Survivor: src/owned.ts:1 a help line only -- rg: rg -n help =>",
+    "Survivor: src/owned.ts:1 a help line only -- law: none",
+  ];
 
   /** An empty commit that carries `body`, as a build or fix step makes one for its Survivor: lines. */
   const carry = (r: Repo, step: Step, body: string, flags: string[] = []) => {
@@ -1800,7 +1808,14 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
       ] satisfies Array<[Step, boolean]>,
       ([step, only]) =>
         withRepo([], (r) => {
-          const lines = `${survivor}\n\n${survivor.replace(":1 ", ":2 ")}`;
+          // One line of each proof: a plant run with its result, a search with what it found, a law's id.
+          const lines = [
+            survivor,
+            "",
+            "Survivor: src/owned.ts:2 a help line only -- plant: sed -i s/help/x/ src/owned.ts; vitest run owned.test.ts => 3 passed, still green",
+            "Survivor: src/owned.ts:* thin glue -- law: H12 (owned.test.ts) already fails with it planted",
+          ].join("\n");
+
           const got = carry(r, step, lines, only ? ["--commit-only"] : []);
           expect(got.code, got.text).toBe(0);
           expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
@@ -1825,7 +1840,7 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
           `${survivor}\nreworded a help line`,
           `note\n${survivor}`,
           `${survivor}\n${malformed[0]}`,
-          malformed[1] ?? "",
+          ...malformed.slice(1),
         ];
 
         for (const body of bodies) {

@@ -88,7 +88,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      with `--files` naming the guarding files when it refuses the scope as too wide. On the builder's commit and files it is instant: it reads the builder's saved run and starts no box. Add `--answered`: it lists only the mutants no
      `Survivor:` line answers, and each `lived`, `no law ran` or `no law loads` line it prints in a
      guarding check that no `Plant:` line explains is a finding. A `Survivor:` line whose evidence an
-     input of yours refutes is a finding too. Plant each `static` line that guards by hand: Stryker skips code that
+     input of yours refutes is a finding too, and so is one whose `plant:` you cannot repeat to the same result or whose `rg:` search misses a reader. Plant each `static` line that guards by hand: Stryker skips code that
      runs as the module loads. Stryker also never moves or reorders code, so a race (a read, a
      yield and a write in place of one atomic update) needs your own plant too. Give its run time
      and the mutants a capped run did not reach. Where your box cannot start Docker, say so, and

@@ -40,13 +40,13 @@ if body_file is not None:
 # its body is those lines and nothing else. Each line is read by survivors.ts's own parser (notAnswers), so a line that
 # would answer nothing is refused here, before a commit the builder cannot take back.
 if empty and step != "lead":
-    asked = "an empty " + step + " commit carries Survivor: lines and nothing else: pass --body-file <file> holding one 'Survivor: <file>:<line> <reason> -- <evidence>' line per answer"
+    asked = "an empty " + step + " commit carries Survivor: lines and nothing else: pass --body-file <file> holding one 'Survivor: <file>:<line> <reason> -- <evidence>' line per answer, its evidence naming a proof: 'plant: <command> => <result>', 'rg: <search> => <result>' or 'law: <id>'"
     if not body: refuse(asked, 2)
     reader = "const m = await import(process.argv[1]); let t = ''; for await (const c of process.stdin) t += c; console.log(JSON.stringify(m.notAnswers(t)));"
     read = subprocess.run(["node", "--input-type=module", "-e", reader, (here / "../../mutation/scripts/survivors.ts").as_uri()], input=body, capture_output=True, text=True)
     try: bad = json.loads(read.stdout)
     except ValueError: refuse("cannot read the Survivor: lines with survivors.ts: " + read.stderr.strip(), 2)
-    if bad: refuse(asked + "; this line answers nothing (it needs a reason and two words of evidence): " + bad[0], 2)
+    if bad: refuse(asked + "; this line answers nothing (it needs a reason, and evidence that names a plant:, rg: or law: proof): " + bad[0], 2)
 # The tests step's plant record lives only in its answer, which a reviewer never reads. A tests commit
 # (or a fix round that names a test file) carries it in the body: one "Plant: ..." line per new law (and, when the plan has a Generators
 # section, the reach table under it). A box's commit is drive's, and its report holds the record.
