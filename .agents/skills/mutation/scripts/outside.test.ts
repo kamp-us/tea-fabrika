@@ -35,16 +35,22 @@ describe("outside, the mutant a child process runs", () => {
 
 describe("outside, the rule's mutants a rule's own test covers", () => {
   // Plants: read the helper's own definition as a mutant; list an id once per use; read a number that is no id.
-  it("pinned: the ids are those of the calls that switch a mutant on, each once and in order", () => {
-    const text = [
-      "function stryMutAct_9fa48(id) { return ns.activeMutant === id; }",
-      'const a = stryMutAct_9fa48("12") ? 1 : stryMutAct_9fa48("3") ? 2 : 3;',
-      'const b = stryMutAct_9fa48("12") ? 1 : stryCov_9fa48("40", "41");',
-      "const c = stryMutAct_9fa48(n);",
-    ].join("\n");
+  it("the ids are those of the calls that switch a mutant on, each once and in order of first use", () => {
+    const ids = fc.array(fc.nat(999).map(String), { minLength: 0, maxLength: 12 });
 
-    expect(mutantIds(text)).toEqual(["12", "3"]);
-    expect(mutantIds("export const none = 1;")).toEqual([]);
+    fc.assert(
+      fc.property(ids, fc.array(fc.nat(999), { maxLength: 6 }), (used, noise) => {
+        const text = [
+          "function stryMutAct_9fa48(id) { return ns.activeMutant === id; }",
+          ...noise.map((n) => `stryCov_9fa48("${n}", "${n + 1}");`),
+          ...used.map((id, i) => `const v${i} = stryMutAct_9fa48("${id}") ? 1 : stryMutAct_9fa48(n${i});`),
+          ...noise.map((n) => `const w${n} = ${n};`),
+        ].join("\n");
+
+        expect(mutantIds(text)).toEqual([...new Set(used)]);
+      }),
+      options,
+    );
   });
 
   // Plants: build a new object, which loses every hit an instrumented file records after it; drop the hits already there; count none.
