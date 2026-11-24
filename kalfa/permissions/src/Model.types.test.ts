@@ -5,6 +5,9 @@
 import { expectTypeOf, it } from "@effect/vitest";
 import { Model, Relation } from "./index.ts";
 
+// What a rule's body is handed is public: the model's own name for it.
+type Rules = Model.Rules<"a" | "b">;
+
 const library = () =>
   Model.make("library")
     .type("reader", {})
@@ -23,7 +26,9 @@ const library = () =>
 // M1. Plant: drop `NoInfer` from `change`, and the wrong-`change` lines compile; drop the `Extract<P, keyof R>` check from the name, and the
 // shared-name line compiles; widen the subject list to `string`, and the `#` lines compile; let `Name` pass an empty text, and the empty-name line
 // compiles; type the name as a plain `string`, and the string and union lines compile; stop `N extends keyof T` from refusing a repeat, and the
-// twice line compiles; take the subject list as `ReadonlyArray<S>`, and the empty-list line compiles.
+// twice line compiles; take the subject list as `ReadonlyArray<S>`, and the empty-list line compiles; let `Literal` pass a text pattern (refuse only `string` and unions), and
+// the three pattern lines compile; put `declared` back on the public `Model`, and the `declared` lines compile; stop exporting `Rules` from `Model.ts`,
+// and the `Model.Rules` lines do not compile.
 const modelTypes = (start: ReturnType<typeof library>) => {
   // The protocol-shaped model compiles with no annotation, and each step it takes is a model that takes the next one.
   const shelved = start
@@ -107,6 +112,25 @@ const modelTypes = (start: ReturnType<typeof library>) => {
   // @ts-expect-error a name that holds a colon
   const coloned = () => start.type("two:words", {});
 
+  // A name typed as a text pattern is no literal word either: it stands for many words, and a repeat among them cannot be seen.
+  // @ts-expect-error a name typed as a pattern with a literal start
+  const startsWith = (name: `x${string}`) => start.type(name, {});
+  // @ts-expect-error a name typed as a pattern with a literal end
+  const endsWith = (name: `${string}x`) => start.type(name, {});
+  // @ts-expect-error a name typed as every uppercase text
+  const uppercase = (name: Uppercase<string>) => start.type(name, {});
+  // @ts-expect-error a name typed as every lowercase text
+  const lowercase = (name: Lowercase<string>) => start.type(name, {});
+
+  // The declared data is the walk's. The model's public type does not show it, to a caller or to a type that wraps one.
+  // @ts-expect-error the declared data on a model
+  const peek = () => start.declared;
+  // @ts-expect-error the declared data on a model that has taken more types
+  const peekFurther = () => start.type("note", {}).declared;
+
+  expectTypeOf(start).not.toHaveProperty("declared");
+  expectTypeOf<keyof typeof start>().toEqualTypeOf<"name" | "type">();
+
   // A permission is no relation of its own type.
   const reader = Relation.one(["reader"]);
   // @ts-expect-error a permission that shares the name of a relation
@@ -134,6 +158,12 @@ const modelTypes = (start: ReturnType<typeof library>) => {
     spaced,
     hashed,
     coloned,
+    startsWith,
+    endsWith,
+    uppercase,
+    lowercase,
+    peek,
+    peekFurther,
     shared,
   ];
 };
@@ -142,6 +172,24 @@ const modelTypes = (start: ReturnType<typeof library>) => {
 // is the compile error.
 const refusals = modelTypes(library());
 
-it("M1 type: a model's types take a declared subject, union and change and refuse an undeclared one, a `type#relation` subject, an empty list and a name that is no literal word", () => {
+// A rule's body is handed `Model.Rules` of the names of its own type, and a union takes at least one of them.
+const ruleTypes = (rules: Rules) => {
+  expectTypeOf(rules.union).toBeCallableWith("a");
+  expectTypeOf(rules.union).toBeCallableWith("a", "b", "a");
+  expectTypeOf(rules.union).parameter(0).toEqualTypeOf<"a" | "b">();
+  expectTypeOf(rules.union).returns.not.toBeAny();
+
+  // @ts-expect-error a union that names nothing
+  const nothing = () => rules.union();
+  // @ts-expect-error a union that names a word outside the rule's names
+  const outside = () => rules.union("a", "c");
+
+  return [nothing, outside];
+};
+
+const ruleRefusals = ruleTypes({ union: () => ({ kind: "union", names: [] }) });
+
+it("M1 type: a model's types take a declared subject, union and change and refuse an undeclared one, a `type#relation` subject, an empty list, a name that is no literal word and a look at the declared data; the rules a body is handed are public", () => {
   expectTypeOf(refusals).toBeArray();
+  expectTypeOf(ruleRefusals).toBeArray();
 });
