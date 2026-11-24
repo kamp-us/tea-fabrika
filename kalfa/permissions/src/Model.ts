@@ -7,8 +7,15 @@
  * mistake a written declaration can hold. A value that got past them with a cast throws where it is declared, with a message that names the
  * model and the place.
  */
-import { type Declared, declareType, type Rule, type Rules } from "./internal/declare.ts";
+import { type Declared, declareType, type Rule, type Rules as RuleHelper } from "./internal/declare.ts";
 import type { Holds, Relation } from "./Relation.ts";
+
+/**
+ * What a rule's body is handed to build its rule from: `union`, which takes one name or more of the type's own relations and permissions.
+ *
+ * @category models
+ */
+export type Rules<Names extends string> = RuleHelper<Names>;
 
 /**
  * What a model has declared so far: each type's relations, by name, and the names of its permissions.
@@ -30,8 +37,8 @@ type IsUnion<U, Each = U> = [U] extends [never]
       : true
     : never;
 
-/** A name written in code: one literal word, not a plain text and not a union of words. */
-type Literal<N extends string> = string extends N ? never : IsUnion<N> extends true ? never : N;
+/** A name written in code: one literal word, not a plain text, not a text pattern such as `x${string}` and not a union of words. */
+type Literal<N extends string> = Nothing extends Record<N, 1> ? never : IsUnion<N> extends true ? never : N;
 
 /** A type, relation or permission name: a literal that is not empty and holds no `#`, `:` or space. */
 type Name<N extends string> = [Literal<N>] extends [never]
@@ -47,7 +54,6 @@ type Name<N extends string> = [Literal<N>] extends [never]
  */
 export interface Model<T extends Types> {
   readonly name: string;
-  readonly declared: Declared;
   /**
    * Declares one type, with its relations and the permissions built from them, and gives the model with it added. A relation's subjects are
    * types declared before it or this one, its `change` is a permission of this type, and a permission's union names relations and
@@ -68,7 +74,6 @@ export interface Model<T extends Types> {
 
 const from = <T extends Types>(name: string, declared: Declared): Model<T> => ({
   name,
-  declared,
   type: (type, shape) => from(name, declareType(name, declared, type, shape.relations ?? {}, shape.permissions ?? {})),
 });
 

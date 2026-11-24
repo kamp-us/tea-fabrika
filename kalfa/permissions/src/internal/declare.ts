@@ -51,7 +51,7 @@ const refusal = (model: string, text: string): Error => new Error(`model ${model
  * **Details**
  *
  * The earlier map is left as it was. The order of the checks is the order of the messages: names, a repeat, a name that is both a relation
- * and a permission, then each relation and each permission in turn.
+ * and a permission, each relation, each permission read in full, the names each union takes, then each `change`.
  */
 export const declareType = (
   model: string,
@@ -105,6 +105,14 @@ export const declareType = (
     }
 
     unions.set(each, rule);
+  }
+
+  for (const [each, rule] of unions) {
+    const missing = rule.names.find((union) => !kept.has(union) && !unions.has(union));
+
+    if (missing !== undefined) {
+      throw refusal(model, `${name}.${each} names ${missing}, which is no relation or permission of ${name}`);
+    }
   }
 
   for (const [each, relation] of kept) {
