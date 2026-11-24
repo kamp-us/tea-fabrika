@@ -26,7 +26,7 @@
 //
 //   MUTATE_SECONDS       300   how long Stryker may test mutants: run.sh's cap, in whole seconds
 //   MUTATE_FILES         8     the most product files one run takes; more is refused, naming the count
-//   MUTATE_RUNS          10    the most cases a property law draws in the box, or `full` for each law's own count
+//   MUTATE_RUNS          25    the most cases a property law draws in the box, or `full` for each law's own count
 //                              (ticket 1306: the laws run three times over, and at full depth they alone cost more
 //                              than the 300 s; depth.ts says how the cap reaches a law, and what it cannot reach)
 //   MUTATE_WAIT_SECONDS  7200  the longest a run waits in line for the box; then it gives up its place (exit 2)
@@ -98,7 +98,7 @@ const FILES = Config.schema(AtLeastOne, "MUTATE_FILES").pipe(Config.withDefault(
 
 /** The most cases a property law draws in the box, or `full`: no cap, each law's own count. */
 const RUNS = Config.schema(Schema.Union([AtLeastOne, Schema.Literal("full")]), "MUTATE_RUNS").pipe(
-  Config.withDefault(10),
+  Config.withDefault(25),
 );
 
 /** How many days a saved run is kept: a save drops the older ones. */
