@@ -89,6 +89,70 @@ written to an end closes both with its code and reason. A write to an end that c
 fails nothing, as a WebSocket drops it, and the close reaches the reader. There is no
 capacity, as a browser's `WebSocket.send` has none.
 
+## The Cloudflare gateway
+
+`@kalfa/transport/cloudflare` is the half of the package that runs in a Durable Object. `@kalfa/transport/cloudflare/memory`
+is a stand-in Durable Object for tests. Both need `@alchemy.run/cloudflare` and `alchemy`, which are optional peers: a
+project that never imports these two entry points installs neither. The core imports no Alchemy, and Cloudflare is
+reached only through Alchemy, never through `cloudflare:*` or a raw socket.
+
+A `Gateway` is the four calls a Durable Object class hands to the platform, with Alchemy's own signatures, so any class
+spreads them into its shape and no slot names a class:
+
+```ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { Effect, Layer } from "effect";
+import { Gateway, Hibernation } from "@kalfa/transport/cloudflare";
+
+// `handlers` is a Layer<Gateway, never, Hibernation>.
+export class AppGateway extends Cloudflare.DurableObject<AppGateway>()(
+  "AppGateway",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const gateway = yield* Gateway;
+
+      return {
+        fetch: gateway.upgrade(), // the app routes and checks first; Transport knows no route
+        webSocketMessage: gateway.webSocketMessage,
+        webSocketClose: gateway.webSocketClose,
+        webSocketError: gateway.webSocketError,
+      };
+    }).pipe(Effect.provide(Layer.provide(handlers, Hibernation.layer)));
+  }),
+) {}
+```
+
+`Hibernation` is the seam to the platform. Its `upgrade` accepts a socket the object may sleep with and gives the `101`
+response with the server's end, a `HeldSocket`: four calls of Alchemy's `Cloudflare.WebSocket` (`send`, `close`,
+`getAttachment`, `setAttachment`) and nothing of the raw socket. `Hibernation.layer` is the one place that calls Alchemy.
+
+### The stand-in
+
+```ts
+import * as MemoryGateway from "@kalfa/transport/cloudflare/memory";
+
+const object = yield* MemoryGateway.make(handlers); // Effect<MemoryGateway, never, Scope>
+const client = yield* object.connect(); // a Socket: the client's end, as the app's route would call gateway.upgrade()
+yield* object.sleep; // the Layer and all its memory are dropped, and built again on the next event
+```
+
+It keeps the platform's rules, and the same laws run on it and on real workerd:
+
+- An object with only hibernatable sockets sleeps after about 10 idle seconds (real workerd slept after 12), and its
+  sockets stay open. `sleep` does it at once. Attachments live through it, and memory does not: the next event builds the
+  Layer again.
+- A message is delivered as soon as the client writes it, even while an earlier call still runs, one call for each
+  message, in the order written.
+- An attachment is stored as a `structuredClone` of its encoded value, so a change after the write is not seen. It is
+  refused above 16,384 bytes of JSON text in UTF-8, or when it cannot be cloned, with Alchemy's own
+  `WebSocketAttachmentError` of `write`, and the value before stays.
+- A socket is a new object for each event: nothing may key on its identity.
+- After a server `close`, `send` throws a `TypeError` and the attachment can still be read. The platform's close event
+  comes later, in an event of its own, with the server's own code, no reason and the attachment kept. After a client
+  `close`, one event comes, with the client's code and reason.
+- `stranger` is a socket accepted outside the gateway, with no attachment. `drop(socket)` is the one call only the
+  stand-in has: the platform reports the socket broken, and the object gets an error event.
+
 ## What never shows a frame
 
 A frame can hold a person's secret, such as the app's sign-in proof. `FormatError` holds a reason and nothing else: no
