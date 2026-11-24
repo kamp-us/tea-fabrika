@@ -4,7 +4,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Schema } from "effect";
 import { Socket } from "effect/socket";
-import { Format } from "./index.ts";
+import { Format, FormatError, NoSharedVersion } from "./index.ts";
 import {
   attempt,
   between,
@@ -16,6 +16,7 @@ import {
   connectionCases,
   dialing,
   failureFrom,
+  goodChallenge,
   HANDSHAKE_CLASSES,
   handshakes,
   helloDraw,
@@ -25,6 +26,7 @@ import {
   readerFailure,
   REFUSED,
   runCase,
+  scripted,
   SEED,
   signInApp,
   unwritableHellos,
@@ -86,7 +88,8 @@ it.effect.prop(
   { arbitrary: { seed: SEED, runs: 300 } },
 );
 
-// H3. Plant: wrap make's error in `FormatError "value"`; close with the refusal code for it.
+// H3. Plant: wrap make's error in `FormatError "value"`; close with the refusal code for it; delete the flag that says make failed, so the
+// app's own FormatError or NoSharedVersion closes as a refusal.
 it.effect.prop(
   "H3 the app's failure stays the app's: connect fails with the very error make failed with, not a FormatError or a SocketError; the far end reads no hello and reads the close 1000",
   { draw: helloDraw },
@@ -108,6 +111,26 @@ it.effect.prop(
           Option.map(failureFrom(exit).error, (error) => (Predicate.hasProperty(error, "_tag") ? error._tag : error)),
           "not a FormatError or a SocketError",
         ).toEqual(Option.some("AppFailure"));
+      }
+
+      // An app whose own error is a FormatError or a NoSharedVersion, the names of Transport's refusals: it is still the app's,
+      // and the connection closes with 1000 and no refusal.
+      for (const [name, own] of [
+        ["a FormatError", new FormatError({ reason: "value" })],
+        ["a NoSharedVersion", new NoSharedVersion({ client: [1], gateway: [2] })],
+      ] as const) {
+        const run = yield* attempt({
+          app: { ...signInApp, make: () => Effect.fail(own) },
+          client: { versions: [1], features: [] },
+          program: scripted(Option.some(goodChallenge(draw.nonce)), Option.none()),
+        });
+
+        const exit = Option.getOrElse(run.exit, () => assert.fail(`${name}: connect stalled`));
+        expect(Option.getOrUndefined(failureFrom(exit).error), `${name}: the app's own error, as it was`).toBe(own);
+        expect(
+          Option.map(run.seen.close, ({ code, reason }) => ({ code, reason })),
+          `${name}: closed with 1000 and no reason`,
+        ).toEqual(Option.some({ code: 1000, reason: undefined }));
       }
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 100 } },
