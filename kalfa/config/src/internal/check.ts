@@ -88,6 +88,9 @@ export const near = (names: ReadonlyArray<string>, typed: string): Option.Option
 /** Whether `path` is the setting's own name or one of its tables. */
 const under = (s: Setting.Any, path: ReadonlyArray<string>) => path.every((word, n) => segments(s.name)[n] === word);
 
+/** Whether `path` is the setting's own name or goes on inside its value: a member of a record, a field of a table. */
+const reaches = (s: Setting.Any, path: ReadonlyArray<string>) => segments(s.name).every((word, n) => path[n] === word);
+
 /** Where a setting may be set, as a message says it: its files, and its variable unless only a file may set it. */
 export const places = (app: string, s: Setting.Any, names: Names) =>
   [...s.files.map((file) => names[file]), ...(s.fileOnly ? [] : [`as ${variable(app, s.name)}`])]
@@ -112,12 +115,17 @@ const explain = (
   const stopped = (reason: SettingsError["reason"], text: string, key: ReadonlyArray<string>) =>
     stop(app, reason, text, { file: found.name, line: lineAt(found.document, key) }, undefined, closing);
 
-  if (own.some((s) => under(s, path))) {
-    const s = own.find((s) => same(segments(s.name), path));
+  // A fault inside a setting's value (a member of a record, a field of a table) is the setting's own, at its own line: the member's key is part of the value, and a message never holds one.
+  const holder = own.find((s) => reaches(s, path));
 
-    return s === undefined
-      ? stopped("invalid", `${path.join(".")} is a table of settings, not a value.`, path)
-      : refused(app, s, Origin.cases.file.make({ file: found.name, line: lineAt(found.document, path) ?? 0 }), closing);
+  if (holder !== undefined) {
+    const line = lineAt(found.document, segments(holder.name)) ?? 0;
+
+    return refused(app, holder, Origin.cases.file.make({ file: found.name, line }), issue, closing);
+  }
+
+  if (own.some((s) => under(s, path))) {
+    return stopped("invalid", `${path.join(".")} is a table of settings, not a value.`, path);
   }
 
   const key = leaf(found.document.value, path);
@@ -145,28 +153,66 @@ const explain = (
   );
 };
 
-/** What a setting's schema asks for, as a message says it, in place of the value it refused. */
-const wanted = (s: Setting.Any, name: string) => {
-  const expected = SchemaAST.resolveTitle(s.schema.ast) ?? "a valid value";
-  const rule = SchemaAST.resolveDescription(s.schema.ast);
+/** The type's text as Effect writes it in `Expected <type>`, from an issue made fresh with no input, so no input can reach it. */
+const expected = (ast: SchemaAST.AST): string =>
+  SchemaIssue.makeFormatterDefault()(new SchemaIssue.InvalidType(ast)).replace(/^Expected /u, "");
 
-  return `${name} is not ${expected}.${rule === undefined ? "" : ` ${rule}`}`;
+/**
+ * What a refused value had to be, from the declared parts of its issue only: never the input, never a message a check wrote at run time, never a path inside the value.
+ */
+const rule = (issue: SchemaIssue.Issue): Option.Option<string> => {
+  switch (issue._tag) {
+    case "Filter":
+      return Option.fromNullishOr(issue.filter.annotations?.expected);
+    case "InvalidType":
+    case "AnyOf":
+    case "OneOf":
+      return Option.some(expected(issue.ast));
+    case "Pointer":
+    case "Encoding":
+      return rule(issue.issue);
+    case "Composite":
+      return rule(issue.issues[0]);
+    case "MissingKey":
+      return Option.some("a table with every key it needs");
+    case "UnexpectedKey":
+      return Option.some("a table with no other keys");
+    case "InvalidValue":
+    case "Forbidden":
+      return Option.none();
+  }
+};
+
+/** What a setting's schema asks for, as a message says it, in place of the value it refused: its title and description, else the rule its issue declares. */
+const wanted = (s: Setting.Any, name: string, issue: SchemaIssue.Issue) => {
+  const title = SchemaAST.resolveTitle(s.schema.ast);
+  const description = SchemaAST.resolveDescription(s.schema.ast);
+
+  const tail =
+    description !== undefined
+      ? ` ${description}`
+      : Option.match(rule(issue), {
+          onSome: (declared) => ` Expected ${declared}.`,
+          onNone: () => (title === undefined ? " Its schema names no rule." : ""),
+        });
+
+  return `${name} is not ${title ?? "a valid value"}.${tail}`;
 };
 
 /** The `invalid` error for a value its setting's schema refuses, naming where it was and never what it was. */
-export const refused = (app: string, s: Setting.Any, origin: Origin, closing?: string) =>
+export const refused = (app: string, s: Setting.Any, origin: Origin, issue: SchemaIssue.Issue, closing?: string) =>
   Origin.matchOrElse(
     origin,
     {
-      file: ({ file, line }) => stop(app, "invalid", wanted(s, s.name), { file, line }, undefined, closing),
-      default: () => stop(app, "invalid", wanted(s, s.name), undefined, undefined, closing),
+      file: ({ file, line }) => stop(app, "invalid", wanted(s, s.name, issue), { file, line }, undefined, closing),
+      default: () => stop(app, "invalid", wanted(s, s.name, issue), undefined, undefined, closing),
     },
-    ({ name }) => stop(app, "invalid", wanted(s, name), undefined, undefined, closing),
+    ({ name }) => stop(app, "invalid", wanted(s, name, issue), undefined, undefined, closing),
   );
 
 /** The `invalid` error for a value an edit was asked to write that its setting's schema refuses: the file is named, no line, and never the value. */
-export const unfit = (app: string, s: Setting.Any, file: string, closing: string) =>
-  stop(app, "invalid", wanted(s, s.name), { file }, undefined, closing);
+export const unfit = (app: string, s: Setting.Any, file: string, issue: SchemaIssue.Issue, closing: string) =>
+  stop(app, "invalid", wanted(s, s.name, issue), { file }, undefined, closing);
 
 /** How a check of one file differs from the start's: the closing sentence, and one key left out. */
 interface Options {

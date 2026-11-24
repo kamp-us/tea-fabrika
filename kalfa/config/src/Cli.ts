@@ -1,7 +1,7 @@
 /**
  * The `config` command over every group of one app: ask what its settings are now and where each came from, set or remove one in a configuration file, and print the settings' schema and reference. `@kalfa/cli` mounts it as its built-in, and an app can mount it under its own command.
  */
-import { Config, Console, Effect, type FileSystem, Option, type Path } from "effect";
+import { Config, Console, Effect, type FileSystem, Option, type Path, Schema } from "effect";
 import * as Arr from "effect/Array";
 import { Argument, Command, Flag } from "effect/cli";
 import type * as Setting from "./Declaration.ts";
@@ -9,7 +9,7 @@ import { type Group, near, unfit } from "./internal/check.ts";
 import { join } from "./internal/cli/join.ts";
 import { line, listing } from "./internal/cli/listing.ts";
 import * as disk from "./internal/disk.ts";
-import { type SettingsError, stop } from "./internal/error.ts";
+import { because, type SettingsError, stop } from "./internal/error.ts";
 import { segments } from "./internal/names.ts";
 import { textSource } from "./internal/read.ts";
 import * as references from "./internal/reference.ts";
@@ -131,7 +131,18 @@ export const config = <const App extends string>(
       const given = yield* Config.schema(setting.schema, segments(setting.name))
         .parse(textSource(value))
         .pipe(
-          Effect.mapError(() => unfit(app, setting, found.place.name, `The ${chosen} configuration was not changed.`)),
+          Effect.mapError((error) =>
+            error.cause instanceof Schema.SchemaError
+              ? unfit(app, setting, found.place.name, error.cause.issue, `The ${chosen} configuration was not changed.`)
+              : stop(
+                  app,
+                  "read",
+                  `${setting.name} could not be read, because ${because(error.cause)}.`,
+                  undefined,
+                  error.cause,
+                  `The ${chosen} configuration was not changed.`,
+                ),
+          ),
         );
 
       yield* disk.set(group, toml, setting, given, chosen, found);
