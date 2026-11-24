@@ -33,7 +33,7 @@
       "pure": false
     },
     "kalfa-config": {
-      "imports": ["next-vitest"],
+      "imports": ["kalfa-diagnostics", "next-vitest"],
       "pure": false
     },
     "kalfa-markdown": {

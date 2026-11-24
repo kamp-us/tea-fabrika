@@ -4925,9 +4925,10 @@
                   "@tea-fabrika/**",
                   "@kalfa/*",
                   "@kalfa/**",
+                  "!@kalfa/diagnostics/Hidden",
                   "**/next/**"
                 ],
-                "message": "The config engine imports no workspace package at runtime; tests keep only their test toolbox."
+                "message": "The config engine imports no workspace package at runtime but `@kalfa/diagnostics/Hidden`, the hidden cause its errors hold (decision 0084 gave it Diagnostics); tests keep only their test toolbox."
               }
             ]
           }
@@ -5011,9 +5012,10 @@
                   "@tea-fabrika/**",
                   "@kalfa/*",
                   "@kalfa/**",
+                  "!@kalfa/diagnostics/Hidden",
                   "**/next/**"
                 ],
-                "message": "The config engine imports no workspace package at runtime; tests keep only their test toolbox."
+                "message": "The config engine imports no workspace package at runtime but `@kalfa/diagnostics/Hidden`, the hidden cause its errors hold (decision 0084 gave it Diagnostics); tests keep only their test toolbox."
               }
             ]
           }

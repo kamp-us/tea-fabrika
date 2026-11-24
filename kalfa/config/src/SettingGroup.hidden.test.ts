@@ -15,6 +15,11 @@ import { SettingGroup } from "./index.ts";
 import { stop, unread } from "./internal/error.ts";
 import { forms, HiddenDraw, OldSnapshotError, Reach } from "./SettingGroup.snapshot.test-support.ts";
 
+/** The two fields of an error that the laws read: its message and its cause, whatever it holds. */
+const Parts = Schema.Struct({ message: Schema.String, cause: Schema.optional(Schema.Unknown) });
+
+const parts = Schema.decodeUnknownSync(Parts);
+
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
 
 /** What every codec that writes outward writes for a hidden cause. It is written out here, so this file stays true if the schema's text changes. */
@@ -25,7 +30,7 @@ const CLASSES = ["error", "platform", "text", "record"] as const;
 
 type Class = (typeof CLASSES)[number];
 
-const causeOf = (id: Class, secret: string): unknown => {
+const quoting = (id: Class, secret: string): unknown => {
   switch (id) {
     case "error":
       return new Error(secret, { cause: new Error(secret) });
@@ -70,7 +75,7 @@ const written = <S extends Schema.Top>(schema: S, error: unknown): string => {
 
 /** The error a class and a drawn app make for each of the two causes: `SettingsError` through `stop`, and `SnapshotError` as the older read builds it. */
 const makers = (app: string, id: Class, secret: string) => {
-  const cause = causeOf(id, secret);
+  const cause = quoting(id, secret);
 
   return [
     {
@@ -107,7 +112,7 @@ it.effect.prop(
       for (const id of CLASSES) {
         // The control: the cause as a plain `Defect` shows the secret for each class, so the search below can find it.
         const plain = JSON.stringify(
-          Schema.encodeUnknownSync(Schema.toCodecJson(Schema.Defect()))(causeOf(id, secret)),
+          Schema.encodeUnknownSync(Schema.toCodecJson(Schema.Defect()))(quoting(id, secret)),
         );
 
         expect(
@@ -123,7 +128,7 @@ it.effect.prop(
             expect(text, `${named}: no codec writes ${form}`).not.toContain(form);
           }
 
-          const wire = Schema.encodeUnknownSync(Schema.toCodecJson(schema))(error) as { readonly cause?: unknown };
+          const wire = parts(Schema.encodeUnknownSync(Schema.toCodecJson(schema))(error));
 
           expect(wire.cause, `${named}: the JSON codec writes the placeholder`).toBe(PLACEHOLDER);
         }
@@ -150,10 +155,7 @@ it.effect.prop(
           const named = `${name} over a ${id}`;
           const wire = Schema.encodeUnknownSync(Schema.toCodecJson(schema))(error);
 
-          const back = Schema.decodeUnknownSync(Schema.toCodecJson(schema))(wire) as {
-            readonly message: string;
-            readonly cause?: unknown;
-          };
+          const back = parts(Schema.decodeUnknownSync(Schema.toCodecJson(schema))(wire));
 
           expect(back.message, `${named}: the message`).toBe(error.message);
           expect(Redacted.isRedacted(back.cause), `${named}: the cause read back is hidden`).toBe(true);
@@ -171,7 +173,7 @@ it.effect.prop(
       const wire = Schema.encodeUnknownSync(Schema.toCodecJson(OldSnapshotError))(none);
       const back = Schema.decodeUnknownSync(Schema.toCodecJson(OldSnapshotError))(wire);
 
-      expect(Object.keys(wire as object).toSorted(), "no cause key is written").toEqual(["_tag", "message"]);
+      expect(Object.keys(wire).toSorted(), "no cause key is written").toEqual(["_tag", "message"]);
       expect(back.cause, "none is read back").toBeUndefined();
 
       reach.done();
