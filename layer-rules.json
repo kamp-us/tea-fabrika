@@ -497,6 +497,12 @@
       "imports": []
     },
     {
+      "name": "kalfa-transport",
+      "layer": 0,
+      "paths": ["kalfa/transport/src"],
+      "imports": []
+    },
+    {
       "name": "apps",
       "paths": ["apps"]
     },
@@ -552,7 +558,8 @@
     "kalfa/github/src",
     "kalfa/ledger/src",
     "kalfa/markdown/src",
-    "kalfa/secrets/src"
+    "kalfa/secrets/src",
+    "kalfa/transport/src"
   ],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],
   "allowed": [

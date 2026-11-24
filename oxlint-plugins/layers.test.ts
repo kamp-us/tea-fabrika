@@ -717,6 +717,7 @@ describe("the real rule file on planted trees", () => {
       "kalfa-cli": 2, // T2076's approved plan: it imports kalfa-diagnostics (0) only today, and kalfa-config (1) joins in ticket 2081, so it ranks above both
       "kalfa-secrets": 2, // T2053's approved plan: its settings read through kalfa-config (1), so secrets ranks one above it, beside github
       "kalfa-ledger": 0, // T2082's approved plan: the Ledger imports no kalfa package, so it ranks lowest, beside source control and Markdown
+      "kalfa-transport": 0, // T2066's approved plan: transport imports no package of ours, so it ranks with the lowest
     });
   });
 
