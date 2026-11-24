@@ -479,7 +479,8 @@ export const Summary = Schema.Struct({
 
 export type Summary = typeof Summary.Type;
 
-const TESTED = new Set(["Killed", "Survived", "Timeout"]);
+// `CompileError`: a mutant that does not type-check, which the tests judged (it lived) and the type check then refused (recheck.ts).
+const TESTED = new Set(["Killed", "Survived", "Timeout", "CompileError"]);
 
 const mutantKey = (r: Row) =>
   Arr.join(

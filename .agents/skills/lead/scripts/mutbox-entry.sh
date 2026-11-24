@@ -58,6 +58,19 @@ fi
 arm b "$T" /out/baseline.json
 b=$(cat /out/b/exit)
 
+# The type check (ticket 1309, recheck.ts): the vitest runner strips types, so a mutant that `tsc` refuses lives in arm b's report. Each one
+# that lived is type-checked in its own package, and the ones that do not compile are set to `CompileError` in the report (the original is
+# /out/t/report.stryker.json): the recheck below leaves them out, and mutbox counts them as kills. It has its own time limit,
+# TYPECHECK_SECONDS (default 90): a mutant it did not reach stays as it was. A build with no `typedFrom`, or a check that fails, leaves the report as it is.
+if [ -f /out/b/report.json ]; then
+	TYPECHECK_SECONDS=${TYPECHECK_SECONDS:-90} node --input-type=module -e '
+import { typedFrom, tscCheck } from "./.agents/skills/mutation/scripts/recheck.ts";
+const root = process.cwd();
+const got = typedFrom({ root, report: "/out/b/report.json", out: "/out/t", seconds: Number(process.env.TYPECHECK_SECONDS), check: tscCheck(root + "/node_modules/.bin/tsc", root) });
+console.log("type check: " + got.checked + " mutants checked, " + got.typed.length + " do not compile, " + got.unreached + " not reached");' > /out/t.txt 2>&1 || :
+	git reset -q --hard refs/heads/build
+fi
+
 # The recheck (ticket 1306, recheck.ts): a mutant that lived at the capped depth is run again at full depth, in only
 # the tests that cover it, so the gate reports it only when it lives there too. Arm c is that run: no MUTATE_RUNS,
 # the survivors' own ranges, and the vitest limit at its ceiling, since the plain baseline ran capped and says
