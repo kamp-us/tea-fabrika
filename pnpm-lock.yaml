@@ -943,6 +943,9 @@ importers:
       '@kalfa/config':
         specifier: workspace:*
         version: link:../config
+      '@kalfa/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
