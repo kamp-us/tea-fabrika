@@ -3,6 +3,8 @@
 // does. Each law runs on a world of its own, a fresh stand-in holding the raw gateway of `PlatformLaws.test-support.ts`. A law that waits
 // for a reply runs on the real clock (`it.live`), so a reply that never comes fails after a short wait instead of never ending.
 import { it } from "@effect/vitest";
-import { memoryWorld, platformLaws } from "./PlatformLaws.test-support.ts";
+import { limitLaws, memoryWorld, platformLaws } from "./PlatformLaws.test-support.ts";
 
 platformLaws(it.live, memoryWorld, { runs: 300, draws: 1, concurrency: 1 });
+
+limitLaws(it.live, memoryWorld, { runs: 300 });

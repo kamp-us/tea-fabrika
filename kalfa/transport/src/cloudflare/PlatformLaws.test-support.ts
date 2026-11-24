@@ -8,7 +8,7 @@ import type { Vitest } from "@effect/vitest";
 import { Arbitrary, Deferred, Effect, Predicate, Queue, Schema } from "effect";
 import type { Scope, Duration } from "effect";
 import type { Socket } from "effect/socket";
-import { between, SEED, wellFormedText, word } from "../Transport.test-support.ts";
+import { between, pick, SEED, wellFormedText, word } from "../Transport.test-support.ts";
 import * as MemoryGateway from "./MemoryGateway.ts";
 import { GateCommand, GateCommandText, GateReport, GateReportText } from "./platform-gate-wire.test-support.ts";
 import { rawGateway } from "./platform-gateway.test-support.ts";
@@ -216,7 +216,9 @@ export const platformLaws = <R>(
     });
 
   // M1. Plant: store the attachment by reference (no `structuredClone`): the change after the write is seen, "mutated" is red; clear
-  // the value when a write is refused: the read after the big value finds nothing, "big" is red.
+  // the value when a write is refused: the read after the big value finds nothing, "big" is red; give the reader the stored object and
+  // not a clone: "changed" is red; read null or undefined as a value: "null" and "undefined" are red; give the encode or the decode
+  // failure another reason: "encode" or "decode" is red.
   tester.prop(
     "M1 property: an attachment is stored by clone, read back equal after every sleep, and refused above 16384 bytes of JSON or holding a function, with the value before kept",
     { seeds: draws(attachments) },
@@ -289,6 +291,60 @@ export const platformLaws = <R>(
             (yield* ask(world, session, GateCommand.cases.get.make({}))).body,
             "function: and the value before is kept, after a sleep too",
           ).toEqual({ value: afterMutated });
+
+          // A value read is a clone too: what the reader changes is not seen by the next read.
+          const changed = yield* ask(world, session, GateCommand.cases.getChanged.make({}));
+
+          expect(changed.body, "changed: a change after a read is made, and the next read does not see it").toEqual({
+            changed: true,
+            again: { value: afterMutated },
+          });
+
+          // A schema that refuses what it is given: a failed encode is Alchemy's `encode`, a stored value the read schema refuses is its
+          // `decode`, and a refused write keeps the value before.
+          const whole = yield* ask(world, session, GateCommand.cases.putWhole.make({ value: seed.n }));
+
+          expect(whole.body, "whole: a whole number is stored through a whole-number schema").toEqual({ stored: true });
+          expect(
+            (yield* ask(world, session, GateCommand.cases.getWhole.make({}))).body,
+            "whole: and read back through it",
+          ).toEqual({ value: seed.n });
+
+          expect(
+            (yield* ask(world, session, GateCommand.cases.putWhole.make({ value: seed.n + 0.5 }))).body,
+            "encode: a number the schema refuses fails as an encode, an Alchemy error",
+          ).toEqual({ refused: "encode", alchemy: true });
+          expect(
+            (yield* ask(world, session, GateCommand.cases.getWhole.make({}))).body,
+            "encode: and the value before is kept",
+          ).toEqual({ value: seed.n });
+
+          yield* ask(world, session, GateCommand.cases.put.make({ value: seed.text }));
+          expect(
+            (yield* ask(world, session, GateCommand.cases.getWhole.make({}))).body,
+            "decode: a stored value the read schema refuses fails as a decode, an Alchemy error",
+          ).toEqual({ refused: "decode", alchemy: true });
+
+          // An empty attachment is a missing one: Alchemy reads null and undefined as `missing`, and a value written after them is read.
+          const empties: ReadonlyArray<readonly [string, typeof GateCommand.Type]> = [
+            ["null", GateCommand.cases.put.make({ value: null })],
+            ["undefined", GateCommand.cases.putUndefined.make({})],
+          ];
+
+          for (const [id, command] of empties) {
+            expect((yield* ask(world, session, command)).body, `${id}: the store is accepted`).toEqual({
+              stored: true,
+            });
+            expect(
+              (yield* ask(world, session, GateCommand.cases.get.make({}))).body,
+              `${id}: reads back as missing`,
+            ).toEqual({ refused: "missing", alchemy: true });
+            yield* ask(world, session, GateCommand.cases.put.make({ value: nested }));
+            expect(
+              (yield* ask(world, session, GateCommand.cases.get.make({}))).body,
+              `${id}: and a value written after it is read`,
+            ).toEqual({ value: nested });
+          }
         }),
       ),
     check,
@@ -390,7 +446,10 @@ export const platformLaws = <R>(
   );
 
   // M4. Plant: let `send` after a server close succeed: the TypeError check is red; give two close events for one client close: the
-  // "exactly one" check is red; give the server close's event the server's reason: the reason check is red.
+  // "exactly one" check is red; give the server close's event the server's reason: the reason check is red; give a close the gateway
+  // answers to a client close a second close event: "answered" is red; let a second server close send a second close event: "twice" is
+  // red; deliver the close event while the closing call still runs, which the two yields in the gateway allow: the first report is
+  // the close event, red.
   tester.prop(
     "M4 property: send after the server's close throws, the close event after it is as real workerd gave it, a client close gives exactly one event with its code and reason, and an error event gives webSocketError",
     { seeds: draws(platformCloses) },
@@ -453,6 +512,73 @@ export const platformLaws = <R>(
             expect(
               (yield* drained(session)).map(({ _tag }) => _tag),
               `${close.id}: exactly one close event comes`,
+            ).toEqual([]);
+          }
+
+          // A client close answered with a `close()` of the gateway's own, as the platform's WebSocket page tells a handler to: the platform
+          // gives no second close event for it.
+          const marker = Attachment.cases.kept.make({ value: { answerClose: true } });
+
+          for (const close of closes.filter(({ by }) => by === "client")) {
+            const session = yield* world.open();
+
+            yield* ask(world, session, GateCommand.cases.answerClose.make({}));
+            yield* drained(session);
+            yield* Effect.orDie(session.client.close(close.code, close.reason));
+            const event = yield* nextReport(world, session);
+
+            expect(
+              GateReport.guards.CloseEvent(event)
+                ? [event.code, event.reason, event.wasClean, event.attachment]
+                : [event._tag],
+              `${close.id}, answered: the event carries the client's code and reason`,
+            ).toEqual([close.code, close.reason, true, marker]);
+            yield* world.settle;
+            expect(
+              (yield* drained(session)).map(({ _tag }) => _tag),
+              `${close.id}, answered: the gateway's own close gives no second close event`,
+            ).toEqual([]);
+          }
+
+          // A server close made twice: the second changes nothing, so one close event comes, with the first close's code.
+          const twice = closes.find(({ id }) => id === "server 3000 to 4999");
+
+          if (twice !== undefined) {
+            const session = yield* world.open();
+            const attached = Attachment.cases.kept.make({ value: twice.attached });
+
+            yield* ask(world, session, GateCommand.cases.put.make({ value: twice.attached }));
+            yield* drained(session);
+            yield* Effect.orDie(
+              Effect.flatMap(
+                encodeCommand(GateCommand.cases.closeTwice.make({ code: twice.code, reason: twice.reason })),
+                (text) => session.client.send(text),
+              ),
+            );
+            const first = yield* nextReport(world, session);
+
+            expect(
+              GateReport.guards.ClosedByServer(first) ? [first.sent, first.attachment] : [first._tag],
+              "twice: send after the closes throws a TypeError, and the attachment is still there",
+            ).toEqual(["TypeError", attached]);
+
+            const event = yield* nextReport(world, session);
+
+            expect(
+              GateReport.guards.CloseEvent(event) ? [event.code, event.reason, event.attachment] : [event._tag],
+              "twice: one close event comes, with the first close's code",
+            ).toEqual([twice.code, SERVER_CLOSE_EVENT.reason, attached]);
+
+            const ended = yield* Effect.orDie(Effect.timeout(Deferred.await(session.client.ended), world.patience));
+
+            expect(
+              Predicate.isTagged(ended.error.reason, "SocketCloseError") ? ended.error.reason.code : undefined,
+              "twice: the client saw the first close's code",
+            ).toBe(twice.code);
+            yield* world.settle;
+            expect(
+              (yield* drained(session)).map(({ _tag }) => _tag),
+              "twice: and no second close event comes",
             ).toEqual([]);
           }
 
@@ -527,5 +653,56 @@ export const platformLaws = <R>(
         }),
       ),
     fewer,
+  );
+};
+
+/**
+ * The law M6, on the stand-in alone: the attachment's limit, which the platform counts in bytes of structured clone and the stand-in in bytes
+ * of JSON text in UTF-8, so only the stand-in's own edge can be pinned. A text of exactly 16,384 bytes of JSON is kept, and one byte more
+ * is refused with the value before kept, whether the bytes are one, two, three or four to a character.
+ */
+export const limitLaws = <R>(
+  tester: Vitest.Tester<Scope.Scope | R>,
+  make: Effect.Effect<World, never, Scope.Scope | R>,
+  options: Pick<SuiteOptions, "runs">,
+): void => {
+  /** The characters whose UTF-8 width is 1, 2, 3 and 4 bytes, each a class every run reaches. */
+  const WIDTHS = ["x", "é", "€", "😀"] as const;
+  const BODY_BYTES = 16_384 - 2;
+
+  // M6. Plant: change the limit's `<=` to `<`: the exact text is refused, red; count characters in place of bytes: the multi-byte texts
+  // are kept past the limit, red.
+  tester.prop(
+    "M6 property: an attachment of exactly 16384 bytes of JSON text in UTF-8 is kept and one byte more is refused, with the value before kept, for characters of one to four bytes",
+    { pad: pick(["a", "k", "z", "7"]) },
+    ({ pad }) =>
+      Effect.gen(function* () {
+        const world = yield* make;
+        const session = yield* world.open();
+
+        for (const unit of WIDTHS) {
+          const width = new TextEncoder().encode(unit).length;
+          const count = Math.floor(BODY_BYTES / width);
+          const exact = unit.repeat(count) + pad.repeat(BODY_BYTES - count * width);
+
+          expect(new TextEncoder().encode(JSON.stringify(exact)).length, `${unit}: the text is the limit`).toBe(16_384);
+          expect(
+            (yield* ask(world, session, GateCommand.cases.put.make({ value: exact }))).body,
+            `${unit}: exactly the limit is kept`,
+          ).toEqual({ stored: true });
+          expect((yield* ask(world, session, GateCommand.cases.get.make({}))).body, `${unit}: and read back`).toEqual({
+            value: exact,
+          });
+          expect(
+            (yield* ask(world, session, GateCommand.cases.put.make({ value: `${exact}${pad}` }))).body,
+            `${unit}: one byte more is refused`,
+          ).toEqual({ refused: "write", alchemy: true });
+          expect(
+            (yield* ask(world, session, GateCommand.cases.get.make({}))).body,
+            `${unit}: and the value before is kept`,
+          ).toEqual({ value: exact });
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: Math.min(options.runs, 50) } },
   );
 };

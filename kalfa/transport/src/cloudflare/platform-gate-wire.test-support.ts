@@ -6,19 +6,27 @@ import { Attachment } from "./platform-wire.test-support.ts";
 
 /**
  * What a client tells the gateway, as the text of a message: store a value as the socket's attachment; store one and change it after
- * the write; store a function; read the attachment back; hold the slot call until released; release it; answer at once; send `n`
- * frames; and close the socket.
+ * the write; store a function; store `undefined`; store a number through a schema that takes only whole numbers, and read the
+ * attachment back through that schema; read the attachment back, and read it, change what was read, and read it again; hold the slot
+ * call until released; release it; answer at once; send `n` frames; close the socket; close it and then close it again; and ask the gateway
+ * to answer the client's close with a `close()` of its own, as the platform's WebSocket page tells a handler to.
  */
 export const GateCommand = Schema.TaggedUnion({
   put: { value: Schema.Json },
   putMutated: { value: Schema.Json },
   putFunction: {},
+  putUndefined: {},
+  putWhole: { value: Schema.Finite },
+  answerClose: {},
   get: {},
+  getWhole: {},
+  getChanged: {},
   hold: {},
   release: {},
   ping: {},
   burst: { n: Schema.Int },
   close: { code: Schema.Int, reason: Schema.String },
+  closeTwice: { code: Schema.Int, reason: Schema.String },
 });
 
 /**

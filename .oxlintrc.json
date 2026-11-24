@@ -6545,6 +6545,14 @@
                 "message": "@kalfa/transport imports no path out of its own folder."
               },
               {
+                "group": ["alchemy", "alchemy/**", "@alchemy.run/**"],
+                "message": "L2: the core of @kalfa/transport imports no Alchemy. Only src/cloudflare/** reaches it."
+              },
+              {
+                "group": ["./cloudflare/**", "**/cloudflare/**"],
+                "message": "L2: the core of @kalfa/transport imports nothing from src/cloudflare/**: the Cloudflare entry points sit above the core."
+              },
+              {
                 "group": ["./internal/jsonRpc*", "**/internal/jsonRpc*", "**/jsonRpc", "**/jsonRpc.ts"],
                 "message": "Transport.ts calls the format through `Format`, never the JSON-RPC frame's own writer: a test Layer replaces the format with no change to the stream functions."
               }
@@ -6715,6 +6723,14 @@
               {
                 "group": ["**/next/**", "../../**"],
                 "message": "@kalfa/transport imports no path out of its own folder."
+              },
+              {
+                "group": ["alchemy", "alchemy/**", "@alchemy.run/**"],
+                "message": "L2: the core of @kalfa/transport imports no Alchemy. Only src/cloudflare/** reaches it."
+              },
+              {
+                "group": ["./cloudflare/**", "**/cloudflare/**"],
+                "message": "L2: the core of @kalfa/transport imports nothing from src/cloudflare/**: the Cloudflare entry points sit above the core."
               },
               {
                 "group": [
