@@ -79,3 +79,29 @@ _Avoid_: Write policy, guard (a program's), validator, hook
 The ledger as a client reaches it over a connection: append, read, wait and listing streams, and
 no transaction.
 _Avoid_: Far ledger, client ledger, proxy
+
+## New names
+
+**New entry**:
+An entry as its writer hands it to append, before the Ledger gives it a place.
+_Avoid_: Line, draft, event data
+
+**Entry name**:
+A fixed word a package picks to tell one kind of its entries from another, used to build one entry id from another.
+_Avoid_: Kind (the text before an id's first `:`), type, label
+
+**Child id**:
+An entry id built from an entry name and another entry id, the parent, so one act can append several entries.
+_Avoid_: Derived id, sub-id, suffix
+
+**Expected revision**:
+The revision of a stream's head a writer read. An append that names it is kept only while the head is still there.
+_Avoid_: Version, precondition, lock
+
+**Revision conflict**:
+The refusal of an append whose expected revision is not the head's any more.
+_Avoid_: Clash, collision, stale write
+
+**Refusal** and **failure**:
+An error that says the Ledger will not keep an entry, and one that says it could not answer at all.
+_Avoid_: Rejection, fault, outage
