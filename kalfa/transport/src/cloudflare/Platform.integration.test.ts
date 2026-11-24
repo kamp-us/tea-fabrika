@@ -41,7 +41,7 @@ import {
 import { FetchHttpClient, HttpClient } from "effect/http";
 import type { Socket } from "effect/socket";
 import { SEED } from "../Transport.test-support.ts";
-import { Attachment, Command, Report, ReportText } from "./platform-worker.test-support.ts";
+import { Attachment, Command, Report, ReportText } from "./platform-wire.test-support.ts";
 import { CLOSE_CLASSES, closesFrom, connect, freePort, platformCloses } from "./Platform.test-support.ts";
 import type { Client, Close } from "./Platform.test-support.ts";
 
@@ -135,7 +135,10 @@ const deployed = Layer.effect(
       ),
     );
 
-    // Any answer says the Worker is up: this path names no role, so the object refuses it and the Worker answers 500.
+    // `deploy` returns once Alchemy reports the dev server started, on the port the Worker's module read from the environment: it
+    // is loaded by the import above, after the environment was set here, and never before (a module that read it earlier would
+    // read nothing, and Alchemy would pick a port of its own). This one request only confirms it answers: this path names no
+    // role, so the object refuses it and the Worker answers 500.
     yield* HttpClient.get(`http://127.0.0.1:${port}/ready`).pipe(
       Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
     );
