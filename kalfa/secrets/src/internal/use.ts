@@ -1,7 +1,7 @@
 /**
  * What `Secrets` does with a declared secret: the checks that come before any store is asked, and the fetch.
  */
-import { type Context, Effect } from "effect";
+import { type Context, Effect, Redacted } from "effect";
 import * as Errors from "../Errors.ts";
 import * as Name from "../Name.ts";
 import * as Recorder from "../Recorder.ts";
@@ -10,11 +10,20 @@ import * as Store from "../Store.ts";
 import type { Routed } from "./start.ts";
 
 /** What a use reads: where each declared secret is held, the recorder, and what the stores' ports need. */
-export interface World {
+interface World {
   readonly routed: ReadonlyMap<Secret.Any, Routed>;
   readonly recorder: Context.Service.Shape<typeof Recorder.Recorder>;
-  readonly context: Context.Context<never>;
+  readonly context: Context.Context<any>;
 }
+
+/** Reads an item of a store with what the store's port needs, which the layer took from its own context. A port that throws when called is a defect of the read. */
+const read = <Item, R>(
+  holds: Store.Holds<Item, R>,
+  item: Item,
+  name: typeof Name.SecretName.Type,
+  context: Context.Context<R>,
+): Effect.Effect<Store.Held, Errors.StoreFailed> =>
+  Effect.suspend(() => holds.read(item, name)).pipe(Effect.provideContext(context));
 
 /**
  * Fetches a declared secret for a proof. A secret that was not declared, and a proof made for another object, are faults in the
@@ -40,14 +49,10 @@ export const fetch = (world: World) =>
 
     yield* Effect.annotateCurrentSpan({ "kalfa.secrets.name": name, "kalfa.secrets.store": store });
 
-    // SAFETY: a store's ports need what `Store.Needs` names, and `Secrets.layer` took that from its own context, which `world` holds. A
-    // store is any store, so its needs are `any`, which no provided context can take away in the types.
-    const read = routed.holds.read(routed.item, name).pipe(Effect.provideContext(world.context)) as Effect.Effect<
-      Store.Held,
-      Errors.StoreFailed
-    >;
-
-    const held = yield* read.pipe(Effect.mapError(unavailable));
+    const held = yield* read(routed.holds, routed.item, name, world.context).pipe(
+      Effect.mapError(unavailable),
+      Effect.catchDefect((defect) => Effect.die(new Errors.StoreFailed({ cause: Redacted.make(defect) }))),
+    );
 
     if (held instanceof Store.Missing) {
       return yield* new Errors.SecretMissing({ secret: name, store, item: routed.text, reason: held.reason });
