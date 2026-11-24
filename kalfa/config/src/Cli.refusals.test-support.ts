@@ -161,6 +161,7 @@ export type RuleId =
   | "i2"
   | "i3"
   | "i4"
+  | "i5"
   | "j"
   | "n"
   | "w";
@@ -180,6 +181,7 @@ export const RULE_IDS: ReadonlyArray<RuleId> = [
   "i2",
   "i3",
   "i4",
+  "i5",
   "j",
   "n",
   "w",
@@ -389,6 +391,27 @@ export const ruleCases = (draw: RuleDraw): ReadonlyArray<RuleCase> => {
         line: draw.pad + 1,
       },
       tail: "a valid value. Expected a table with every key it needs.",
+      needles: forms(draw.other),
+    },
+    {
+      // (i5) an item the whole of which a check refuses, whose header comes after the header of a table inside it: the fault is the item's own, and its line is the item's header, not the first line below it.
+      id: "i5",
+      setting: made(
+        draw,
+        Schema.Record(
+          Schema.String,
+          Schema.Struct({ [first(draw)]: Schema.Finite, [second(draw)]: Schema.Struct({ z: Schema.Finite }) }).check(
+            Schema.makeFilter(() => false),
+          ),
+        ),
+      ),
+      raw: "",
+      text: "",
+      placed: {
+        text: `${notes(draw)}[${table(draw)}.${key(draw)}.${JSON.stringify(draw.other)}.${second(draw)}]\nz = 1\n[${table(draw)}.${key(draw)}.${JSON.stringify(draw.other)}]\n${first(draw)} = 1\n`,
+        line: draw.pad + 3,
+      },
+      tail: "a valid value. Its schema names no rule.",
       needles: forms(draw.other),
     },
     {
