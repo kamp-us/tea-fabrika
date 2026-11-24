@@ -288,7 +288,8 @@ const PASSING_LINES: ReadonlyArray<(s: Spelling, h: Hiding, i: number) => string
     `class N${i} extends unbound${i}.TaggedError<N${i}>()("N${i}", { x: unbound${i}.Redacted(1), cause: unbound${i}.String }) {}`,
   (_, __, i) =>
     `class N${i} extends a${i}.b.Schema.TaggedError<N${i}>()("N${i}", { x: a${i}.b.Schema.Redacted(1) }) {}`,
-  // Fields that loop back on themselves, through a value and through a spread, end the walk, and a `const` that holds no object holds no field.
+  // Fields that loop back on themselves, through a value and through a spread, end the walk, and a `const` that holds no object holds no field. The list a `const` with no object gives is
+  // only read for entries of type `Property`, so a stray entry in it is skipped as an empty list is: that mutant is answered, not killed.
   (s, _, i) => `const A${i} = { x: B${i} }; const B${i} = { x: A${i} }; ${klass(s, i, `A${i}`)}`,
   (s, _, i) => `const A${i} = { ...B${i} }; const B${i} = { ...A${i} }; ${klass(s, i, `A${i}`)}`,
   (s, _, i) => `const A${i} = { x: B${i} }; const B${i} = { x: A${i} }; ${klass(s, i, `{ x: A${i}, y: B${i} }`)}`,
