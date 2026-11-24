@@ -181,6 +181,46 @@ const REDACTED_LINES: ReadonlyArray<(s: Spelling, i: number) => string> = [
     `const S${i} = ${s.module}.Struct({ y: ${s.module}.Redacted(${s.module}.String) }); ${klass(s, i, `{ x: S${i} }`)}`,
   (s, i) =>
     klass(s, i, `{ x: ${s.module}.String, cause: ${s.module}.optional(${s.module}.Redacted(${s.module}.Defect())) }`),
+  // The member named and not called (as the argument of `pipe`), called with `?.`, and written as a template string.
+  (s, i) => klass(s, i, `{ x: ${s.module}.String.pipe(${s.module}.Redacted) }`),
+  (s, i) => klass(s, i, `{ x: ${s.module}.String.pipe(${s.module}.RedactedFromValue) }`),
+  (s, i) => klass(s, i, `{ x: ${s.module}.Redacted?.(${s.module}.String) }`),
+  (s, i) => klass(s, i, `{ x: ${s.module}[\`Redacted\`](${s.module}.String) }`),
+  // Imported by name from `effect/Schema`, renamed, as a string, and named as the argument of `pipe`.
+  (s, i) =>
+    `import { Redacted as Named${i} } from "effect/Schema"; ${klass(s, i, `{ x: Named${i}(${s.module}.String) }`)}`,
+  (s, i) =>
+    `import { RedactedFromValue as Named${i} } from "effect/Schema"; ${klass(s, i, `{ x: ${s.module}.String.pipe(Named${i}) }`)}`,
+  (s, i) => `import { "Redacted" as Named${i} } from "effect/Schema"; ${klass(s, i, `{ x: Named${i}(1) }`)}`,
+  // Behind a name: a `Schema.Class` or an error class of the file that holds one, as a field and inside `optional`.
+  (s, i) =>
+    `class In${i} extends ${s.module}.Class<In${i}>("In${i}")({ s: ${s.module}.Redacted(${s.module}.String) }) {} ${klass(s, i, `{ x: In${i} }`)}`,
+  (s, i) =>
+    `class In${i} extends ${s.module}.Class<In${i}>("In${i}")({ s: ${s.module}.Redacted(${s.module}.String) }) {} ${klass(s, i, `{ x: ${s.module}.optional(In${i}) }`)}`,
+  (s, i) =>
+    `class In${i} extends ${s.module}.TaggedError<In${i}>()("In${i}", { s: ${s.module}.Redacted(${s.module}.String) }) {} ${klass(s, i, `{ x: In${i} }`)}`,
+  // A member of a `const` object: by dot, by string, two levels deep, spread whole, and by a name that is no text.
+  (s, i) =>
+    `const O${i} = { r: ${s.module}.Redacted(${s.module}.String), ok: ${s.module}.String }; ${klass(s, i, `{ x: O${i}.r }`)}`,
+  (s, i) => `const O${i} = { r: ${s.module}.Redacted(${s.module}.String) }; ${klass(s, i, `{ x: O${i}["r"] }`)}`,
+  (s, i) =>
+    `const O${i} = { a: { r: ${s.module}.Redacted(${s.module}.String) } }; ${klass(s, i, `{ x: ${s.module}.optional(O${i}.a.r) }`)}`,
+  (s, i) =>
+    `const O${i} = { r: ${s.module}.Redacted(${s.module}.String) }; const k${i} = "r"; ${klass(s, i, `{ x: O${i}[k${i}] }`)}`,
+  // A `const` two and three steps deep, and fields two steps deep.
+  (s, i) =>
+    `const A${i} = ${s.module}.Redacted(${s.module}.String); const B${i} = A${i}; ${klass(s, i, `{ x: B${i} }`)}`,
+  (s, i) =>
+    `const A${i} = ${s.module}.Redacted(${s.module}.String); const B${i} = A${i}; const C${i} = B${i}; ${klass(s, i, `{ cause: C${i} }`)}`,
+  (s, i) =>
+    `const A${i} = { x: ${s.module}.Redacted(${s.module}.String) }; const B${i} = A${i}; ${klass(s, i, `B${i}`)}`,
+  // A class that extends a `const` that holds the call, through one `const` or two.
+  (s, i) =>
+    `const Base${i} = ${s.module}.TaggedError<K${i}>()("K${i}", { x: ${s.module}.Redacted(${s.module}.String) }); class K${i} extends Base${i} {}`,
+  (s, i) =>
+    `const Base${i} = ${s.module}.TaggedError<K${i}>()("K${i}", { x: ${s.module}.Redacted(${s.module}.String) }); const Mid${i} = Base${i}; class K${i} extends Mid${i} {}`,
+  (s, i) =>
+    `const Base${i} = ${s.module}.Error<K${i}>("K${i}")({ x: ${s.module}.Redacted(${s.module}.String) }); class K${i} extends Base${i} {}`,
 ];
 
 /** Lines that fire as refusal two: a `cause` that is none of the four forms. */
@@ -217,6 +257,14 @@ const CAUSE_LINES: ReadonlyArray<(s: Spelling, i: number) => string> = [
   (s, i) => `const F${i} = { cause: ${s.module}.String }; ${klass(s, i, `{ ...F${i} }`)}`,
   (s, i) =>
     `const F${i} = { cause: ${s.module}.String }; const G${i} = { ...F${i} }; ${klass(s, i, `{ x: ${s.module}.String, ...G${i} }`)}`,
+  // The key written as a template string, and a base `const` with a bad cause.
+  (s, i) => klass(s, i, `{ [\`cause\`]: ${s.module}.String }`),
+  (s, i) =>
+    `const Base${i} = ${s.module}.TaggedError<K${i}>()("K${i}", { cause: ${s.module}.String }); class K${i} extends Base${i} {}`,
+  (s, i) =>
+    `const Base${i} = ${s.module}.Error<K${i}>("K${i}")({ cause: ${s.module}.Unknown }); class K${i} extends Base${i} {}`,
+  (s, i) => `const A${i} = ${s.module}.String; const B${i} = A${i}; ${klass(s, i, `{ cause: B${i} }`)}`,
+  (s, i) => `const O${i} = { c: ${s.module}.String }; ${klass(s, i, `{ cause: O${i}.c }`)}`,
   // One `cause` is one fire, however many classes spread the `const` that holds it, and a name nothing binds is no form of a cause.
   (s, i) =>
     `const F${i} = { cause: ${s.module}.String }; ${klass(s, i, `F${i}`)} ${klass(s, i + 1000, `{ ...F${i} }`)}`,
@@ -266,8 +314,6 @@ const PASSING_LINES: ReadonlyArray<(s: Spelling, h: Hiding, i: number) => string
   (s, _, i) => `class N${i} extends ${s.module}.TaggedError<N${i}>()("N${i}") {}`,
   (s, _, i) => `class N${i} extends make()("N${i}", { x: ${s.module}.Redacted(${s.module}.String) }) {}`,
   (s, _, i) => `class N${i} extends ${s.module}.Struct({ cause: ${s.module}.String }) {}`,
-  // A call that is optional is no call of the member: the old text patterns did not match it either.
-  (s, _, i) => klass(s, i, `{ x: ${s.module}.Redacted?.(${s.module}.String) }`),
   // A key that is computed from a name is no `cause`, and neither is the key of another field.
   (s, _, i) => `const cause${i} = "c"; ${klass(s, i, `{ [cause${i}]: ${s.module}.String }`)}`,
   (s, _, i) => klass(s, i, `{ causes: ${s.module}.String, because: ${s.module}.Unknown }`),
@@ -288,6 +334,25 @@ const PASSING_LINES: ReadonlyArray<(s: Spelling, h: Hiding, i: number) => string
     `class N${i} extends unbound${i}.TaggedError<N${i}>()("N${i}", { x: unbound${i}.Redacted(1), cause: unbound${i}.String }) {}`,
   (_, __, i) =>
     `class N${i} extends a${i}.b.Schema.TaggedError<N${i}>()("N${i}", { x: a${i}.b.Schema.Redacted(1) }) {}`,
+  // A class that is clean as a field, a member of a `const` object that is clean, a `const` two steps deep that is a Defect, and a base that is clean.
+  (s, _, i) =>
+    `class In${i} extends ${s.module}.Class<In${i}>("In${i}")({ s: ${s.module}.String }) {} ${klass(s, i, `{ x: In${i}, cause: ${s.module}.Defect() }`)}`,
+  (s, _, i) =>
+    `const O${i} = { r: ${s.module}.Redacted(${s.module}.String), ok: ${s.module}.String }; ${klass(s, i, `{ x: O${i}.ok, y: O${i}.missing }`)}`,
+  (s, _, i) => `const A${i} = ${s.module}.Defect(); const B${i} = A${i}; ${klass(s, i, `{ cause: B${i} }`)}`,
+  (s, _, i) => `const O${i} = { c: ${s.module}.Defect() }; ${klass(s, i, `{ cause: O${i}.c }`)}`,
+  (s, _, i) =>
+    `const Base${i} = ${s.module}.TaggedError<K${i}>()("K${i}", { cause: ${s.module}.Defect() }); class K${i} extends Base${i} {}`,
+  (_, __, i) => `const Base${i} = make(); class K${i} extends Base${i} {}`,
+  // A known miss, listed in README.md: a helper function that returns the schema is not followed, since a call does not say what its body makes.
+  (s, _, i) => `const hide${i} = () => ${s.module}.Redacted(${s.module}.String); ${klass(s, i, `{ x: hide${i}() }`)}`,
+  // The key `Redacted` is no use of the import, and neither is the name of a member; a `Redacted` of another module is no Schema's.
+  (s, _, i) =>
+    `import { Redacted as Kept${i} } from "effect/Schema"; ${klass(s, i, `{ Redacted: ${s.module}.String, y: other.Redacted, z: Kept${i}Other }`)}`,
+  (s, _, i) => `import { Redacted as Kept${i} } from "effect"; ${klass(s, i, `{ x: Kept${i}.make(1) }`)}`,
+  (s, _, i) => `import { Redacted as Kept${i} } from "./mine.ts"; ${klass(s, i, `{ x: Kept${i}(1) }`)}`,
+  (s, _, i) => `import { Other as Kept${i} } from "effect/Schema"; ${klass(s, i, `{ x: Kept${i}(1) }`)}`,
+  (s, _, i) => klass(s, i, `{ [\`cause\${i}\`]: ${s.module}.String, [\`x\`]: ${s.module}.Defect() }`),
   // Fields that loop back on themselves, through a value and through a spread, end the walk, and a `const` that holds no object holds no field. The list a `const` with no object gives is
   // only read for entries of type `Property`, so a stray entry in it is skipped as an empty list is: that mutant is answered, not killed.
   (s, _, i) => `const A${i} = { x: B${i} }; const B${i} = { x: A${i} }; ${klass(s, i, `A${i}`)}`,

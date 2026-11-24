@@ -8,20 +8,24 @@
 // `Schema` in any spelling, resolved through the file's own scope so a renamed import is seen and a local of the same name is not:
 // - `Schema` imported from `effect` under any name, `effect/Schema` imported as a namespace, and the `effect` barrel imported as a namespace
 //   (`E.Schema.TaggedError`).
-// Its fields are the object literal, or a same-file `const` the argument or a spread names, followed one step at a time.
+// Its fields are the object literal, or a same-file `const` the argument or a spread names, followed step by step. A class that extends a same-file
+// `const` which holds the `TaggedError` call is an error class too.
 // What fires, in the fields of an error class:
-// - refusal one: a call of `<S>.Redacted(` or `<S>.RedactedFromValue(` at any depth (inside `optional`, `Union`, `Struct`, an array), or in a same-file
-//   `const` the fields name by the argument of a call, a property's value, a spread or an array element;
+// - refusal one: `<S>.Redacted` or `<S>.RedactedFromValue`, called or only named (`S.String.pipe(S.Redacted)`), or the same two imported by name from
+//   `effect/Schema` under any name, at any depth (inside `optional`, `Union`, `Struct`, an array). It is also found behind a name: a same-file `const`
+//   (any number of steps, and a member of a `const` object such as `O.r`) or a same-file class that the fields name by the argument of a call, a
+//   property's value, a spread or an array element;
 // - refusal two: a top-level `cause` key whose value is not one of four forms: `<S>.Defect(...)`, `<S>.optional(<S>.Defect(...))`, `Hidden.Cause`, or
 //   `<S>.optional(Hidden.Cause)`, where `Hidden` is a namespace import of `@kalfa/diagnostics/Hidden` (or `Cause` imported from it by name), or
 //   `./Hidden.ts` inside `kalfa/diagnostics/src/`. A `cause` that holds a refusal-one call is reported once, as refusal one.
 // What passes: a `Schema.Redacted(` outside an error class (in `S.Struct`, in `S.is(...)`), a local object named `Schema`, each of the four forms
 // of `cause`, a comment and a string.
-// Misses: fields built by a call (`Schema.Struct(...).fields`), fields imported from another file, an alias made at run time (`const S = Schema`), and
+// Misses: fields built by a call (`Schema.Struct(...).fields`), a helper function that returns the schema (`const hide = () => Schema.Redacted(...)`: its
+// body is no field, and a call does not say what its body makes), fields imported from another file, an alias made at run time (`const S = Schema`), and
 // anything outside `kalfa/`. `.oxlintrc.json` leaves kalfa's test files and test support out: a test makes errors with any cause to probe them.
 import type { CreateRule, Scope, Variable } from "@oxlint/plugins";
 import { Predicate } from "effect";
-import { below, pathIn } from "./match.ts";
+import { below, imported, pathIn } from "./match.ts";
 import type { Node } from "./match.ts";
 
 const REDACTED =
@@ -32,36 +36,20 @@ const CAUSE =
 
 const HIDDEN = "@kalfa/diagnostics/Hidden";
 
-/** The import an identifier is bound to: its source and the name it imports (`*` for a namespace). */
-const imported = (variable: Variable | undefined): { readonly from: string; readonly name: string } | null => {
-  const def = variable?.defs[0];
-
-  if (def === undefined || def.type !== "ImportBinding" || def.parent?.type !== "ImportDeclaration") {
-    return null;
-  }
-
-  const from = def.parent.source.value;
-  const spec = def.node;
-
-  if (spec.type === "ImportNamespaceSpecifier") {
-    return { from, name: "*" };
-  }
-
-  if (spec.type === "ImportSpecifier") {
-    return { from, name: spec.imported.type === "Identifier" ? spec.imported.name : String(spec.imported.value) };
-  }
-
-  return null;
-};
-
 /** A member's or a key's name, written plainly or as a string literal. */
 const written = (key: Node, computed: boolean): string | null => {
   if (!computed && key.type === "Identifier") {
     return key.name;
   }
 
+  if (key.type === "TemplateLiteral" && key.expressions.length === 0 && key.quasis.length === 1) {
+    return key.quasis[0]?.value.cooked ?? null;
+  }
+
   return key.type === "Literal" && Predicate.isString(key.value) ? key.value : null;
 };
+
+const REDACTED_NAMES = ["Redacted", "RedactedFromValue"];
 
 export const hiddenCause: CreateRule = {
   create(context) {
@@ -162,7 +150,7 @@ export const hiddenCause: CreateRule = {
     };
 
     /** The initializer of the same-file `const` an identifier names, one step. */
-    const followed = (node: Node): Node | null => {
+    const constInit = (node: Node): Node | null => {
       if (node.type !== "Identifier") {
         return null;
       }
@@ -178,7 +166,91 @@ export const hiddenCause: CreateRule = {
         : null;
     };
 
-    /** The `Redacted` calls under a node, and under each same-file `const` it names in the places a value is taken from one. */
+    /** The base of the same-file class an identifier names: what it extends, one step. */
+    const classBase = (node: Node): Node | null => {
+      if (node.type !== "Identifier") {
+        return null;
+      }
+
+      const def = resolve(node)?.defs[0];
+
+      return def?.type === "ClassName" && def.node.type === "ClassDeclaration" ? (def.node.superClass ?? null) : null;
+    };
+
+    /** What an expression stands for: a name is replaced by its same-file `const`'s value, however many steps deep, and a member of a `const` object by that property's value. */
+    const resolved = (node: Node, seen = new Set<Node>()): Node => {
+      if (seen.has(node)) {
+        return node;
+      }
+
+      seen.add(node);
+
+      if (node.type === "Identifier") {
+        const init = constInit(node);
+
+        return init === null ? node : resolved(init, seen);
+      }
+
+      if (node.type === "MemberExpression") {
+        const object = resolved(node.object, seen);
+
+        if (object.type === "ObjectExpression") {
+          const name = written(node.property, node.computed);
+
+          const found = object.properties.find(
+            (each) => each.type === "Property" && name !== null && written(each.key, each.computed) === name,
+          );
+
+          // A member read with a computed name that is no text could be any of them: the whole object stands for it.
+          if (found?.type === "Property") {
+            return resolved(found.value, seen);
+          }
+
+          return name === null ? object : node;
+        }
+      }
+
+      return node;
+    };
+
+    /** What a name stands for, or `null` when it stands for itself. */
+    const followed = (node: Node): Node | null => {
+      const found = resolved(node);
+
+      return found === node ? null : found;
+    };
+
+    /** Whether an identifier is a use of a name, and no key and no member's name. */
+    const isUse = (node: Node): boolean => {
+      const parent = node.parent;
+
+      if (parent == null) {
+        return true;
+      }
+
+      if (parent.type === "MemberExpression") {
+        return parent.property !== node || parent.computed;
+      }
+
+      return !(parent.type === "Property" && parent.key === node && !parent.computed);
+    };
+
+    /** The uses of `Redacted` and `RedactedFromValue` of Effect's Schema under a node: a member of it, called or not, or one imported by name from `effect/Schema`. */
+    const namedAt = (node: Node): boolean => {
+      if (node.type === "MemberExpression") {
+        return isSchema(node.object) && REDACTED_NAMES.includes(written(node.property, node.computed) ?? "");
+      }
+
+      if (node.type === "Identifier" && isUse(node)) {
+        const at = imported(resolve(node));
+
+        return at !== null && at.from === "effect/Schema" && REDACTED_NAMES.includes(at.name);
+      }
+
+      return false;
+    };
+
+    /** The `Redacted` uses under a node, and under each same-file `const` or class it names in the places a value is taken from one. */
     const redacted = (node: Node, seen = new Set<Node>()): ReadonlyArray<Node> => {
       if (seen.has(node)) {
         return [];
@@ -189,7 +261,7 @@ export const hiddenCause: CreateRule = {
       const found: Array<Node> = [];
 
       const follow = (named: Node | null | undefined) => {
-        const init = named == null ? null : followed(named);
+        const init = named == null ? null : (followed(named) ?? classBase(named));
 
         if (init !== null) {
           found.push(...redacted(init, seen));
@@ -197,7 +269,7 @@ export const hiddenCause: CreateRule = {
       };
 
       for (const each of below(node)) {
-        if (schemaCall(each, ["Redacted", "RedactedFromValue"]) !== null) {
+        if (namedAt(each)) {
           found.push(each);
         }
 
@@ -223,9 +295,9 @@ export const hiddenCause: CreateRule = {
 
     /** The properties of a fields object, a same-file `const` it names, and each object it spreads. */
     const properties = (fields: Node, seen = new Set<Node>()): ReadonlyArray<Node> => {
-      const object = fields.type === "Identifier" ? followed(fields) : fields;
+      const object = resolved(fields);
 
-      if (object == null || object.type !== "ObjectExpression" || seen.has(object)) {
+      if (object.type !== "ObjectExpression" || seen.has(object)) {
         return [];
       }
 
@@ -237,8 +309,11 @@ export const hiddenCause: CreateRule = {
     };
 
     /** The fields of an error class: `S.TaggedError<...>()(tag, fields)` or `S.Error<...>(id)(fields)`. */
-    const fieldsOf = (superClass: Node | null | undefined): Node | null => {
-      if (superClass == null || superClass.type !== "CallExpression" || superClass.callee.type !== "CallExpression") {
+    const fieldsOf = (given: Node | null | undefined): Node | null => {
+      // `class K extends Base {}`, with `Base` a same-file `const` that holds the call, is an error class as much as the call written there.
+      const superClass = given == null ? null : resolved(given);
+
+      if (superClass === null || superClass.type !== "CallExpression" || superClass.callee.type !== "CallExpression") {
         return null;
       }
 

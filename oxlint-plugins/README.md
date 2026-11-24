@@ -971,17 +971,23 @@ secret. `Hidden.Cause` from `@kalfa/diagnostics/Hidden` is held as a `Redacted` 
 
 An error class is a class that extends `<S>.TaggedError<...>()(tag, fields)` or `<S>.Error<...>(id)(fields)`, where `<S>` is
 Effect's `Schema` under any spelling (named, renamed, `effect/Schema` as a namespace, the barrel as a namespace), resolved
-through the file's own scope. Its fields are the object literal, or a same-file `const` it names, followed one step at a time.
+through the file's own scope. Its fields are the object literal, or a same-file `const` it names, followed step by step. A class that
+extends a same-file `const` holding the call is an error class too.
 
-- **Refusal one:** a call of `Schema.Redacted(` or `Schema.RedactedFromValue(` in the fields at any depth, or in a same-file
-  `const` a call, a property, a spread or an array in the fields names.
+- **Refusal one:** `Schema.Redacted` or `Schema.RedactedFromValue`, called or only named (`Schema.String.pipe(Schema.Redacted)`),
+  or the same two imported by name from `effect/Schema` under any name, in the fields at any depth. It is also found behind a name:
+  a same-file `const` (any number of steps, or a member of a `const` object such as `O.r`) or a same-file class (a `Schema.Class`
+  field) that a call, a property, a spread or an array in the fields names.
 - **Refusal two:** a top-level `cause` that is none of `Schema.Defect(...)`, `Schema.optional(Schema.Defect(...))`,
   `Hidden.Cause` and `Schema.optional(Hidden.Cause)`, where `Hidden` is a namespace import of `@kalfa/diagnostics/Hidden` (or
   `Cause` imported from it by name), or `./Hidden.ts` inside `kalfa/diagnostics/src/`. One cause is reported once.
 - **Passes:** `Schema.Redacted(` outside an error class (`Schema.is(...)`, a plain `Schema.Struct`), a local named `Schema`, a
   comment and a string.
-- **Misses:** fields built by a call (`Schema.Struct(...).fields`), fields imported from another file, an alias made at run time
-  (`const S = Schema`), and anything outside `kalfa/`. `next/`'s `Audit.ts` and `LaunchdStatus.ts` use `Schema.Redacted` and stay out.
+- **Misses:** a helper function that returns the schema (`const hide = () => Schema.Redacted(...)`, then `{ x: hide() }`): a call
+  does not say what its body makes, so the rule does not follow it. Also fields built by a call (`Schema.Struct(...).fields`), fields
+  imported from another file, an alias made at run
+  time (`const S = Schema`), and anything outside `kalfa/`. A `cause` key is read when written plainly, as a string or as a template
+  string with no hole; a key computed from a name is no `cause`. `next/`'s `Audit.ts` and `LaunchdStatus.ts` use `Schema.Redacted` and stay out.
 
 One override in `.oxlintrc.json` holds every file of `kalfa/` as an error and leaves out `*.test.ts`, `*.test.tsx` and
 `*.test-support.ts`: a test makes errors with any cause to probe them. The Secrets import block of the same file lets
@@ -1003,7 +1009,7 @@ hand: **2 fires in 1 file, 2 real, 0 false alarms**, from refusal one: `kalfa/se
 causes to `Hidden.Cause`, and the rule then has 0 fires.
 
 `hidden-cause.test.ts` holds the laws. L1 is a property through oxlint's `RuleTester`: an import spelling of `Schema`, one of
-`Hidden`, and one to six lines that fire or must pass (100 runs, seed 119120). L2 is one real oxlint run over one planted body per
+`Hidden`, and one to six lines that fire or must pass (400 runs, seed 119120). L2 is one real oxlint run over one planted body per
 path kind, with the repo's config. L3 is the entry in `plants.test.ts`.
 
 ## A test's kind follows what it uses, an earlier decision
