@@ -33,10 +33,13 @@ const memorySubject: StoreTest.Subject<string, MemoryStore.Contents> = {
 
 StoreTest.suite("memory", memorySubject, { runs: 200, timeout: 60_000 });
 
+/** The name the reads below ask for. */
+const NAME = Schema.decodeUnknownSync(Name.SecretName)("transport/turn-key");
+
 /** The version a read of `item` gives, or `absent` when it gave none. */
 const versionRead = (item: string) =>
   holder(MemoryStore.store)
-    .read(item)
+    .read(item, NAME)
     .pipe(
       Effect.map((held) =>
         Option.getOrElse(
@@ -132,8 +135,8 @@ describe("the memory store", () => {
           yield* MemoryStore.Contents.use((contents) => contents.put("later", "x"));
 
           return {
-            seeded: yield* Effect.forEach(items, (item) => store.read(item), { concurrency: 1 }),
-            blank: yield* store.read("blank"),
+            seeded: yield* Effect.forEach(items, (item) => store.read(item, NAME), { concurrency: 1 }),
+            blank: yield* store.read("blank", NAME),
             put: yield* versionRead("later"),
           };
         }).pipe(Effect.provide(seeded));

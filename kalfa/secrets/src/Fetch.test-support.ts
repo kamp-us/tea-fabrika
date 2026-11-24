@@ -67,8 +67,10 @@ interface Spy<Item> {
 }
 
 /** What a spy answers: a value that says which item it is for, as version 1. */
-const answer = (item: string | number): Store.Held =>
-  new Store.Found({ value: { value: Redacted.make(`value-of-${item}`), version: Name.Version.make("1") } });
+const answer = (item: string | number, name: typeof Name.SecretName.Type): Store.Held =>
+  new Store.Found({
+    value: { value: Redacted.make(`value-of-${item}`, { label: name }), version: Name.Version.make("1") },
+  });
 
 /** A store whose items are any text but the empty one. */
 export const spyStore = (id: string): Spy<string> => {
@@ -81,11 +83,11 @@ export const spyStore = (id: string): Spy<string> => {
       item: Schema.NonEmptyString,
       place: "store",
       holds: {
-        read: (item: string) =>
+        read: (item: string, name) =>
           Effect.sync(() => {
             asked.push(item);
 
-            return answer(item);
+            return answer(item, name);
           }),
       },
     }),
@@ -103,11 +105,11 @@ const numberStore = (id: string): Spy<number> => {
       item: Schema.FiniteFromString,
       place: "store",
       holds: {
-        read: (item: number) =>
+        read: (item: number, name) =>
           Effect.sync(() => {
             asked.push(item);
 
-            return answer(item);
+            return answer(item, name);
           }),
       },
     }),
@@ -126,11 +128,11 @@ export const countingMemory = () => {
     item: Schema.NonEmptyString,
     place: "memory",
     holds: {
-      read: (item: string) =>
+      read: (item: string, name) =>
         Effect.suspend(() => {
           reads.count += 1;
 
-          return MemoryStore.store.holds?.read(item) ?? Effect.die("the memory store holds");
+          return MemoryStore.store.holds?.read(item, name) ?? Effect.die("the memory store holds");
         }),
     },
   });
