@@ -407,14 +407,22 @@ export const edit = <App extends string, R extends ReadonlyArray<Setting.Any>>(
  *
  * @category combinators
  */
-export const set = <App extends string, R extends ReadonlyArray<Setting.Any>, S extends R[number]>(
+export const set = Effect.fn("config.set")(function* <
+  App extends string,
+  R extends ReadonlyArray<Setting.Any>,
+  S extends R[number],
+>(
   group: SettingGroup<App, R>,
   setting: S,
   value: Setting.Type<S>,
   file: Setting.File,
   options?: { readonly repo?: string },
-): Effect.Effect<void, SettingsError, FileSystem.FileSystem | Path.Path> =>
-  disk.set({ app: group.app, settings: watched(group.settings) }, toml, setting, value, file, options?.repo ?? ".");
+): Effect.fn.Return<void, SettingsError, FileSystem.FileSystem | Path.Path> {
+  const read = { app: group.app, settings: watched(group.settings) };
+  const found = yield* disk.locate(group.app, toml, file, options?.repo ?? ".");
+
+  yield* disk.set(read, toml, setting, value, file, found);
+});
 
 /**
  * Takes one setting out of a configuration file on disk, the same way `set` writes: the same file, lock and rename.
@@ -425,10 +433,14 @@ export const set = <App extends string, R extends ReadonlyArray<Setting.Any>, S 
  *
  * @category combinators
  */
-export const remove = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+export const remove = Effect.fn("config.remove")(function* <App extends string, R extends ReadonlyArray<Setting.Any>>(
   group: SettingGroup<App, R>,
   setting: R[number],
   file: Setting.File,
   options?: { readonly repo?: string },
-): Effect.Effect<void, SettingsError, FileSystem.FileSystem | Path.Path> =>
-  disk.remove({ app: group.app, settings: watched(group.settings) }, toml, setting, file, options?.repo ?? ".");
+): Effect.fn.Return<void, SettingsError, FileSystem.FileSystem | Path.Path> {
+  const read = { app: group.app, settings: watched(group.settings) };
+  const found = yield* disk.locate(group.app, toml, file, options?.repo ?? ".");
+
+  yield* disk.remove(read, toml, setting, file, found);
+});

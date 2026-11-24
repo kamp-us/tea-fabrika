@@ -125,14 +125,16 @@ export const config = <const App extends string>(
     Effect.fn("config.set")(function* ({ name, value, file }) {
       const setting = yield* opened(name);
       const chosen = Option.getOrElse(file, () => setting.files[0]);
-      // A text the schema refuses stops before any file is touched. The error names the file the write would, and never holds the text.
-      const found = yield* disk.fileName(app, toml, chosen, options.repo);
+      // A text the schema refuses stops before any file is touched. The error names the file the write goes to, and never holds the text.
+      const found = yield* disk.locate(app, toml, chosen, options.repo);
 
       const given = yield* Config.schema(setting.schema, segments(setting.name))
         .parse(textSource(value))
-        .pipe(Effect.mapError(() => unfit(app, setting, found, `The ${chosen} configuration was not changed.`)));
+        .pipe(
+          Effect.mapError(() => unfit(app, setting, found.place.name, `The ${chosen} configuration was not changed.`)),
+        );
 
-      yield* disk.setBare(group, toml, setting, given, chosen, options.repo);
+      yield* disk.set(group, toml, setting, given, chosen, found);
     }),
   ).pipe(Command.withDescription("Set one setting in a configuration file"));
 
@@ -148,13 +150,9 @@ export const config = <const App extends string>(
     Effect.fn("config.remove")(function* ({ name, file }) {
       const setting = yield* opened(name);
 
-      yield* disk.removeBare(
-        group,
-        toml,
-        setting,
-        Option.getOrElse(file, () => setting.files[0]),
-        options.repo,
-      );
+      const chosen = Option.getOrElse(file, () => setting.files[0]);
+
+      yield* disk.remove(group, toml, setting, chosen, yield* disk.locate(app, toml, chosen, options.repo));
     }),
   ).pipe(Command.withDescription("Take one setting out of a configuration file"));
 
