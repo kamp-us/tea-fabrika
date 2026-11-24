@@ -1,13 +1,23 @@
-// T1 to T3: the sender's trace rides in the frame, under params._meta, as the W3C `traceparent` and `tracestate` (the way MCP carries
+// T1 to T4: the sender's trace rides in the frame, under params._meta, as the W3C `traceparent` and `tracestate` (the way MCP carries
 // it). A span held by `encodeTraced` is written, a plain `encode` writes none, a broken trace in a frame is no trace and never an
 // error, and a span made by Effect's own tracer crosses the memory pair with its ids.
 import { assert, expect, it } from "@effect/vitest";
-import { Effect, Option, Stream, Tracer } from "effect";
+import { Duration, Effect, Option, Stream, Tracer } from "effect";
 import { Format, Transport } from "./index.ts";
 import type { Traced } from "./index.ts";
 import * as MemorySocket from "./MemorySocket.ts";
 import {
   BROKEN_TRACE_CLASSES,
+  Refused,
+  challengeFrom,
+  Challenge,
+  connectionCases,
+  dialing,
+  helloDraw,
+  runCase,
+  signInApp,
+  SignInAnswer,
+  watching,
   BAD_STATE_CLASSES,
   badStateTraces,
   brokenMetas,
@@ -264,5 +274,91 @@ it.effect.prop(
       );
       expect(far.map((read) => idsFrom(read.trace))).toEqual([Option.some([span.traceId, span.spanId, span.sampled])]);
     }).pipe(Effect.withSpan("sender"), Effect.scoped, Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 100 } },
+);
+
+/** The `transport.*` spans a tracer held, by name. */
+const spanNamed = (spans: ReadonlyArray<Tracer.Span>, name: string) => spans.find((span) => span.name === name);
+
+// T4. Plant: write the hello with plain `encode`; write the gateway's current span into the answer; write a trace with the tracer off.
+it.effect.prop(
+  "T4 the hello's trace: the hello frame's traceparent names the transport.connect.hello span's trace id and span id, accept's span is a child of it when the gateway runs the hello's trace as its parent, the frames challenge and answer write hold no _meta, and with the tracer off the hello holds none",
+  { draw: helloDraw, drawn: traceSeed },
+  ({ draw, drawn }) =>
+    Effect.gen(function* () {
+      const each = connectionCases(draw)[0];
+
+      if (each === undefined) {
+        return assert.fail("no case is made");
+      }
+
+      const format = yield* Format;
+      const parents = validTraces(drawn);
+      expect(
+        parents.map(({ name }) => name),
+        "every class (z) of parent is reached",
+      ).toEqual([...VALID_TRACE_CLASSES]);
+
+      for (const parent of parents) {
+        // (y) on: the hello is sent under a span of Effect's own tracer, with a generated parent.
+        const watched = yield* watching;
+
+        const out = yield* runCase(yield* dialing, each).pipe(
+          Effect.withParentSpan(externalSpanFor(parent)),
+          Effect.withTracer(watched.tracer),
+        );
+
+        const hello = spanNamed(watched.spans, "transport.connect.hello");
+        assert.isDefined(hello, `${parent.name}: the hello step made a span`);
+
+        if (hello === undefined) {
+          return;
+        }
+
+        const frame = out.seen.frames[0] ?? "";
+        expect(metaFrom(frame).params._meta?.traceparent, `${parent.name}: the traceparent names the hello span`).toBe(
+          `00-${hello.traceId}-${hello.spanId}-${hello.sampled ? "01" : "00"}`,
+        );
+        expect(hello.traceId, `${parent.name}: in the parent's trace`).toBe(parent.traceId);
+
+        // The gateway runs the frame's trace as the parent of `accept`: its span is a child of the hello's.
+        const gateway = yield* watching;
+        const trace = Option.getOrThrow((yield* format.read(frame)).trace);
+        yield* Transport.accept({ versions: each.gateway.versions, hello: signInApp.proof })(frame).pipe(
+          Effect.withParentSpan(trace),
+          Effect.withTracer(gateway.tracer),
+        );
+        const accepting = spanNamed(gateway.spans, "transport.accept");
+        expect(
+          Option.map(accepting?.parent ?? Option.none(), (span) => [span.traceId, span.spanId]),
+          `${parent.name}: accept is a child of the hello span`,
+        ).toEqual(Option.some([hello.traceId, hello.spanId]));
+      }
+
+      // The gateway's two frames carry no trace, though they are written under a span.
+      const asked = yield* Transport.challenge(Challenge)(challengeFrom(draw.nonce)).pipe(Effect.withSpan("gateway"));
+
+      const answered = yield* Transport.answer(SignInAnswer)({
+        version: 1,
+        ping: Duration.millis(draw.ping),
+        answer: Refused.make({ reason: draw.reason }),
+      }).pipe(Effect.withSpan("gateway"));
+
+      for (const written of [asked, answered]) {
+        expect(hasNoTraceKey(written), "a gateway frame holds no trace key").toBe(true);
+      }
+
+      // (y) off: with the tracer off, the hello holds no trace, parent or not.
+      const off = yield* watching;
+
+      const quiet = yield* runCase(yield* dialing, each).pipe(
+        Effect.withParentSpan(externalSpanFor(parents[0] ?? validTraces(drawn)[0]!)),
+        Effect.withTracerEnabled(false),
+        Effect.withTracer(off.tracer),
+      );
+
+      expect(quiet.seen.frames.length > 0, "the hello was sent").toBe(true);
+      expect(hasNoTraceKey(quiet.seen.frames[0] ?? ""), "(y) the tracer off: the hello holds no trace").toBe(true);
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 100 } },
 );

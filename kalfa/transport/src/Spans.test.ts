@@ -1,11 +1,39 @@
-// S1 and S2: the one span a running socket makes, `transport.socket`, made with Effect's own calls and read here from a tracer held in
+// S1 to S5: the one span a running socket makes, `transport.socket`, made with Effect's own calls and read here from a tracer held in
 // memory. It ends when the stream ends, fails with the SocketError of a close other than 1000, and is never made when tracing is off.
 import { assert, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Effect, Exit, Option, Predicate, Stream } from "effect";
+import { Arbitrary, Array as Arr, Cause, Duration, Effect, Exit, Option, Predicate, Schema, Stream } from "effect";
+import type { Tracer } from "effect";
 import { Socket } from "effect/socket";
-import { Format, Transport } from "./index.ts";
+import { Format, FormatError, NoSharedVersion, Transport } from "./index.ts";
 import * as MemorySocket from "./MemorySocket.ts";
-import { between, bothWays, closeFrom, Message, message, SEED, watching } from "./Transport.test-support.ts";
+import {
+  Admitted,
+  attempt,
+  between,
+  bothWays,
+  Challenge,
+  challengeFrom,
+  closeFrom,
+  connectionCases,
+  dialing,
+  HELLO_CLASSES,
+  helloDraw,
+  helloValue,
+  handshakes,
+  hellos,
+  LIST_CLASSES,
+  Message,
+  message,
+  notification,
+  PING_CLASSES,
+  Proof,
+  runCase,
+  SEED,
+  SignInAnswer,
+  unwritablePings,
+  versionLists,
+  watching,
+} from "./Transport.test-support.ts";
 
 const messages = Arbitrary.array(message, { minLength: 2, maxLength: 10 });
 
@@ -87,6 +115,238 @@ it.effect.prop(
       const off = yield* watching;
       yield* bothWays(left, right).pipe(Effect.withTracerEnabled(false), Effect.withTracer(off.tracer));
       expect(off.spans, "no span with tracing off").toEqual([]);
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 100 } },
+);
+
+/** The error a span ended with, when it failed. */
+const failedWith = (span: Tracer.Span) =>
+  Predicate.isTagged(span.status, "Ended") && Exit.isFailure(span.status.exit)
+    ? Cause.findErrorOption(span.status.exit.cause)
+    : Option.none();
+
+const endedOk = (span: Tracer.Span) => Predicate.isTagged(span.status, "Ended") && Exit.isSuccess(span.status.exit);
+
+const ATTRIBUTES = ["kalfa.transport.features", "kalfa.transport.version", "kalfa.transport.versions"];
+
+/** The names of a span's attributes, sorted. */
+const attributeNames = (span: Tracer.Span) => [...span.attributes.keys()].sort();
+
+// S3. Plant: make no span for the answer step; end the spans ok on a NoSharedVersion from the gateway; add a `kalfa.transport.answer`
+// attribute.
+it.effect.prop(
+  "S3 connect's spans: transport.connect with, under it and in order, a child for each step reached and no others; a refusal ends the step where it happened and transport.connect with that error; on success transport.connect has exactly the version, versions and features attributes",
+  { draw: helloDraw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const tags = { format: "FormatError", noShared: "NoSharedVersion", app: "AppFailure" } as const;
+
+      // The connections that fail: (a) to (d) and (g) to (j).
+      for (const each of handshakes(draw)) {
+        const watched = yield* watching;
+        yield* attempt(each).pipe(Effect.withTracer(watched.tracer));
+
+        const connect = watched.spans.filter(({ name }) => name === "transport.connect");
+        expect(connect.length, `${each.name}: one transport.connect`).toBe(1);
+        const [top] = connect;
+
+        if (top === undefined) {
+          return assert.fail("no transport.connect span");
+        }
+
+        const children = watched.spans.filter(({ name }) => name.startsWith("transport.connect."));
+        expect(
+          children.map(({ name }) => name),
+          `${each.name}: a child for each step reached, in order`,
+        ).toEqual(each.steps.map((step) => `transport.connect.${step}`));
+        expect(
+          children.map(({ parent }) => Option.map(parent, ({ spanId }) => spanId)),
+          `${each.name}: each under transport.connect`,
+        ).toEqual(children.map(() => Option.some(top.spanId)));
+
+        const last = children.length - 1;
+        const tag = tags[each.expected.kind];
+
+        for (const [index, child] of children.entries()) {
+          expect(
+            endedOk(child) === index < last,
+            `${each.name}: ${child.name} ends ok only if the refusal came later`,
+          ).toBe(true);
+        }
+
+        expect(
+          Option.exists(failedWith(Arr.getUnsafe(children, last)), Predicate.isTagged(tag)),
+          `${each.name}: the step where it happened fails with the error`,
+        ).toBe(true);
+        expect(
+          Option.exists(failedWith(top), Predicate.isTagged(tag)),
+          `${each.name}: transport.connect fails with the same error`,
+        ).toBe(true);
+      }
+
+      // The connections that succeed: (m), one for each answer.
+      for (const each of connectionCases(draw).slice(0, 3)) {
+        const watched = yield* watching;
+        yield* runCase(yield* dialing, each).pipe(Effect.withTracer(watched.tracer));
+
+        const connect = watched.spans.find(({ name }) => name === "transport.connect");
+        const children = watched.spans.filter(({ name }) => name.startsWith("transport.connect."));
+
+        expect(
+          children.map(({ name }) => name),
+          `${each.name}: the three steps, in order`,
+        ).toEqual(["transport.connect.challenge", "transport.connect.hello", "transport.connect.answer"]);
+        expect(children.every(endedOk), `${each.name}: each step ends ok`).toBe(true);
+        expect(connect !== undefined && endedOk(connect), `${each.name}: transport.connect ends ok`).toBe(true);
+        expect(
+          connect === undefined ? [] : attributeNames(connect),
+          `${each.name}: exactly the three attributes`,
+        ).toEqual(ATTRIBUTES);
+      }
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 200 } },
+);
+
+// S4. Plant: build `accept` with `Effect.fnUntraced`; end `transport.accept` ok on (o).
+it.effect.prop(
+  "S4 the gateway's spans: accept makes one transport.accept with the three attributes on success, failed with NoSharedVersion or FormatError otherwise; challenge makes one transport.challenge; answer makes one transport.answer, failed for a ping it cannot write",
+  { draw: helloDraw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const only = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        Effect.gen(function* () {
+          const watched = yield* watching;
+          yield* Effect.exit(effect.pipe(Effect.withTracer(watched.tracer)));
+
+          return watched.spans;
+        });
+
+      // accept, for each list (n) and (o) and each frame (p) and (q).
+      const lists = versionLists(draw.pool);
+      expect(
+        lists.map(({ name }) => name),
+        "every class (n) and (o) is reached",
+      ).toEqual([...LIST_CLASSES]);
+
+      for (const each of lists) {
+        const frame = notification("hello", helloValue(draw, { versions: [...each.client] }));
+        const spans = yield* only(Transport.accept({ versions: each.gateway, hello: Proof })(frame));
+
+        expect(
+          spans.map(({ name }) => name),
+          `${each.name}: one span`,
+        ).toEqual(["transport.accept"]);
+
+        if (Option.isSome(each.picked)) {
+          expect(endedOk(spans[0]!), `${each.name}: ends ok`).toBe(true);
+          expect(attributeNames(spans[0]!), `${each.name}: the three attributes`).toEqual(ATTRIBUTES);
+        } else {
+          expect(
+            Option.exists(failedWith(spans[0]!), Predicate.isTagged("NoSharedVersion")),
+            `${each.name}: fails with NoSharedVersion`,
+          ).toBe(true);
+        }
+      }
+
+      for (const each of hellos(draw)) {
+        const spans = yield* only(Transport.accept({ versions: [1], hello: Proof })(each.frame));
+
+        expect(
+          spans.map(({ name }) => name),
+          `${each.name}: one span`,
+        ).toEqual(["transport.accept"]);
+        expect(
+          Option.exists(failedWith(spans[0]!), Predicate.isTagged("FormatError")),
+          `${each.name}: fails with FormatError`,
+        ).toBe(true);
+      }
+
+      expect(hellos(draw).length, "every class (p) and (q) is reached").toBe(HELLO_CLASSES.length);
+
+      // challenge and answer: one span each, ok.
+      const asked = yield* only(Transport.challenge(Challenge)(challengeFrom(draw.nonce)));
+      expect(asked.map(({ name }) => name)).toEqual(["transport.challenge"]);
+      expect(endedOk(asked[0]!), "challenge ends ok").toBe(true);
+
+      const reply = {
+        version: 1,
+        ping: Duration.millis(draw.ping),
+        answer: Admitted.make({ name: draw.text }),
+      } as const;
+
+      const answered = yield* only(Transport.answer(SignInAnswer)(reply));
+      expect(answered.map(({ name }) => name)).toEqual(["transport.answer"]);
+      expect(endedOk(answered[0]!), "answer ends ok").toBe(true);
+
+      const refusing = yield* only(
+        Transport.answer(SignInAnswer)(new NoSharedVersion({ client: draw.left, gateway: draw.right })),
+      );
+
+      expect(refusing.map(({ name }) => name)).toEqual(["transport.answer"]);
+
+      // A ping it cannot write: the span fails with a FormatError.
+      const pings = unwritablePings(draw);
+      expect(
+        pings.map(({ name }) => name),
+        "every class (s) is reached",
+      ).toEqual([...PING_CLASSES]);
+
+      for (const { name, ping } of pings) {
+        const spans = yield* only(Transport.answer(SignInAnswer)({ ...reply, ping }));
+        expect(
+          spans.map(({ name: each }) => each),
+          `${name}: one span`,
+        ).toEqual(["transport.answer"]);
+        expect(
+          Option.map(failedWith(spans[0]!), (error) => (Schema.is(FormatError)(error) ? "FormatError" : error)),
+          `${name}: fails`,
+        ).toEqual(Option.some("FormatError"));
+      }
+    }).pipe(Effect.provide(Format.layerJsonRpc)),
+  { arbitrary: { seed: SEED, runs: 200 } },
+);
+
+// S5. Plant: turn tracing on again inside `connect` with `Effect.withTracerEnabled(true)`.
+it.effect.prop(
+  "S5 the tracer off: under Effect.withTracerEnabled(false), connect, accept, challenge and answer leave the tracer held in memory empty and connect still succeeds; with tracing on the same run makes spans",
+  { draw: helloDraw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const [each] = connectionCases(draw);
+
+      if (each === undefined) {
+        return assert.fail("no case is made");
+      }
+
+      const gateway = (value: string) =>
+        Effect.gen(function* () {
+          const frame = yield* Transport.challenge(Challenge)(challengeFrom(value));
+          const hello = notification("hello", helloValue(draw));
+          yield* Effect.exit(Transport.accept({ versions: [draw.pool[0] ?? 1], hello: Proof })(hello));
+          yield* Transport.answer(SignInAnswer)({
+            version: 1,
+            ping: Duration.millis(draw.ping),
+            answer: Admitted.make({ name: value }),
+          });
+
+          return frame;
+        });
+
+      const on = yield* watching;
+      yield* Effect.all([runCase(yield* dialing, each), gateway(draw.nonce)], { concurrency: 1 }).pipe(
+        Effect.withTracer(on.tracer),
+      );
+      expect(on.spans.length > 0, "the tracer sees the spans of a run with tracing on").toBe(true);
+
+      const off = yield* watching;
+
+      const out = yield* Effect.all([runCase(yield* dialing, each), gateway(draw.nonce)], { concurrency: 1 }).pipe(
+        Effect.withTracerEnabled(false),
+        Effect.withTracer(off.tracer),
+      );
+
+      expect(off.spans, "no span with tracing off").toEqual([]);
+      expect(out[0].version, "connect still succeeds").toBe(each.picked);
     }).pipe(Effect.provide(Format.layerJsonRpc)),
   { arbitrary: { seed: SEED, runs: 100 } },
 );

@@ -1,4 +1,4 @@
-// W1, the same chain on Effect's own Node WebSocket Layer. It is an integration law: it binds a port on 127.0.0.1 and opens real
+// W1 and W2, the same chain, and the hello, on Effect's own Node WebSocket Layer. It is an integration law: it binds a port on 127.0.0.1 and opens real
 // WebSockets, so the laptop refuses it by its name and it runs in a proof run and on main's full run. There is no stand-in that could
 // replace it: the point is that Transport has no Node code of its own, and that Effect's `NodeSocketServer.layerWebSocket` and
 // `NodeSocket.layerWebSocket` read as the memory pair does. Every behavior it touches is proved first on the memory pair
@@ -10,8 +10,18 @@ import { Arbitrary, Deferred, Effect, Exit, Option, Predicate, Queue, Schema, St
 import { Socket, SocketServer } from "effect/socket";
 import { Format, Transport } from "./index.ts";
 import type { Traced } from "./index.ts";
+import type { Harness, Program, World } from "./Transport.test-support.ts";
 import {
+  checkOneDial,
+  checkOrder,
+  checkWhole,
+  connectionCases,
   end,
+  helloDraw,
+  idle,
+  newSeen,
+  runCase,
+  serveFar,
   externalSpanFor,
   mailbox,
   seed,
@@ -147,6 +157,59 @@ it.live.prop(
           expect(Exit.isSuccess(exit), `${order}: the server's chain ends cleanly`).toBe(true);
         }
       }
+    }).pipe(
+      Effect.provide(Format.layerJsonRpc),
+      Effect.provide(NodeSocketServer.layerWebSocket({ host: HOST, port: 0 })),
+    ),
+  { timeout: 20_000, arbitrary: { seed: SEED, runs: 5 } },
+);
+
+// W2, the hello on Effect's own Node WebSocket Layer. A server from `NodeSocketServer.layerWebSocket` runs the test gateway for each
+// accepted socket, a client on `NodeSocket.layerWebSocket` runs `connect` and then a chain on the socket it gave, and the assertions of
+// H1, H6 and O1 (the same functions the memory laws call) all hold, with the server counting one accepted socket for each connect.
+// Plant: O1's plant, run on the real socket (give back the dialed socket itself; the server counts two sockets). Not run on the
+// laptop, the CI proof run checks it.
+it.live.prop(
+  "W2 the hello on Effect's Node WebSocket Layer: connect gets the app's answer whole, the chain on the socket it gave reads the answer's batch first and then the rest, and the server accepts exactly one socket for each connect",
+  { draw: helloDraw },
+  ({ draw }) =>
+    Effect.gen(function* () {
+      const server = yield* SocketServer.SocketServer;
+      const { address } = server;
+
+      if (!Predicate.isTagged(address, "InetAddressV4")) {
+        return assert.fail("the server is bound to an IPv4 address");
+      }
+
+      const world: World = { acquisitions: 0, connections: [] };
+      const programs: Array<Program> = [];
+
+      yield* Effect.forkScoped(
+        server.run((accepted) => {
+          const seen = newSeen();
+          world.acquisitions += 1;
+          world.connections.push(seen);
+
+          return serveFar(programs.shift() ?? idle, accepted, seen);
+        }),
+      );
+
+      const harness: Harness = {
+        world,
+        serve: (program) => Effect.sync(() => void programs.push(program)),
+        client: NodeSocket.layerWebSocket(`ws://${HOST}:${address.port}`),
+        within: (effect) => Effect.timeout(effect, "5 seconds"),
+      };
+
+      for (const each of connectionCases(draw)) {
+        const out = yield* runCase(harness, each);
+
+        checkWhole(each, out);
+        checkOrder(each, out);
+        checkOneDial(each, out);
+      }
+
+      expect(world.acquisitions, "the server accepted one socket for each connect").toBe(connectionCases(draw).length);
     }).pipe(
       Effect.provide(Format.layerJsonRpc),
       Effect.provide(NodeSocketServer.layerWebSocket({ host: HOST, port: 0 })),
