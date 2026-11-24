@@ -41,6 +41,18 @@ _Avoid_: offer, negotiation, handshake
 The first thing a client sends on a new connection: its versions, its features, and the app's own sign-in proof, which Transport carries and never reads.
 _Avoid_: handshake, initialize, greeting
 
+**Challenge**:
+The gateway's first frame on a new connection, the app's one-time value that the client's hello answers. Transport carries it and never reads it.
+_Avoid_: nonce, greeting, banner
+
+**Answer**:
+What the gateway says back to a hello: the version it picked, the ping interval and the app's own answer (admitted, waiting, refused), which Transport carries whole.
+_Avoid_: welcome, reply, response, result
+
+**Protocol version**:
+A whole number, 1 or more, naming one version of what the two ends speak; the gateway picks the highest one both list.
+_Avoid_: revision, protocol id, level
+
 **Feature**:
 One optional thing a client says in its hello that it can do.
 _Avoid_: capability, has, extension
