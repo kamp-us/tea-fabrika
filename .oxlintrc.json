@@ -6154,6 +6154,227 @@
               {
                 "group": ["**/next/**", "../../**"],
                 "message": "@kalfa/transport imports no path out of its own folder."
+              },
+              {
+                "group": ["alchemy", "alchemy/**", "@alchemy.run/**"],
+                "message": "L2: the core of @kalfa/transport imports no Alchemy. Only src/cloudflare/** reaches it."
+              },
+              {
+                "group": ["./cloudflare/**", "**/cloudflare/**"],
+                "message": "L2: the core of @kalfa/transport imports nothing from src/cloudflare/**: the Cloudflare entry points sit above the core."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The Cloudflare half of @kalfa/transport (ticket 2067): `Gateway`, `Hibernation` and the stand-in, in src/cloudflare/**. It repeats the package override's entries, WITHOUT the two Alchemy patterns the core refuses (this half imports `alchemy` and `@alchemy.run/cloudflare` on purpose), and adds L1: Cloudflare is reached only through Alchemy, so no `cloudflare:*`, no `@cloudflare/**`, no `miniflare`, `workerd`, `wrangler`, no `@alchemy.run/cloudflare-runtime`, no Alchemy `RawWebSocket` name, and no `WebSocketPair`, `WebSocketRequestResponsePair` or `Response` global. L2: it reads the core only through `../index.ts` and `../MemorySocket.ts`. @kalfa/transport (ticket 2066) moves values over a socket it is given. It imports no other package of this repository and no tea package (decision 0047: it is usable alone), no Telemetry (its span is made with Effect's own calls, decision 0063), no platform package and no Node module (the app joins the socket Layer at the top), and no test tool. Tests, test support and the integration file are left out below: an override applies to product files only. An override replaces a rule's options, so this repeats the base entries and adds its own. Every pattern that means "and below" ends in /**, never /*.
+      "files": ["kalfa/transport/src/cloudflare/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test-support.ts", "**/*.integration.test.ts"],
+      "rules": {
+        // `RawWebSocket` is the platform's own socket type (L1): refused as a name an import brings in. A path entry with `importNames` would also refuse `import * as Cloudflare`, which every file here writes.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how", "RawWebSocket"],
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "WebSocketPair",
+            "message": "L1: Cloudflare is reached only through Alchemy. Accept a socket with `Cloudflare.upgrade`, never `new WebSocketPair()`."
+          },
+          {
+            "name": "WebSocketRequestResponsePair",
+            "message": "L1: Cloudflare is reached only through Alchemy. Accept a socket with `Cloudflare.upgrade`."
+          },
+          {
+            "name": "Response",
+            "message": "L1: answer with Effect's HttpServerResponse (Alchemy's `Cloudflare.upgrade` gives it), never a raw `Response`."
+          }
+        ],
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib",
+                  "assert/**",
+                  "async_hooks/**",
+                  "buffer/**",
+                  "child_process/**",
+                  "cluster/**",
+                  "console/**",
+                  "constants/**",
+                  "crypto/**",
+                  "dgram/**",
+                  "diagnostics_channel/**",
+                  "dns/**",
+                  "domain/**",
+                  "events/**",
+                  "fs/**",
+                  "http/**",
+                  "http2/**",
+                  "https/**",
+                  "inspector/**",
+                  "module/**",
+                  "net/**",
+                  "os/**",
+                  "path/**",
+                  "perf_hooks/**",
+                  "process/**",
+                  "punycode/**",
+                  "querystring/**",
+                  "readline/**",
+                  "repl/**",
+                  "stream/**",
+                  "string_decoder/**",
+                  "sys/**",
+                  "timers/**",
+                  "tls/**",
+                  "trace_events/**",
+                  "tty/**",
+                  "url/**",
+                  "util/**",
+                  "v8/**",
+                  "vm/**",
+                  "wasi/**",
+                  "worker_threads/**",
+                  "zlib/**",
+                  "!effect/http",
+                  "!effect/http/**"
+                ],
+                "message": "@kalfa/transport imports no Node module, so it runs in a browser and in Node alike: the app joins a socket Layer at the top. Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/transport imports no platform package: the app provides the socket Layer (NodeSocket.layerWebSocket and its kin) at the top."
+              },
+              {
+                "group": ["@effect/vitest/**", "vitest/**", "fast-check/**"],
+                "message": "@kalfa/transport: no test tools in product files."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/transport imports no Telemetry: its span is made with Effect's own calls (decision 0063)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**"],
+                "message": "@kalfa/transport imports no other package of this repository and no tea package (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/transport imports no path out of its own folder."
+              },
+              {
+                "group": ["@alchemy.run/cloudflare/**"],
+                "importNames": ["RawWebSocket"],
+                "message": "L1: `RawWebSocket` is the platform's own socket type. A slot takes `HeldSocket`, Alchemy's wrapper, and never the raw one."
+              },
+              {
+                "group": [
+                  "cloudflare:*",
+                  "cloudflare:**",
+                  "@cloudflare/**",
+                  "miniflare",
+                  "miniflare/**",
+                  "workerd",
+                  "workerd/**",
+                  "wrangler",
+                  "wrangler/**",
+                  "@alchemy.run/cloudflare-runtime",
+                  "@alchemy.run/cloudflare-runtime/**"
+                ],
+                "message": "L1: Cloudflare is reached only through Alchemy (`@alchemy.run/cloudflare`): no `cloudflare:*`, no `@cloudflare/**`, no miniflare, workerd, wrangler, and no Alchemy runtime package."
+              },
+              {
+                "group": ["../**", "!../index.ts", "!../MemorySocket.ts"],
+                "message": "L2: src/cloudflare/** reads the core only through `../index.ts` and `../MemorySocket.ts`."
               }
             ]
           }

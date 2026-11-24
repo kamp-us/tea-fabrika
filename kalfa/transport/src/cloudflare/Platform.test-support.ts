@@ -62,13 +62,14 @@ export const clientMayClose = (code: number): boolean => code === 1000 || (code 
 export const closesFrom = (seeds: ReadonlyArray<CloseSeed>): ReadonlyArray<Close> =>
   seeds.flatMap((seed, index) => {
     const reasons = ["", seed.word, `çok güzel ${seed.word} ü`];
-    const reason = reasons[index % reasons.length] ?? "";
+    // The four closes of a draw take the three reasons in turn, so each draw has a close with a reason and one with none.
+    let turn = index;
 
     const made = (id: Close["id"], by: Close["by"], code: number): Close => ({
       id,
       by,
       code,
-      reason,
+      reason: reasons[turn++ % reasons.length] ?? "",
       attached: `${seed.value}-${index}`,
     });
 
@@ -145,10 +146,9 @@ export const dial = (url: string): Effect.Effect<string> =>
     return Effect.sync(() => asked.destroy());
   }).pipe(Effect.timeoutOption("5 seconds"), Effect.map(Option.getOrElse(() => "no answer in 5 seconds")));
 
-/** Connects to `url` and reads it in the background until the scope ends. A failed open is told, with what the server answers. */
-export const connect = (url: string): Effect.Effect<Client, Socket.SocketError, Scope.Scope> =>
+/** The client end of a socket that is already made, read in the background until the scope ends; `url` only names it in what it says. */
+export const clientOn = (socket: Socket.Socket, url: string): Effect.Effect<Client, Socket.SocketError, Scope.Scope> =>
   Effect.gen(function* () {
-    const socket = yield* Effect.provide(Socket.Socket, NodeSocket.layerWebSocket(url));
     const writer = yield* socket.writer;
 
     const { pull } = yield* socket.reader.pipe(
@@ -196,6 +196,10 @@ export const connect = (url: string): Effect.Effect<Client, Socket.SocketError, 
       opened,
     };
   });
+
+/** Connects to `url` and reads it in the background until the scope ends. A failed open is told, with what the server answers. */
+export const connect = (url: string): Effect.Effect<Client, Socket.SocketError, Scope.Scope> =>
+  Effect.flatMap(Effect.provide(Socket.Socket, NodeSocket.layerWebSocket(url)), (socket) => clientOn(socket, url));
 
 /** A TCP port on 127.0.0.1 that was free a moment ago. The probe's Worker binds it right after, in this process's own run. */
 export const freePort: Effect.Effect<number> = Effect.callback<number>((resume) => {

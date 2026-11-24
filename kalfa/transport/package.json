@@ -10,6 +10,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./memory": "./src/MemorySocket.ts",
+    "./cloudflare": "./src/cloudflare/index.ts",
+    "./cloudflare/memory": "./src/cloudflare/MemoryGateway.ts",
     "./package.json": "./package.json"
   },
   "peerDependencies": {

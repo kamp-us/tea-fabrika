@@ -44,8 +44,8 @@ export const Report = Schema.TaggedUnion({
 /** One report as the text of a message. */
 export const ReportText = Schema.fromJsonString(Report);
 
-/** The two sockets an object holds: the one under test, and the sink that carries reports. */
-const Role = Schema.Literals(["main", "log"]);
+/** The sockets an object holds: the one under test, the sink that carries reports, and a stranger the gateway did not accept. */
+const Role = Schema.Literals(["main", "log", "stranger"]);
 
 /** Where a request goes: the object it names, and the role of the socket it opens. */
 interface Route {
