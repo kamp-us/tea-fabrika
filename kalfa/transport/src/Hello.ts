@@ -240,7 +240,7 @@ export const answer = <A extends Schema.Top>(schema: A) =>
   Effect.fn("transport.answer")(function* (
     reply: Answer<A["Type"]> | NoSharedVersion,
   ): Effect.fn.Return<Frame, FormatError, Format | A["EncodingServices"]> {
-    const value = Schema.is(NoSharedVersion)(reply) ? reply : AnswerCase(schema).make(reply, { disableChecks: true });
+    const value = Schema.is(NoSharedVersion)(reply) ? reply : AnswerCase(schema).make(reply);
 
     return yield* send("answer")(AnswerValue(schema))({ value, trace: Option.none() });
   });
