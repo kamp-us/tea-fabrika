@@ -1,8 +1,9 @@
 #!/bin/sh
 # stepcommit.sh [--commit-only] [--empty] [--body-file <file>] <step> <ticket> <subject> <file>...
 # --empty makes a commit with no files (name none), signed like any commit of its step. The lead step may, to open a slice's
-# draft PR on a fresh branch. A build or fix step may too, when its body holds Survivor: lines and nothing else: that
-# is how it carries the answers to a guard check's survivors, never a code change made only to hold them.
+# draft PR on a fresh branch. A tests, build or fix step may too, when its body holds Survivor: lines and nothing else: that
+# is how it carries the answers to a guard check's survivors, never a code change made only to hold them. Each line's evidence
+# names a plant:, rg: or law: proof (survivors.ts's parser says how). A tests commit that only carries those lines needs no plant record.
 # A commit right after an empty one is refused: two empty links on one tree break the chain.
 # --body-file puts the file's text in the commit body. A tests commit needs one with a plant line
 # ("Plant: <law>: <what was broken>: <first red line>"; a fix commit needs it only when it names a
@@ -29,29 +30,29 @@ while args and args[0] in ("--commit-only", "--empty", "--body-file"):
 if len(args) < (3 if empty else 4): refuse("name step, ticket, subject" + ("" if empty else " and named paths"), 2)
 step, ticket, subject, *paths = args
 if empty and paths: refuse("--empty makes a commit with no files; name none", 2)
-if empty and step not in ("lead", "build", "fix"): refuse("--empty is for the lead step (it opens a slice's pull request) and for a build or fix commit of Survivor: lines; a " + step + " commit holds its files", 2)
+if empty and step not in ("lead", "tests", "build", "fix"): refuse("--empty is for the lead step (it opens a slice's pull request) and for a tests, build or fix commit of Survivor: lines; a " + step + " commit holds its files", 2)
 if step not in ("tests", "build", "mutation", "lead", "fix"): refuse("unknown step " + step, 2)
 role = "tests" if step == "mutation" else step
 body = ""
 if body_file is not None:
     try: body = pathlib.Path(body_file).read_text().strip()
     except (OSError, ValueError) as e: refuse("cannot read --body-file " + body_file + ": " + str(e), 2)
-# An empty build or fix commit exists only to carry Survivor: lines (the guard check reads them from commit bodies), so
+# An empty tests, build or fix commit exists only to carry Survivor: lines (the guard check reads them from commit bodies), so
 # its body is those lines and nothing else. Each line is read by survivors.ts's own parser (notAnswers), so a line that
 # would answer nothing is refused here, before a commit the builder cannot take back.
 if empty and step != "lead":
-    asked = "an empty " + step + " commit carries Survivor: lines and nothing else: pass --body-file <file> holding one 'Survivor: <file>:<line> <reason> -- <evidence>' line per answer"
+    asked = "an empty " + step + " commit carries Survivor: lines and nothing else: pass --body-file <file> holding one 'Survivor: <file>:<line> <reason> -- <evidence>' line per answer, its evidence naming a proof: 'plant: <command> => <result>', 'rg: <search> => <result>' or 'law: <id>'"
     if not body: refuse(asked, 2)
     reader = "const m = await import(process.argv[1]); let t = ''; for await (const c of process.stdin) t += c; console.log(JSON.stringify(m.notAnswers(t)));"
     read = subprocess.run(["node", "--input-type=module", "-e", reader, (here / "../../mutation/scripts/survivors.ts").as_uri()], input=body, capture_output=True, text=True)
     try: bad = json.loads(read.stdout)
     except ValueError: refuse("cannot read the Survivor: lines with survivors.ts: " + read.stderr.strip(), 2)
-    if bad: refuse(asked + "; this line answers nothing (it needs a reason and two words of evidence): " + bad[0], 2)
+    if bad: refuse(asked + "; this line answers nothing (it needs a reason, and evidence that names a plant:, rg: or law: proof): " + bad[0], 2)
 # The tests step's plant record lives only in its answer, which a reviewer never reads. A tests commit
 # (or a fix round that names a test file) carries it in the body: one "Plant: ..." line per new law (and, when the plan has a Generators
 # section, the reach table under it). A box's commit is drive's, and its report holds the record.
 # A fix round (one agent writes the law and the fix) owes it too, when a commit holds a test file.
-owes = step == "tests" or (step == "fix" and any(re.search(r"\.(test|test-support)\.ts\Z", p) for p in paths))
+owes = (step == "tests" and not empty) or (step == "fix" and any(re.search(r"\.(test|test-support)\.ts\Z", p) for p in paths))
 if owes and not os.environ.get("STEPCOMMIT_BOX") and not re.search(r"^[ \t]*plant:[ \t]*\S", body, re.I | re.M):
     refuse("a tests commit needs its plant record in the body: pass --body-file <file> holding one line per new law, 'Plant: <law title>: <what you broke>: <the failure's first line>', and the reach table when the plan has a Generators section", 7)
 def git(*args, **kw):

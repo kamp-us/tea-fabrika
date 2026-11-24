@@ -16,11 +16,12 @@ const Ask = Schema.Struct({
   files: Schema.Array(File),
   version: Word,
   seconds: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 900 })),
-  field: Schema.Literals(["base", "tree", "files", "version", "seconds"]),
+  runs: Schema.Union([Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 300 })), Schema.Literal("full")]),
+  field: Schema.Literals(["base", "tree", "files", "version", "seconds", "runs"]),
 });
 
 it.effect.prop(
-  "the key changes with the base, the tree, the files, the scripts and the time budget, and with nothing else",
+  "the key changes with the base, the tree, the files, the scripts, the time budget and the run depth, and with nothing else",
   Ask.fields,
   ({ field, ...ask }) =>
     Effect.sync(() => {
@@ -33,6 +34,7 @@ it.effect.prop(
         files: { ...ask, files: [...ask.files, "z/new.ts"] },
         version: { ...ask, version: `${ask.version}0` },
         seconds: { ...ask, seconds: ask.seconds + 1 },
+        runs: { ...ask, runs: ask.runs === "full" ? 10 : "full" },
       }[field];
 
       expect(key(other), `${field} is in the key`).not.toBe(key(ask));

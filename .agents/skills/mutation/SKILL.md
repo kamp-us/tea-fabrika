@@ -122,10 +122,20 @@ It is the same container run on a smaller scope: `scripts/survivors.ts` picks th
 (those a change touches, or those `--files` names), finds the laws whose imports reach them, and
 hands mutbox a commit whose parent holds the base's version of those files, so the sampler draws
 from their changed lines (a named file the change does not touch is mutated whole). Its header
-holds the flags, the settings `MUTATE_SECONDS` (default 300) and `MUTATE_FILES` (default 8), the
+holds the flags, the settings `MUTATE_SECONDS` (default 300), `MUTATE_FILES` (default 8) and `MUTATE_RUNS` (default 25), the
 exits, and what it cannot see. It prints one line per survivor: `lived` (a law ran it and
 passed), `no law ran`, or `no law loads` for a file no law reaches, then `static` lines Stryker
 skipped, then the counts and seconds. A scope past `MUTATE_FILES` is refused before Docker starts.
+`MUTATE_RUNS` is the most cases a property law draws in the box, or `full` for each law's own count: the laws run
+three times over (the plain baseline, Stryker's dry run, then once per mutant they cover), so at full depth the slow
+ones alone passed the five minutes on `@kalfa/git`. A law that asks for fewer keeps its own count, the seed stays its
+own, and `depth.ts` says what the cap reaches. A mutant that lives at the cap is run again at full depth, in only the laws that cover it, and is listed only if it lives there too:
+the cap is the fast path and full depth the fallback (`recheck.ts`). The last line gives the counts at both depths. The depth is in the saved-run key. The hourly
+run on CI passes none and keeps full depth.
+Before that recheck, the box type-checks each mutant that lived, in its own package (`recheck.ts`, `tsc --noEmit`, 90 s in all): the vitest
+runner strips types, so a mutant `tsc` refuses would otherwise live. One that does not compile is a kill (`CompileError`), is not listed and is
+not run again at full depth, and the last line counts them. A package that fails `tsc` as it is, or a file in no package, is not judged.
+A `Survivor:` line answers only with a proof in its evidence (`plant:`, `rg:` or `law:`), as [the build skill](../build/SKILL.md) shows.
 A call whose base, tree, files and scripts match a saved run reads it and starts no box, and a call that
 needs the box waits its turn in line, one box at a time; its header holds the settings and says how.
 `mutbox.ts run --wait <seconds>` takes a place in the same line. Drive's mutation step still refuses at the

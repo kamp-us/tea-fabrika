@@ -103,6 +103,28 @@ export const branchWait = Setting.make("delivery.branch-wait", Wait).pipe(
 
 A URL works the same way, with `Schema.URLFromString` where it is read.
 
+## When a start is refused, and why
+
+A refusal of `SettingGroup.layer` says what went wrong in the words a person can act on, and never holds a value, a
+secret or an absolute path. An `invalid` refusal names the rule the value broke, from what the setting's schema declares:
+its title and description when it has them, else the rule of the check that failed, else the type it expected.
+
+```
+.demo/demo.toml, line 2: net.port is not a valid value. Expected a value greater than 1023.
+  demo did not start.
+```
+
+A `read` refusal says why the read failed, from the failure's kind and its POSIX code:
+
+```
+~/.demo/demo.toml: could not be read, because permission was denied (EACCES).
+  demo did not start.
+```
+
+The error's `cause` is kept, hidden in a `Redacted`, since a platform error prints the path it failed on. Code that must
+see it reads it on purpose with `Redacted.value`. Every refusal ends the span of its call: `config.layer`, `config.set`,
+`config.remove`, `config.edit` or the command's own.
+
 ## Change one setting in a file's text
 
 `SettingGroup.edit(group, text, file)` changes one setting in the text of a configuration file. It is pure: no
