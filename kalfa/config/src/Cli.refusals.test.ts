@@ -1,7 +1,9 @@
 // Ticket 1995, kalfa/config (new work): RF1 to RF6 and RF8 of the approved plan (.kalfa/quests/kalfa-config-refusals-PLAN.md),
 // for the two refusals of the root entry (`@kalfa/config`, `SettingGroup`) that said too little: an `invalid` refusal of
 // a setting whose schema has no title and no description, and a `read` refusal. The type law RF7 is in
-// SettingGroup.types.test.ts, and C12's changed message is in Cli.test.ts. Written before the code.
+// SettingGroup.types.test.ts, and C12's changed message is in Cli.test.ts. Written before the code. The file is named
+// `Cli.refusals` because it runs the `config` command too (RF2, RF3 and RF6), and `layer-rules.json` puts `Cli*.ts` in the
+// layer that may import the command's own test support.
 //
 // What the code does, as these laws hold it to (the plan's "The read says why" and "The invalid names a rule"):
 // - An `invalid` message ends with the rule the value broke, read from the declared parts of the schema only: `<name> is
@@ -11,13 +13,12 @@
 //   from its message, its path or its description. A fault of the environment says the environment did not answer.
 // - The error's `cause` is a `Redacted` of the failure under it; every refusal leaves a span, `config.edit` included.
 //
-// Every law is a property over generated cases (SettingGroup.refusals.test-support.ts): each builds one case for each
+// Every law is a property over generated cases (Cli.refusals.test-support.ts): each builds one case for each
 // class it lists from the drawn seeds, and fails when a class was not reached. The texts a refusal must say are written
 // there from the plan's tables, never from the code under test.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Cause, ConfigProvider, Effect, Exit, Option, Redacted, Schema } from "effect";
-import { SettingGroup } from "./index.ts";
 import {
   command,
   denial,
@@ -60,7 +61,8 @@ import {
   sourced,
   startOn,
   variable,
-} from "./SettingGroup.refusals.test-support.ts";
+} from "./Cli.refusals.test-support.ts";
+import { SettingGroup } from "./index.ts";
 
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
 

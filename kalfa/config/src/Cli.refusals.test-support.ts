@@ -1,6 +1,6 @@
 import { inspect } from "node:util";
 /**
- * What the laws RF1 to RF6 and RF8 of ticket 1995 share (SettingGroup.refusals.test.ts): the draws, the settings of each
+ * What the laws RF1 to RF6 and RF8 of ticket 1995 share (Cli.refusals.test.ts): the draws, the settings of each
  * class of schema, the faults each read can meet, the runners (a start, a disk call, an edit and the command, each under
  * a recording tracer and logger), and the text each refusal must say, written here from the plan's tables and never from
  * the code under test.
@@ -18,7 +18,7 @@ import { Reach } from "./SettingGroup.edit.test-support.ts";
 
 export { Reach };
 
-export type AnyGroup = SettingGroup.SettingGroup<string, ReadonlyArray<Setting.Any>>;
+type AnyGroup = SettingGroup.SettingGroup<string, ReadonlyArray<Setting.Any>>;
 
 const VERSION = "1.2.3";
 
@@ -53,7 +53,7 @@ const RepoFolder = Schema.String.check(Schema.isPattern(/^\/work\/[a-z]{3,6}$/u)
 const MovedFolder = Schema.String.check(Schema.isPattern(/^\/moved\/[a-z]{3,6}$/u));
 
 /** The tags of a system error a read can fail with, other than a missing path. */
-export const OTHER_TAGS = [
+const OTHER_TAGS = [
   "Busy",
   "TimedOut",
   "Unknown",
@@ -107,9 +107,6 @@ export const EnvironmentDraw = Schema.Struct({ ...Core.fields, message: Secret }
 
 export type EnvironmentDraw = typeof EnvironmentDraw.Type;
 
-/** RF8's raw causes: anything JSON can hold, which is never a `Redacted`. */
-export const RawCause = Schema.Json;
-
 // ---------------------------------------------------------------------------------------------
 // Names
 // ---------------------------------------------------------------------------------------------
@@ -119,15 +116,15 @@ export const settingName = (draw: RuleDraw) => `${draw.words[0]}.${draw.words[1]
 /** The environment variable that sets a setting: `DEMO_NET_PORT`. */
 export const variable = (draw: RuleDraw) => [draw.app, ...settingName(draw).split(".")].join("_").toUpperCase();
 
-export const homeVariable = (draw: RuleDraw) => `${draw.app.toUpperCase()}_HOME`;
+const homeVariable = (draw: RuleDraw) => `${draw.app.toUpperCase()}_HOME`;
 
 export const repoName = (draw: RuleDraw) => `.${draw.app}/${draw.app}.toml`;
 
 export const repoPath = (draw: RuleDraw) => `${draw.repo}/.${draw.app}/${draw.app}.toml`;
 
-export const homePath = (draw: RuleDraw) => `${draw.home}/.${draw.app}/${draw.app}.toml`;
+const homePath = (draw: RuleDraw) => `${draw.home}/.${draw.app}/${draw.app}.toml`;
 
-export const movedPath = (draw: RuleDraw) => `${draw.moved}/${draw.app}.toml`;
+const movedPath = (draw: RuleDraw) => `${draw.moved}/${draw.app}.toml`;
 
 /** Every form a text may take: raw, JSON-escaped and URL-encoded. */
 export const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
@@ -140,7 +137,7 @@ export type RuleId = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" |
 
 export const RULE_IDS: ReadonlyArray<RuleId> = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "n"];
 
-export interface RuleCase {
+interface RuleCase {
   readonly id: RuleId;
   readonly setting: Setting.Any;
   /** The value as the file writes it. */
@@ -164,7 +161,7 @@ const title = (draw: RuleDraw) => `a ${draw.words[2]} ${draw.words[3]}`;
 const description = (draw: RuleDraw) => `Use ${draw.words[4]} ${draw.words[5]}.`;
 
 /** The declared text of (j). */
-export const declared = (draw: RuleDraw) => `an even number of ${draw.words[6]}`;
+const declared = (draw: RuleDraw) => `an even number of ${draw.words[6]}`;
 
 const even = Schema.makeFilter((n: number) => n % 2 === 0);
 
@@ -335,7 +332,7 @@ const recording = () => {
   };
 };
 
-export interface Scene {
+interface Scene {
   readonly files?: Readonly<Record<string, string>>;
   /** A read of the path fails with the error. */
   readonly broken?: Readonly<Record<string, PlatformError.PlatformError>>;
@@ -371,7 +368,7 @@ export const startOn = (group: AnyGroup, scene: Scene) => {
 };
 
 /** A disk the program changes: the file system faults are planted in, and the files it holds. */
-export interface Disk {
+interface Disk {
   readonly files: Readonly<Record<string, string>>;
   readonly faults?: ReadonlyArray<MemoryFiles.Fault>;
   readonly env: Readonly<Record<string, string>>;
@@ -428,7 +425,7 @@ export const command = (world: World, args: ReadonlyArray<string>) =>
 // What a run answered
 // ---------------------------------------------------------------------------------------------
 
-export interface Refusal {
+interface Refusal {
   readonly error: SettingGroup.SettingsError;
   readonly reason: string;
   readonly file: string | undefined;
@@ -520,7 +517,7 @@ const kind = (tag: PlatformError.SystemErrorTag) => {
 /** The read of `path` refused for want of permission. */
 export const denial = (path: string) => system("PermissionDenied", path);
 
-export interface Fault {
+interface Fault {
   readonly id: FaultId;
   readonly error: PlatformError.PlatformError;
   /** What follows `because `, up to the full stop. */
