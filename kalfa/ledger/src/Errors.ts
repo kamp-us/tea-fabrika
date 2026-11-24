@@ -4,8 +4,8 @@
  *
  * **Details**
  *
- * A refusal says the Ledger will not keep this entry: the writer sent something it should not have. `EmptyTags` is no refusal, since a read keeps no entry:
- * it says a read asked for entries by tag and named no tag. A failure says the Ledger could not answer. No error carries a body or metadata, since an
+ * A refusal says the Ledger will not keep this entry: the writer sent something it should not have. `EmptyTypes` is no refusal, since a read keeps no entry:
+ * it says a read asked for entries by type and named no type. A failure says the Ledger could not answer. No error carries a body or metadata, since an
  * entry's content never rides in an error. A failure holds its cause as a `Redacted`, which no rendering shows, since a driver's own error can quote a row:
  * a caller makes it with `Redacted.make(cause)`, and code that needs the cause reads it on purpose with `Redacted.value(error.cause)`. A failure crosses a
  * wire with its tag and its cause written as the text `<redacted>`, and is read back with an empty hidden cause: the value never leaves the process.
@@ -19,11 +19,11 @@ import { Revision } from "./Entry.ts";
  * @category refusals
  */
 export class BadEntry extends Schema.TaggedError<BadEntry, { readonly brand: unique symbol }>()("BadEntry", {
-  part: Schema.Literals(["stream", "id", "entry", "tag", "body", "metadata", "expectedRevision"]),
+  part: Schema.Literals(["stream", "id", "entry", "type", "body", "metadata", "expectedRevision"]),
 }) {}
 
 /**
- * The same id in the same stream, sent with another body or another tag.
+ * The same id in the same stream, sent with another body or another type.
  *
  * @category refusals
  */
@@ -60,13 +60,13 @@ export class RevisionConflict extends Schema.TaggedError<RevisionConflict, { rea
 ) {}
 
 /**
- * A read that asked for entries by tag and named no tag. A caller who wants every entry leaves `tags` out. It is the read's own error, and no refusal.
+ * A read that asked for entries by type and named no type. A caller who wants every entry leaves `types` out. It is the read's own error, and no refusal.
  *
  * @category read errors
  */
-export class EmptyTags extends Schema.TaggedError<EmptyTags, { readonly brand: unique symbol }>()("EmptyTags", {}) {
+export class EmptyTypes extends Schema.TaggedError<EmptyTypes, { readonly brand: unique symbol }>()("EmptyTypes", {}) {
   override get message(): string {
-    return "tags must hold at least one tag: leave tags out to read every entry";
+    return "types must hold at least one type: leave types out to read every entry";
   }
 }
 

@@ -11,7 +11,7 @@ import { Schema } from "effect";
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
 /**
- * Schema for the Ledger's settings. `limits.bytes` is the most bytes one entry counts: its stream, id, tag, body and metadata, as UTF-8 text.
+ * Schema for the Ledger's settings. `limits.bytes` is the most bytes one entry counts: its stream, id, type, body and metadata, as UTF-8 text.
  *
  * @category models
  */

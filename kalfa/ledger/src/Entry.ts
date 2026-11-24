@@ -27,9 +27,6 @@ export const Position = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
 
 export type Position = typeof Position.Type;
 
-// The writer's own case name is open text, never a closed union's tag, so the key is a constant, not a `_tag` field of a tagged schema.
-const TAG = "_tag";
-
 /**
  * Named slots, one per package. The Ledger keeps them and never reads them.
  *
@@ -50,7 +47,7 @@ export type Metadata = typeof Metadata.Type;
  * @category models
  */
 export const NewEntry = Schema.Struct({
-  [TAG]: Schema.NonEmptyString,
+  type: Schema.NonEmptyString,
   body: Schema.Json,
   metadata: Schema.optionalKey(Metadata),
 });
@@ -68,7 +65,7 @@ export const Entry = Schema.Struct({
   revision: Revision,
   position: Position,
   arrivedAt: Schema.Int,
-  [TAG]: Schema.NonEmptyString,
+  type: Schema.NonEmptyString,
   body: Schema.Json,
   metadata: Metadata,
 });

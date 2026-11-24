@@ -14,7 +14,7 @@ _Avoid_: Topic, channel, partition
 
 **Entry**:
 One item kept in a stream. Once kept, it is never changed. A program may call an entry that says
-something happened an event; to the ledger it is an entry. Its tag (Shared names) says what kind
+something happened an event; to the ledger it is an entry. Its entry type says what kind
 of entry it is.
 _Avoid_: Line, record, row, fact, letter
 
@@ -57,7 +57,7 @@ _Avoid_: Write, put, insert, send (as the ledger's verb)
 
 **Read**:
 Getting a stream's entries after a given revision, oldest first, once, all of them or only those
-with given tags.
+with given entry types.
 _Avoid_: Fetch, load, query
 
 **Wait**:
@@ -88,7 +88,13 @@ _Avoid_: Line, draft, event data
 
 **Entry name**:
 A fixed word a package picks to tell one kind of its entries from another, used to build one entry id from another.
-_Avoid_: Kind (the text before an id's first `:`), type, label
+_Avoid_: Kind (the text before an id's first `:`), label
+
+**Entry type**:
+The open text a writer picks to say what kind of entry it is, such as `Requested`: the `type` of an entry, and the `types` a read filters by. It is
+not a Tag (Shared names): a Tag is one name out of a fixed set that Effect writes, and an entry type is any non-empty text, so the Ledger keeps it and never
+matches on it. A read that names no types fails as `EmptyTypes`.
+_Avoid_: Tag, kind (as the field), discriminator
 
 **Child id**:
 An entry id built from an entry name and another entry id, the parent, so one act can append several entries.
