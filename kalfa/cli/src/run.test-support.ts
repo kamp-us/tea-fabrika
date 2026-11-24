@@ -26,7 +26,7 @@ import {
 import { Argument, CliError, Command, Flag } from "effect/cli";
 import { TestConsole } from "effect/testing";
 import { Refused } from "./internal/failure.ts";
-import { Packages } from "./internal/packages.ts";
+import { Packages, Unloaded } from "./internal/packages.ts";
 import { main } from "./internal/run.ts";
 import { platform, Probe } from "./Subcommand.test-support.ts";
 import * as Subcommand from "./Subcommand.ts";
@@ -348,12 +348,9 @@ export const Call = Data.taggedEnum<Call>();
 export const toSpecifier = (name: string, subpath: string): string =>
   subpath === "." ? name : `${name}/${subpath.slice(2)}`;
 
-const toSubpath = (pkg: string, specifier: string): string =>
-  specifier === pkg ? "." : `.${specifier.slice(pkg.length)}`;
-
 /**
- * `Packages` on a repo in memory. A resolve that refuses and an import that throws are what Node gives, so they are the
- * refusals `layerNode` gives; the stand-in gives them as the real one must.
+ * `Packages` on a repo in memory. A resolve that refuses and an import that throws are what Node gives, so the stand-in
+ * fails as `layerNode` does: with an `Unloaded` that holds only its reason. The field and the subpath are put to it by `load.ts`.
  */
 const standIn = (repo: Repo): { readonly layer: Layer.Layer<Packages>; readonly calls: Array<Call> } => {
   const calls: Array<Call> = [];
@@ -375,14 +372,13 @@ const standIn = (repo: Repo): { readonly layer: Layer.Layer<Packages>; readonly 
         calls.push(Call.Load({ pkg, specifier }));
 
         const entry = Object.hasOwn(repo.entries, specifier) ? repo.entries[specifier] : undefined;
-        const refusal = { packages: [pkg], field: "cli", subpath: toSubpath(pkg, specifier) } as const;
 
         return entry === undefined
-          ? Effect.fail(new Refused({ reason: "load", ...refusal }))
+          ? Effect.fail(new Unloaded({ reason: "load" }))
           : Entry.$match(entry, {
               Module: ({ exports }) => Effect.succeed(exports),
-              NoDefault: () => Effect.fail(new Refused({ reason: "not-exported", ...refusal })),
-              Throws: () => Effect.fail(new Refused({ reason: "load", ...refusal })),
+              NoDefault: () => Effect.fail(new Unloaded({ reason: "not-exported" })),
+              Throws: () => Effect.fail(new Unloaded({ reason: "load" })),
             });
       }),
   });

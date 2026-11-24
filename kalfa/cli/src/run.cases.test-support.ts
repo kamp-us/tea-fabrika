@@ -530,6 +530,15 @@ const notObjects = (seed: Seed): ReadonlyArray<unknown> => {
   ];
 };
 
+/** The subpaths of an entry, as a field may name one: the usual one, one with a part between, the package itself, and two of words of the seed. */
+const entrySubpaths = (seed: Seed): ReadonlyArray<string> => [
+  "./cli",
+  "./sub/cli",
+  ".",
+  `./${at(seed.words, 4)}`,
+  `./${at(seed.words, 5)}/${at(seed.words, 6)}/${at(seed.words, 7)}`,
+];
+
 const FIELD = (name: string, field: string) =>
   `${name}'s kalfa.${field} field must be "." or a "./" path inside the package.`;
 
@@ -554,6 +563,7 @@ export const refusalIds = (made: Subcommand.Subcommand): ReadonlyArray<string> =
   "bad-field/kalfa",
   "not-exported",
   "load",
+  "load/unresolved",
   "no-subcommand/no-key",
   "no-subcommand/inherited",
   ...candidates(made).map((one) => `look-alike/${one.id}`),
@@ -639,31 +649,49 @@ export const refusals = (seed: Seed): Effect.Effect<ReadonlyArray<Refusal>> =>
       });
     }
 
-    add("not-exported", withBad({ lists: ["dependencies"], kalfa: { cli: subpath }, entry: Entry.NoDefault() }), true, {
-      message: `${bad} names ${subpath} in its kalfa.cli field, but its exports give that path no "default" condition, so kalfa cannot load it.`,
-    });
+    // An entry is named by a subpath that is not always `./cli`: the line must say the one the package's field gave.
+    const reading = entrySubpaths(seed);
 
-    add("load", withBad({ lists: ["dependencies"], kalfa: { cli: subpath }, entry: Entry.Throws() }), true, {
-      message: `${bad}'s kalfa.cli entry ${subpath} failed to load.`,
-    });
+    const noSubcommand = (named: string) =>
+      `${bad} names ${named} in its kalfa.cli field, but that entry exports no subcommand. Expected: export const subcommand = Subcommand.make(command, { layer, diagnostics }), from @kalfa/cli/Subcommand.`;
 
-    const noSubcommand = `${bad} names ${subpath} in its kalfa.cli field, but that entry exports no subcommand. Expected: export const subcommand = Subcommand.make(command, { layer, diagnostics }), from @kalfa/cli/Subcommand.`;
-
-    const lookingAlike = (id: string, entry: Entry, refused = true) =>
-      add(id, withBad({ lists: ["dependencies"], kalfa: { cli: subpath }, entry }), refused, {
-        message: refused ? noSubcommand : undefined,
+    const lookingAlike = (id: string, named: string, entry: Entry, refused = true) =>
+      add(id, withBad({ lists: ["dependencies"], kalfa: { cli: named }, entry }), refused, {
+        message: refused ? noSubcommand(named) : undefined,
       });
 
-    lookingAlike("no-subcommand/no-key", Entry.Module({ exports: { other: 1 } }));
-    lookingAlike(
-      "no-subcommand/inherited",
-      Entry.Module({ exports: Object.create({ subcommand: at(world.subs, 1) }) }),
-    );
+    for (const named of reading) {
+      add("not-exported", withBad({ lists: ["dependencies"], kalfa: { cli: named }, entry: Entry.NoDefault() }), true, {
+        message: `${bad} names ${named} in its kalfa.cli field, but its exports give that path no "default" condition, so kalfa cannot load it.`,
+      });
 
-    // (f) Each value that is not a subcommand, as the slice's own list of look-alikes has it, under an own key.
-    for (const one of candidates(at(world.subs, 1))) {
-      lookingAlike(`look-alike/${one.id}`, Entry.Module({ exports: { subcommand: one.value } }), !one.holds);
+      // Node refuses the entry as it resolves it, or the module throws as it loads: each is `load`, with the same words.
+      add("load", withBad({ lists: ["dependencies"], kalfa: { cli: named }, entry: Entry.Throws() }), true, {
+        message: `${bad}'s kalfa.cli entry ${named} failed to load.`,
+      });
+
+      add("load/unresolved", withBad({ lists: ["dependencies"], kalfa: { cli: named } }), true, {
+        message: `${bad}'s kalfa.cli entry ${named} failed to load.`,
+      });
+
+      lookingAlike("no-subcommand/no-key", named, Entry.Module({ exports: { other: 1 } }));
+      lookingAlike(
+        "no-subcommand/inherited",
+        named,
+        Entry.Module({ exports: Object.create({ subcommand: at(world.subs, 1) }) }),
+      );
     }
+
+    // (f) Each value that is not a subcommand, as the slice's own list of look-alikes has it, under an own key; the
+    // subpaths are dealt out round, so each look-alike is met at one and every subpath is met by some.
+    candidates(at(world.subs, 1)).forEach((one, index) => {
+      lookingAlike(
+        `look-alike/${one.id}`,
+        at(reading, index),
+        Entry.Module({ exports: { subcommand: one.value } }),
+        !one.holds,
+      );
+    });
 
     return found;
   });
