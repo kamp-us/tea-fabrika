@@ -148,19 +148,10 @@ A typed error may hold a cause that quotes a value, as a secret store's own clie
 `Hidden.Cause`: a `Redacted` in memory, which no rendering shows, and the fixed text `Hidden.placeholder` (`<redacted>`) in every
 codec that writes outward.
 
-```ts
-import * as Hidden from "@kalfa/diagnostics/Hidden";
-import { Redacted, Schema } from "effect";
-
-export class StoreFailed extends Schema.TaggedError<StoreFailed, { readonly brand: unique symbol }>()("StoreFailed", {
-  cause: Hidden.Cause,
-}) {}
-
-const failed = new StoreFailed({ cause: Redacted.make(new Error("read token abc")) });
-
-// { _tag: "StoreFailed", cause: "<redacted>" }
-Schema.encodeSync(Schema.toCodecJson(StoreFailed))(failed);
-```
+Give the error a field `cause: Hidden.Cause` (or `Schema.optional(Hidden.Cause)`), import it with
+`import * as Hidden from "@kalfa/diagnostics/Hidden"`, and make a cause with `Redacted.make(cause)`. Then
+`Schema.toCodecJson` of the error writes `{ _tag: "StoreFailed", cause: "<redacted>" }`, whatever the cause was. The example in
+`Hidden.Cause`'s doc block shows the whole class.
 
 - **Why not `Schema.Redacted`.** In Effect 4.1.3 `Schema.toCodecJson` of a `Schema.Redacted` writes the value it holds, in full. So an
   error that crosses a socket would carry its cause. `Hidden.Cause` writes `<redacted>` there, whatever the cause was, and a label is
