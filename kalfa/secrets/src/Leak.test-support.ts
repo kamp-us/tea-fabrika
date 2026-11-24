@@ -19,7 +19,7 @@ export const flow = Effect.fn("secrets.flow")(
 
     yield* contents.put(item, text);
 
-    const held = yield* holder(MemoryStore.store).read(item);
+    const held = yield* holder(MemoryStore.store).read(item, NAME);
 
     if (Predicate.isTagged(held, "Found")) {
       yield* recorder.record(new Recorder.Fetched({ name: NAME, store: STORE_ID, version: held.value.version }));

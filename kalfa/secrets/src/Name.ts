@@ -1,9 +1,9 @@
 /**
- * The three names of the package: a secret's name, a store's id and a version.
+ * The names of the package: a secret's name, a store's id and a version, and the object a proof of a secret names.
  *
  * **Details**
  *
- * Each is a branded text a Schema checks, so a name written in a route or a declaration is refused before anything reads a store. A
+ * Each name is a branded text a Schema checks, so a name written in a route or a declaration is refused before anything reads a store. A
  * refusal's message holds no part of the text it refused.
  */
 import { Schema } from "effect";
@@ -39,3 +39,20 @@ export const StoreId = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9]*(?:-
 export const Version = Schema.NonEmptyString.check(Schema.isMaxLength(128)).pipe(
   Schema.brand("@kalfa/secrets/Version"),
 );
+
+/**
+ * What Secrets reads from a proof: the object its permission check was for. Any value with this text counts, so a proof is whatever the
+ * app's Permissions makes.
+ *
+ * @category models
+ */
+export interface Proof {
+  readonly object: string;
+}
+
+/**
+ * The object a permission check names for the secret `name`: `secret:` and the name.
+ *
+ * @category models
+ */
+export const object = <N extends string>(name: N): `secret:${N}` => `secret:${name}`;

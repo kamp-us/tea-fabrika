@@ -1,5 +1,5 @@
 /**
- * The root entry point of `@kalfa/secrets`: secrets held by name, and the store side that holds them.
+ * The root entry point of `@kalfa/secrets`: secrets held by name, declared in code, routed to a store and fetched hidden.
  *
  * **Details**
  *
@@ -12,6 +12,27 @@
  * @category recording
  */
 export * as Recorder from "./Recorder.ts";
+
+/**
+ * Declares a secret, which is fetched by yielding it.
+ *
+ * @category declarations
+ */
+export * as Secret from "./Secret.ts";
+
+/**
+ * The service a declared secret asks for its value, and the Layer that starts it.
+ *
+ * @category services
+ */
+export * as Secrets from "./Secrets.ts";
+
+/**
+ * The settings of the package: which store and item each secret name points to.
+ *
+ * @category settings
+ */
+export * as SecretsSettings from "./Settings.ts";
 
 /**
  * The ports of a secret store and what it answers.

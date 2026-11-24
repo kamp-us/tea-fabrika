@@ -13,7 +13,7 @@ class Dep extends Context.Service<Dep, { readonly count: number }>()("@kalfa/sec
 
 class Other extends Context.Service<Other, { readonly label: string }>()("@kalfa/secrets/test/Other") {}
 
-// D6. Plant: type `Store.Needs` as `never`, and the union line fails; type `Missing`'s reason as `string`, and the refused-reason line compiles;
+// D6. Plant: take only the item in a read's parameters, and the parameters line fails; type `Store.Needs` as `never`, and the union line fails; type `Missing`'s reason as `string`, and the refused-reason line compiles;
 // type `Found`'s value as a plain text, and the plain-text line compiles; let `Store.make` keep only `string` as an id, and the literal lines fail;
 // widen `Place` by a word, and the place lines fail; type the read's error as `unknown`, and the read line fails.
 const storeTypes = (absent: Store.Missing) => {
@@ -86,6 +86,11 @@ const storeTypes = (absent: Store.Missing) => {
   expectTypeOf(needsDep).toExtend<Store.Any>();
   expectTypeOf(needsNothing).toExtend<Store.Any>();
   expectTypeOf<typeof MemoryStore.store>().toExtend<Store.Any>();
+
+  // A read takes the item and the name it is asked for, so a store labels the value it hands out with that name.
+  expectTypeOf<Parameters<Store.Holds<string, Dep>["read"]>>().toEqualTypeOf<
+    [item: string, name: typeof Name.SecretName.Type]
+  >();
 
   // A read answers with a Held, fails with StoreFailed, and needs what the store needs.
   expectTypeOf<ReturnType<Store.Holds<string, Dep>["read"]>>().toEqualTypeOf<
