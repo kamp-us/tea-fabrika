@@ -1,7 +1,7 @@
 /**
  * The whole-file check of a setting group: a file is read against the settings that may be set in it, and its first fault is the one error. It reads no file and starts nothing.
  */
-import { Effect, Option, Schema, SchemaAST, SchemaIssue, type SemVer } from "effect";
+import { Effect, Option, Predicate, Schema, SchemaAST, SchemaIssue, type SemVer } from "effect";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import type * as Setting from "../Declaration.ts";
@@ -171,17 +171,25 @@ const explain = (
   );
 };
 
-/** The type's text as Effect writes it in `Expected <type>`, from an issue made fresh with no input, so no input can reach it. */
-const expected = (ast: SchemaAST.AST): string =>
-  SchemaIssue.makeFormatterDefault()(new SchemaIssue.InvalidType(ast)).replace(/^Expected /u, "");
+/**
+ * What a type was expected to be, as one sentence, from an issue made fresh with no input, so no input can reach it. Effect writes `Expected <type>`, and the schema author's own `message`, where one is declared, as written: that sentence is said as the author wrote it, as a description is, and the other gets its full stop.
+ */
+const expected = (ast: SchemaAST.AST): string => {
+  const text = SchemaIssue.makeFormatterDefault()(new SchemaIssue.InvalidType(ast));
+
+  return Predicate.isString(ast.annotations?.message) ? text : `${text}.`;
+};
 
 /**
- * What a refused value had to be, from the declared parts of its issue only: never the input, never a message a check wrote at run time, never a path inside the value.
+ * What a refused value had to be, as a sentence, from the declared parts of its issue only: never the input, never a message a check wrote at run time, never a path inside the value.
  */
 const rule = (issue: SchemaIssue.Issue): Option.Option<string> => {
   switch (issue._tag) {
     case "Filter":
-      return Option.fromNullishOr(issue.filter.annotations?.expected);
+      return Option.map(
+        Option.fromNullishOr(issue.filter.annotations?.expected),
+        (declared) => `Expected ${declared}.`,
+      );
     case "InvalidType":
     case "AnyOf":
     case "OneOf":
@@ -192,9 +200,9 @@ const rule = (issue: SchemaIssue.Issue): Option.Option<string> => {
     case "Composite":
       return rule(issue.issues[0]);
     case "MissingKey":
-      return Option.some("a table with every key it needs");
+      return Option.some("Expected a table with every key it needs.");
     case "UnexpectedKey":
-      return Option.some("a table with no other keys");
+      return Option.some("Expected a table with no other keys.");
     case "InvalidValue":
     case "Forbidden":
       return Option.none();
@@ -210,7 +218,7 @@ const wanted = (s: Setting.Any, name: string, issue: SchemaIssue.Issue) => {
     description !== undefined
       ? ` ${description}`
       : Option.match(rule(issue), {
-          onSome: (declared) => ` Expected ${declared}.`,
+          onSome: (said) => ` ${said}`,
           onNone: () => (title === undefined ? " Its schema names no rule." : ""),
         });
 
