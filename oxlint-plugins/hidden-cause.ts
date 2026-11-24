@@ -144,17 +144,18 @@ export const hiddenCause: CreateRule = {
       }
 
       const optional = schemaCall(node, ["optional"]);
-      const [inner, ...rest] = optional?.arguments ?? [];
 
-      return optional !== null && rest.length === 0 && inner !== undefined && (isDefect(inner) || isHidden(inner));
+      if (optional === null) {
+        return false;
+      }
+
+      const [inner, ...rest] = optional.arguments;
+
+      return rest.length === 0 && inner !== undefined && (isDefect(inner) || isHidden(inner));
     };
 
     /** The initializer of the same-file `const` an identifier names, one step. */
-    const constInit = (node: Node): Node | null => {
-      if (node.type !== "Identifier") {
-        return null;
-      }
-
+    const constInit = (node: Node & { readonly name: string }): Node | null => {
       const def = resolve(node)?.defs[0];
 
       return def?.type === "Variable" &&
@@ -224,21 +225,19 @@ export const hiddenCause: CreateRule = {
     const isUse = (node: Node): boolean => {
       const parent = node.parent;
 
-      if (parent == null) {
-        return true;
-      }
-
-      if (parent.type === "MemberExpression") {
+      if (parent?.type === "MemberExpression") {
         return parent.property !== node || parent.computed;
       }
 
-      return !(parent.type === "Property" && parent.key === node && !parent.computed);
+      return !(parent?.type === "Property" && parent.key === node && !parent.computed);
     };
 
     /** The uses of `Redacted` and `RedactedFromValue` of Effect's Schema under a node: a member of it, called or not, or one imported by name from `effect/Schema`. */
     const namedAt = (node: Node): boolean => {
       if (node.type === "MemberExpression") {
-        return isSchema(node.object) && REDACTED_NAMES.includes(written(node.property, node.computed) ?? "");
+        const name = written(node.property, node.computed);
+
+        return isSchema(node.object) && name !== null && REDACTED_NAMES.includes(name);
       }
 
       if (node.type === "Identifier" && isUse(node)) {

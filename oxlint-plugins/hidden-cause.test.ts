@@ -192,6 +192,12 @@ const REDACTED_LINES: ReadonlyArray<(s: Spelling, i: number) => string> = [
   (s, i) =>
     `import { RedactedFromValue as Named${i} } from "effect/Schema"; ${klass(s, i, `{ x: ${s.module}.String.pipe(Named${i}) }`)}`,
   (s, i) => `import { "Redacted" as Named${i} } from "effect/Schema"; ${klass(s, i, `{ x: Named${i}(1) }`)}`,
+  // The import used as the object of a member, as a computed member's name and as a computed key: each a use of it.
+  (s, i) =>
+    `import { Redacted as Named${i} } from "effect/Schema"; ${klass(s, i, `{ x: Named${i}.pipe(${s.module}.String) }`)}`,
+  (s, i) => `import { Redacted as Named${i} } from "effect/Schema"; ${klass(s, i, `{ x: other[Named${i}] }`)}`,
+  (s, i) =>
+    `import { Redacted as Named${i} } from "effect/Schema"; ${klass(s, i, `{ [Named${i}]: ${s.module}.String }`)}`,
   // Behind a name: a `Schema.Class` or an error class of the file that holds one, as a field and inside `optional`.
   (s, i) =>
     `class In${i} extends ${s.module}.Class<In${i}>("In${i}")({ s: ${s.module}.Redacted(${s.module}.String) }) {} ${klass(s, i, `{ x: In${i} }`)}`,
@@ -346,6 +352,12 @@ const PASSING_LINES: ReadonlyArray<(s: Spelling, h: Hiding, i: number) => string
   (_, __, i) => `const Base${i} = make(); class K${i} extends Base${i} {}`,
   // A known miss, listed in README.md: a helper function that returns the schema is not followed, since a call does not say what its body makes.
   (s, _, i) => `const hide${i} = () => ${s.module}.Redacted(${s.module}.String); ${klass(s, i, `{ x: hide${i}() }`)}`,
+  // A key and a member's name that are spelled as the import are no use of it, and a member named by a name that is no text is no `Redacted`.
+  (s, _, i) =>
+    `import { Redacted as Kept${i} } from "effect/Schema"; ${klass(s, i, `{ Kept${i}: ${s.module}.String, y: other.Kept${i} }`)}`,
+  (s, _, i) => klass(s, i, `{ x: ${s.module}[unbound${i}](1) }`),
+  // Names that lead to each other end the walk.
+  (s, _, i) => `const A${i} = B${i}; const B${i} = A${i}; ${klass(s, i, `{ x: A${i} }`)}`,
   // The key `Redacted` is no use of the import, and neither is the name of a member; a `Redacted` of another module is no Schema's.
   (s, _, i) =>
     `import { Redacted as Kept${i} } from "effect/Schema"; ${klass(s, i, `{ Redacted: ${s.module}.String, y: other.Redacted, z: Kept${i}Other }`)}`,
