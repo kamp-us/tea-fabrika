@@ -117,20 +117,38 @@ it("K4 scenario: the public test entries export only what a caller needs", () =>
 // What K5 leaves out: a test names a time on purpose, the two test layers hold test settings, and `Settings.ts` is where limits are named.
 const NOT_SCANNED = /(?:\.test\.ts|\.test-support\.ts)$|^(?:RepositoryTest|HistoryTest|Settings)\.ts$/;
 
-const DURATION_CALL = /Duration\.(?:nanos|micros|millis|seconds|minutes|hours|days|weeks)\(/;
+const UNITS = "nanos?|micros?|millis?|seconds?|minutes?|hours?|days?|weeks?";
 
-const DURATION_TEXT = /["'`]\s*\d[\d_.]*\s*(?:nanos?|micros?|millis?|seconds?|minutes?|hours?|days?|weeks?)\s*["'`]/;
+// `Duration.seconds(5)`, with any space around the dot or before the parenthesis.
+const DURATION_CALL = /Duration\s*\.\s*(?:nanos|micros|millis|seconds|minutes|hours|days|weeks)\s*\(/;
 
-const COUNT_CONSTANT = /^(?:export )?const ([A-Z][A-Z0-9_]*) = (\d[\d_]*)\s*;/gm;
+// A unit as a quoted word, with an amount or without: `"5 seconds"`, and the `"seconds"` of `[5, "seconds"]`.
+const DURATION_TEXT = new RegExp(`["'\`]\\s*(?:\\d[\\d_.]*\\s*)?(?:${UNITS})\\s*["'\`]`);
+
+// A number written out, or a sum or product of numbers: `5000`, `10_000`, `5 * 1000`.
+const NUMBER = String.raw`\d[\d_.]*(?:\s*[-+*/%]\s*\(?\s*\d[\d_.]*\s*\)?)*`;
+
+// A constant of any case, annotated or not, that is only a number: `const KILL_AFTER: Duration.Input = 5000;`.
+const COUNT_CONSTANT = new RegExp(
+  String.raw`^[ \t]*(?:export )?const (\w+)\s*(?::[^=\n]+)?=\s*\(?\s*${NUMBER}\s*\)?\s*;`,
+  "gm",
+);
+
+// A name that says it is a length of time or a wait, given a number: `forceKillAfter: 5000`, `duration: 10_000`, `timeout = 30`.
+const TIME_KEY = new RegExp(
+  String.raw`\b\w*(?:killafter|duration|timeout|delay|interval|wait|deadline|ttl|after|time|${UNITS.replaceAll("?", "")})\s*[:=]\s*\(?\s*${NUMBER}\s*\)?\s*(?=[,;)}\n])`,
+  "i",
+);
 
 // Each is git's own rule or git's own fixed format, not a limit an app could choose: how far into a file git looks for a NUL
 // to call it binary, and how much of a printed row a parser reads.
 const GIT_OWN = ["BINARY_WINDOW", "HEADER_BYTES", "HEAD_BYTES"];
 
 // Plant: put `const KILL_AFTER = Duration.seconds(5);` back in `ProcessRepository.ts`; write `forceKillAfter: "5 seconds"`
-// there; add `const MOST_PATHS = 1000;` to `internal/lookup.ts` and scan only the top folder, so the scanned-list check fails it;
+// there; and each of `forceKillAfter: 5000`, `const KILL_AFTER: Duration.Input = 5000;`, `const killAfter = 5000;`,
+// `const KILL_AFTER = 5 * 1000;`, `[5, "seconds"]`, `Duration.seconds (5)` and `duration: 10_000`; add `const MOST_PATHS = 1000;` to `internal/lookup.ts` and scan only the top folder, so the scanned-list check fails it;
 // remove `BINARY_WINDOW` from `internal/lines.ts` and keep it allowed, so "found exactly once" fails it.
-it("K5 scenario: no code of the package holds a fixed duration or a top-level count limit, except git's own three constants", () => {
+it("K5 scenario: no code of the package holds a fixed duration or a fixed number as a limit, except git's own three constants", () => {
   const root = new URL("./", import.meta.url);
 
   const scanned = filesUnder(root)
@@ -153,11 +171,12 @@ it("K5 scenario: no code of the package holds a fixed duration or a top-level co
     const text = readFileSync(new URL(file, root), "utf8");
     expect(DURATION_CALL.test(text), `${file} builds a fixed duration`).toBe(false);
     expect(DURATION_TEXT.test(text), `${file} writes a fixed duration as text`).toBe(false);
+    expect(TIME_KEY.exec(text)?.[0], `${file} gives a time or wait a number`).toBeUndefined();
 
     for (const [, name] of text.matchAll(COUNT_CONSTANT)) {
       found.push(name ?? "");
     }
   }
 
-  expect(found.toSorted(), "each top-level count is git's own, found once").toEqual(GIT_OWN.toSorted());
+  expect(found.toSorted(), "each constant that is a number is git's own, found once").toEqual(GIT_OWN.toSorted());
 });
