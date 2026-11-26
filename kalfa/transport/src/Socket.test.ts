@@ -98,7 +98,7 @@ it.effect.prop(
 );
 
 /** The close codes (q): a clean one, going away, an abnormal one, a server error and the application's own range. */
-const CODES = (extra: number): ReadonlyArray<number> => [1000, 1001, 1006, 1011, 4000 + extra];
+const CODES = (extra: number): ReadonlyArray<number> => [1000, 1001, 1006, 1011, 3000 + extra];
 
 /** The far end writes `frames`, then closes; the near end's `socket` stream is read to its end. */
 const closedBy = <R = never>(
@@ -144,7 +144,7 @@ it.effect.prop(
   {
     frames: Arbitrary.array(word, { maxLength: 20 }),
     reason: word,
-    extra: between(0, 999),
+    extra: between(0, 1999),
     later: Arbitrary.schema(Schema.Boolean),
   },
   ({ frames, reason, extra, later }) =>
