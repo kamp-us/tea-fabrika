@@ -8,7 +8,8 @@ name: scheduled
 # (a test that needs a real resource runs only in main's full run): the in-memory tests, the real-resource ones (`*.integration.test.ts`), which only this
 # run runs, and the visual ones (`*.visual.test.ts`), and every tooling test, on main's head. A
 # push to main starts it when no full run on main started in the last hour, and an hourly catch-up
-# starts it on a head that has had none (main's full run starts on a push to main and an hourly catch-up): the `gate` job decides (gate.mjs), so a break no
+# starts it on a head that is not tested (a head is tested by one green full run, or by two that did not end
+# `canceled`; main's full run starts on a push to main and an hourly catch-up): the `gate` job decides (gate.mjs), so a break no
 # diff reached shows within about an hour of its push, two at most when the next push is long in
 # coming. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one, and
 # a green run closes it (scheduled.mjs). Those are the only issues automation opens here.
@@ -90,7 +91,7 @@ on:
     branches: [main]
   # The hourly catch-up (main's full run starts on a push to main and an hourly catch-up), at minute 17: GitHub delays and drops runs queued on the hour, when
   # most schedules start (its docs, "Events that trigger workflows", schedule). It starts a run only
-  # on a head that has had none, and never within the gap.
+  # on a head that is not tested, and never within the gap.
   schedule:
     - cron: "17 * * * *"
   # By hand, on main or on a branch. On main it is main's full run whatever the inputs say: `select`
@@ -158,8 +159,8 @@ env:
 
 jobs:
   # The gate (main's full run starts on a push to main and an hourly catch-up): whether this run starts the tests. A hand start always does; a push or the
-  # catch-up does when no full run on main started within the gap, and only on a head that has had
-  # none (gate.mjs). The ref's workflow group holds this run, so earlier runs on main have ended
+  # catch-up does when no full run on main started within the gap, and only on a head that is not tested
+  # (gate.mjs). The ref's workflow group holds this run, so earlier runs on main have ended
   # before main's gate reads them. It reads runs with the workflow's own token, which cannot cancel
   # a run, and its summary line says why. When it cannot read GitHub it fails and gives no `start`: the tests
   # skip and the report judges the run red. No install: the runner's own Node runs gate.mjs.
