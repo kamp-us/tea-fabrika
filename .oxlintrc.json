@@ -6168,8 +6168,13 @@
       }
     },
     {
-      // The stream functions (Transport.ts) stay apart from the format: they call `Format`'s `write` and `read` and never the JSON-RPC frame's own writer (the line format a test passes in its place must work with no change here). The package override's entries, repeated, and one more.
-      "files": ["kalfa/transport/src/Transport.ts"],
+      // The stream functions (Transport.ts) and the hello (Hello.ts and the two files under internal/ it is built on) stay apart from the format: they call `Format`'s `write` and `read` and never the JSON-RPC frame's own writer (the line format a test passes in its place must work with no change here). The package override's entries, repeated, and one more.
+      "files": [
+        "kalfa/transport/src/Transport.ts",
+        "kalfa/transport/src/Hello.ts",
+        "kalfa/transport/src/internal/message.ts",
+        "kalfa/transport/src/internal/connection.ts"
+      ],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -6332,7 +6337,7 @@
               },
               {
                 "group": ["./internal/jsonRpc*", "**/internal/jsonRpc*", "**/jsonRpc", "**/jsonRpc.ts"],
-                "message": "Transport.ts calls the format through `Format`, never the JSON-RPC frame's own writer: a test Layer replaces the format with no change to the stream functions."
+                "message": "The stream functions and the hello call the format through `Format`, never the JSON-RPC frame's own writer: a test Layer replaces the format with no change to them."
               }
             ]
           }

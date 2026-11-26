@@ -88,6 +88,7 @@ import {
 import type { PlatformError } from "effect";
 import { Command, Flag } from "effect/cli";
 import { alive, bounded, DOCKER_SECONDS, heldBy, loads, secondsFor, Summary } from "../../lead/scripts/mutbox.ts";
+import { ANSWER } from "./answer.ts";
 import * as Saved from "./gatecache.ts";
 import { inLine, noteLine } from "./gatequeue.ts";
 import type { Line } from "./gatequeue.ts";
@@ -406,11 +407,6 @@ export const staticLines = (rows: ReadonlyArray<Row>): ReadonlyArray<string> => 
  */
 export type Answer = { readonly file: string; readonly line: number | null };
 
-// A command the arrow does not open with, so `plant: => y` has a result and no command.
-const PROOF = String.raw`(?:\b(?:plant|rg):[ \t]*(?!=>)\S.*?=>[ \t]*\S|\blaw:[ \t]*[A-Z][A-Za-z]*\d+\b)`;
-
-const ANSWER = new RegExp(String.raw`^Survivor:[ \t]+(\S+):(\d+|\*)[ \t]+\S.*?[ \t]+--[ \t]+(?:\S.*?)?${PROOF}`);
-
 /** The place a `Survivor:` row answers, `file:line` or `file:*`; `null` for a row too broken to say. */
 const PLACE = /^Survivor:[ \t]+(\S+:(?:\d+|\*))(?=[ \t])/;
 
@@ -443,9 +439,7 @@ const standing = (text: string): ReadonlyArray<Said> => {
 export const answersIn = (text: string): ReadonlyArray<Answer> =>
   Arr.flatMap(standing(text), (row) => (row.answer === null ? [] : [row.answer]));
 
-/** The nonblank rows of a text that answer nothing: a commit that only carries answers (stepcommit.sh --empty) holds none. Pure. */
-export const notAnswers = (text: string): ReadonlyArray<string> =>
-  Arr.filter(Str.split(text, "\n"), (row) => Str.trim(row) !== "" && !ANSWER.test(row));
+export { notAnswers } from "./answer.ts";
 
 /** The `Survivor:` rows that stand and answer nothing, the ones the check refuses by name. A newer row on the same place with a proof clears an older one. Pure. */
 export const refusedIn = (text: string): ReadonlyArray<string> =>
