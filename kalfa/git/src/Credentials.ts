@@ -1,5 +1,5 @@
 /**
- * The slot a fetch asks for a login, the login it holds, and the filler that gives none.
+ * The credential slot a fetch asks, the credential it holds, and the filler that gives none.
  *
  * **Details**
  *
@@ -41,7 +41,7 @@ export class NoCredential extends Schema.TaggedError<NoCredential, { readonly br
 ) {}
 
 /**
- * The slot: asked once on every fetch, with the URL git will use. `none` answers that no login is needed.
+ * The slot: asked once on every fetch, with the URL git will use. `none` answers that no credential is needed.
  *
  * @category services
  */
@@ -51,7 +51,7 @@ export class Credentials extends Context.Service<
 >()("@kalfa/git/Credentials") {}
 
 /**
- * The filler that gives no credential, for a remote that needs no login: a local path, a remote in memory or a public one.
+ * The filler that gives no credential, for a remote that needs no credential: a local path, a remote in memory or a public one.
  *
  * @category layers
  */

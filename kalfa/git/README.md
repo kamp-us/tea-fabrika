@@ -79,11 +79,13 @@ no ref and changes no config. `[]` means git proved the remote holds none, and a
 a failure. A push that deletes a ref can trust it.
 
 - **The slot.** A fetch asks the `Credentials` slot once, with the URL git will use, so the call's requirement is the slot,
-  and the program picks a filler at its top, by name. `Credentials.none` gives no login. A repository that fetches only from
-  remotes with no login picks it. In this version the git adapter does not hand a credential to git, so a remote that needs
-  a login fails `FetchFailed`.
+  and the program picks a filler at its top, by name. `Credentials.none` gives no credential. A repository that fetches only
+  from remotes that need none picks it. In this version the git adapter does not hand a credential to git, so a remote that
+  needs one fails `FetchFailed`.
 - **The remote.** `Remote.named(name)` or `Remote.url(url)`. A URL is `https://host[:port]/path`, `file:///abs/path` or an
-  absolute path. It holds no user, password, query or fragment, no space and no control character. `http://`, `ssh://`,
+  absolute path. It holds no user, password, query or fragment, no space, backslash or control character, and its host is exactly
+  what the URL parser reads (lowercase, no default port written out, an international name as `xn--`), so no character the parser
+  drops, maps or decodes can hide a host. `http://`, `ssh://`,
   `git@host:path`, `ext::`, `fd::` and relative paths are refused. A named remote's URL is the configured text exactly: no
   `insteadOf` applies.
 - **Failures.** `NoSuchRemote` for a name this repository has no remote for, `BadRemoteUrl` for a named remote whose config
@@ -100,8 +102,9 @@ a failure. A push that deletes a ref can trust it.
   It runs `git fetch --no-tags --no-write-fetch-head --update-shallow` with `transfer.unpackLimit=1` and
   `protocol.allow=never`, so only a local path, a `file://` URL and `https` are reached, and a refspec that writes the
   remote's refs under `refs/fetched/` in that directory only. A pack is renamed into the repository only after a good answer,
-  `.idx` last, so a fetch that fails leaves the repository as it was. The folder is removed after every ending, bounded by
-  `limits.kill`, and a removal that fails never changes what the call answered. A hard kill of the process leaves one
+  `.idx` last, so a fetch that fails leaves the repository as it was. The folder is removed after every ending, each removal bounded by
+  `limits.kill`, and a removal that fails never changes what the call answered. A call ends within `limits.time` plus two
+  `limits.kill` waits: a transfer that ignores the first signal holds its own scope for one, and the removal waits at most another. A hard kill of the process leaves one
   `kalfa-fetch-*` folder in the git directory, which git ignores. A remote with a cut history, and a repository that is
   shallow, fail `HistoryTooShort` and leave the repository as it was.
 
@@ -446,7 +449,8 @@ call always ends.
 ## The laws
 
 `@kalfa/git/test` holds `RepositoryTest.suite`, the laws every adapter passes, with its `Subject`, `Seeded` and
-`SuiteOptions` types and `settings`. `@kalfa/git/test/History` holds the `History` and `Node` types and the `textureArb`
+`SuiteOptions` types and `settings`, and `FetchTest`, the laws of `fetch`, which an adapter that fetches runs beside it with a
+`FetchSubject` of its own: `FetchTest.suite("name", subject, { runs, timeout })`. `@kalfa/git/test/History` holds the `History` and `Node` types and the `textureArb`
 and `shapes` that draw the histories. A new adapter writes a `Subject` that seeds a history into its own kind of store,
 with each node's `files` in each commit's tree, answers each commit's tree id in `Seeded.trees`, and runs
 `RepositoryTest.suite("name", subject, { runs, timeout })` in its own test file. `@effect/vitest` and `vitest` are

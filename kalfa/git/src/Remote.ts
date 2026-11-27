@@ -3,7 +3,7 @@
  *
  * **Details**
  *
- * A remote is named in this repository's config, such as `origin`, or it is a URL. A URL is one this package takes: it holds no login, so no credential can ride in it, and no text the URL parser would drop can hide a host.
+ * A remote is named in this repository's config, such as `origin`, or it is a URL. A URL is one this package takes: it holds no user name or password, so no credential can ride in it, and its host is written as the parser reads it, so no character the parser drops, maps or decodes can hide a host.
  */
 import { Schema } from "effect";
 import * as Ref from "./Ref.ts";
@@ -34,25 +34,22 @@ const isWebOrFile = (text: string): boolean => {
     return false;
   }
 
-  if (!URL.canParse(text)) {
+  const scheme = text.startsWith("https://") ? "https://" : text.startsWith("file://") ? "file://" : undefined;
+
+  if (scheme === undefined || !URL.canParse(text)) {
     return false;
   }
 
-  const parsed = new URL(text);
-  const authority = text.slice(text.indexOf("//") + 2).split("/")[0] ?? "";
+  // The host the parser read is the text of the authority, exactly. A user name or a password in the authority, a dropped, mapped or decoded
+  // character, a capital letter or a written-out default port would each make the text read another way than a caller reads it.
+  const authority = text.slice(scheme.length).split("/")[0] ?? "";
 
-  if (parsed.username !== "" || parsed.password !== "" || authority.includes("@")) {
+  if (new URL(text).host !== authority) {
     return false;
   }
 
-  switch (parsed.protocol) {
-    case "https:":
-      return text.startsWith("https://") && parsed.hostname !== "";
-    case "file:":
-      return text.startsWith("file:///") && parsed.hostname === "";
-    default:
-      return false;
-  }
+  // A file URL names no host: `file:///abs/path`.
+  return scheme === "https://" || authority === "";
 };
 
 // An absolute path, as git takes a local repository. A path that starts with two slashes names a host on some systems.
@@ -65,7 +62,7 @@ const isUrl = (text: string): boolean => !HIDDEN.test(text) && (isPath(text) || 
  *
  * **Details**
  *
- * It holds no user, password, query or fragment and no space or control character. `http://`, `ssh://`, `git@host:path`, `ext::`, `fd::` and relative paths are refused.
+ * It holds no user, password, query or fragment and no space or control character, and its host is exactly the text the URL parser reads: lowercase, with no default port written out, and an international name written as the parser writes it (`xn--`). `http://`, `ssh://`, `git@host:path`, `ext::`, `fd::` and relative paths are refused.
  *
  * @category models
  */
@@ -127,7 +124,7 @@ export class BadRemoteUrl extends Schema.TaggedError<BadRemoteUrl, { readonly br
 ) {}
 
 /**
- * Git could not fetch from the URL: there is no repository there, no way to reach it, or a login was refused.
+ * Git could not fetch from the URL: there is no repository there, no way to reach it, or the credential was refused.
  *
  * **Details**
  *

@@ -169,8 +169,19 @@ with no lines.
 _Avoid_: blob (every file is one), non-text
 
 **Credential**:
-What git hands a remote to log in on a fetch or a push: a user name and a password. It is asked for at each call. A repository that fetches only from remotes with no login picks the one that gives none, by name.
+What git hands a remote to prove who is asking, on a fetch or a push: a user name and a password. A fetch asks the credential
+slot for it at each call. A repository that fetches only from remotes that need none picks the filler that gives none, by name.
 _Avoid_: token, access grant, login, key
+
+**Credential slot**:
+The place a fetch asks, once for each call and with the URL git will use, for the credential to hand the remote. It answers
+a credential or none, or fails. It is the call's requirement, so the program that fetches picks what fills it, at its top.
+_Avoid_: credential provider, auth hook, login prompt
+
+**Filler**:
+What fills the credential slot: one that gives no credential, for a local path or a public remote, or one that reads an
+access grant. The program picks it by name.
+_Avoid_: provider, backend, plugin
 
 **Pre-push hook**:
 A check that reads what a push would send and can stop it before anything leaves. Every push runs one; a repository

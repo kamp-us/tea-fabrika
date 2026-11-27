@@ -881,13 +881,19 @@ export const layer = (
         const there = yield* source;
         const refs = refsAt(there, request.under);
         const tips = refs.map((ref) => ref.commit);
-        yield* Cell.update(cell, (now) => copied(now, there, tips));
 
         if ([...reach(there, tips)].some((id) => there.shallow.has(id))) {
           return yield* new Repository.HistoryTooShort();
         }
 
-        return refs.length > limits.refs ? yield* new Repository.TooMany({ limit: "refs", most: limits.refs }) : refs;
+        if (refs.length > limits.refs) {
+          return yield* new Repository.TooMany({ limit: "refs", most: limits.refs });
+        }
+
+        // Only a good answer adds commits, as the process adapter renames its pack in only after one.
+        yield* Cell.update(cell, (now) => copied(now, there, tips));
+
+        return refs;
       });
 
       const write = <A, E>(call: (held: Store) => Step<A, E>): Effect.Effect<A, E> =>
