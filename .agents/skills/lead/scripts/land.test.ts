@@ -438,7 +438,7 @@ describe("land.ts, today's tooling", () => {
     expect(got.calls.filter((c) => !c.startsWith("sign "))).toEqual([]);
   });
 
-  it("T652 scenario: an open PR is updated through the REST API, never gh pr edit (AGENTS.md)", () => {
+  it("T652 scenario: an open PR is updated through the REST API, never gh pr edit", () => {
     const got = land({ ...fine, open: "41" });
     expect(got.code, got.err).toBe(0);
     expect(got.calls).toContainEqual(
