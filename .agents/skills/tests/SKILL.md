@@ -39,6 +39,11 @@ this skill for the law. The reviewer reads that law on its recheck.
      nothing or to push edge cases. Effect's own tools come first, `effect/testing` (`TestClock`,
      `TestConsole`, `TestSchema`) included. Case counts use `runsFor`, as the neighbors do.
    - A property states its coverage and fails loudly when a required case is never reached.
+   - **A check on a property's tally runs only when the property drew its full count.** The mutation
+     box caps each property's case count, and a capped run is too short to reach every kind. Count the
+     cases inside the property and gate the tally check on that count, so the check still fails at
+     full depth and a capped or filtered run skips it. A guard of `tally.size > 0` only proves the
+     property ran, not that it ran fully.
    - When moving a law onto a schema's Arbitrary, keep its old reach: set size and run counts at
      least as large as the old generator, and test the real limit, not the schema's cap.
    - **A lower run count or input size keeps each plant red.** Any change that lowers a law's run

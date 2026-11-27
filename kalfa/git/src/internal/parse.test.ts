@@ -518,6 +518,9 @@ const isShorterReading = (whole: Reading, got: Reading): boolean => {
   );
 };
 
+// The cases P18 draws. The mutation box caps a property's count to `MUTATE_RUNS`, so the tally below is read only after all of these.
+const P18_RUNS = 400;
+
 const tally = new Map<string, number>();
 
 const counted = (kind: string): void => {
@@ -533,6 +536,7 @@ it.prop(
   "P18 parse.patch: a patch cut at any byte or bent in one place is unreadable, or a shorter reading of the whole, and never throws",
   { row: int(0, 1_000_000), kind: int(0, 6), pick: int(0, 1_000_000), flip: int(0, 1), junk: int(0, 3) },
   ({ row, kind, pick, flip, junk }) => {
+    counted("case");
     const chosen = readable[row % readable.length];
     expect(chosen, "a recorded row").toBeDefined();
 
@@ -664,7 +668,7 @@ it.prop(
       expect(encodeContents(read.success), `${note}: the same reading`).toEqual(whole);
     }
   },
-  { arbitrary: { runs: 400, seed: 119120 } },
+  { arbitrary: { runs: P18_RUNS, seed: 119120 } },
 );
 
 // The rows of P18 that were first found by hand, each the one-line row of the recording cut or bent, kept as they are.
@@ -696,8 +700,9 @@ it("pinned: P18 a patch with a partial row after its last section, a marker with
     }
   }
 
-  // When the law above ran in this file, each kind of cut or bend was drawn, and a cut read as a shorter reading at least once.
-  if (tally.size > 0) {
+  // When the law above drew all its cases in this file, each kind of cut or bend was drawn, and a cut read as a shorter reading at
+  // least once. A run that drew fewer (a capped box, a filtered run) has no say on what a full run draws, so it checks nothing here.
+  if ((tally.get("case") ?? 0) >= P18_RUNS) {
     for (const kind of [
       "cut",
       "cut: a shorter reading",
