@@ -61,7 +61,7 @@ const computedPasses = Arr.join(
     'export const d = {["type"]: 1};', // 5
     'let LET = "_tag";', // 6
     "export const e = {[LET]: 1};", // 7
-    "export const f = (suffix: string) => ({[`_tag${suffix}`]: 1});", // 8
+    `export const f = (suffix: string) => ({[\`_tag\${suffix}\`]: 1});`, // 8
   ],
   "\n",
 );
