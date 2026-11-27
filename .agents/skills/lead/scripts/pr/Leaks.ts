@@ -4,7 +4,7 @@
 // could not run, fails the gate; nothing here reads an exit code loosely. On 2026-11-15 a merge ran
 // after a grep had printed a leak, because the shell line never checked its exit code
 // (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json). Today's lead tooling, run on
-// our own laptop; it is not product. Read through its module: `Leaks.gate(...)`.
+// our own laptop; it is not product. Read through its module: `Leaks.diff(...)` and `Leaks.text(...)`.
 import { Effect } from "effect";
 import type { Detail } from "./PullRequests.ts";
 import { Pushes } from "./Pushes.ts";
@@ -23,10 +23,4 @@ export const diff = Effect.fn("Leaks.diff")(function* (dir: string, found: Pick<
 export const text = Effect.fn("Leaks.text")(function* (dir: string, found: Pick<Detail, "title" | "body">) {
   const pushes = yield* Pushes;
   yield* pushes.leakText(dir, words(found));
-});
-
-/** Fails unless the leak grep passed on the change, each commit and the words of pull request `found`. */
-export const gate = Effect.fn("Leaks.gate")(function* (dir: string, found: Pick<Detail, "oid" | "title" | "body">) {
-  yield* diff(dir, found);
-  yield* text(dir, found);
 });

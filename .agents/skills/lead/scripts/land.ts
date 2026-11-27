@@ -61,7 +61,8 @@
 //     refs/notes/fabrika, or a person's own signature) or made by `stepcommit.sh` (a `--commit-only` commit, signed at
 //     `land.ts run`, and a fix round's, which signs nothing), naming each one that is neither. The first refusal is the one printed.
 //     Changes nothing but the refs it fetches. Exits 1 on a refusal, naming what is wrong and the file it comes from; else prints
-//     one line that lists the checks it passed and exits 0.
+//     one line that lists the checks it passed and exits 0. `queue`, `run`, `merge`, `admin` and `arm` print that same line
+//     first (pr/Gate.ts `line`), unless the pull request was found merged already.
 //
 //   land.ts arm <pr>
 //     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips; pr/Arm.ts): runs the merge gate
@@ -120,7 +121,19 @@
 // calls them in order.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Result, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  Console,
+  DateTime,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import { Alerts } from "../../sev/scripts/Alerts.ts";
@@ -131,6 +144,7 @@ import * as RunsGh from "./ci/RunsGh.ts";
 import * as Arm from "./pr/Arm.ts";
 import * as BranchesGit from "./pr/BranchesGit.ts";
 import * as Gate from "./pr/Gate.ts";
+import * as MainFetch from "./pr/MainFetch.ts";
 import * as Merge from "./pr/Merge.ts";
 import { PullRequests } from "./pr/PullRequests.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
@@ -464,29 +478,9 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ quest, ready, env 
   return { title: posted.title, file };
 });
 
-/**
- * Fetches origin's main into a ref of this call alone and gives back its commit, then removes the ref. Never FETCH_HEAD
- * (every fetch in a checkout writes it, and a session that fetched there at once swapped it before the read: "the fetched
- * main is not a commit") and never a shared ref. Writes no FETCH_HEAD, so it takes none from anyone else.
- */
-const fetchedMain = Effect.fnUntraced(function* (tree: string, check: typeof Check.Type) {
-  const git = gitIn(tree);
-  const ref = `refs/land-fetch/${process.pid}-${globalThis.crypto.randomUUID()}`;
-
-  return yield* Effect.acquireUseRelease(
-    git(
-      check,
-      "origin main could not be fetched",
-      "fetch",
-      "-q",
-      "--no-write-fetch-head",
-      "origin",
-      `+refs/heads/main:${ref}`,
-    ),
-    () => git(check, "the fetched main is not a commit", "rev-parse", `${ref}^{commit}`),
-    () => sh(tree, "git", ["update-ref", "-d", ref]),
-  );
-});
+/** Origin's main as a commit (./pr/MainFetch.ts), a refusal at `check` when it cannot be read. */
+const fetchedMain = (tree: string, check: typeof Check.Type) =>
+  MainFetch.fetchedMain(tree).pipe(Effect.mapError((e) => new Refused({ check, reason: e.reason, output: e.output })));
 
 /** Fetches main and merges it in as the bot, never a rebase; a conflict names each file's step. */
 export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: Quest) {
@@ -712,6 +706,13 @@ const queueServices = (env: Env) =>
   );
 
 /**
+ * The line every merge path prints before its own, the one `check` prints: the merge gate passed it (./pr/Gate.ts). None for a
+ * pull request found merged already, which no gate read. A path that got past the gate held an open pull request.
+ */
+const gateLines = (pr: number, merged: boolean): ReadonlyArray<string> =>
+  merged ? [] : [Gate.line({ number: pr, state: "OPEN" })];
+
+/**
  * Adds pull request `pr` to GitHub's merge queue (pr/Queue.ts): the leak checks, `ci-required`
  * green at its head, then one pinned squash. With `wait`, the check is given the quest's hour to end.
  * `dir` is the checkout the head is fetched into: the main checkout unless a quest names its tree.
@@ -776,7 +777,13 @@ const run = Command.make(
     yield* say(
       `PR https://github.com/${quest.env.GH_REPO}/pull/${pr}; waiting for ${Queue.REQUIRED} to add it to the queue`,
     );
-    yield* say(Queue.line(yield* queue(quest.env, pr, Queue.QUEST_WAIT, quest.ready.tree)));
+    const added = yield* queue(quest.env, pr, Queue.QUEST_WAIT, quest.ready.tree);
+
+    for (const said of gateLines(pr, added._tag === "merged")) {
+      yield* say(said);
+    }
+
+    yield* say(Queue.line(added));
   }),
 );
 
@@ -792,7 +799,9 @@ const queueCommand = Command.make(
   "queue",
   { pr: PrNumber, wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)), ...waitFlags(Queue.QUEST_WAIT) },
   Effect.fn("land.queueCommand")(function* ({ pr, wait, minutes, every }) {
-    yield* Console.log(Queue.line(yield* queue(yield* loadEnv, pr, wait ? { minutes, every } : undefined)));
+    const added = yield* queue(yield* loadEnv, pr, wait ? { minutes, every } : undefined);
+
+    yield* Console.log(Arr.join([...gateLines(pr, added._tag === "merged"), Queue.line(added)], "\n"));
   }),
 );
 
@@ -830,12 +839,12 @@ const waitCommand = Command.make(
  * The commits on the branch since main (merges of main included, oldest first) that no tool vouches for: no note on
  * refs/notes/fabrika, no signature of a person's own, and not made by `stepcommit.sh` (a fix round's, which signs nothing, or a `--commit-only` commit, which `land.ts` signs later; its author is the bot's). A plain
  * `git commit` is the one that slips; CI never reads signatures on a PR branch, so the merge gate (pr/Gate.ts) is where it is found, on every path.
- * Fetches main and, when the head is not here, the head; changes nothing else. This is `Signatures.unvouched`, run on real git,
+ * Fetches main and, when the head is not here, the head; changes nothing else. This is `Signatures.unsigned`, run on real git,
  * for `replay.ts`, whose child node runs it on a pull request's head.
  */
 export const unsignedCommits = Effect.fn("land.unsignedCommits")(
   function* (tree: string, head: string) {
-    return yield* (yield* Signatures).unvouched(tree, head);
+    return yield* (yield* Signatures).unsigned(tree, head);
   },
   Effect.provide(SignaturesGit.layer),
   Effect.mapError((e) => new Refused({ check: "check", reason: e.reason, output: "" })),
@@ -849,10 +858,10 @@ const checkCommand = Command.make(
   Effect.fn("land.checkCommand")(function* ({ pr }) {
     const env = yield* loadEnv;
 
-    const refusal = yield* Effect.gen(function* () {
+    const checked = yield* Effect.gen(function* () {
       const found = yield* (yield* PullRequests).view(pr);
 
-      return yield* Gate.before({ dir: env.MAIN, found, readies: true });
+      return { found, refusal: yield* Gate.before({ dir: env.MAIN, found, marksReady: true }) };
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -872,11 +881,11 @@ const checkCommand = Command.make(
       ),
     );
 
-    if (refusal !== null) {
-      return yield* new Refused({ check: "body", reason: `pr ${pr}: ${refusal}`, output: "" });
+    if (checked.refusal !== null) {
+      return yield* new Refused({ check: "body", reason: `pr ${pr}: ${checked.refusal}`, output: "" });
     }
 
-    yield* Console.log(`pr ${pr}: the merge gate passes (${Gate.passed})`);
+    yield* Console.log(Gate.line(checked.found));
   }),
 );
 
@@ -906,7 +915,7 @@ const armCommand = Command.make(
       Effect.mapError(refusedAt("arm")),
     );
 
-    yield* Console.log(Arm.line(armed));
+    yield* Console.log(Arr.join([...gateLines(pr, armed._tag === "merged"), Arm.line(armed)], "\n"));
   }),
 );
 
@@ -957,7 +966,7 @@ const mergeBy = Effect.fn("land.mergeBy")(function* (
     Effect.mapError(refusedAt("merge")),
   );
 
-  yield* Console.log(Merge.line(done));
+  yield* Console.log(Arr.join([...gateLines(pr, done._tag === "merged"), Merge.line(done)], "\n"));
 });
 
 const mergeCommand = Command.make(

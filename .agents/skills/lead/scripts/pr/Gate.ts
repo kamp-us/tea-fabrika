@@ -17,9 +17,11 @@
 // A merged pull request is no refusal here: each path answers one as "already merged" before it asks the gate, and `land.ts
 // check` reads merged ones too (replay.ts runs it on them).
 //
-// The review check (ticket 2338, the one that binds a review to the head it judged) plugs in at `CHECKS` below: a `Check` of its
-// own, last, whose error joins `Unread` and whose services join `Needs`. Nothing else changes, for no path names a check. Read
-// through its module: `Gate.before(...)`.
+// The review check (ticket 2338, the one that binds a review to the head it judged) plugs in at `CHECKS` below as a `Check` of its
+// own, last: its error joins `Unread` and its services join `Needs`. It is more than one more entry, though: it must tell the
+// route (an admin merge may go past it, with a reason the lead gives) and read the pull request's files (a change that needs no
+// review passes by a file rule), so `Ask` grows a `route` and the paths pass theirs (queue, arm, admin). Read through its
+// module: `Gate.before(...)`.
 import { String as Str, pipe, Array as Arr, Effect } from "effect";
 
 import * as Leaks from "./Leaks.ts";
@@ -42,12 +44,12 @@ export type Ask = {
   readonly dir: string;
   readonly found: Detail;
   /** Whether the path marks a draft ready itself, as `queue`, `arm` and `check` do and `admin` does with a wait; a draft then passes. */
-  readonly readies: boolean;
+  readonly marksReady: boolean;
 };
 
-/** One refusal: what it says when the pull request passes, and how it asks. It gives why the pull request may not merge, or `null`. */
+/** One refusal: what it says of this pull request when it passes, and how it asks. It gives why the pull request may not merge, or `null`. */
 type Check = {
-  readonly passes: string;
+  readonly passes: (found: Pick<Detail, "state">) => string;
   readonly ask: (ask: Ask) => Effect.Effect<string | null, Unread, Needs>;
 };
 
@@ -65,8 +67,8 @@ const canBranch = (found: Detail): string | null =>
  * Why a pull request is in no state to merge, or `null`. A draft is refused for a path that does not mark it ready; one that
  * does asks about it as ready. A merged pull request is not refused.
  */
-const unfit = ({ found, readies }: Ask): string | null => {
-  const at = readies && found.state === "OPEN" && found.draft ? { ...found, draft: false } : found;
+const unfit = ({ found, marksReady }: Ask): string | null => {
+  const at = marksReady && found.state === "OPEN" && found.draft ? { ...found, draft: false } : found;
 
   return at.state === "MERGED"
     ? null
@@ -175,21 +177,25 @@ export const body = Effect.fn("Gate.body")(function* (
 
 /** The refusals, in the order they are asked. The review check (ticket 2338) is the next entry, last. */
 const CHECKS: ReadonlyArray<Check> = [
-  { passes: "not a can/ branch", ask: ({ found }) => Effect.succeed(canBranch(found)) },
-  { passes: "open, into main, no conflict", ask: (ask) => Effect.succeed(unfit(ask)) },
-  { passes: "no Plan: title", ask: ({ found }) => Effect.succeed(plan(found)) },
+  { passes: () => "not a can/ branch", ask: ({ found }) => Effect.succeed(canBranch(found)) },
   {
-    passes: "leak grep on the change and each commit",
+    passes: ({ state }) => (state === "MERGED" ? "state: already merged" : "open, into main, no conflict"),
+    ask: (ask) => Effect.succeed(unfit(ask)),
+  },
+  { passes: () => "no Plan: title", ask: ({ found }) => Effect.succeed(plan(found)) },
+  {
+    passes: () => "leak grep on the change and each commit",
     ask: ({ dir, found }) => Effect.as(Leaks.diff(dir, found), null),
   },
   {
-    passes: "leak grep on the title and description, the pr skill's sections, ## New names, fabrika close ticket lines",
+    passes: () =>
+      "leak grep on the title and description, the pr skill's sections, ## New names, fabrika close ticket lines",
     ask: ({ dir, found }) => body(dir, found),
   },
   {
-    passes: "every commit since main signed",
+    passes: () => "every commit since main signed",
     ask: Effect.fn("Gate.signatures")(function* ({ dir, found }) {
-      const unsigned = yield* (yield* Signatures).unvouched(dir, found.oid);
+      const unsigned = yield* (yield* Signatures).unsigned(dir, found.oid);
 
       return unsigned.length === 0
         ? null
@@ -198,11 +204,15 @@ const CHECKS: ReadonlyArray<Check> = [
   },
 ];
 
-/** What a passing gate says it checked, in the order it asked. */
-export const passed: string = Arr.join(
-  Arr.map(CHECKS, (check) => check.passes),
-  "; ",
-);
+/**
+ * What a passing gate says it checked, one line: the same words from `land.ts check` and from each path that merges, so the
+ * lead reads one list. `found` is the pull request as it stood when the gate read it, so a merged one says so.
+ */
+export const line = (found: Pick<Detail, "number" | "state">): string =>
+  `pr ${found.number}: the merge gate passes (${Arr.join(
+    Arr.map(CHECKS, (check) => check.passes(found)),
+    "; ",
+  )})`;
 
 /**
  * Why the pull request may not merge by any path, or `null` when it may: the first refusal of `CHECKS`. A refusal that cannot be

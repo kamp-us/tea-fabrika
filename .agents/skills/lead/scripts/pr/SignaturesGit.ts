@@ -1,11 +1,11 @@
 // SignaturesGit.layer: the Signatures service on real git, in the checkout the caller names. It changes nothing but the refs
 // it fetches. Main is fetched into a ref of this call alone and the ref is removed after: never FETCH_HEAD (every fetch in a
-// checkout writes it, and a session that fetched there at once swapped it before the read: "the fetched main is not a
-// commit") and never a shared ref.
-import { Effect, Layer, Random } from "effect";
+// checkout writes it) and never a shared ref: see ./MainFetch.ts.
+import { Effect, Layer } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 
 import { lastLine, run } from "./command.ts";
+import { fetchedMain } from "./MainFetch.ts";
 import { Signatures, SignaturesError } from "./Signatures.ts";
 
 /** The identity `stepcommit.sh` commits as; a commit with this author is one of its own. */
@@ -33,26 +33,13 @@ export const layer: Layer.Layer<Signatures, never, ChildProcessSpawner.ChildProc
           : Effect.fail(SignaturesError.make({ reason: `${reason}: ${lastLine(done)}` })),
       );
 
-    const fetchedMain = Effect.fn("SignaturesGit.fetchedMain")(function* (dir: string) {
-      const ref = `refs/land-fetch/${process.pid}-${yield* Random.nextInt}`;
-
-      return yield* Effect.acquireUseRelease(
-        must(
-          dir,
-          "origin main could not be fetched",
-          "fetch",
-          "-q",
-          "--no-write-fetch-head",
-          "origin",
-          `+refs/heads/main:${ref}`,
+    const commits = Effect.fn("SignaturesGit.unsigned")(function* (dir: string, head: string) {
+      const main = yield* fetchedMain(dir).pipe(
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Effect.mapError((e) =>
+          SignaturesError.make({ reason: `${e.reason}: ${e.output.trim().split("\n").at(-1) ?? ""}` }),
         ),
-        () => must(dir, "the fetched main is not a commit", "rev-parse", `${ref}^{commit}`),
-        () => Effect.ignore(ran(dir, ["update-ref", "-d", ref])),
       );
-    });
-
-    const unvouched = Effect.fn("SignaturesGit.unvouched")(function* (dir: string, head: string) {
-      const main = yield* fetchedMain(dir);
 
       if ((yield* ran(dir, ["cat-file", "-e", `${head}^{commit}`])).code !== 0) {
         yield* must(
@@ -83,6 +70,6 @@ export const layer: Layer.Layer<Signatures, never, ChildProcessSpawner.ChildProc
       return unsigned;
     });
 
-    return Signatures.of({ unvouched });
+    return Signatures.of({ unsigned: commits });
   }),
 );

@@ -228,12 +228,6 @@ export const Added = Schema.TaggedUnion({
 
 export type Added = typeof Added.Type;
 
-/**
- * The checks on a pull request's own words, alone: the part of the merge gate (./Gate.ts) that reads its title and description.
- * The laws read it here.
- */
-export const body = Gate.body;
-
 const conflicted = (pr: number) => NotQueued.make({ reason: `pr ${pr}: ${Gate.conflictLine(pr)}` });
 
 export const add = Effect.fn("Queue.add")(function* (a: Ask) {
@@ -245,7 +239,7 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   }
 
   // The gate, which every merge path asks first. A draft is not refused for being a draft: it is marked ready below, once the gate has passed.
-  const refused = yield* Gate.before({ dir: a.dir, found, readies: true });
+  const refused = yield* Gate.before({ dir: a.dir, found, marksReady: true });
 
   if (refused !== null) {
     return yield* NotQueued.make({ reason: `pr ${found.number}: ${refused}` });

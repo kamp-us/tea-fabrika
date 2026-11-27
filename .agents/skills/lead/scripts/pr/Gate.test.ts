@@ -23,7 +23,8 @@ import * as TicketsTest from "./TicketsTest.ts";
 
 const oid = "0123456789abcdef0123456789abcdef01234567";
 
-const hit = LeakGrepRefused.make({ reason: "leakgrep.sh exited 1" });
+/** Each leak check says which one refused, so a check asked in the wrong order is told apart. */
+const hit = (method: string) => LeakGrepRefused.make({ reason: `leakgrep.sh exited 1 on ${method}` });
 
 /** Each way a pull request is wrong that the gate refuses. A merged one is no refusal: every path answers it as done. */
 const Defect = Schema.Literals([
@@ -52,9 +53,9 @@ const ORDER: ReadonlyArray<{ readonly defect: Defect; readonly says: string }> =
   { defect: "otherBase", says: "merges into fabrikalfa/parent, not main" },
   { defect: "conflicting", says: "it conflicts with main" },
   { defect: "plan", says: "its title starts `Plan:`" },
-  { defect: "leakChange", says: "leakgrep.sh exited 1" },
-  { defect: "leakGrep", says: "leakgrep.sh exited 1" },
-  { defect: "leakText", says: "leakgrep.sh exited 1" },
+  { defect: "leakChange", says: "leakgrep.sh exited 1 on leakChange" },
+  { defect: "leakGrep", says: "leakgrep.sh exited 1 on leakGrep" },
+  { defect: "leakText", says: "leakgrep.sh exited 1 on leakText" },
   { defect: "placeholder", says: ".agents/skills/pr/SKILL.md" },
   { defect: "noEvidence", says: ".agents/skills/pr/SKILL.md" },
   { defect: "unnamed", says: "its ## New names section does not name: newThing" },
@@ -104,9 +105,9 @@ const memory = (defects: ReadonlyArray<Defect>) => {
   }
 
   const failing: PushesTest.Failing = {
-    ...(has("leakChange") ? { leakChange: hit } : {}),
-    ...(has("leakGrep") ? { leakGrep: hit } : {}),
-    ...(has("leakText") ? { leakText: hit } : {}),
+    ...(has("leakChange") ? { leakChange: hit("leakChange") } : {}),
+    ...(has("leakGrep") ? { leakGrep: hit("leakGrep") } : {}),
+    ...(has("leakText") ? { leakText: hit("leakText") } : {}),
   };
 
   const layer = Layer.mergeAll(
@@ -117,7 +118,7 @@ const memory = (defects: ReadonlyArray<Defect>) => {
     RunsTest.layer(RunsTest.world()),
     TicketsTest.layer(TicketsTest.world()),
     SignaturesTest.layer({
-      ...(has("unsigned") ? { unvouched: ["abc12345 a plain commit"] } : {}),
+      ...(has("unsigned") ? { unsigned: ["abc12345 a plain commit"] } : {}),
       ...(has("unreadable") ? { broken: "git cannot be read" } : {}),
     }),
   );
@@ -134,7 +135,11 @@ const walk = (path: Path, defects: ReadonlyArray<Defect>) => {
   const ended = Effect.gen(function* () {
     switch (path) {
       case "check": {
-        const refusal = yield* Gate.before({ dir: ".", found: yield* (yield* PullRequests).view(1415), readies: true });
+        const refusal = yield* Gate.before({
+          dir: ".",
+          found: yield* (yield* PullRequests).view(1415),
+          marksReady: true,
+        });
 
         // The gate alone answers with its words, as each path's own error carries them after `pr 1415: `.
         return refusal === null ? null : yield* Effect.fail({ _tag: "Refusal", reason: `pr 1415: ${refusal}` });
@@ -211,6 +216,28 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
     { arbitrary: { seed: 2337, runs: runsFor({ fast: 120, full: 400 }) } },
   );
 
+  // A random set of 14 refusals rarely holds the two that sit next to each other in the order, so a pair of checks asked the wrong way round slips by. This one always holds one adjacent pair, given
+  // in the wrong order, so each of the 13 pairs is walked at fast depth. Plants, each run once and restored: swap each pair of neighbouring entries of `CHECKS`, and the two checks inside `body` (red: that pair).
+  it.effect.prop(
+    "property: a pull request with two neighbouring refusals, given the later first, is refused by every path with the earlier one's words",
+    { at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: ORDER.length - 2 })) },
+    ({ at }) =>
+      Effect.gen(function* () {
+        const [earlier, later] = [ORDER[at], ORDER[at + 1]];
+        expect(earlier !== undefined && later !== undefined).toBe(true);
+
+        for (const path of ["check", ...PATHS] as const) {
+          const got = yield* walk(path, [later?.defect ?? "can", earlier?.defect ?? "can"]);
+
+          expect(got.refused?.reason, `${path}: ${earlier?.defect} before ${later?.defect}`).toContain(
+            earlier?.says ?? "",
+          );
+          expect(got.calls, path).toEqual([]);
+        }
+      }),
+    { arbitrary: { seed: 2338, runs: runsFor({ fast: 60, full: 200 }) } },
+  );
+
   // Plants: refuse a draft the path marks ready itself, or let `admin` without a wait mark one.
   it.effect(
     "scenario: a draft passes the gate for a path that marks it ready, and is refused for one that does not",
@@ -219,8 +246,8 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
         const m = memory([]);
         const found = yield* (yield* PullRequests).view(1415);
         const draft = { ...found, draft: true };
-        expect(yield* Gate.before({ dir: ".", found: draft, readies: true })).toBeNull();
-        expect(yield* Gate.before({ dir: ".", found: draft, readies: false })).toBe(
+        expect(yield* Gate.before({ dir: ".", found: draft, marksReady: true })).toBeNull();
+        expect(yield* Gate.before({ dir: ".", found: draft, marksReady: false })).toBe(
           "draft, not merged; refused until it is ready for review",
         );
         expect(m.github.calls).toEqual([]);
@@ -233,13 +260,21 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
     () =>
       Effect.gen(function* () {
         const found = yield* (yield* PullRequests).view(1415);
-        expect(yield* Gate.before({ dir: ".", found: { ...found, state: "MERGED" }, readies: false })).toBeNull();
+        expect(yield* Gate.before({ dir: ".", found: { ...found, state: "MERGED" }, marksReady: false })).toBeNull();
       }).pipe(Effect.provide(memory([]).layer)),
   );
 
-  it("vector: what a passing gate says it checked, in the order it asked, for `land.ts check` to print", () => {
-    expect(Gate.passed).toBe(
-      "not a can/ branch; open, into main, no conflict; no Plan: title; leak grep on the change and each commit; leak grep on the title and description, the pr skill's sections, ## New names, fabrika close ticket lines; every commit since main signed",
+  // Plant: say "open, into main" of a merged pull request, as the line did.
+  it("vector: what a passing gate says it checked, in the order it asked, for `land.ts check` and every path to print; a merged one says so", () => {
+    const checks =
+      "no Plan: title; leak grep on the change and each commit; leak grep on the title and description, the pr skill's sections, ## New names, fabrika close ticket lines; every commit since main signed)";
+
+    expect(Gate.line({ number: 7, state: "OPEN" })).toBe(
+      `pr 7: the merge gate passes (not a can/ branch; open, into main, no conflict; ${checks}`,
+    );
+
+    expect(Gate.line({ number: 7, state: "MERGED" })).toBe(
+      `pr 7: the merge gate passes (not a can/ branch; state: already merged; ${checks}`,
     );
   });
 });

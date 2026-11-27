@@ -702,6 +702,25 @@ describe("land.ts, today's tooling", () => {
     }, 300_000);
   }
 
+  // Plants: print the list of checks from `check` only, or a different one from a merge path.
+  it("scenario: `land.ts check` and every path that merges print the same line listing the checks the gate ran, first", () => {
+    const checked = land({ ...fine, command: ["check", "77"] });
+    expect(checked.code, checked.err).toBe(0);
+    const line = checked.out.trim();
+    expect(line).toMatch(/^pr 77: the merge gate passes \(not a can\/ branch; open, into main, no conflict;/);
+
+    for (const command of [
+      ["queue", "77"],
+      ["merge", "77", "--admin=false"],
+      ["merge", "77", "--admin"],
+      ["admin", "77", "--wait"],
+    ]) {
+      const got = land({ ...fine, command });
+      expect(got.code, `${command.join(" ")}: ${got.err}`).toBe(0);
+      expect(got.out.split("\n")[0], command.join(" ")).toBe(line);
+    }
+  }, 300_000);
+
   // Plants: skip the signature read in `check`, count only the branch's tip, or name no commit.
   it("scenario: `land.ts check` refuses a commit since main with no signature, names it, and passes when every commit has a note", () => {
     const unsigned = land({ ...fine, unsignedCommit: true, command: ["check", "77"] });

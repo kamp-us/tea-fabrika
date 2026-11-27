@@ -31,6 +31,7 @@ import { Checks } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import * as BranchesTest from "./BranchesTest.ts";
 import * as Merge from "./Merge.ts";
+import { PullRequests } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
@@ -602,6 +603,45 @@ describe("merge: land.ts admin never merges ahead of ci-required, a can/ branch 
       expect(fiber.reason).toContain(`its head moved from ${oid} to ${moved}`);
       expect(m.github.calls).toEqual([]);
     }),
+  );
+});
+
+describe("merge: admin merges only the head the gate read", () => {
+  /** Whatever a push does to the pull request, from the point the layer names: its head is `moved` from then on. */
+  const pushed = (m: ReturnType<typeof memory>, at: "queue" | "ready") =>
+    Layer.effect(
+      PullRequests,
+      Effect.map(PullRequests, (prs) => {
+        const move = Effect.sync(() => {
+          m.github.prs[0] = { ...m.github.prs[0]!, oid: "f".repeat(40) };
+        });
+
+        return PullRequests.of({
+          ...prs,
+          ...(at === "queue" ? { queue: Effect.tap(prs.queue, () => move) } : {}),
+          ...(at === "ready" ? { ready: (n: number) => Effect.tap(prs.ready(n), () => move) } : {}),
+        });
+      }),
+    ).pipe(Layer.provide(m.layer));
+
+  // Plant: re-read the pull request after the queue read or after marking it ready and pin the merge to the new head, as `Merge.admin` did, so a push after the gate is merged unread.
+  it.effect.prop(
+    "property: a push after the gate read the head, during the queue read or when the draft is marked ready, makes an admin merge refuse with the moved head and ask for no merge",
+    { at: Schema.Literals(["queue", "ready"]) },
+    ({ at }) =>
+      Effect.gen(function* () {
+        const m = memory({ draft: at === "ready" });
+
+        const refused = yield* Merge.merge({
+          dir: ".",
+          pr: 1415,
+          route: admin(),
+          wait: { minutes: 5, every: 60 },
+        }).pipe(Effect.provide(Layer.merge(m.layer, pushed(m, at))), Effect.flip);
+
+        expect(refused.reason).toContain(`its head moved from ${oid} to ${"f".repeat(40)} after the gate read it`);
+        expect(m.github.calls.filter((call) => call._tag === "admin")).toEqual([]);
+      }),
   );
 });
 

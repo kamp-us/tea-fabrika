@@ -166,13 +166,23 @@ const admin = Effect.fn("Merge.admin")(function* (
 
   // With a wait, a draft is not refused for being a draft: it is marked ready below, after the gate.
   const marking = wait !== undefined && found.state === "OPEN" && found.draft;
-  const refused = yield* Gate.before({ dir, found, readies: wait !== undefined });
+  const refused = yield* Gate.before({ dir, found, marksReady: wait !== undefined });
 
   if (refused !== null) {
     return yield* refuse(refused);
   }
 
   const allowed = adminFor(found.head, route);
+  // The head the gate read. Every later read of the pull request must hold the same head, or what is merged is not what was gated.
+  const gated = found.oid;
+
+  const reread = Effect.fn("Merge.reread")(function* () {
+    found = yield* prs.view(pr);
+
+    if (found.oid !== gated) {
+      return yield* refuse(`its head moved from ${gated} to ${found.oid} after the gate read it; not merged`);
+    }
+  });
 
   // A merge to main moves main under the queue and restarts the build of every entry in it: any other
   // pull request waits for the queue to empty. A sev fix and a sev0's ready pull request keep the sev
@@ -190,7 +200,7 @@ const admin = Effect.fn("Merge.admin")(function* (
       );
     }
 
-    found = yield* prs.view(pr);
+    yield* reread();
   }
 
   // Marking a draft ready starts its real `ci-required`, which has not registered yet: the wait below
@@ -206,7 +216,7 @@ const admin = Effect.fn("Merge.admin")(function* (
     }
 
     yield* prs.ready(found.number);
-    found = yield* prs.view(pr);
+    yield* reread();
   }
 
   // Every admin merge, docs included, lands once ci-required is green at the head: it skips the queue,

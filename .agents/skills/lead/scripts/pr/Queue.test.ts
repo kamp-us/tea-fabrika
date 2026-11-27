@@ -7,6 +7,7 @@ import { Effect, Fiber, Layer, Option, Schema, Match } from "effect";
 import { TestClock } from "effect/testing";
 import { Checks, ChecksError, type Job } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
+import * as Gate from "./Gate.ts";
 import type { PullRequest } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
@@ -407,7 +408,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
 
 describe("body: the description is the pr skill's template, never the draft placeholder (pull request 2320 merged with the placeholder and a ## New names section)", () => {
   const answer = (text: string) =>
-    Queue.body(".", { number: 900, title: "T1: a title", body: text }).pipe(
+    Gate.body(".", { number: 900, title: "T1: a title", body: text }).pipe(
       Effect.provide(memory({ more: { body: text } }).layer),
     );
 
@@ -458,7 +459,7 @@ describe("body: a `fabrika close ticket <N>` line must name an open tracker tick
       m.github.issues.add(n);
     }
 
-    return Queue.body(".", { number: 900, title: "T1: a title", body: text }).pipe(
+    return Gate.body(".", { number: 900, title: "T1: a title", body: text }).pipe(
       Effect.provide(m.layer),
       Effect.result,
     );
@@ -499,7 +500,7 @@ describe("body: a `fabrika close ticket <N>` line must name an open tracker tick
       Effect.gen(function* () {
         const m = memory({ open: [7] });
 
-        const plain = yield* Queue.body(".", {
+        const plain = yield* Gate.body(".", {
           number: 900,
           title: "t",
           body: `${full}\nCloses #1843\nfabrika close ticket 5x`,
