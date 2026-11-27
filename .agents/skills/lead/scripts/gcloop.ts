@@ -53,8 +53,9 @@
 //   - GitHub scheduled workflows
 //     (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule):
 //     a CI runner cannot see this laptop's boxes.
-// The repo had no laptop timer before this: the hourly mutation run is a CI workflow a person or a
-// session dispatches by hand (.github/workflows/mutation.yaml).
+// The repo had no laptop timer before this. The hourly mutation run is no laptop job either: it is a
+// CI workflow that starts itself on a push to main and an hourly cron (.github/workflows/mutation.yaml),
+// so a sleeping laptop never stops it, and a heartbeat workflow alarms when it does stop.
 
 import {
   String as Str,

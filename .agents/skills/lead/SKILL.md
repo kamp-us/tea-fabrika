@@ -560,7 +560,7 @@ visible, and never weaken the rules to hide this message.
    or replaced law, using exact test titles. Save that table as `mapping.md` for the command.
    A pure addition needs no replacement row. `loosening.sh`'s header says what counts as a hit;
    it fails closed, so every hit is yours to check by hand. A law narrowed with no changed
-   `expect` is found by the hourly mutation run instead, as a ticket marked loosening.
+   `expect` is found by the hourly mutation run instead, which shows it in its job summary and artifact: the run cannot reach the tracker, so it files no loosening ticket until a ticket adds a filer, and a person or session files it by hand.
    Before this new check blocks anything, measure false alarms on the last 20 merged `next/`
    PRs and record the count. Do not claim that measure from generated tests alone.
    Never write "owner read" unless the owner did. Log each required owner read in a field note.
