@@ -238,6 +238,11 @@ describe("the mutation heartbeat, today's tooling: its settings", () => {
       }),
     ));
 
+  // pinned: workflow-lint/mutation.test.ts holds the same two numbers for the range the lint allows.
+  it("pinned: the limit's range is 105 to 1440 minutes", () => {
+    expect(LATE_RANGE).toEqual({ least: 105, most: 1440 });
+  });
+
   it("scenario: the edges of the limit's range are allowed", () =>
     law(
       Effect.gen(function* () {

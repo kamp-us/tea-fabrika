@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { LATE_RANGE } from "../../../.agents/skills/mutation/scripts/heartbeat.ts";
 import { lintMutation } from "./mutation.ts";
 import { allSteps, map } from "./shared.ts";
 
@@ -210,8 +209,11 @@ it("MU11: a setting outside its range, or no number, is refused wherever it is s
   }
 });
 
-it("pinned: the lint's range for the limit is the one heartbeat.ts enforces", () => {
+// pinned: heartbeat.test.ts holds the same two numbers for the range heartbeat.ts enforces. A test here may not
+// import a script from .agents/skills, or a change to that script would select this file too (related.test.ts).
+it("pinned: the lint's range for the limit is 105 to 1440 minutes, the one heartbeat.ts enforces", () => {
   const f = files();
+  const LATE_RANGE = { least: 105, most: 1440 };
 
   for (const edge of [LATE_RANGE.least, LATE_RANGE.most]) {
     map(job(f.beat, "heartbeat")["env"])["MUTATION_LATE_MINUTES"] = String(edge);

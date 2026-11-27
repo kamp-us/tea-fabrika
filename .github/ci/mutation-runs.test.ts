@@ -1,5 +1,8 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { passedRun as heartbeatPass, type Gh as BeatGh } from "../../.agents/skills/mutation/scripts/heartbeat.ts";
 import { type Gh, passedRun, recent, SCAN } from "./mutation-runs.mjs";
 
 // Today's lead tooling. Covers mutation-runs.mjs: a run counts by its own job, never by the run's conclusion.
@@ -13,7 +16,7 @@ const jobsOf = (id: number) => `${API}/actions/runs/${id}/jobs?per_page=100`;
 const fake = (table: Record<string, unknown>) => {
   const calls: string[][] = [];
 
-  const gh: Gh & BeatGh = (args) => {
+  const gh: Gh = (args) => {
     calls.push([...args]);
     const answer = table[String(args[1])];
 
@@ -164,6 +167,33 @@ describe("mutation-runs.mjs, today's tooling", () => {
     expect(calls.map((c) => c[1])).toEqual([RECENT, jobsOf(4), jobsOf(3), jobsOf(2)]);
   });
 
+  /**
+   * heartbeat.ts run as a program against a fake `gh` that answers from `table`, and the line it prints. It is run, not
+   * imported, so a change to heartbeat.ts selects only its own tests (related.test.ts).
+   */
+  const heartbeatLine = (table: Record<string, unknown>) => {
+    const dir = mkdtempSync(join(tmpdir(), "mutation-runs-"));
+
+    writeFileSync(
+      join(dir, "gh"),
+      [
+        "#!/usr/bin/env node",
+        "const table = JSON.parse(process.env.FAKE_TABLE);",
+        "const key = process.argv[2] === 'api' ? process.argv[3] : process.argv.slice(2).join(' ');",
+        "const compare = key.includes('/compare/') ? { ahead_by: 1, commits: [{ commit: { committer: { date: '2026-11-26T11:00:00Z' } } }] } : undefined;",
+        "const answer = table[key] ?? compare;",
+        "if (answer === undefined) { console.error('unexpected gh call: ' + key); process.exit(1); }",
+        "console.log(JSON.stringify(answer));",
+      ].join("\n"),
+    );
+    chmodSync(join(dir, "gh"), 0o755);
+
+    return spawnSync(process.execPath, [".agents/skills/mutation/scripts/heartbeat.ts"], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${dir}:${process.env["PATH"]}`, FAKE_TABLE: JSON.stringify(table) },
+    }).stdout;
+  };
+
   it("scenario: the gate's read and the heartbeat's read give one last pass", () => {
     const table = {
       [PASSED]: {
@@ -173,7 +203,17 @@ describe("mutation-runs.mjs, today's tooling", () => {
       [jobsOf(2)]: { jobs: [job("mutation", "success", "2026-11-26T10:00:05Z")] },
     };
 
-    expect(heartbeatPass(fake(table).gh)).toEqual(passedRun(fake(table).gh, "mutation.yaml", "mutation"));
-    expect(heartbeatPass(fake({ ...table, [jobsOf(2)]: { jobs: [] } }).gh)).toBeNull();
+    // The last pass is the run at 10:00 (c2), the older one: the newer run's job was skipped.
+    expect(passedRun(fake(table).gh, "mutation.yaml", "mutation")).toEqual({
+      createdAt: Date.parse("2026-11-26T10:00:00Z"),
+      headSha: "c2",
+    });
+    expect(heartbeatLine(table)).toContain("since the last passing run (2026-11-26T10:00:00Z)");
+
+    // No run whose job passed: none for both.
+    const none = { ...table, [jobsOf(2)]: { jobs: [] } };
+
+    expect(passedRun(fake(none).gh, "mutation.yaml", "mutation")).toBeNull();
+    expect(heartbeatLine({ ...none, [`${API}/commits?sha=main&per_page=100`]: [] })).toContain("(none)");
   });
 });
