@@ -1063,7 +1063,10 @@ it.effect(
 // to what the call and the stand-in say: a repository's own inputs steer no rebase (I13), and the call answers what `git rebase` does.
 // ---------------------------------------------------------------------------------------------------------
 
-/** One file of ten lines, so git's rename detection finds it again after a move and a change of one line. */
+/**
+ * One file of ten lines, so git's rename detection finds it again after a move and a change of one line. Two changes to one file merge
+ * clean only when an unchanged line lies between them: changes on neighboring lines conflict.
+ */
 const lines = (word: string, changed = -1): Uint8Array =>
   new TextEncoder().encode(
     Array.from({ length: 10 }, (_, i) => (i === changed ? `${word} changed\n` : `${word} line ${i}\n`)).join(""),
@@ -1086,7 +1089,9 @@ const answered = <E>(result: Result.Result<ReadonlyArray<Commit.Commit>, E>) => 
 // the law itself runs only here, in CI's full run.
 //   1. ProcessRepository.ts, in MERGE_PINS, delete the line `"merge.renameLimit=7000",`. The configured repository's limit of 1
 //      is then in force, git finds no rename of `one` to `uno` and `two` to `dos` (each changed by one line, so no exact rename), and
-//      the rebase of "a rename against a change" answers a Conflict on `one` and `two` where the plain repository answers commits.
+//      the rebase of "a rename against a change" answers a Conflict on `one` and `two` (modify/delete) where the plain repository
+//      answers commits. The two sides change lines 7 and 2 of each file: neighboring lines would conflict as text, with or without
+//      the rename, which is how the first version of this law failed on CI.
 //   2. ProcessRepository.ts, in PINNED, delete the line `GIT_ATTR_SOURCE: EMPTY_TREE,`. On a git that reads a tree's attributes (2.43
 //      and newer; older gits ignore the variable, so this plant stays green there) `attr.tree` and HEAD's `* merge=union` merge the
 //      clash by union, and "a clash" answers commits where the plain repository answers a Conflict on `clash`.
@@ -1123,8 +1128,8 @@ it.effect(
       const history: History = {
         nodes: [
           node([], [file("one", one), file("two", two)], "base\n"),
-          node([0], [file("uno", lines("one", 5)), file("dos", lines("two", 5))], "onto\n"),
-          node([0], [file("one", lines("one", 4)), file("two", lines("two", 4))], "change\n"),
+          node([0], [file("uno", lines("one", 7)), file("dos", lines("two", 7))], "onto\n"),
+          node([0], [file("one", lines("one", 2)), file("two", lines("two", 2))], "change\n"),
           node([], [file("clash", text("x\n"))], "clash base\n"),
           node([3], [file("clash", text("o\n"))], "clash onto\n"),
           node([3], [file("clash", text("t\n"))], "clash change\n"),
