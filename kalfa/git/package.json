@@ -17,6 +17,8 @@
     "./Repository": "./src/Repository.ts",
     "./MergeCommit": "./src/MergeCommit.ts",
     "./CommitEdit": "./src/CommitEdit.ts",
+    "./Remote": "./src/Remote.ts",
+    "./Credentials": "./src/Credentials.ts",
     "./memory": "./src/MemoryRepository.ts",
     "./process": "./src/ProcessRepository.ts",
     "./test": "./src/RepositoryTest.ts",

@@ -3,10 +3,11 @@
  *
  * **Details**
  *
- * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a call. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`, and a ref that could not be moved is read again with `for-each-ref`. It writes with `hash-object` and `update-ref` and runs no command that reaches a remote.
+ * No file of this package imports a Node module, this one included. The app provides the Node spawner and the file system at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a call. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`, and a ref that could not be moved is read again with `for-each-ref`. It writes with `hash-object` and `update-ref`. Only `fetch` reaches a remote, and it runs in a git directory made for the call, so no key of the repository's config acts on it.
  */
 import type { Duration } from "effect";
-import { Array as Arr, Config, Effect, Fiber, Layer, Option, Result, Schema, Stream } from "effect";
+import { Array as Arr, Config, Effect, Fiber, Layer, Option, Predicate, Result, Schema, Stream } from "effect";
+import * as FileSystem from "effect/FileSystem";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Commit from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
@@ -15,7 +16,8 @@ import * as Folder from "./internal/folder.ts";
 import * as Lookup from "./internal/lookup.ts";
 import { byBytes, bytes, OBJECT_ID } from "./internal/object.ts";
 import * as Parse from "./internal/parse.ts";
-import type * as Ref from "./Ref.ts";
+import * as Ref from "./Ref.ts";
+import * as Remote from "./Remote.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
 import * as Tree from "./Tree.ts";
@@ -354,8 +356,152 @@ const printedId = (output: Output): Effect.Effect<string, Repository.GitUnavaila
   return OBJECT_ID.test(id) ? Effect.succeed(id) : Effect.fail(unreadable(new Error("git printed no object id")));
 };
 
-const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Parse.Version): Repository.Raw => {
+// What a fetch needs beside the repository's own runner: the file system for the folder it makes, a runner for the git directory made in it,
+// and how long the folder's removal may take.
+interface Disk {
+  readonly fs: FileSystem.FileSystem;
+  readonly runIn: (path: string, extra?: Record<string, string>) => Run;
+  readonly kill: Duration.Duration;
+}
+
+// The prefix the transfer's refs are written under, in the git directory made for the call and nowhere else.
+const SCRATCH = "refs/fetched/";
+
+// What the transfer is given on its command line, so no config acts on it: only a local path or an `https` URL, and one pack, never loose objects.
+const TRANSFER_PINS = [
+  "protocol.allow=never",
+  "protocol.file.allow=always",
+  "protocol.https.allow=always",
+  "transfer.unpackLimit=1",
+].flatMap((pin) => ["-c", pin]);
+
+const TRANSFER_FLAGS = [
+  "fetch",
+  "--quiet",
+  "--no-tags",
+  "--no-write-fetch-head",
+  "--no-recurse-submodules",
+  "--update-shallow",
+  "--no-auto-gc",
+  "--no-auto-maintenance",
+  "--no-write-commit-graph",
+];
+
+// What `rev-parse` is asked in the repository before a transfer: whether it is shallow, its hash format, its git directory and its object folder.
+const PROBE = [
+  "rev-parse",
+  "--is-shallow-repository",
+  "--show-object-format",
+  "--absolute-git-dir",
+  "--path-format=absolute",
+  "--git-path",
+  "objects",
+];
+
+interface Probed {
+  readonly format: "sha1" | "sha256";
+  readonly gitDir: string;
+  readonly objects: string;
+}
+
+// The four lines of the probe. A shallow repository fails before anything else is read: its cut is not known to a fresh directory.
+const probed = Effect.fnUntraced(function* (
+  run: Run,
+): Effect.fn.Return<Probed, Repository.GitUnavailable | Repository.HistoryTooShort> {
+  const [shallow, format, gitDir, objects, end, ...more] = (yield* stdoutText(
+    yield* Effect.flatMap(run(PROBE), succeeded),
+  )).split("\n");
+
+  if (
+    end !== "" ||
+    more.length > 0 ||
+    (shallow !== "true" && shallow !== "false") ||
+    (format !== "sha1" && format !== "sha256") ||
+    gitDir === undefined ||
+    gitDir === "" ||
+    objects === undefined ||
+    objects === ""
+  ) {
+    return yield* unreadable(new Error("git answered the four questions of a fetch in another form"));
+  }
+
+  if (shallow === "true") {
+    return yield* new Repository.HistoryTooShort();
+  }
+
+  return { format, gitDir, objects };
+});
+
+// The name of a ref in the remote, from its scratch name.
+const unscratch = (name: Ref.RefName): Result.Result<Ref.RefName, Repository.GitUnavailable> =>
+  Result.mapError(Schema.decodeUnknownResult(Ref.RefName)(name.slice(SCRATCH.length)), () =>
+    unreadable(new Error("a scratch ref holds no name of the remote's")),
+  );
+
+const isRefNotCommit = Schema.is(Repository.RefNotCommit);
+
+// What `for-each-ref` printed of the scratch refs, as the remote's refs. A ref at a tag fails naming the remote's ref, never the scratch one.
+const fetchedRefs = (
+  output: string,
+): Result.Result<ReadonlyArray<Ref.Ref>, Repository.RefNotCommit | Repository.GitUnavailable> =>
+  Result.gen(function* () {
+    const parsed = Parse.refs(output);
+
+    if (Result.isFailure(parsed)) {
+      const error = parsed.failure;
+
+      if (isRefNotCommit(error)) {
+        return yield* Result.fail(
+          new Repository.RefNotCommit({ ref: yield* unscratch(error.ref), points: error.points }),
+        );
+      }
+
+      return yield* Result.fail(error);
+    }
+
+    return yield* Result.all(
+      parsed.success.map((each) =>
+        Result.map(unscratch(each.name), (name) => new Ref.Ref({ name, commit: each.commit })),
+      ),
+    );
+  });
+
+// The pack the transfer left in its own object folder moves into the repository's: its `.pack`, its `.rev` if git wrote one, and its `.idx` last,
+// since git finds a pack by its `.idx`, so a reader never sees half of one. A half-written `tmp_pack_*` is no pack, and stays to be removed.
+const adopt = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, from: string, into: string) {
+  const packs = `${from}/objects/pack`;
+  const names = yield* fs.readDirectory(packs);
+
+  const stems = new Set(
+    names.flatMap((name) => (/^pack-.+\.(?:pack|rev|idx)$/.test(name) ? [name.replace(/\.[^.]+$/, "")] : [])),
+  );
+
+  for (const stem of [...stems].toSorted()) {
+    for (const kind of ["pack", "rev", "idx"]) {
+      if (names.includes(`${stem}.${kind}`)) {
+        yield* fs.rename(`${packs}/${stem}.${kind}`, `${into}/pack/${stem}.${kind}`);
+      }
+    }
+  }
+}, Effect.mapError(unreadable));
+
+const calls = (
+  run: Run,
+  list: Listed,
+  settings: Settings.Settings,
+  version: Parse.Version,
+  disk: Disk,
+): Repository.Raw => {
   const { limits } = settings;
+
+  // The folder of one fetch, inside the repository's git directory so each move out of it is a rename on one file system. It is released after
+  // every ending, bounded by `limits.kill`, and a removal that fails or hangs never replaces what the call answered. Not `makeTempDirectoryScoped`,
+  // whose release can be neither bounded nor dropped.
+  const folder = (gitDir: string) =>
+    Effect.acquireRelease(
+      Effect.mapError(disk.fs.makeTempDirectory({ directory: gitDir, prefix: "kalfa-fetch-" }), unreadable),
+      (dir) => Effect.ignore(Effect.timeout(disk.fs.remove(dir, { recursive: true }), disk.kill)),
+    );
 
   // The objects of commits whose sizes are within `limits.bytes`, read with one `cat-file --batch`.
   const objects = Effect.fnUntraced(function* (ids: ReadonlyArray<CommitId>) {
@@ -748,6 +894,90 @@ const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Par
         ? yield* unavailable(new Repository.Unreadable({ cause: new Error("a conflict named no path") }))
         : yield* new Repository.Conflict({ paths: [first, ...rest] });
     }),
+    remoteUrl: Effect.fnUntraced(function* (remote) {
+      if (Predicate.isTagged(remote, "Url")) {
+        return remote.url;
+      }
+
+      // Nothing else of the config is read for a fetch, so the URL is the configured text exactly: no `insteadOf` applies.
+      const output = yield* run(["config", "--null", "--get-all", `remote.${remote.name}.url`]);
+
+      if (output.code === 1) {
+        return yield* new Remote.NoSuchRemote({ remote: remote.name });
+      }
+
+      const printed = yield* stdoutText(yield* succeeded(output));
+      const [first, ...others] = printed.split("\0");
+
+      // Each value ends with a NUL byte, so the last piece is empty.
+      if (first === undefined || others.at(-1) !== "") {
+        return yield* unreadable(new Error("git printed a remote's URLs in another form"));
+      }
+
+      if (others.length > 1) {
+        return yield* new Remote.BadRemoteUrl({ remote: remote.name, reason: "several" });
+      }
+
+      return yield* Effect.mapError(
+        Effect.fromResult(Schema.decodeUnknownResult(Remote.Url)(first)),
+        () => new Remote.BadRemoteUrl({ remote: remote.name, reason: "refused" }),
+      );
+    }),
+    // The transfer runs in a fresh git directory made for the call, with its own object folder that borrows the repository's, so no key of the
+    // repository's config acts on it and nothing but a whole pack, renamed in after a good answer, ever lands in the repository.
+    fetch: ({ url, under }) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { format, gitDir, objects } = yield* probed(run);
+          const dir = yield* folder(gitDir);
+          const fresh = `${dir}/fetch.git`;
+          const there = disk.runIn(fresh);
+
+          yield* Effect.flatMap(
+            there(["init", "--bare", "--quiet", "--template=", `--object-format=${format}`]),
+            succeeded,
+          );
+          yield* Effect.mapError(
+            disk.fs.writeFileString(`${fresh}/objects/info/alternates`, `${objects}\n`),
+            unreadable,
+          );
+
+          // `GIT_ASKPASS` set to nothing, so git never prompts. The refspec is a glob, so it matches `<under>-2` too, which the read back leaves out.
+          const moved = yield* disk.runIn(fresh, { GIT_ASKPASS: "" })([
+            ...TRANSFER_PINS,
+            ...TRANSFER_FLAGS,
+            "--",
+            url,
+            `+${under}*:${SCRATCH}${under}*`,
+          ]);
+
+          if (moved.code !== 0) {
+            return yield* new Remote.FetchFailed({ url, code: moved.code, stderr: moved.stderr });
+          }
+
+          yield* whole(there);
+
+          const printed = yield* Effect.flatMap(
+            there([
+              "for-each-ref",
+              `--count=${limits.refs + 1}`,
+              "--format=%(objectname) %(objecttype) %(symref) %(refname)",
+              `${SCRATCH}${under}`,
+            ]),
+            succeeded,
+          );
+
+          const refs = yield* Effect.fromResult(fetchedRefs(yield* stdoutText(printed)));
+
+          if (refs.length > limits.refs) {
+            return yield* new Repository.TooMany({ limit: "refs", most: limits.refs });
+          }
+
+          yield* adopt(disk.fs, fresh, objects);
+
+          return refs;
+        }),
+      ),
     moveRef: Effect.fnUntraced(function* (move) {
       yield* known(run, [move.to]);
 
@@ -782,7 +1012,7 @@ const canMerge = ({ major, minor }: Parse.Version): boolean => major > 2 || (maj
  *
  * **Details**
  *
- * Building it runs `git version` (2.38 or newer, else `GitTooOld`; `mergeTrees` needs 2.40 and fails with `GitTooOld` as a `GitUnavailable` reason on older git) and `git rev-parse --git-dir` with `--git-dir` (else `NoRepository`), in a span named `git.open` that records the version. `PATH` is read once through `Config`, as the one inherited variable. It needs a `ChildProcessSpawner`, which the app provides.
+ * Building it runs `git version` (2.38 or newer, else `GitTooOld`; `mergeTrees` needs 2.40 and fails with `GitTooOld` as a `GitUnavailable` reason on older git) and `git rev-parse --git-dir` with `--git-dir` (else `NoRepository`), in a span named `git.open` that records the version. `PATH` is read once through `Config`, as the one inherited variable. It needs a `ChildProcessSpawner` and a `FileSystem`, which the app provides: a fetch makes its folder with the second.
  *
  * @category layers
  */
@@ -792,12 +1022,13 @@ export const layer = (options: {
 }): Layer.Layer<
   Repository.Repository,
   Repository.GitTooOld | Repository.NoRepository | Repository.GitUnavailable | Repository.TimedOut,
-  ChildProcessSpawner.ChildProcessSpawner
+  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
 > =>
   Layer.effect(
     Repository.Repository,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const fs = yield* FileSystem.FileSystem;
 
       const path = yield* Config.String("PATH").pipe(
         Effect.mapError((cause) => unavailable(new Repository.NotStarted({ cause }))),
@@ -832,6 +1063,9 @@ export const layer = (options: {
         orElse: () => Effect.fail(new Repository.TimedOut({ after })),
       });
 
-      return Repository.make(calls(run, list, options.settings, version), options.settings);
+      const runIn = (path: string, extra: Record<string, string> = {}): Run =>
+        runner(spawner, path, { ...env, ...extra }, options.settings, kill);
+
+      return Repository.make(calls(run, list, options.settings, version, { fs, runIn, kill }), options.settings);
     }),
   );

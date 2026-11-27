@@ -151,6 +151,9 @@ export interface SuiteOptions {
 
 export { settings };
 
+/** The laws of `fetch`, shipped with `/test` as the laws of a commit edit are: an adapter that fetches runs `FetchTest.suite` beside `suite`. */
+export * as FetchTest from "./Fetch.test-support.ts";
+
 const nodeAt = (history: History, i: number): History["nodes"][number] => {
   const node = history.nodes[i];
 
@@ -1521,6 +1524,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // call an adapter writes, so it is in `Raw` too. Ticket 1936, slice 1: leave `rebase` out of the service: red; let `rebase` point
     // `refs/heads/main` at its tip: red. Ticket 1935, slice 1: leave `readFile` out of the service, or
     // let `readText` be a call an adapter writes, so it is in `Raw` too; let a read write an object, so the fingerprint moves: red.
+    // Ticket 1938, slice 1: leave `fetch` out of the service: red on the keys. `fetch` is in the keys but in neither list of calls, since it adds objects.
     it.effect.prop(
       "S10 no working copy: the service has the ten read calls and the five write calls, no list of reads changes the store, and no list of writes, edits, merges or rebases moves a ref",
       { texture: textureArb },
@@ -1530,6 +1534,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             expect(Object.keys(seeded.repository).sort(), `${shape.label}: the keys`).toEqual([
               "diff",
               "editTree",
+              "fetch",
               "isAncestor",
               "mergeBases",
               "mergeTrees",
