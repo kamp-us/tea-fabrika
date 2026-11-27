@@ -464,7 +464,9 @@ export const platformLaws = <R>(
   // "exactly one" check is red; give the server close's event the server's reason: the reason check is red; give a close the gateway
   // answers to a client close a second close event: "answered" is red; let a second server close send a second close event: "twice" is
   // red; give the close event a wrong code, or send none: the close event check is red (the event may come before or after the closing
-  // call's report, so no order is held).
+  // call's report, so no order is held); run the close event inside the gateway's own close() call: `closing` is 1, red; read a client
+  // close with no reason as no event or a reason other than "": the no-reason check is red; give a dropped connection another code than
+  // 1006, or a close event after the error event: the drop checks are red.
   tester.prop(
     "M4 property: send after the server's close throws, the close event after it is as real workerd gave it, a client close gives exactly one event with its code and reason, and an error event gives webSocketError",
     { seeds: draws(platformCloses) },
@@ -497,9 +499,11 @@ export const platformLaws = <R>(
               ).toEqual(["TypeError", attached]);
 
               expect(
-                event === undefined ? tags : [event.code, event.reason, event.wasClean, event.attachment],
-                `${close.id}: a close event comes, as real workerd gave it (code the client's Close frame carried, no reason, clean, attachment kept)`,
-              ).toEqual([close.code, SERVER_CLOSE_EVENT.reason, SERVER_CLOSE_EVENT.wasClean, attached]);
+                event === undefined
+                  ? tags
+                  : [event.code, event.reason, event.wasClean, event.attachment, event.closing],
+                `${close.id}: a close event comes, in an event of its own (no close() of the gateway running), as real workerd gave it (code the client's Close frame carried, no reason, clean, attachment kept)`,
+              ).toEqual([close.code, SERVER_CLOSE_EVENT.reason, SERVER_CLOSE_EVENT.wasClean, attached, 0]);
 
               const ended = yield* Effect.orDie(Effect.timeout(Deferred.await(session.client.ended), world.patience));
 
@@ -523,6 +527,29 @@ export const platformLaws = <R>(
             expect(
               (yield* drained(session)).map(({ _tag }) => _tag),
               `${close.id}: exactly one close event comes`,
+            ).toEqual([]);
+          }
+
+          // A client close with no reason argument, as the core makes its own (`new Socket.CloseEvent(1000)`): the event's reason is empty.
+          for (const close of closes.filter(({ by }) => by === "client")) {
+            const session = yield* world.open();
+            const attached = Attachment.cases.kept.make({ value: close.attached });
+
+            yield* ask(world, session, GateCommand.cases.put.make({ value: close.attached }));
+            yield* drained(session);
+            yield* Effect.orDie(session.client.close(close.code));
+            const event = yield* nextReport(world, session);
+
+            expect(
+              GateReport.guards.CloseEvent(event)
+                ? [event.code, event.reason, event.wasClean, event.attachment, event.closing]
+                : [event._tag],
+              `${close.id}, no reason argument: the event carries the client's code and an empty reason`,
+            ).toEqual([close.code, "", true, attached, 0]);
+            yield* world.settle;
+            expect(
+              (yield* drained(session)).map(({ _tag }) => _tag),
+              `${close.id}, no reason argument: exactly one close event comes`,
             ).toEqual([]);
           }
 
@@ -574,9 +601,9 @@ export const platformLaws = <R>(
             ).toEqual(["TypeError", attached]);
 
             expect(
-              event === undefined ? tags : [event.code, event.reason, event.attachment],
-              "twice: one close event comes, with the first close's code",
-            ).toEqual([twice.code, SERVER_CLOSE_EVENT.reason, attached]);
+              event === undefined ? tags : [event.code, event.reason, event.attachment, event.closing],
+              "twice: one close event comes, with the first close's code, in an event of its own",
+            ).toEqual([twice.code, SERVER_CLOSE_EVENT.reason, attached, 0]);
 
             const ended = yield* Effect.orDie(Effect.timeout(Deferred.await(session.client.ended), world.patience));
 
@@ -600,6 +627,18 @@ export const platformLaws = <R>(
             const event = yield* nextReport(world, session);
 
             expect(event._tag, "an error event gives webSocketError, and no close event").toBe("ErrorEvent");
+
+            const ended = yield* Effect.orDie(Effect.timeout(Deferred.await(session.client.ended), world.patience));
+
+            expect(
+              Predicate.isTagged(ended.error.reason, "SocketCloseError") ? ended.error.reason.code : undefined,
+              "a dropped connection ends the client's socket with 1006",
+            ).toBe(1006);
+            yield* world.settle;
+            expect(
+              (yield* drained(session)).map(({ _tag }) => _tag),
+              "an error event gives no close event after it",
+            ).toEqual([]);
           }
         }),
       ),

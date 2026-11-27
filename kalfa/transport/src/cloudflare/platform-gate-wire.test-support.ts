@@ -33,7 +33,8 @@ export const GateCommand = Schema.TaggedUnion({
  * What the gateway says. `Reply` is the answer to a command, on the socket it came on: the wake token (made when the gateway's Layer was
  * built), the slot call's number in its wake, whether the socket object was new to the gateway, how many slot calls were running when it
  * answered, and the body. The other four are reports, on the sink: `upgrade` was called with these options (`null` for none); the
- * gateway closed the socket and then sent on it, and what the attachment held; the platform's close event; the platform's error event.
+ * gateway closed the socket and then sent on it, and what the attachment held; the platform's close event, with how many `close()` calls of
+ * the gateway were still running when it came (`closing`: the event is an event of its own, so none is); the platform's error event.
  */
 export const GateReport = Schema.TaggedUnion({
   Reply: { wake: Schema.String, seq: Schema.Int, fresh: Schema.Boolean, active: Schema.Int, body: Schema.Json },
@@ -45,6 +46,7 @@ export const GateReport = Schema.TaggedUnion({
     reason: Schema.String,
     wasClean: Schema.Boolean,
     attachment: Attachment,
+    closing: Schema.Int,
   },
   ErrorEvent: { wake: Schema.String, attachment: Attachment },
 });

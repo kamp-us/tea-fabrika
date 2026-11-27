@@ -86,7 +86,8 @@ export const closesFrom = (seeds: ReadonlyArray<CloseSeed>): ReadonlyArray<Close
 /** The client's end of one real WebSocket. */
 export interface Client {
   readonly send: (text: string) => Effect.Effect<void, Socket.SocketError>;
-  readonly close: (code: number, reason: string) => Effect.Effect<void, Socket.SocketError>;
+  /** A close with no `reason` argument is the one the core makes (`new Socket.CloseEvent(1000)`). */
+  readonly close: (code: number, reason?: string) => Effect.Effect<void, Socket.SocketError>;
   /** The text frames the server sent, in order. */
   readonly inbox: Queue.Queue<string>;
   /** Set once, with the error the socket ended with (Effect's reader ends every socket with one, a clean close included) and when. */

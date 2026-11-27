@@ -37,6 +37,22 @@ export const rawGateway = (report: (made: Report) => Effect.Effect<void>): Layer
       const seen = new WeakSet<object>();
       let seq = 0;
       let active = 0;
+      // How many `close()` calls of this gateway are running now. The platform's close event is an event of its own, so it never comes
+      // inside one, and the report of the event says how many there were.
+      let closing = 0;
+
+      const closeSocket = (socket: SlotSocket, code: number, reason: string) =>
+        Effect.suspend(() => {
+          closing += 1;
+
+          return socket.close(code, reason);
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              closing -= 1;
+            }),
+          ),
+        );
 
       const attachmentHeld = (socket: SlotSocket) =>
         Effect.match(socket.getAttachment(Schema.Json), {
@@ -93,11 +109,11 @@ export const rawGateway = (report: (made: Report) => Effect.Effect<void>): Layer
             // this report; the law reads both reports in either order.
             const closed = (code: number, reason: string, again: boolean) =>
               Effect.gen(function* () {
-                yield* socket.close(code, reason);
+                yield* closeSocket(socket, code, reason);
 
                 if (again) {
                   // Whether a second close throws is the platform's own answer; the law holds only what is the same either way.
-                  yield* Effect.exit(socket.close(1000, "again"));
+                  yield* Effect.exit(closeSocket(socket, 1000, "again"));
                 }
 
                 // The platform says `send` throws once the server has sent its Close frame.
@@ -187,12 +203,12 @@ export const rawGateway = (report: (made: Report) => Effect.Effect<void>): Layer
           Effect.gen(function* () {
             const attachment = yield* attachmentHeld(socket);
 
-            yield* report(GateReport.cases.CloseEvent.make({ wake, code, reason, wasClean, attachment }));
+            yield* report(GateReport.cases.CloseEvent.make({ wake, code, reason, wasClean, attachment, closing }));
 
             // The platform's WebSocket page tells a handler to answer the peer's close with `close()`. The platform gives no second close
             // event for it, and whether the call throws is its own answer, so the outcome is not read.
             if (Attachment.guards.kept(attachment) && Schema.is(Answering)(attachment.value)) {
-              yield* Effect.exit(socket.close(code, ""));
+              yield* Effect.exit(closeSocket(socket, code, ""));
             }
           }),
         webSocketError: (socket) =>
