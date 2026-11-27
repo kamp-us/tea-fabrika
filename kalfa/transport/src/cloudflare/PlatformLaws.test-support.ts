@@ -97,6 +97,21 @@ const nextFrame = (world: World, client: Client) =>
 const nextReport = (world: World, session: Session) =>
   Effect.orDie(Effect.timeout(Queue.take(session.reports), world.patience));
 
+/**
+ * The two reports a server close makes, in whatever order they came: the gateway's own report of what `send` and the attachment did in the
+ * closing call, and the platform's close event. The close event is an event of its own and real workerd may deliver it before or after the
+ * closing call's report, so a law reads both and finds each by its tag. A report of any other kind leaves that side `undefined`, and the
+ * law's check of it names the tags that came.
+ */
+const serverCloseReports = (world: World, session: Session) =>
+  Effect.gen(function* () {
+    const reports = [yield* nextReport(world, session), yield* nextReport(world, session)];
+    const closed = reports.find(GateReport.guards.ClosedByServer);
+    const event = reports.find(GateReport.guards.CloseEvent);
+
+    return { closed, event, tags: reports.map(({ _tag }) => _tag) };
+  });
+
 /** Sends one command and takes the reply to it. */
 const ask = (world: World, session: Session, command: typeof GateCommand.Type) =>
   Effect.gen(function* () {
@@ -448,8 +463,8 @@ export const platformLaws = <R>(
   // M4. Plant: let `send` after a server close succeed: the TypeError check is red; give two close events for one client close: the
   // "exactly one" check is red; give the server close's event the server's reason: the reason check is red; give a close the gateway
   // answers to a client close a second close event: "answered" is red; let a second server close send a second close event: "twice" is
-  // red; deliver the close event while the closing call still runs, which the two yields in the gateway allow: the first report is
-  // the close event, red.
+  // red; give the close event a wrong code, or send none: the close event check is red (the event may come before or after the closing
+  // call's report, so no order is held).
   tester.prop(
     "M4 property: send after the server's close throws, the close event after it is as real workerd gave it, a client close gives exactly one event with its code and reason, and an error event gives webSocketError",
     { seeds: draws(platformCloses) },
@@ -474,20 +489,16 @@ export const platformLaws = <R>(
                   (text) => session.client.send(text),
                 ),
               );
-              const first = yield* nextReport(world, session);
+              const { closed, event, tags } = yield* serverCloseReports(world, session);
 
               expect(
-                GateReport.guards.ClosedByServer(first) ? [first.sent, first.attachment] : [first._tag],
+                closed === undefined ? tags : [closed.sent, closed.attachment],
                 `${close.id}: send after the server's close throws a TypeError, and the attachment is still there`,
               ).toEqual(["TypeError", attached]);
 
-              const event = yield* nextReport(world, session);
-
               expect(
-                GateReport.guards.CloseEvent(event)
-                  ? [event.code, event.reason, event.wasClean, event.attachment]
-                  : [event._tag],
-                `${close.id}: a close event comes later, as real workerd gave it (code the client's Close frame carried, no reason, clean, attachment kept)`,
+                event === undefined ? tags : [event.code, event.reason, event.wasClean, event.attachment],
+                `${close.id}: a close event comes, as real workerd gave it (code the client's Close frame carried, no reason, clean, attachment kept)`,
               ).toEqual([close.code, SERVER_CLOSE_EVENT.reason, SERVER_CLOSE_EVENT.wasClean, attached]);
 
               const ended = yield* Effect.orDie(Effect.timeout(Deferred.await(session.client.ended), world.patience));
@@ -555,17 +566,15 @@ export const platformLaws = <R>(
                 (text) => session.client.send(text),
               ),
             );
-            const first = yield* nextReport(world, session);
+            const { closed, event, tags } = yield* serverCloseReports(world, session);
 
             expect(
-              GateReport.guards.ClosedByServer(first) ? [first.sent, first.attachment] : [first._tag],
+              closed === undefined ? tags : [closed.sent, closed.attachment],
               "twice: send after the closes throws a TypeError, and the attachment is still there",
             ).toEqual(["TypeError", attached]);
 
-            const event = yield* nextReport(world, session);
-
             expect(
-              GateReport.guards.CloseEvent(event) ? [event.code, event.reason, event.attachment] : [event._tag],
+              event === undefined ? tags : [event.code, event.reason, event.attachment],
               "twice: one close event comes, with the first close's code",
             ).toEqual([twice.code, SERVER_CLOSE_EVENT.reason, attached]);
 

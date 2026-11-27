@@ -89,8 +89,8 @@ export const rawGateway = (report: (made: Report) => Effect.Effect<void>): Layer
               });
 
             // Closes the socket as a client's Close frame is not yet back, and says what the platform did to the next send and to the
-            // attachment. Two yields come before the report, so the report does not depend on this call never yielding: the platform's
-            // close event is an event of its own and may be delivered at any point after `close`.
+            // attachment. The platform's close event is an event of its own and may be delivered at any point after `close`, before or after
+            // this report; the law reads both reports in either order.
             const closed = (code: number, reason: string, again: boolean) =>
               Effect.gen(function* () {
                 yield* socket.close(code, reason);
@@ -100,8 +100,6 @@ export const rawGateway = (report: (made: Report) => Effect.Effect<void>): Layer
                   yield* Effect.exit(socket.close(1000, "again"));
                 }
 
-                yield* Effect.yieldNow;
-                yield* Effect.yieldNow;
                 // The platform says `send` throws once the server has sent its Close frame.
                 const sent = yield* Effect.exit(socket.send("after the close"));
 
