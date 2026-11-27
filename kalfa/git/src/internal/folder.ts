@@ -3,6 +3,7 @@
 // not UTF-8, a submodule and an odd mode pass through as they are.
 import { Result } from "effect";
 import { joined } from "./bytes.ts";
+import { key } from "./lines.ts";
 import type { Listed } from "./parse.ts";
 
 const encoder = new TextEncoder();
@@ -99,9 +100,6 @@ export const lines = (
 
   return found;
 };
-
-// A line as text, one character for each byte, so two lines are equal exactly when their bytes are.
-const key = (line: Uint8Array): string => Array.from(line, (octet) => String.fromCharCode(octet)).join("");
 
 /**
  * Whether two lists hold the same entries, in any order.
