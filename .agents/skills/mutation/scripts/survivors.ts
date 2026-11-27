@@ -502,6 +502,14 @@ export { notAnswers } from "./answer.ts";
 export const refusedIn = (text: string): ReadonlyArray<string> =>
   Arr.flatMap(standing(text), (row) => (row.answer === null && !row.withdrawn ? [row.text] : []));
 
+/** What a refused row lacks, and the way out, in plain words: a withdrawal needs a place and a reason, any other row a proof. Pure. */
+export const refusalNote = (line: string): string =>
+  `${
+    line.startsWith("Survivor-withdrawn:")
+      ? "a withdrawal needs a <file>:<line> and a reason"
+      : "its evidence names no plant:, rg: or law:"
+  }; write the row again with that, or take it back with a \`Survivor-withdrawn: <file>:<line> <reason>\` line, in an empty commit: \`stepcommit.sh --empty <step> ...\``;
+
 /** The commit bodies `git log --format=%B%x00` gives, newest first, as one text with the oldest first, so a newer row wins. Pure. */
 export const oldestFirst = (log: string): string =>
   Arr.join(Arr.reverse(Arr.filter(Str.split(log, "\0"), (body) => Str.trim(body) !== "")), "\n");
@@ -910,9 +918,7 @@ const check = Effect.fnUntraced(function* (ask: {
   const refused = refusedIn(Arr.join(yield* texts, "\n"));
 
   for (const line of refused) {
-    yield* Console.log(
-      `refused  ${line}  (its evidence names no plant:, rg: or law:; re-answer it with proof, or take it back with a \`Survivor-withdrawn: <file>:<line> <reason>\` line, in an empty commit: \`stepcommit.sh --empty <step> ...\`)`,
-    );
+    yield* Console.log(`refused  ${line}  (${refusalNote(line)})`);
   }
 
   if (files.length === 0) {
