@@ -53,7 +53,9 @@ import {
   moveFrom,
   moveOf,
   providers,
+  readyAndRecord,
   recordReady,
+  ticketNumber,
   RetriesExhausted,
   sectionsOf,
   slotRefusal,
@@ -66,6 +68,7 @@ import {
 import { FAULTS, faultFrom, MUTATION_AGENT, stepProvider } from "./drive.ts";
 import * as BranchesTest from "./pr/BranchesTest.ts";
 import * as PullRequestsTest from "./pr/PullRequestsTest.ts";
+import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesTest from "./pr/PushesTest.ts";
 import * as ReviewsTest from "./pr/ReviewsTest.ts";
 
@@ -2035,5 +2038,92 @@ describe("R11: the chain records its review at the head it pushed, and a refused
         );
       }),
     { arbitrary: { seed: 2346, runs: runsFor({ fast: 60, full: 200 }) } },
+  );
+  // Plants, each run once and restored: leave the `recordReady` call out of `readyAndRecord`; let a refused record go on (answer the pull request's number
+  // all the same); record before the push and the pull request's words are done, or even when they refused; mark the pull request ready after the record.
+  effectIt.effect.prop(
+    "property: the ready step pushes the head and readies the pull request, then records the review at that head, and answers no pull request (so the quest stops there, before CI and the queue) when the push, the words or the record is refused, with no record asked after a refusal before it",
+    {
+      pr: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 99_999 })),
+      quest: Schema.Literals(["trace-x", "t2338", "a-quest"]),
+      ticket: Schema.NullOr(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9999 }))),
+      // The branch has no pull request yet (the chain opens one), a draft, or one that is ready.
+      already: Schema.Literals(["none", "draft", "ready"]),
+      fault: Schema.Literals(["none", "none", "none", "otherChange", "readFails", "pushLeak", "editFails"]),
+    },
+    ({ pr, quest, ticket, already, fault }) =>
+      Effect.gen(function* () {
+        const { store, head, other } = yield* made;
+        const branch = `fabrikalfa/${quest}`;
+
+        const draft = already !== "ready";
+
+        const github = PullRequestsTest.world(
+          already === "none"
+            ? []
+            : [{ number: pr, head: branch, oid: fault === "otherChange" ? other : head, state: "OPEN", draft }],
+        );
+
+        const reviews = ReviewsTest.world();
+
+        const layer = Layer.mergeAll(
+          PullRequestsTest.layer(github, fault === "editFails" ? { edit: "gh is down" } : {}),
+          BranchesTest.layer({ branches: [], ahead: {}, empty: [] }),
+          PushesTest.layer(
+            PushesTest.remote(),
+            fault === "pushLeak" ? { leakGrep: LeakGrepRefused.make({ reason: "leakgrep.sh exited 1" }) } : {},
+          ),
+          ReviewsTest.layer(reviews, fault === "readFails" ? { read: "gh is down" } : {}),
+          MemoryRepository.layer(store, SETTINGS).pipe(Layer.provide(Digest.layerWebCrypto)),
+        );
+
+        const done = yield* readyAndRecord({
+          dir: ".",
+          branch,
+          head,
+          text: { title: "T2338 a quest", body: "## Summary\n\nWords.\n" },
+          quest,
+          ticket,
+        }).pipe(Effect.provide(layer));
+
+        // A pull request the chain opens itself is opened at the head it pushed, so no other change can stand on it.
+        const stops = fault !== "none" && !(already === "none" && fault === "otherChange");
+        const number = already === "none" ? 1 : pr;
+
+        // The answer names the pull request only when every part went through; a stop names why.
+        expect(done.pr).toBe(stops ? null : number);
+        expect(done.detail.length).toBeGreaterThan(0);
+        expect(stops || done.detail === (already === "none" ? "opened" : "existing")).toBe(true);
+
+        // A record is written only when the push and the words went through and the record itself is fine; none is even asked before that.
+        expect(reviews.calls.map((call) => call._tag)).toEqual(stops ? [] : ["comment", "status"]);
+
+        // The record sits on the head the review read, and names the quest's ticket.
+        const [commented, statused] = reviews.calls;
+        expect(stops || (statused?._tag === "status" && statused.head === head)).toBe(true);
+        expect(
+          stops || (commented?._tag === "comment" && commented.body.includes(`"ticket":${ticket ?? "null"}`)),
+        ).toBe(true);
+        expect(reviews.reads.length > 0).toBe(fault !== "pushLeak" && fault !== "editFails");
+
+        // The pull request is readied (a draft only) once the words are in, whether or not the record is then refused; a refused push readies nothing.
+        const readied = github.calls.filter((call) => call._tag === "ready");
+        expect(readied.length).toBe(draft && fault !== "pushLeak" && fault !== "editFails" ? 1 : 0);
+      }),
+    { arbitrary: { seed: 2347, runs: runsFor({ fast: 120, full: 300 }) } },
+  );
+  // Plants: read a ticket with a letter, a space or a sign in it as a number; read none (a digit string) as no ticket; read a leading zero as no ticket.
+  effectIt.effect.prop(
+    "property: a quest's ticket is its number when it is only digits, and no ticket otherwise",
+    {
+      n: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 99_999 })),
+      bad: Schema.Literals(["", "12a", "a12", " 7", "7 ", "-3", "+3", "1.5", "7\n", "٣"]),
+    },
+    ({ n, bad }) =>
+      Effect.sync(() => {
+        expect(ticketNumber(String(n))).toBe(n);
+        expect(ticketNumber(bad)).toBeNull();
+      }),
+    { arbitrary: { seed: 2348, runs: runsFor({ fast: 60, full: 200 }) } },
   );
 });

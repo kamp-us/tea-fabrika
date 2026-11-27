@@ -1325,6 +1325,31 @@ describe("R11: the quest paths record the review, and every command asks for it 
     expect(got.out).toContain(reason);
   }, 120_000);
 
+  // Plants: take `--override-review` on `merge` with no `--admin` and drop it (the merge then goes through the queue as if no reason was given); print the
+  // gate's review words for an override merge.
+  it("scenario: `land.ts merge --override-review` without `--admin` (`--admin=false`) is refused, naming `--admin`, and nothing is merged or written; the line of an admin merge that went past a missing record on a reason does not say a review is on the head", () => {
+    const got = land({
+      ...fine,
+      reviewedPath: true,
+      command: ["merge", "77", "--admin=false", "--override-review", "sev1 fix"],
+    });
+
+    expect(got.code).toBe(1);
+    expect(got.err).toContain("--admin");
+    expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toEqual([]);
+    expect(got.calls.filter((c) => c.startsWith("gh api -X POST"))).toEqual([]);
+
+    const past = land({
+      ...fine,
+      reviewedPath: true,
+      command: ["merge", "77", "--admin", "--override-review", "sev1 fix"],
+    });
+
+    expect(past.code, past.err).toBe(0);
+    expect(past.out).not.toContain("a review on the head");
+    expect(past.out).toContain("sev1 fix");
+  }, 120_000);
+
   // Plant: write an override for a pull request that holds a record already, or for one that needs none.
   it("scenario: `land.ts admin --wait` of a docs-only pull request needs no reason and writes no override, with or without one", () => {
     for (const command of [

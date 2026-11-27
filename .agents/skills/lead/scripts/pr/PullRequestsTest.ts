@@ -110,10 +110,11 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
               mergedAt: dated(w, pr.number).mergedAt,
             })),
         ),
-      draft: (branch, text) =>
+      draft: (branch, text, head) =>
         Effect.map(fails("draft"), () => {
           const number = Math.max(0, ...Arr.map(w.prs, (pr) => pr.number)) + 1;
-          w.prs.push({ number, head: branch, oid: "", state: "OPEN", draft: true });
+          // A pull request is opened at the head it was pushed at, as GitHub opens it.
+          w.prs.push({ number, head: branch, oid: head, state: "OPEN", draft: true });
           w.calls.push(Call.cases.draft.make({ branch, title: text.title, body: text.body }));
 
           return number;

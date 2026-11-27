@@ -819,6 +819,8 @@ const ReasonKey = Schema.Literals([
   "tab",
   "lineBreak",
   "twoLines",
+  "lineSeparator",
+  "paragraphSeparator",
   "padded",
   "long",
 ]);
@@ -837,13 +839,15 @@ const REASONS: Record<ReasonKey, string | null> = {
   tab: "\t",
   lineBreak: "\n",
   twoLines: "a\nb",
+  lineSeparator: "a\u2028b",
+  paragraphSeparator: "a\u2029b",
   padded: " padded ",
   long: "y".repeat(129),
 };
 
 /** A reason is one trimmed line of 1 to 128 characters. */
 const goodReason = (text: string | null): text is string =>
-  text !== null && text.length > 0 && text.length <= 128 && text === text.trim() && !/[\r\n]/.test(text);
+  text !== null && text.length > 0 && text.length <= 128 && text === text.trim() && !/[\r\n\u2028\u2029]/.test(text);
 
 const CHANGED = {
   docs: ["docs/plan/README.md"],
@@ -1046,7 +1050,10 @@ describe("R10: an admin merge past a missing review is written down first, and o
         // this law cannot count, so then only a merge is checked: it came with nothing broken.
         const leaks = writes && c.reason === "leaky";
         const brokenWrite = writes && (c.failing === "comment" || c.failing === "status");
-        const fine = c.after === "none" && !leaks && !brokenWrite && c.failing !== "squash";
+        const squashFails = c.failing === "squash";
+        // Nothing before the squash refuses: it is asked, and so the override, if one is due, is written first.
+        const reachesSquash = c.after === "none" && !leaks && !brokenWrite;
+        const fine = reachesSquash && !squashFails;
 
         if (c.moves) {
           expect(!Result.isSuccess(answer) || fine).toBe(true);
@@ -1065,13 +1072,25 @@ describe("R10: an admin merge past a missing review is written down first, and o
           }
         }
 
+        // A squash that fails after the override was written: the override stays (written once, as the step before it), nothing merged, and
+        // the refusal names the override, so no one reads the red status on the head as a merge that happened.
+        if (!c.moves && reachesSquash && squashFails) {
+          expect(merged).toBe(false);
+          expect(wrote).toEqual(writes ? ["comment", "status"] : []);
+
+          if (writes) {
+            expect(Result.isFailure(answer) && answer.failure._tag).toBe("NotMerged");
+            expect(Result.isFailure(answer) ? String(answer.failure.reason) : "").toContain(reason ?? "");
+          }
+        }
+
         // A refusal before the squash leaves nothing written and nothing merged; a leak in the reason is the grep's own refusal.
-        if (!fine && c.failing !== "squash" && !brokenWrite) {
+        if (!reachesSquash && !brokenWrite) {
           expect(merged).toBe(false);
           expect(wrote).toEqual([]);
         }
 
-        if (leaks && c.after === "none" && !c.moves && c.failing !== "squash") {
+        if (leaks && c.after === "none" && !c.moves) {
           expect(Result.isFailure(answer) && answer.failure._tag).toBe("LeakGrepRefused");
         }
 

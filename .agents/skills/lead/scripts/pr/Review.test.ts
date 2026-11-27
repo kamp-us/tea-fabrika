@@ -412,7 +412,19 @@ const drawnRecord = (c: typeof RecordCase.Type): Review.Record => {
   }
 };
 
-const BAD_WORDS = ["", "  ", "\t", "\n", "a\nb", "a\r", " lead", "trail ", "a".repeat(129)] as const;
+const BAD_WORDS = [
+  "",
+  "  ",
+  "\t",
+  "\n",
+  "a\nb",
+  "a\r",
+  "a\u2028b",
+  "a\u2029b",
+  " lead",
+  "trail ",
+  "a".repeat(129),
+] as const;
 
 describe("R2: the record on the wire (slice 1)", () => {
   // Plants, each run once and restored: give an override `success`; give an override `error`; let a reason of 129 characters through; write
@@ -443,7 +455,7 @@ describe("R2: the record on the wire (slice 1)", () => {
   );
 
   it.prop(
-    "R2 property: a blank reason, a reason with a line break or space at either end, a reason over 128 characters, and a blank or over-long reviewer are no record, and read back from a status as nothing",
+    "R2 property: a blank reason, a reason with a line break (U+2028 and U+2029 too) or space at either end, a reason over 128 characters, and a blank or over-long reviewer are no record, and read back from a status as nothing",
     { n: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 })), bad: Schema.Literals(BAD_WORDS) },
     ({ n, bad }) => {
       const head = hex(n);
@@ -458,6 +470,46 @@ describe("R2: the record on the wire (slice 1)", () => {
       expect(Schema.is(Review.Record)({ _tag: "override", v: 1, head, reason: "a".repeat(128) })).toBe(true);
     },
     { arbitrary: { seed: 1003, runs: runsFor({ fast: 30, full: 100 }) } },
+  );
+
+  // Plants: let U+2028 or U+2029 into a reason (`Line`), as the pattern `[^\r\n]` did, so the status's description holds a line separator that the read-back
+  // pattern's `.` does not match; read the description with a pattern that stops at a separator.
+  it.prop(
+    "R2 property: every reason the record accepts reads back, from the status it is posted as, as the same reason",
+    {
+      lead: Schema.Literals(["", "", "a", " "]),
+      middle: Schema.Array(
+        Schema.Literals([
+          "a",
+          "é",
+          "日本",
+          "x y",
+          "\u2028",
+          "\u2029",
+          "\u0085",
+          "\u000b",
+          "\u000c",
+          "\t",
+          "\r",
+          "\n",
+          "\u00a0",
+        ]),
+      ).check(Schema.isMaxLength(12)),
+      trail: Schema.Literals(["", "", "b", " "]),
+      n: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 })),
+    },
+    ({ lead, middle, trail, n }) => {
+      const reason = `${lead}${middle.join("")}${trail}`;
+      const record = { _tag: "override", v: 1, head: hex(n), reason };
+
+      // A reason the record refuses is never posted, so it has nothing to read back.
+      const said = Schema.is(Review.Record)(record)
+        ? Review.core(Review.status(record).state, Review.status(record).description)
+        : Result.succeed({ _tag: "override", reason });
+
+      expect(said).toEqual(Result.succeed({ _tag: "override", reason }));
+    },
+    { arbitrary: { seed: 1004, runs: runsFor({ fast: 200, full: 400 }) } },
   );
 
   // Plant: read a `v2` record as a pass.

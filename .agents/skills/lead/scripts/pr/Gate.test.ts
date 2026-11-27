@@ -315,7 +315,8 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
   // merges a pull request another path refuses (red: that path's defects); ask it after the path's own first write; read one
   // refusal out of the order above; let `check` skip a check the others run. The review check (slice 2): leave it out of `Arm.arm`;
   // let `arm` pass a pull request with an approval; look at one path of the list only (the first or the last); read the statuses of
-  // another head; let an override status approve.
+  // another head; let an override status approve. Plants for the one gate (red: every defect but the review's): make `Arm.arm` or `Merge.admin` add
+  // words of its own to the gate's refusal, as `refuse(`${refused}; and arm says something else`)`.
   it.effect.prop(
     "property: whatever refusals a pull request holds, every path refuses it with the gate's own words for the first of them and asks GitHub for nothing; a pull request with none is not refused by any path, which each asks its own one write, except `arm`, which refuses one that needs a review even with an approval",
     { defects: Schema.Array(Defect), changed: Changed },
@@ -323,6 +324,10 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
       Effect.gen(function* () {
         const first = ORDER.find(({ defect }) => defects.includes(defect));
         const byWay = new Map<Way, { readonly tag: string; readonly reason: string } | null>();
+        // The one gate: for every refusal but the review's, each path answers with exactly what `check` answers, word for word. The review's refusal
+        // names a different command for each way, so there a path is compared only with the others of its own way.
+        const gate = (yield* walk("check", defects, changed)).refused;
+        const wordForWord = first !== undefined && first.defect !== "unreviewed";
 
         for (const path of PATHS) {
           const way = WAY[path];
@@ -335,6 +340,10 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
             expect(got.refused, path).toBeNull();
           } else {
             expect(got.refused?.reason, path).toContain(says);
+          }
+
+          if (wordForWord) {
+            expect(got.refused, path).toEqual(gate);
           }
 
           // Every path of one way answers with the same words as the others of its way.
@@ -526,14 +535,14 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
         Schema.Literals([0, 1, 127, 128, 129, 130]),
         Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 140 })),
       ]),
-      inner: Schema.Literals(["", "", "", " ", "\n", "\r", "é"]),
+      inner: Schema.Literals(["", "", "", " ", "\n", "\r", "\u2028", "\u2029", "é"]),
       trail: Schema.Literals(["", "", "", " ", "\n"]),
     },
     ({ lead, length, inner, trail }) =>
       Effect.sync(() => {
         const half = Math.floor(length / 2);
         const text = `${lead}${"x".repeat(half)}${inner}${"x".repeat(length - half)}${trail}`;
-        const fine = text.length > 0 && text.length <= 128 && text === text.trim() && !/[\r\n]/.test(text);
+        const fine = text.length > 0 && text.length <= 128 && text === text.trim() && !/[\r\n\u2028\u2029]/.test(text);
 
         expect(Schema.is(Gate.Way.cases.admin)({ _tag: "admin", override: text })).toBe(fine);
       }),
@@ -552,5 +561,18 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
     expect(Gate.line({ number: 7, state: "MERGED" })).toBe(
       `pr 7: the merge gate passes (not a can/ branch; state: already merged; ${checks}`,
     );
+  });
+
+  // Plant: print the review words for an admin merge that went past a missing record on a reason.
+  it("vector: the line an admin merge on a written reason prints, which names the override and does not say a review is on the head", () => {
+    const line = Gate.line({ number: 7, state: "OPEN" }, true);
+
+    expect(line).not.toContain("a review on the head");
+    expect(line).toContain("no review is recorded");
+    expect(line).toContain("--override-review");
+    // The other checks are the same words as ever.
+    expect(
+      line.startsWith("pr 7: the merge gate passes (not a can/ branch; open, into main, no conflict; no Plan: title;"),
+    ).toBe(true);
   });
 });
