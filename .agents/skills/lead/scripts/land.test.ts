@@ -62,13 +62,42 @@ case "$1 $2" in
   printf '{"number":%s,"headRefName":"fabrikalfa/t652-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":%s,"title":"%s","body":"%s","mergeCommit":null,"mergeable":"%s"}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" "$draft" "\${LAND_TITLE:-T652 fixture: one quest}" "\${LAND_BODY:-}" "$mergeable" ;;
 "api graphql") echo '{"data":{"repository":{"mergeQueue":null}}}' ;;
 "api --paginate")
+  # A head's commit statuses, as the slice-2 review check reads them: \`--slurp\` and the commits endpoint.
+  if [ "$3" = --slurp ]; then
+    sha=\${4#*commits/}
+    sha=\${sha%%/*}
+    printf '[['
+    [ ! -f "$LAND_STATUSES/$sha" ] || paste -sd, - <"$LAND_STATUSES/$sha" | tr -d '\\n'
+    printf ']]\\n'
+    exit 0
+  fi
   # The open GitHub issues, one number a line, when it is the issues list that is asked for.
   case "$3" in */issues?*) for n in $LAND_ISSUES; do echo "$n"; done; exit 0 ;; esac
   # The files the pull request changes, one JSON row each: one new export when a law names one.
   [ -z "\${LAND_PATCH:-}" ] || printf '{"path":"src/thing.ts","patch":"@@ -0,0 +1 @@\\\\n+export const %s = 1"}\\n' "$LAND_PATCH" ;;
 "api -X")
+  case "$3 $4" in
+  # The review record's two writes (a pull request comment, a commit status), kept as the status check reads them back.
+  "POST "*/comments) echo '{"id":1,"html_url":"https://github.com/owner/repo/pull/77#issuecomment-1"}' ;;
+  "POST "*/statuses/*)
+    sha=\${4##*/}
+    shift 4
+    state=; description=; url=
+    while [ $# -gt 0 ]; do
+      case "$2" in
+      state=*) state=\${2#state=} ;;
+      description=*) description=\${2#description=} ;;
+      target_url=*) url=\${2#target_url=} ;;
+      esac
+      shift 2
+    done
+    n=$(( $(cat "$LAND_STATUSES/count" 2>/dev/null || echo 0) + 1 ))
+    echo "$n" >"$LAND_STATUSES/count"
+    echo "{\\"id\\":$n,\\"state\\":\\"$state\\",\\"context\\":\\"review\\",\\"description\\":\\"$description\\",\\"target_url\\":\\"$url\\",\\"creator\\":{\\"login\\":\\"fixture\\"}}" >>"$LAND_STATUSES/$sha"
+    echo '{}' ;;
   # A read of a workflow's runs: none, so a pull request arms as one with no run at its head.
-  [ "$3" != GET ] || echo '{"workflow_runs":[]}' ;;
+  *) [ "$3" != GET ] || echo '{"workflow_runs":[]}' ;;
+  esac ;;
 "api -i")
   # \`LAND_REQUIRED=pending\` is a check that has not ended.
   status=completed
@@ -121,6 +150,8 @@ type World = {
   /** The tracker's open tickets, and GitHub's open issues, as space-separated numbers. */
   readonly tickets?: string;
   readonly issues?: string;
+  /** The quest also changes a file under `next/`, a path that needs a review (slice 2 of .kalfa/quests/review-record-PLAN.md). */
+  readonly reviewedPath?: boolean;
   /** The one new export the pull request's diff adds, in `src/thing.ts`; none when left out. */
   readonly patch?: string;
   /** Run this command after `land.ts`, in place of `run <quest> <ticket>`; the main checkout is then the quest's tree. */
@@ -205,6 +236,7 @@ const land = (world: World) => {
       LAND_BODY: world.body ?? full,
       LAND_TITLE: world.title ?? "T652 fixture: one quest",
       LAND_PATCH: world.patch ?? "",
+      LAND_STATUSES: join(dir, "statuses"),
       LAND_TICKETS: world.tickets ?? "",
       LAND_ISSUES: world.issues ?? "",
       BOXES: join(dir, "boxes"),
@@ -238,7 +270,7 @@ const land = (world: World) => {
     const origin = join(dir, "origin");
     const quest = join(dir, "quest");
 
-    for (const folder of ["bin", "home", "origin", "boxes", "main/.agents/skills/plan/scripts"]) {
+    for (const folder of ["bin", "home", "origin", "boxes", "statuses", "main/.agents/skills/plan/scripts"]) {
       mkdirSync(join(dir, folder), { recursive: true });
     }
 
@@ -262,6 +294,12 @@ const land = (world: World) => {
 
     git(quest, "checkout", "-q", "-b", "fabrikalfa/t652-fixture");
     writeFileSync(join(quest, "quest.txt"), world.leak ? `the quest, with ${planted}\n` : "the quest\n");
+
+    if (world.reviewedPath) {
+      mkdirSync(join(quest, "next"), { recursive: true });
+      writeFileSync(join(quest, "next/thing.ts"), "export const thing = 1;\n");
+    }
+
     git(quest, "add", ".");
     git(quest, "commit", "-qm", "the quest's step");
     git(quest, "notes", "--ref=fabrika", "add", "-m", '{"step":"build"}', "HEAD");
@@ -403,8 +441,10 @@ const land = (world: World) => {
       writeFileSync(join(dir, "plain"), "a file, not a folder");
     }
 
-    // `{tree}` in an argument is the quest's checkout.
-    const args = (world.command ?? ["run", "t652f", "652"]).map((arg) => arg.replace("{tree}", quest));
+    // `{tree}` in an argument is the quest's checkout, and `{head}` the head the quest agent leaves it at (the head its review reads).
+    const args = (world.command ?? ["run", "t652f", "652"]).map((arg) =>
+      arg.replace("{tree}", quest).replace("{head}", before[0] ?? ""),
+    );
 
     const ran = spawnSync(process.execPath, [script, ...args], {
       cwd: quest,
@@ -1157,6 +1197,147 @@ describe("R7: land.ts review (slice 1)", () => {
       }
     }
   }, 180_000);
+});
+
+// R11 and the flags of slice 2 (.kalfa/quests/review-record-PLAN.md): a quest that changes a reviewed path records its review before it queues, every
+// command refuses a reviewed path with no record, and an admin merge goes past one only with a reason. Git and the leak grep are real, on
+// disposable repos; `gh` is the stub above, which keeps the record's comment and status and gives them back as GitHub lists a head's statuses.
+const ofCall = (calls: ReadonlyArray<string>, start: string) => calls.findIndex((c) => c.startsWith(start));
+
+describe("R11: the quest paths record the review, and every command asks for it (slice 2)", () => {
+  // Plants: queue before recording; record before the pull request is opened; ignore a refused record; pass a ticket of its own to `run`;
+  // record the merged head as `reviewed` (a head the review never read).
+  it("scenario: `land.ts run` with --reviewed and --reviewer, on a quest that changes a reviewed path, writes the record on the pushed head after the pull request is opened and before it queues, and the queue then passes", () => {
+    const got = land({
+      ...fine,
+      behind: true,
+      reviewedPath: true,
+      command: ["run", "t652f", "652", "--reviewed", "{head}", "--reviewer", "a fixture reviewer, session one"],
+    });
+
+    expect(got.code, got.err).toBe(0);
+
+    const opened = ofCall(got.calls, "gh pr create");
+    const commented = ofCall(got.calls, "gh api -X POST repos/owner/repo/issues/77/comments");
+    const statused = ofCall(got.calls, `gh api -X POST repos/owner/repo/statuses/${got.head}`);
+    const queued = ofCall(got.calls, "gh pr merge 77");
+
+    expect(opened).toBeGreaterThanOrEqual(0);
+    expect(commented).toBeGreaterThan(opened);
+    expect(statused).toBeGreaterThan(commented);
+    expect(queued).toBeGreaterThan(statused);
+    expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toEqual([
+      `gh pr merge 77 -R owner/repo --squash --match-head-commit ${got.head}`,
+    ]);
+
+    // The record names the head the quest agent left (the one the review read), not the head the merge of main made, and the quest's own ticket.
+    const said = got.calls.join("\n");
+    expect(got.before[0]).not.toBe(got.head);
+    expect(said).toContain(`reviewed=${got.before[0]}`);
+    expect(said).toMatch(/"ticket":\s*652/);
+  }, 120_000);
+
+  it("scenario: `land.ts run` on a quest that changes a reviewed path, given no --reviewed and no --reviewer, stops at the queue naming the command that carries a record, and enqueues and writes nothing", () => {
+    const got = land({ ...fine, reviewedPath: true });
+
+    expect(got.code).toBe(1);
+    expect(got.err).toContain("land.ts review 77");
+    expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toEqual([]);
+    expect(got.calls.filter((c) => c.startsWith("gh api -X POST"))).toEqual([]);
+  }, 120_000);
+
+  it("scenario: `land.ts run` whose record is refused stops before it queues: a reviewed head that is no commit here, and a reviewer the leak grep refuses, each writes nothing and enqueues nothing", () => {
+    for (const flags of [
+      ["--reviewed", "a".repeat(40), "--reviewer", "a fixture reviewer"],
+      ["--reviewed", "{head}", "--reviewer", `a reviewer ${planted}`],
+    ]) {
+      const got = land({ ...fine, reviewedPath: true, command: ["run", "t652f", "652", ...flags] });
+
+      expect(got.code, flags.join(" ")).toBe(1);
+      expect(got.err, flags.join(" ")).toContain("refused at the review check");
+      expect(
+        got.calls.filter((c) => c.startsWith("gh pr merge")),
+        flags.join(" "),
+      ).toEqual([]);
+      expect(
+        got.calls.filter((c) => c.startsWith("gh api -X POST")),
+        flags.join(" "),
+      ).toEqual([]);
+      expect(got.out + got.err, flags.join(" ")).not.toContain(planted);
+    }
+  }, 120_000);
+
+  it("scenario: `land.ts run` takes no --ticket of its own: its ticket is the one it already names", () => {
+    const got = land({
+      ...fine,
+      reviewedPath: true,
+      command: ["run", "t652f", "652", "--reviewed", "{head}", "--reviewer", "a fixture reviewer", "--ticket", "7"],
+    });
+
+    expect(got.code).not.toBe(0);
+    // The one flag it refuses is `--ticket`: `--reviewed` and `--reviewer` are taken.
+    expect(got.err).toContain("--ticket");
+    expect(got.err).not.toContain("--reviewed");
+    expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toEqual([]);
+  }, 120_000);
+
+  // Plants: leave the review check out of one command; name the carry command for `arm` (which refuses even a pull request with a record); name `--override-review` for the queue.
+  it("scenario: on a pull request that changes a reviewed path and holds no record, `check`, `queue` and `merge` refuse naming the command that carries a record, `arm` names `land.ts queue`, and `merge --admin` names `--override-review`; none merges, arms or queues", () => {
+    const rows: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
+      [["check", "77"], "land.ts review 77"],
+      [["queue", "77"], "land.ts review 77"],
+      [["merge", "77"], "land.ts review 77"],
+      [["arm", "77"], "land.ts queue 77"],
+      [["merge", "77", "--admin"], "--override-review"],
+      [["admin", "77", "--wait"], "--override-review"],
+    ];
+
+    for (const [command, says] of rows) {
+      const got = land({ ...fine, reviewedPath: true, command });
+
+      expect(got.code, command.join(" ")).toBe(1);
+      expect(got.err, command.join(" ")).toContain(says);
+      expect(
+        got.calls.filter((c) => c.startsWith("gh pr merge")),
+        command.join(" "),
+      ).toEqual([]);
+    }
+  }, 240_000);
+
+  // Plants: wire the flag to nothing; write the override after the merge; write it right after the gate, before the checks that follow; merge with no reason.
+  it("scenario: `land.ts admin --wait --override-review <reason>` on a pull request that changes a reviewed path and holds no record writes the override (a comment, then a `failure` status holding the reason) and only then merges past the queue", () => {
+    const reason = "sev1 fix for the red main";
+    const got = land({ ...fine, reviewedPath: true, command: ["admin", "77", "--wait", "--override-review", reason] });
+
+    expect(got.code, got.err).toBe(0);
+
+    const commented = ofCall(got.calls, "gh api -X POST repos/owner/repo/issues/77/comments");
+    const statused = ofCall(got.calls, `gh api -X POST repos/owner/repo/statuses/${got.head}`);
+    const merged = ofCall(got.calls, "gh pr merge 77");
+
+    expect(commented).toBeGreaterThanOrEqual(0);
+    expect(statused).toBeGreaterThan(commented);
+    expect(merged).toBeGreaterThan(statused);
+    expect(got.calls[merged]).toContain("--admin");
+
+    const said = got.calls.join("\n");
+    expect(said).toContain("state=failure");
+    expect(said).toContain(`override v1 ${reason}`);
+    expect(got.out).toContain(reason);
+  }, 120_000);
+
+  // Plant: write an override for a pull request that holds a record already, or for one that needs none.
+  it("scenario: `land.ts admin --wait` of a docs-only pull request needs no reason and writes no override, with or without one", () => {
+    for (const command of [
+      ["admin", "77", "--wait"],
+      ["admin", "77", "--wait", "--override-review", "not needed"],
+    ]) {
+      const got = land({ ...fine, command });
+
+      expect(got.code, got.err).toBe(0);
+      expect(got.calls.filter((c) => c.startsWith("gh api -X POST"))).toEqual([]);
+    }
+  }, 120_000);
 });
 
 /** What `land.ts --help` lists as subcommands, in the order it lists them. */

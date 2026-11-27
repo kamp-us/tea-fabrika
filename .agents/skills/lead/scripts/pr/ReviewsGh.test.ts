@@ -1,6 +1,8 @@
 // Today's lead tooling. The Reviews service on `gh` (./ReviewsGh.ts): the reader asks for one full head's statuses, every page, and keeps
 // only those of context `review` (R5); the writer posts the comment and then the status, in that order, and posts no status for a comment
 // that failed (R6). `gh` is a stand-in that answers as told and keeps every call: nothing here asks GitHub.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder, runsFor } from "@kampus/vitest";
 import { Effect, Layer, Option, Result, Schema, Sink, Stream } from "effect";
@@ -212,6 +214,57 @@ describe("R5: the reader (slice 1)", () => {
 
         expect(rows[5]?.seen.url).toBe("https://ci.jenkins.io/job/Core/job/jenkins/job/PR-27900/display/redirect");
         expect(rows.every((r) => Result.isFailure(r.seen.core))).toBe(true);
+      }),
+  );
+});
+
+// Recorded 2026-11-27 with `gh api --paginate --slurp repos/kamp-us/tea-fabrika/commits/<sha>/statuses`, once for the head a fresh record
+// was written on and once for the head a carry was written on, in the lead's live proof of slice 1 (a pull request of this repository, which
+// now holds commit statuses of context `review`). Each answer is the one status of that head, as GitHub gave it, in the one more array `--slurp`
+// makes of its pages. The creator's account name, id and links are replaced with a made-up account of the same shape: this repository is public.
+const recorded = (name: string): string => readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
+
+describe("R5: the reader on this repository's own recorded statuses (slice 2)", () => {
+  // Plants, each run once and restored: read the creator from the wrong key; read the description from `title`; match the context by prefix; let
+  // a carry read as something other than the pass it carries.
+  it.effect(
+    "vector: a real fresh record and a real carry, as GitHub lists them, read as one and the same approval: the same reviewed head, patch id and comment, on two different heads",
+    () =>
+      Effect.gen(function* () {
+        const reads = [];
+
+        for (const name of ["review-status-pass.json", "review-status-carry.json"]) {
+          const text = recorded(name);
+          const [row] = yield* ReviewsGh.decode(text);
+          const head = /statuses\/([0-9a-f]{40})$/.exec(JSON.parse(text)[0][0].url)?.[1] ?? "";
+
+          // The reader asks for the head's statuses and is given the recorded answer.
+          const [seen] = yield* Effect.flatMap(Reviews, (reviews) => reviews.read(head)).pipe(
+            Effect.provide(layers(() => ({ code: 0, out: text }))),
+          );
+
+          expect(row?.context).toBe("review");
+          expect(seen).toEqual(row?.seen);
+          expect(seen?.state).toBe("success");
+          expect(seen?.creator).toBe("the-lead-login");
+          expect(seen?.url).toMatch(/^https:\/\/github\.com\/kamp-us\/tea-fabrika\/pull\/2357#issuecomment-[0-9]+$/);
+          reads.push({ head, seen });
+        }
+
+        const [fresh, kept] = reads;
+        expect(fresh?.head).not.toBe(kept?.head);
+        expect(fresh?.seen?.id).toBeLessThan(kept?.seen?.id ?? 0);
+        expect(fresh?.seen?.core).toEqual(kept?.seen?.core);
+        expect(fresh?.seen?.url).toBe(kept?.seen?.url);
+        expect(Result.isSuccess(fresh?.seen?.core ?? Result.fail("none"))).toBe(true);
+
+        // What the gate does with them: either one approves a pull request that changes a reviewed path.
+        for (const { seen } of reads) {
+          expect(
+            Review.approval({ reviewed: Review.REVIEWED, paths: ["next/a.ts"], seen: seen === undefined ? [] : [seen] })
+              ._tag,
+          ).toBe("approved");
+        }
       }),
   );
 });

@@ -13,9 +13,11 @@ import { type Job, type Run, Runs } from "../ci/Runs.ts";
 import * as RunsGh from "../ci/RunsGh.ts";
 import * as RunsTest from "../ci/RunsTest.ts";
 import * as Arm from "./Arm.ts";
+import * as ChangesTest from "./ChangesTest.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
+import * as ReviewsTest from "./ReviewsTest.ts";
 import * as Sections from "./Sections.ts";
 import * as SignaturesTest from "./SignaturesTest.ts";
 import * as TicketsTest from "./TicketsTest.ts";
@@ -163,6 +165,8 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
     ).pipe(Layer.provide(RunsTest.layer(actions))),
     ChecksTest.layer([], red.log),
     SignaturesTest.layer(),
+    ChangesTest.layer(ChangesTest.world()),
+    ReviewsTest.layer(ReviewsTest.world()),
     TicketsTest.layer(TicketsTest.world()),
   );
 

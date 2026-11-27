@@ -7,6 +7,7 @@ import { Effect, Fiber, Layer, Option, Schema, Match } from "effect";
 import { TestClock } from "effect/testing";
 import { Checks, ChecksError, type Job } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
+import * as ChangesTest from "./ChangesTest.ts";
 import type { Close } from "./Closes.ts";
 import * as ClosesTest from "./ClosesTest.ts";
 import * as Gate from "./Gate.ts";
@@ -16,6 +17,7 @@ import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
 import * as Queue from "./Queue.ts";
+import * as ReviewsTest from "./ReviewsTest.ts";
 import * as Sections from "./Sections.ts";
 import * as SignaturesTest from "./SignaturesTest.ts";
 import * as SweepsTest from "./SweepsTest.ts";
@@ -92,6 +94,8 @@ const memory = (w: World = {}) => {
     TicketsTest.layer(tracker, w.failing?.tickets),
     SweepsTest.layer(sweeps, w.failing?.sweep),
     SignaturesTest.layer(),
+    ChangesTest.layer(ChangesTest.world()),
+    ReviewsTest.layer(ReviewsTest.world()),
     ClosesTest.layer(closes, w.failing?.closes),
   );
 

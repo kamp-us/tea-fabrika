@@ -29,13 +29,15 @@ export type World = {
   /** The statuses of context `review` on each head, by the full sha. */
   readonly statuses: Map<string, Array<Stored>>;
   readonly calls: Array<Call>;
+  /** Every head a read was asked for, in order. */
+  readonly reads: Array<string>;
   /** A write that GitHub took and the next read does not show: the read back must catch it. */
   lossy: boolean;
   /** The id the next status takes. */
   next: number;
 };
 
-export const world = (): World => ({ statuses: new Map(), calls: [], lossy: false, next: 1000 });
+export const world = (): World => ({ statuses: new Map(), calls: [], reads: [], lossy: false, next: 1000 });
 
 /** Puts a status on a head as it already was, before the tool ran. */
 export const seed = (w: World, head: string, stored: Stored): void => {
@@ -61,10 +63,17 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<Reviews> => 
     Reviews,
     Reviews.of({
       read: (head) =>
-        Effect.flatMap(fails("read"), () =>
-          /^[0-9a-f]{40}$/.test(head)
-            ? Effect.succeed((w.statuses.get(head) ?? []).map(seen))
-            : Effect.fail(ReviewsError.make({ reason: `${head} is not a full commit id` })),
+        Effect.flatMap(
+          Effect.andThen(
+            Effect.sync(() => {
+              w.reads.push(head);
+            }),
+            fails("read"),
+          ),
+          () =>
+            /^[0-9a-f]{40}$/.test(head)
+              ? Effect.succeed((w.statuses.get(head) ?? []).map(seen))
+              : Effect.fail(ReviewsError.make({ reason: `${head} is not a full commit id` })),
         ),
       write: (pr, record: Verdict, url) =>
         Effect.gen(function* () {

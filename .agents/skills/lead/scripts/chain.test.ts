@@ -2,7 +2,15 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { it as effectIt } from "@effect/vitest";
+import * as Commit from "@kalfa/git/Commit";
+import type { CommitId } from "@kalfa/git/CommitId";
+import * as MemoryRepository from "@kalfa/git/memory";
+import * as Ref from "@kalfa/git/Ref";
+import * as Settings from "@kalfa/git/Settings";
+import * as Tree from "@kalfa/git/Tree";
 import { Agent } from "@kampus/fabrika-old";
+import { runsFor } from "@kampus/vitest";
 import {
   Array as Arr,
   String as Str,
@@ -10,12 +18,15 @@ import {
   DateTime,
   Effect,
   Formatter,
+  Layer,
   Match,
   Option,
   Order,
   Record as Rec,
+  Result,
   Schema,
 } from "effect";
+import { Digest } from "effect/crypto";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
@@ -42,6 +53,7 @@ import {
   moveFrom,
   moveOf,
   providers,
+  recordReady,
   RetriesExhausted,
   sectionsOf,
   slotRefusal,
@@ -52,6 +64,10 @@ import {
   stepsTable,
 } from "./chain.ts";
 import { FAULTS, faultFrom, MUTATION_AGENT, stepProvider } from "./drive.ts";
+import * as BranchesTest from "./pr/BranchesTest.ts";
+import * as PullRequestsTest from "./pr/PullRequestsTest.ts";
+import * as PushesTest from "./pr/PushesTest.ts";
+import * as ReviewsTest from "./pr/ReviewsTest.ts";
 
 /** The key of each Msg, Cmd and answer these laws write or expect, made by its schema (a tea Msg, Cmd and Sub are keyed on _tag; nothing shows an agent a banned shape, so shape rules cover tests and tooling too).
  *  A law hands a cell or expects of a Cmd only the fields it reads, so a case holds the key alone. */
@@ -1021,6 +1037,22 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     expect(reads).toEqual([expect.objectContaining({ ...Tag.cases.typecheck_read.make({}), pr: 7, head: second })]);
   });
 
+  // Plant (slice 2, R11): let a pull request that was not marked ready, or whose review record was refused, go on to CI's typecheck and so to the queue.
+  it("scenario: an open that names no pull request (the review record was refused, or the pull request was not marked ready) ends the quest stuck with its reason, and asks for no typecheck, no loosening and no landing", () => {
+    const [m] = merged("a".repeat(40));
+
+    // SAFETY: `pr_open_ok` reads only `m.value`, here no pull request and the reason; no cell
+    // in chain.ts reads the `cmd` a real answer also carries.
+    const [over, cmds] = machine.update.pr_open_ok(m, {
+      ...Tag.cases.pr_open_ok.make({}),
+      value: { pr: null, detail: "the review record was refused" },
+    } as never);
+
+    expect(over.phase).toBe("over");
+    expect(cmds).toEqual([]);
+    expect(over).toMatchObject({ end: { kind: "stuck", reason: "the review record was refused" } });
+  });
+
   it("scenario: a typecheck answer outside the typecheck phase changes nothing", () => {
     const [idle] = machine.init(null, undefined);
     const [same, cmds] = answered(idle, { _tag: "green" });
@@ -1876,4 +1908,132 @@ describe("T675 a quest stops at its budget (a quest stops at its budget, or when
       "backstop: the quest reached $30.00, its backstop (24 steps, $30.00). Spent so far: 9 steps, $31.40. Answer redo, cut scope or drop (a quest stops at its budget, or when its steps keep failing close together).",
     );
   });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// R11, the chain half (slice 2 of .kalfa/quests/review-record-PLAN.md): the chain records the review it ran, at the head it pushed, before it lands
+// ---------------------------------------------------------------------------------------------------------
+
+const SETTINGS = Schema.decodeSync(Settings.Settings)({
+  limits: {
+    commits: 1000,
+    refs: 1000,
+    bytes: 1_000_000,
+    files: 1000,
+    diff: 10_000_000,
+    blob: 10_000_000,
+    time: "10 seconds",
+    kill: "5 seconds",
+  },
+  committer: { name: "Fixture", email: "fixture@example.test" },
+});
+
+const SIGNED = Commit.Signature.make({
+  name: "Fixture",
+  email: "fixture@example.test",
+  at: { seconds: 1_700_000_000, offset: "+0000" },
+});
+
+const treeFiles = (entries: Readonly<Record<string, string>>) =>
+  new Map(
+    Object.entries(entries).map(([path, content]) => [
+      Schema.decodeSync(Tree.Path)(path),
+      { mode: Schema.decodeSync(Tree.Mode)("100644"), content: new TextEncoder().encode(content) },
+    ]),
+  );
+
+/** Main's tip, a branch commit that adds one file (the head the quest pushed), and another that adds a different one. */
+const made = Effect.gen(function* () {
+  let store = MemoryRepository.empty;
+
+  const put = Effect.fnUntraced(function* (
+    message: string,
+    parents: ReadonlyArray<CommitId>,
+    files: Record<string, string>,
+  ) {
+    const tree = yield* Effect.orDie(MemoryRepository.tree(store, treeFiles(files)));
+
+    const commit = yield* MemoryRepository.commit({
+      tree: tree.id,
+      parents,
+      author: SIGNED,
+      committer: SIGNED,
+      message: `${message}\n`,
+    });
+
+    store = yield* Effect.orDie(Effect.fromResult(MemoryRepository.add(tree.store, commit)));
+
+    return commit.id;
+  });
+
+  const base = yield* put("base", [], { "base.txt": "base" });
+  const head = yield* put("head", [base], { "base.txt": "base", "feature.txt": "the change" });
+  const other = yield* put("other", [base], { "base.txt": "base", "feature.txt": "another change" });
+
+  store = yield* Effect.orDie(
+    Effect.fromResult(MemoryRepository.point(store, Schema.decodeSync(Ref.RefName)("refs/remotes/origin/main"), base)),
+  );
+
+  return { store, head, other };
+}).pipe(Effect.provide(Digest.layerWebCrypto));
+
+describe("R11: the chain records its review at the head it pushed, and a refused record stops it before it lands (slice 2)", () => {
+  // Plants, each run once and restored: record nothing; record `reviewed` as another head; ignore a refused record (so the chain goes on to land);
+  // pass the record no ticket; write the record before the pull request is marked ready.
+  effectIt.effect.prop(
+    "property: `recordReady` writes one record, a comment and then a status, on the head the review read, with the quest's ticket, and writes nothing when the pull request is closed, holds another change or cannot be read",
+    {
+      pr: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 99_999 })),
+      quest: Schema.Literals(["trace-x", "t2338", "a-quest"]),
+      ticket: Schema.NullOr(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9999 }))),
+      fault: Schema.Literals(["none", "none", "none", "closed", "otherChange", "readFails"]),
+    },
+    ({ pr, quest, ticket, fault }) =>
+      Effect.gen(function* () {
+        const { store, head, other } = yield* made;
+
+        const github = PullRequestsTest.world([
+          {
+            number: pr,
+            head: `fabrikalfa/${quest}`,
+            oid: fault === "otherChange" ? other : head,
+            state: fault === "closed" ? "CLOSED" : "OPEN",
+            draft: false,
+          },
+        ]);
+
+        const reviews = ReviewsTest.world();
+
+        const layer = Layer.mergeAll(
+          PullRequestsTest.layer(github),
+          BranchesTest.layer({ branches: [], ahead: {}, empty: [] }),
+          PushesTest.layer(PushesTest.remote()),
+          ReviewsTest.layer(reviews, fault === "readFails" ? { read: "gh is down" } : {}),
+          MemoryRepository.layer(store, SETTINGS).pipe(Layer.provide(Digest.layerWebCrypto)),
+        );
+
+        const done = yield* Effect.result(recordReady({ dir: ".", pr, head, quest, ticket })).pipe(
+          Effect.provide(layer),
+        );
+
+        if (fault !== "none") {
+          expect(Result.isFailure(done)).toBe(true);
+          expect(reviews.calls).toEqual([]);
+
+          return;
+        }
+
+        expect(Result.isSuccess(done) && done.success).toMatchObject({ _tag: "fresh", head, reviewed: head });
+        expect(reviews.calls.map((call) => call._tag)).toEqual(["comment", "status"]);
+        const [commented, statused] = reviews.calls;
+        expect(statused).toMatchObject({ _tag: "status", head, state: "success" });
+        expect(statused?._tag === "status" && statused.description).toMatch(
+          new RegExp(`^pass v1 reviewed=${head} patch=[0-9a-f]{40}$`),
+        );
+        expect(commented?._tag === "comment" && commented.body).toContain(
+          `"ticket":${ticket === null ? "null" : ticket}`,
+        );
+      }),
+    { arbitrary: { seed: 2346, runs: runsFor({ fast: 60, full: 200 }) } },
+  );
 });
