@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0063, ticket 2018; body 4df150bbac68
+Approved by the lead agent, builds 0063, ticket 2018, amended; body ee0f761adf99
 Plancheck-Version: 3
 
 # Plan: errors that carry an inner failure set it as their cause (ticket 2018)
@@ -25,6 +25,8 @@ export class GitUnavailable extends Schema.TaggedError<GitUnavailable, { readonl
 }
 // And a lint rule, fabrika/inner-cause, refuses a kalfa error class that holds a failure in a field and has no cause.
 ```
+
+**Lead amendment (2026-11-27), after review:** the disable comment on `GitHubError` is replaced by a config allowance, `"fabrika/inner-cause": ["error", { "allow": { "kalfa/github/src/GitHub.ts": ["GitHubError"] } }]` in `.oxlintrc.json`, read by the rule the way `reflect-disables.ts` reads its `allow`. A disable comment would name the plugin and trip the approved law P2. Where this plan says "disable comment" for `GitHubError`, read the allowance: L4's census is 0 fires with no disable comment, and `GitHub.ts` does not change.
 
 ## What changes, in one paragraph
 
