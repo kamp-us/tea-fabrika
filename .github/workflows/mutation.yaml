@@ -1,32 +1,54 @@
 name: mutation
 
 # The hourly mutation run on what merged to main (mutation testing runs on a schedule against main, not in a pull request), here on a CI runner instead of the laptop.
-# Only a person or a scheduler session starts it, by hand, each hour:
+# It starts itself, so no person or session has to remember it (a session that dispatched it each hour
+# stopped on 2026-11-13, and nothing ran for 13 days):
 #
-#   gh workflow run mutation.yaml -f base=<the commit the last run ended at>
+#   - on every push to main, so a merge gets a run soon, and the newest push wins (below);
+#   - on an hourly cron, as the catch-up that retries a failed range when no push comes. GitHub's
+#     cron fires only about 3 times a day on this repo (34 starts in 11.7 days, measured on
+#     scheduled.yaml), so the push is the real clock and the cron the backup;
+#   - by hand, to re-run or to skip a range:
 #
-# No push, pull request or cron starts it, and a merge never waits on it. It runs the same command
+#       gh workflow run mutation.yaml -f base=<the commit to mutate from>
+#
+# The base is the commit the last passing run ended at, read from GitHub's own run list by the
+# `range` step, so a failed range is tried again by the next run (a run that fails leaves the base where
+# it was). Only a hand dispatch gives one. A merge never waits on this run. It runs the same command
 # the laptop runs (mutbox.ts, a step that needs ports or its own processes and network isolation runs in a container): Stryker in a container with `--network none`, the
 # fixed seed 119120 and a sample of at most 150, both set in run.sh. Survivors are its answer, not a
 # failure: the job fails only when the run itself broke (mutbox's `stuck`). It reads, runs the
-# container and uploads its result; it changes nothing in the repo. A one-week trial, like the scheduled-mutation rule.
+# container and uploads its result; it changes nothing in the repo.
+#
+# `mutation-heartbeat.yaml` watches the outcome, not the starter: it goes red and opens one issue when a
+# merge on main has waited past its limit for a passing run, whichever way the runs stopped.
 on:
+  push:
+    branches: [main]
+  schedule:
+    # Not at the top of the hour, when GitHub's load is highest.
+    - cron: "31 * * * *"
   workflow_dispatch:
     inputs:
       base:
-        description: The commit the last run ended at; this run mutates the changed lines of base..head
-        required: true
+        description: The commit to mutate from; empty means the commit the last passing run on main ended at
+        required: false
+        default: ""
         type: string
       head:
-        description: The commit to mutate up to; empty means main's head when the run starts
+        description: The commit to mutate up to; empty means the commit that started the run (main's head on a push or the cron)
         required: false
         default: ""
         type: string
 
 permissions:
   contents: read
+  # The `range` step reads the last passing run from the run list.
+  actions: read
 
-# One run at a time, and a running one is never cut short: a second dispatch waits its turn.
+# One run at a time, and a running one is never cut short. A run that starts while one is running waits,
+# and only the newest waiting run is kept (GitHub replaces an older one with it), so a burst of merges
+# costs one more run that mutates up to the newest head, not one per merge.
 concurrency:
   group: mutation
   cancel-in-progress: false
@@ -61,13 +83,23 @@ jobs:
       # only quest code is in (the hourly mutation run also tests the lead tooling's quest code). scope.ts holds that rule and sample.ts's PRODUCT list, so this
       # pick and the sample's diff are one rule. A path mutbox.ts's --related would refuse is left
       # out.
+      #
+      # The base is the commit the last passing run on main ended at (`headSha`), unless a hand
+      # dispatch gives one. This run is still in progress, so the list never returns it. A run that
+      # failed is no passing run, so its range is read again by the next one. With no passing run at
+      # all, the range is the head's own commit.
       - id: range
         env:
           BASE: ${{ inputs.base }}
           HEAD: ${{ inputs.head || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          base=$(git rev-parse --verify "$BASE^{commit}")
           head=$(git rev-parse --verify "$HEAD^{commit}")
+          if [ -z "$BASE" ]; then
+            BASE=$(gh run list --workflow mutation.yaml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
+          fi
+          base=$(git rev-parse --verify "${BASE:-$head^}^{commit}")
           plain='^[A-Za-z0-9_@.][A-Za-z0-9_@.+/ -]*\.test\.tsx?$'
           # Each in its own line, so a broken diff or scope.ts fails the job and is never read as
           # "no tests".

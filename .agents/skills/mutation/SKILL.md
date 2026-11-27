@@ -5,9 +5,10 @@ description: Run the hourly mutation check on what merged to main with StrykerJS
 
 # The mutation run
 
-Mutation is no step of a pull request. It runs once an hour against
-main, on the changed lines of what merged since the last run, in the container, with the tests
-beside the changed files. No new merge, no run. A merge never waits on it.
+Mutation is no step of a pull request. It runs against
+main, starting itself after a push and on an hourly catch-up, on the changed lines of what merged since
+the last passing run, in the container, with the tests beside the changed files. No new merge, no run.
+A merge never waits on it, and a heartbeat opens an issue when merges wait too long for a passing run.
 
 - **The hourly run** changes nothing in the repo. It sorts each survivor (step 3 below), files a
   real gap as one tracker ticket per file, every one of them (0117: no daily cap), with its category
@@ -146,17 +147,28 @@ lock before it starts mutbox, and the hourly run on CI has a lock of its own.
 ## The hourly run, in CI
 
 The hourly run on main runs in
-GitHub CI, in `.github/workflows/mutation.yaml`, on the free arm64 runner. Nothing starts it but a
-hand dispatch: no push, pull request or cron. It runs the command above with `--ticket 0`, the
-range's base as arm a, and the tests beside the changed files as `--related`.
+GitHub CI, in `.github/workflows/mutation.yaml`, on the free arm64 runner. It starts itself: on every
+push to main, on an hourly cron as the catch-up (GitHub's cron fires only about 3 times a day on
+this repo, so the push is the real clock), and by hand. No person or session has to remember it. It runs
+the command above with `--ticket 0`, the range's base as arm a, and the tests beside the changed files as
+`--related`. One run at a time: a run that starts while one runs waits, and only the newest waiting
+run is kept, so a burst of merges costs one more run up to the newest head.
 
-1. **Start it** with the commit the last run ended at. `head` is main's head unless you give one:
+The base is the commit the last passing run on main ended at, read from GitHub's run list. A run that
+fails leaves it where it was, so the next run mutates that range again. If a range can never pass, skip it by hand
+with a newer base.
+
+1. **Start it by hand** (only to re-run, or to skip a range). `base` is the commit to mutate from, and
+   `head` is main's head unless you give one:
 
    ```sh
    gh workflow run mutation.yaml -f base=<sha>
    ```
 
-2. **Find it.** The newest row is yours; a second dispatch waits until the first ends:
+   A hand run with a `head` older than main's leaves the next base at main's head when it started, not
+   at that `head`; give no `head` unless you mean it.
+
+2. **Find it.** The newest row is yours; a second run waits until the first ends:
 
    ```sh
    gh run list --workflow mutation.yaml --limit 1 --json databaseId,status,conclusion,headSha
@@ -173,12 +185,25 @@ range's base as arm a, and the tests beside the changed files as `--related`.
    gh run download <id> --name mutbox --dir <folder>
    ```
 
-A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke. The next
-run's base is the `build` in this run's `mutbox.json`.
+A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke.
 
-`scripts/heartbeat.ts` says when a merge on main has waited too long for a passing run, and
-`scripts/limit.ts` sets each arm's test and hook limit; each header holds its numbers. Nothing runs
-the heartbeat on a schedule yet.
+### The heartbeat
+
+`.github/workflows/mutation-heartbeat.yaml` runs `scripts/heartbeat.ts --issue` on every push to
+main, each hour and by hand. It watches the outcome, so it alarms whichever way the runs stop
+(the push trigger, the cron, GitHub's scheduler, or runs that fail). When a merge on main has waited
+longer than the limit (210 minutes, two full runs) for a passing run, it goes red and opens one GitHub issue
+titled "The hourly mutation run is late", labeled `mutation-heartbeat` (not `ci-scheduled`, which
+switches on a sev1). A passing run closes the issue. The script's header holds the rules.
+
+- **The limit** is `MUTATION_LATE_MINUTES`, the environment of the heartbeat job. Leave it unset for 210.
+- **A pause on purpose** is `MUTATION_PAUSE` in the same job: `{"until":"<ISO time>","reason":"<why>"}`.
+  Until the end the check stays green and opens no issue; at the end the alarm is back on by itself. A pause
+  with no end or no reason fails the check. Set one in a pull request, so the commit says who and why.
+- **What it cannot see:** if the heartbeat workflow itself stops (disabled, or GitHub's scheduler
+  and pushes both fail), nothing says so. An outside dead-man switch would, and none is set up.
+
+`scripts/limit.ts` sets each arm's test and hook limit; its header holds the numbers.
 
 ## A gap's category
 

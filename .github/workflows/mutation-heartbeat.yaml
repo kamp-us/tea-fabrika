@@ -1,0 +1,62 @@
+name: mutation-heartbeat
+
+# The alarm for the hourly mutation run (`mutation.yaml`): it says when a merge on main has waited
+# longer than the limit for a passing run, whatever stopped the runs (the push trigger, the hourly
+# catch-up, GitHub's own scheduler, or runs that fail). It runs `heartbeat.ts`, whose header holds the
+# rules, the limit and the pause.
+#
+# Late: the check ends red and opens one GitHub issue labeled `mutation-heartbeat` (or comments on the
+# open one). Green: it closes that issue. The label is not `ci-scheduled`, which switches on a sev1.
+#
+# It starts on every push to main as well as on the hourly cron, because GitHub's cron fires only about
+# 3 times a day on this repo (measured on scheduled.yaml: 34 starts in 11.7 days, up to 17 hours
+# apart), and by hand. A late merge is a push, so each push reads the state fresh.
+#
+# The settings are the `env` of the job below, each read by heartbeat.ts:
+#   MUTATION_LATE_MINUTES  the limit, in minutes (default 210, two full runs), set here only to change it
+#   MUTATION_PAUSE         empty, or a pause with an end and a reason, for example
+#                          MUTATION_PAUSE: '{"until":"2026-12-01T00:00:00Z","reason":"the arm64 runner image is broken"}'
+# A pause ends by itself: after `until` the alarm is back on. The commit that sets it says who did.
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Not at the top of the hour, when GitHub's load is highest.
+    - cron: "53 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One check at a time, so two never open two issues. A waiting check is replaced by the newer one, which
+# reads the same state fresher.
+concurrency:
+  group: mutation-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    # Main's copy of the workflow and of heartbeat.ts, never a branch's.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Reads the run list and main's commits, and writes the one issue.
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      MUTATION_PAUSE: ""
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/pnpm
+
+      # For heartbeat.ts itself (Effect).
+      - run: pnpm install --frozen-lockfile
+
+      - run: node .agents/skills/mutation/scripts/heartbeat.ts --issue

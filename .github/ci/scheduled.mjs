@@ -6,7 +6,8 @@
 // the failing tests, or comments on the open one; a green run closes it. Those are the only issues
 // automation opens on this repository (the changed-tests rule's exception to "no GitHub issues here"), with the
 // daily speed check's (CI speed has a goal, and a daily job measures it). That one carries the same label, so the report's own issue is the
-// open one with the label and its exact `TITLE`.
+// open one with the label and its exact `TITLE`. The mutation heartbeat's issue is the third; it has its own label,
+// `mutation-heartbeat`, which switches on no sev1 (heartbeat.ts).
 //
 //   the run           its own open issue           what happens
 //   red               none                         open one
