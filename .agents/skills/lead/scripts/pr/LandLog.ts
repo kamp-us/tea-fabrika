@@ -44,10 +44,11 @@ export const Line = Schema.TaggedUnion({
 export type Line = typeof Line.Type;
 
 /**
- * A name that is safe in a file name: it starts with a letter or a digit, and holds no slash. The record's file layer refuses a quest
- * key that is none, so a name read from a command line can never reach outside the record's folder.
+ * A name that is safe in a file name: it starts with a letter or a digit, holds no slash, and is not all digits (`land.ts last` reads
+ * digits as a pull request, so a quest so named could be written and never read). The record's file layer refuses a quest key that is
+ * none, so a name read from a command line can never reach outside the record's folder.
  */
-export const QuestName = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]*$/));
+export const QuestName = Schema.String.check(Schema.isPattern(/^(?!\d+$)[A-Za-z0-9][A-Za-z0-9._-]*$/));
 
 /** Where a command's lines go: a pull request, or a quest (`ready` and `run` know no pull request yet). */
 export const Key = Schema.TaggedUnion({
