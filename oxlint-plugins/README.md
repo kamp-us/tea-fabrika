@@ -1012,6 +1012,61 @@ causes to `Hidden.Cause`, and the rule then has 0 fires.
 `Hidden`, and one to six lines that fire or must pass (400 runs, seed 119120). L2 is one real oxlint run over one planted body per
 path kind, with the repo's config. L3 is the entry in `plants.test.ts`.
 
+## An error that holds an inner failure sets it as its cause, ticket 2018
+
+`inner-cause` holds a kalfa error class that carries an inner failure in a field to setting it as its JavaScript `cause`. A
+`Schema.TaggedError` passes a field named `cause` to the `Error` constructor, and Effect's printer follows `error.cause` and
+nothing else (`node_modules/effect/src/internal/effect.ts:355-358`). A wrapper that holds its inner failure in `reason` and has no
+`cause` prints as its tag alone, and so does the exception a failed span records, which `OtlpTracer` builds with the same printer.
+Effect's own `SqlError` writes `override readonly cause = this.reason;` for this (`node_modules/effect/src/sql/SqlError.ts:441`).
+
+An error class is what `hidden-cause` calls one. Both rules read it through `error-class.ts`, which holds that code since this
+ticket moved it out of `hidden-cause.ts`, so the two cannot disagree on what an error class is.
+
+- **A field holds a failure** when its schema, followed through same-file `const`s (a union may name its members by a `const` array,
+  and an error class may be a class expression held by a `const`) and through `optional`, `optionalKey`, `NullOr`,
+  `UndefinedOr`, `NullishOr`, `Array`, `NonEmptyArray` and `Union`, reaches a same-file error class, or `Schema.Defect()` under a key
+  that is not `cause`, or, under the key `reason` only, a name imported from a module that is not Effect's. The last one is the
+  pattern's own shape (`.kalfa/patterns/effect-errors-keep-their-cause.md`: a `reason` that is no literal is a union of tagged
+  errors), and without types an import says nothing more.
+- **A class carries it** when its fields have a `cause` key (`hidden-cause` holds that key's form), or its body has a non-static
+  property `cause` whose value is exactly `this.<k>`, with `k` a field that holds a failure. Otherwise the rule reports the class
+  once, at its name.
+- **Passes:** `reason: Schema.Literals([...])`, `reason: Schema.String`, a union of `Schema.TaggedStruct`s, an imported schema under any
+  key but `reason`, and a class that is no error class (`Schema.Class`). A `cause` of the wrong form (`= undefined`, `= this.other`, a
+  getter) fires.
+- **Misses:** a failure behind a helper call, a union that spreads another (`Schema.Union([...Members])`), fields imported from another file, an imported error under a key that is not `reason`,
+  a constructor that passes `cause` to `super` (SocketError's form), and anything outside kalfa's product files.
+
+One override in `.oxlintrc.json`, beside `hidden-cause`'s, holds every file of `kalfa/` as an error and leaves out `*.test.ts`,
+`*.test.tsx` and `*.test-support.ts`: a test makes errors of any shape to probe them.
+
+The one error that holds a failure and sets no cause is `GitHubError`, and the config says so, as `reflect-disables` reads `allow` keyed by path:
+`"fabrika/inner-cause": ["error", { "allow": { "kalfa/github/src/GitHub.ts": ["GitHubError"] } }]`. The option's schema is in the rule's
+`meta`. A class named there passes in that file only: the same name in another file fires, and so does any other class of `GitHub.ts`. The reason
+is a comment in the config, next to the option, and not a disable comment in the package: a package that stands alone may not name this repo's
+plugin, as `kalfa/github/src/Package.test.ts` P2 holds.
+
+Tools looked at first, none used:
+
+| Tool | Why not |
+|---|---|
+| oxlint's `preserve-caught-error` (ESLint's, shipped in 1.90.0) | It asks for `{ cause }` when code throws a new error inside a `catch`. Our errors are classes made from data, never thrown in a `catch`, so it cannot see this shape |
+| oxlint's `no-restricted-syntax` | oxlint has no such rule |
+| Effect's checker (`@effect/tsgo` 0.63.0) | It has no check on an error's cause |
+| `no-data-taggederror.ts` | It matches the `extends` and not the fields or the body |
+
+First-day count, 2026-11-27, on this branch before the build: one real `pnpm format` run, whose oxlint step reads the whole tree with
+the repo's config, each fire read by hand: **3 fires in 3 files, 3 real, 0 false alarms**. `kalfa/git/src/Repository.ts:295`
+(`GitUnavailable`) and `kalfa/secrets/src/Errors.ts:58` (`SecretsUnavailable`) are wrappers that lose their reason in a print and in a
+span, and the build gives each the line. `kalfa/github/src/GitHub.ts:293` (`GitHubError`) is right to fire and is kept on purpose: its
+approved law C9 holds that nothing under its reason reaches a span, so the build keeps it without a cause and the config allows it by name.
+After the build the rule has 0 fires and the tree has no disable comment of it.
+
+`inner-cause.test.ts` holds the laws. L1 is a property through oxlint's `RuleTester`: an import spelling of `Schema` and one to six lines
+that fire or must pass (400 runs, seed 119120), in each of four places that decide what the allowance reaches. L2 is two real oxlint runs with the repo's config: one
+planted body per path kind, and one body at the allowed file and at others. L3 is the entry in `plants.test.ts`.
+
 ## A test's kind follows what it uses, an earlier decision
 
 A test that starts or reaches a real thing is named `*.integration.test.ts` (or `*.visual.test.ts`

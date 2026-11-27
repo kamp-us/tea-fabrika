@@ -18,6 +18,7 @@ import {
 import * as Errors from "./Errors.ts";
 import {
   type AnyError,
+  ChatRefused,
   ChatUnavailable,
   eachError,
   errorTexture,
@@ -291,3 +292,29 @@ it("F3 format: the error of a read that names no types says exactly why, and how
     "types must hold at least one type: leave types out to read every entry",
   );
 });
+
+// R1. Plant: drop the line from `ChatRefused` in the test support, so its cause is none and a print names no refusal; write `cause = undefined`; write the refusal's tag as
+// text in its place, so the cause is no refusal.
+it.effect.prop(
+  "R1 refusal wrapper: ChatRefused's cause is the refusal it holds, for each of the five refusals, and a print of it names which refusal",
+  { texture: errorTexture },
+  ({ texture }) =>
+    Effect.sync(() => {
+      const refusals = eachError(texture).flatMap(({ error }) => (Schema.is(Errors.Refusal)(error) ? [error] : []));
+
+      expect(
+        refusals.map((each) => each._tag),
+        "the generator reaches each of the five",
+      ).toEqual([...REFUSAL_TAGS]);
+
+      for (const refusal of refusals) {
+        const wrapper = new ChatRefused({ reason: refusal });
+
+        expect(wrapper.cause, `${refusal._tag}: the wrapper's cause is the refusal it holds`).toBe(refusal);
+        expect(Cause.pretty(Cause.fail(wrapper)), `${refusal._tag}: a print names the refusal`).toContain(
+          `[cause]: ${refusal._tag}`,
+        );
+      }
+    }),
+  { arbitrary: { runs: 200, seed: SEED } },
+);

@@ -500,7 +500,9 @@ export class ChatUnavailable extends Schema.TaggedError<ChatUnavailable, { reado
  */
 export class ChatRefused extends Schema.TaggedError<ChatRefused, { readonly brand: unique symbol }>()("ChatRefused", {
   reason: Errors.Refusal,
-}) {}
+}) {
+  override readonly cause = this.reason;
+}
 
 // ---- secrets: the plan's (y), a value and the forms it is written in elsewhere
 

@@ -1,5 +1,5 @@
 ---
-where: "next/"
+where: "next/ and kalfa/"
 when: "Writing an error class, a `catch:` or `mapError`, or a handler for a failure"
 ---
 
@@ -77,6 +77,17 @@ Rules:
   away. The cause does not go in a span tag: it rides in the span's failure. A real one:
   `Effect.mapError((cause) => new TasksError({ reason: "storage", cause }))`
   (`next/packages/libfabrika/src/tasks/TasksLedger.ts:189`).
+- **A wrapper's cause is its reason.** An error that holds its inner failure in `reason` (a union of tagged errors) writes
+  `override readonly cause = this.reason` in its body. A `Schema.TaggedError` passes a field named `cause` to the JavaScript `Error`
+  constructor, and Effect's printer follows `error.cause` and nothing else (`node_modules/effect/src/internal/effect.ts:355-358`), so a
+  wrapper with no such line prints as its tag alone, and so does the exception a failed span records (`OtlpTracer` builds it with the
+  same printer). Effect's own wrappers write the line: `sql/SqlError.ts:441`, `ai/AiError.ts:1689`, `ai/McpClientError.ts:306`,
+  `graphql/GraphQLClientError.ts:476`. The owner ruled it for every kalfa `<Package>Unavailable` error on 2026-11-22 (ticket 2018, ask
+  R1b), and a wrapper of refusals does the same (`ChatRefused` in `kalfa/ledger/src/Ledger.test-support.ts`). The line is
+  typed as the reason, so `error.cause._tag` reads without a cast, and the wire is unchanged: `cause` is no schema field. One
+  exception: `GitHubError` (`kalfa/github/src/GitHub.ts`) keeps no cause, because its reason holds GitHub's text and the caller's
+  input, and its approved law C9 holds that nothing under `reason` reaches a span; the lint config allows that one class by name,
+  `"fabrika/inner-cause": ["error", { "allow": { "kalfa/github/src/GitHub.ts": ["GitHubError"] } }]`, with that reason in a comment beside it.
 - **Pick the cause's form from the call sites.** Read every place that makes the error. If each
   one has a cause, the field is required. If one has none, it is `Schema.optional`. Never
   `Schema.optionalKey`.
@@ -145,6 +156,10 @@ cause is a dropped fact.
   `errorPayloadShadowsName` (`tsconfig.base.json:81`). Not yet on:
   `anyUnknownInErrorContext` and `instanceOfSchema`
   turns every check on, one at a time.
+- Lint, on in `kalfa/` product files: `fabrika/inner-cause` refuses an error class that holds a failure in a field (a same-file error
+  class, `Schema.Defect()` under a key that is not `cause`, or an imported name under the key `reason`) and has neither a `cause`
+  field nor `override readonly cause = this.<field>`. `next/` has the same gap and no such rule yet: `GatewayError`,
+  `LedgerStreamsError` and `RepositoriesError` hold their reason with no cause line.
 - No check holds the cause's form. Whether a lint rule or a checker check holds "no `optionalKey`
   on a cause" is for the cleanup's plan.
 - A dropped cause has no built-in check. A custom oxlint rule could flag a `catch:` or `mapError`

@@ -55,7 +55,8 @@ item = "turn-key"
   declared is left alone.
 - **A fetch** reads the routed item, records `Fetched` with the name, the store and the store's version, and only then gives the
   value, hidden, labeled with the name. A store that cannot answer, or a recorder that cannot write, is `SecretsUnavailable` with that
-  failure as its reason and gives no value. An item with nothing in it is `SecretMissing`, never an empty value. Nothing is kept
+  failure as its reason, and also as its JavaScript `cause`, so a printed error and a failed span's exception name the failure and end at
+  the placeholder of its hidden cause (`<redacted>`, or `<redacted:label>` for a labeled one). It gives no value. An item with nothing in it is `SecretMissing`, never an empty value. Nothing is kept
   between fetches. A store that throws instead of failing is a defect of the fetch, and it is re-raised as a `StoreFailed` that holds the thrown error as a hidden cause, so the text it quotes shows nowhere. A fetch is one span, `secrets.fetch`, with `kalfa.secrets.name`, `kalfa.secrets.store` and, on success,
   `kalfa.secrets.version`.
 - **`secrets.routes`** is the one setting: the routes, at most one for each name.
