@@ -1145,13 +1145,19 @@ describe("R3: the carry rule and the write (slice 1)", () => {
 
           const got = Result.isSuccess(result) ? result.success._tag : result.failure._tag;
 
-          if (one.from === undefined) {
-            expect([one.name, got, world.calls]).toEqual([one.name, "RecordRefused", []]);
-          } else {
-            expect([one.name, got]).toEqual([one.name, "kept"]);
-            expect(result).toEqual(Result.succeed({ _tag: "kept", head, from: at(one.from), reviewed: at(one.from) }));
-            expect(world.calls).toHaveLength(1);
-          }
+          const expected =
+            one.from === undefined
+              ? { got: "RecordRefused", writes: 0 }
+              : { got: "kept", writes: 1, from: at(one.from), reviewed: at(one.from) };
+
+          expect({
+            name: one.name,
+            got,
+            writes: world.calls.length,
+            ...(Result.isSuccess(result) && result.success._tag === "kept"
+              ? { from: result.success.from, reviewed: result.success.reviewed }
+              : {}),
+          }).toEqual({ name: one.name, ...expected });
         }
       }).pipe(Effect.orDie),
   );
