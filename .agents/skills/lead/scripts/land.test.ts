@@ -545,12 +545,22 @@ describe("land.ts, today's tooling", () => {
   }
 
   // Plant: read only ci-required in the wait, so a pull request GitHub starts no check on waits out its hour.
-  it("scenario: `land.ts queue --wait` exits 1 at once when the pull request turns to conflict, naming the conflict and the command that merges main in", () => {
-    const got = land({ ...fine, pending: true, mergeable: "later", command: ["queue", "77", "--wait"] });
+  it("scenario: `land.ts queue --wait-ci` exits 1 at once when the pull request turns to conflict, naming the conflict and the command that merges main in", () => {
+    const got = land({ ...fine, pending: true, mergeable: "later", command: ["queue", "77", "--wait-ci"] });
     expect(got.code, got.err).toBe(1);
     expect(got.err).toContain("land: refused at the queue check: pr 77: it conflicts with main");
     expect(got.err).toContain("gh pr update-branch 77");
     expect(got.calls.filter((c) => /^gh pr (ready|merge)/.test(c))).toEqual([]);
+  }, 120_000);
+
+  // Plant: keep `--wait` as a wait for the merge, or let it run anything before it refuses.
+  it("scenario: `land.ts queue --wait` is refused at once and names `--wait-ci`: it does not wait for the merge", () => {
+    const got = land({ ...fine, pending: true, command: ["queue", "77", "--wait"] });
+    expect(got.code, got.err).toBe(1);
+    expect(got.err).toContain("land: refused at the queue check:");
+    expect(got.err).toContain("--wait-ci");
+    expect(got.err).toContain("does not wait for the merge");
+    expect(got.calls.filter((c) => c !== "")).toEqual([]);
   }, 120_000);
 
   // Plant: let `wait` exit 0 on a check that ended red, so a caller's `&&` goes on to queue.
