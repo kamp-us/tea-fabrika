@@ -72,6 +72,10 @@
       "imports": ["kalfa-config", "kalfa-diagnostics"],
       "pure": false
     },
+    "kalfa-ledger": {
+      "imports": ["kalfa-diagnostics"],
+      "pure": false
+    },
     "kalfa-permissions": {
       "imports": [],
       "pure": false
@@ -105,6 +109,7 @@
     "kalfa/git": "kalfa-git",
     "kalfa/github": "kalfa-github",
     "kalfa/secrets": "kalfa-secrets",
+    "kalfa/ledger": "kalfa-ledger",
     "kalfa/permissions": "kalfa-permissions",
     "kalfa/transport": "kalfa-transport"
   },

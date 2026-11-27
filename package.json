@@ -45,6 +45,7 @@
     "@kalfa/git": "workspace:*",
     "@kalfa/github": "workspace:*",
     "@kalfa/diagnostics": "workspace:*",
+    "@kalfa/ledger": "workspace:*",
     "@kalfa/markdown": "workspace:*",
     "@kalfa/permissions": "workspace:*",
     "@kalfa/records": "workspace:*",

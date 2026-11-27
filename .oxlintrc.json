@@ -749,6 +749,7 @@
         "kalfa/diagnostics/src/**",
         "kalfa/git/src/**",
         "kalfa/github/src/**",
+        "kalfa/ledger/src/**",
         "kalfa/markdown/src/**",
         "kalfa/permissions/src/**",
         "kalfa/transport/src/**"
@@ -4342,6 +4343,421 @@
               {
                 "group": ["**/next/**", "../../**"],
                 "message": "@kalfa/git imports no path out of its own folder."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": ["error", "process", "console", "globalThis", "global", "self", "window"],
+        "eslint/no-console": "error"
+      }
+    },
+    {
+      // The Ledger (@kalfa/ledger, ticket 2082) is a library that imports `@kalfa/diagnostics/Hidden` and no other kalfa package, no Telemetry, no Node module and no platform package: its spans are made with `Effect.fn`, and the app joins the Node layer at the top. An override replaces a rule's options, so this repeats the base entries and adds its own. Every pattern that means "and below" ends in /**, never /*. `fast-sha256` is imported by `EntryId.ts` alone (the next override). Tests and test support are left out, and `LedgerTest.ts`, the one file that loads the test tools, has the override after the next one.
+      "files": ["kalfa/ledger/src/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/platform-node",
+                "message": "@kalfa/ledger: the app provides the Node layer at the top, so this package never imports it."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/ledger: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/ledger: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/ledger: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "fast-sha256",
+                "message": "@kalfa/ledger: only EntryId.ts hashes (L2), so the one dependency is imported in one place."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib"
+                ],
+                "message": "@kalfa/ledger imports no Node module, so it runs in a browser, a Worker and Node alike. Both spellings are refused: node:crypto and crypto."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/ledger imports no Telemetry: its spans are made with Effect.fn (decision 0063)."
+              },
+              {
+                "group": ["effect/process", "effect/process/**"],
+                "message": "@kalfa/ledger spawns no process."
+              },
+              {
+                "group": [
+                  "@effect/platform-*",
+                  "@effect/platform-*/**",
+                  "@effect/vitest/**",
+                  "vitest/**",
+                  "fast-check/**",
+                  "fast-sha256/**"
+                ],
+                "message": "@kalfa/ledger: no platform package and no test tools in product files."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**", "!@kalfa/diagnostics/Hidden"],
+                "message": "@kalfa/ledger imports `@kalfa/diagnostics/Hidden`, the hidden cause its failures hold, and no other package of this repository (it ranks just above Diagnostics, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/ledger imports no path out of its own folder."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": ["error", "process", "console", "globalThis", "global", "self", "window"],
+        "eslint/no-console": "error"
+      },
+      "excludeFiles": [
+        "**/*.test.ts",
+        "**/*.test-support.ts",
+        "kalfa/ledger/src/EntryId.ts",
+        "kalfa/ledger/src/LedgerTest.ts"
+      ]
+    },
+    {
+      // @kalfa/ledger's one file that hashes: the same rows as above, less `fast-sha256`, which EntryId.ts alone may import (L2).
+      "files": ["kalfa/ledger/src/EntryId.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/platform-node",
+                "message": "@kalfa/ledger: the app provides the Node layer at the top, so this package never imports it."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/ledger: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/ledger: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/ledger: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib"
+                ],
+                "message": "@kalfa/ledger imports no Node module, so it runs in a browser, a Worker and Node alike. Both spellings are refused: node:crypto and crypto."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/ledger imports no Telemetry: its spans are made with Effect.fn (decision 0063)."
+              },
+              {
+                "group": ["effect/process", "effect/process/**"],
+                "message": "@kalfa/ledger spawns no process."
+              },
+              {
+                "group": [
+                  "@effect/platform-*",
+                  "@effect/platform-*/**",
+                  "@effect/vitest/**",
+                  "vitest/**",
+                  "fast-check/**"
+                ],
+                "message": "@kalfa/ledger: no platform package and no test tools in product files."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**", "!@kalfa/diagnostics/Hidden"],
+                "message": "@kalfa/ledger imports `@kalfa/diagnostics/Hidden`, the hidden cause its failures hold, and no other package of this repository (it ranks just above Diagnostics, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/ledger imports no path out of its own folder."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": ["error", "process", "console", "globalThis", "global", "self", "window"],
+        "eslint/no-console": "error"
+      }
+    },
+    {
+      // The Ledger's `/test` entry point (@kalfa/ledger, ticket 2082, L1): the same rows as the package's own override, less the two test tools, which this file alone loads. It takes `vitest` and `@effect/vitest` by their roots and nothing else of what the rest of the package refuses: no kalfa package but `@kalfa/diagnostics/Hidden`, no Telemetry, no Node module, no platform package, no `fast-check` and no `fast-sha256`. An override replaces a rule's options, so this repeats the base entries.
+      "files": ["kalfa/ledger/src/LedgerTest.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/platform-node",
+                "message": "@kalfa/ledger: the app provides the Node layer at the top, so this package never imports it."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/ledger: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "fast-sha256",
+                "message": "@kalfa/ledger: only EntryId.ts hashes (L2), so the one dependency is imported in one place."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib"
+                ],
+                "message": "@kalfa/ledger imports no Node module, so it runs in a browser, a Worker and Node alike. Both spellings are refused: node:crypto and crypto."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/ledger imports no Telemetry: its spans are made with Effect.fn (decision 0063)."
+              },
+              {
+                "group": ["effect/process", "effect/process/**"],
+                "message": "@kalfa/ledger spawns no process."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**", "fast-check/**", "fast-sha256/**"],
+                "message": "@kalfa/ledger: no platform package, and no test tool but the roots of `vitest` and `@effect/vitest` (the Test.ts file)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**", "!@kalfa/diagnostics/Hidden"],
+                "message": "@kalfa/ledger imports `@kalfa/diagnostics/Hidden`, the hidden cause its failures hold, and no other package of this repository (it ranks just above Diagnostics, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/ledger imports no path out of its own folder."
               }
             ]
           }
