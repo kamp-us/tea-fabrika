@@ -1044,6 +1044,117 @@ describe("R3: the carry rule and the write (slice 1)", () => {
       expect(required.filter((k) => !reached.has(k))).toEqual([]);
     }).pipe(Effect.orDie),
   );
+
+  // Plant: walk every parent of a commit, keeping the guard that stops at main's commits (red: the pass on the side branch is found).
+  it.effect(
+    "scenario: a carry walks the head's first parents only, so a pass on the second parent of a merge inside the pull request is not found",
+    () =>
+      Effect.gen(function* () {
+        // main:0 <- first <- head, and main:0 <- second <- head: head merges two branches of the pull request, each with the whole change.
+        const history = Effect.gen(function* () {
+          let store = MemoryRepository.empty;
+          const ids = new Map<string, CommitId>();
+
+          const put = Effect.fnUntraced(function* (
+            key: string,
+            parents: ReadonlyArray<CommitId>,
+            files: Readonly<Record<string, string>>,
+          ) {
+            const made = yield* Effect.orDie(MemoryRepository.tree(store, filesMap(files)));
+
+            const commit = yield* MemoryRepository.commit({
+              tree: made.id,
+              parents,
+              author: SIGNED,
+              committer: SIGNED,
+              message: `${key}\n`,
+            });
+
+            store = yield* Effect.orDie(Effect.fromResult(MemoryRepository.add(made.store, commit)));
+            ids.set(key, commit.id);
+
+            return commit.id;
+          });
+
+          const files = { "base.txt": "base", "feature.txt": "edit 1" };
+          const main = yield* put("main", [], { "base.txt": "base" });
+          const first = yield* put("first", [main], files);
+          const second = yield* put("second", [main], files);
+          yield* put("head", [first, second], files);
+
+          store = yield* Effect.orDie(
+            Effect.fromResult(
+              MemoryRepository.point(store, Schema.decodeSync(Ref.RefName)("refs/remotes/origin/main"), main),
+            ),
+          );
+
+          return { store, ids };
+        }).pipe(Effect.provide(Digest.layerWebCrypto));
+
+        // Where the passes sit, and what a carry on the head must do.
+        const cases: ReadonlyArray<{
+          readonly name: string;
+          readonly passes: ReadonlyArray<"first" | "second">;
+          readonly from: "first" | undefined;
+        }> = [
+          { name: "none", passes: [], from: undefined },
+          { name: "the second parent only", passes: ["second"], from: undefined },
+          { name: "the first parent only", passes: ["first"], from: "first" },
+          { name: "both parents", passes: ["second", "first"], from: "first" },
+        ];
+
+        for (const one of cases) {
+          const { store, ids } = yield* history;
+          const at = (key: string): string => ids.get(key) ?? hex(0);
+          const head = at("head");
+
+          const github = PullRequestsTest.world([
+            { number: 7, head: "fabrikalfa/t2338", oid: head, state: "OPEN", draft: false },
+          ]);
+
+          github.more.set(7, { base: "main" });
+          const world = ReviewsTest.world();
+
+          for (const [n, key] of one.passes.entries()) {
+            ReviewsTest.seed(world, at(key), {
+              id: n + 1,
+              creator: "lead",
+              state: "success",
+              description: `pass v1 reviewed=${at(key)} patch=${hex(n + 1)}`,
+              url: `https://github.test/c/${n + 1}`,
+            });
+          }
+
+          const layers = Layer.mergeAll(
+            PullRequestsTest.layer(github),
+            BranchesTest.layer({ branches: [], ahead: {}, empty: [] }),
+            Recorder.layer(Pushes, {
+              leakGrep: () => Effect.void,
+              leakChange: () => Effect.void,
+              leakText: () => Effect.void,
+              push: () => Effect.void,
+            }),
+            ReviewsTest.layer(world),
+            MemoryRepository.layer(store, SETTINGS).pipe(Layer.provide(Digest.layerWebCrypto)),
+          );
+
+          const result = yield* Review.record({ dir: ".", pr: 7, ask: Review.Ask.cases.carry.make({}) }).pipe(
+            Effect.result,
+            Effect.provide(layers),
+          );
+
+          const got = Result.isSuccess(result) ? result.success._tag : result.failure._tag;
+
+          if (one.from === undefined) {
+            expect([one.name, got, world.calls]).toEqual([one.name, "RecordRefused", []]);
+          } else {
+            expect([one.name, got]).toEqual([one.name, "kept"]);
+            expect(result).toEqual(Result.succeed({ _tag: "kept", head, from: at(one.from), reviewed: at(one.from) }));
+            expect(world.calls).toHaveLength(1);
+          }
+        }
+      }).pipe(Effect.orDie),
+  );
 });
 
 // R4: the words in a record go public, so they pass the leak grep before anything is posted.
@@ -1123,6 +1234,11 @@ describe("R4: the leak gate on the record's words [secrets] (slice 1)", () => {
 
         if (!leaks && reachesWrite) {
           expect(greps.some(([, text]) => text.includes(reviewer))).toBe(true);
+        }
+
+        // The grep reads the whole comment, not a part of it: each body the world was sent is, byte for byte, a text the grep read first.
+        for (const sent of world.calls.filter(ReviewsTest.Call.guards.comment)) {
+          expect(greps.some(([, text]) => text === sent.body)).toBe(true);
         }
 
         // Every output the code gives: what it returned, and what it wrote.
