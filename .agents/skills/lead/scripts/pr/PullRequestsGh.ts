@@ -1,6 +1,6 @@
 // PullRequestsGh.layer: the PullRequests service on `gh`, the one way the lead tooling reaches
-// GitHub. `gh pr edit` fails here with a classic Projects error (AGENTS.md), so an edit goes
-// through `gh api -X PATCH`. Every call names the repo, so the checkout it runs in does not pick it.
+// GitHub. An edit goes through `gh api -X PATCH`. Every call names the repo, so the checkout it
+// runs in does not pick it.
 import { Effect, Layer, Option, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { type Given, lastLine, run } from "./command.ts";
