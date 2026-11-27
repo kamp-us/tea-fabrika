@@ -183,6 +183,12 @@ const admin = Effect.fn("Merge.admin")(function* (
 
   yield* Leaks.gate(dir, found);
 
+  const unwritten = yield* Queue.description(found);
+
+  if (unwritten !== null) {
+    return yield* refuse(unwritten);
+  }
+
   // A merge to main moves main under the queue and restarts the build of every entry in it: any other
   // pull request waits for the queue to empty. A sev fix and a sev0's ready pull request keep the sev
   // skill's one-at-a-time rule alone, so this never slows a fix.

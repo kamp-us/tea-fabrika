@@ -19,9 +19,33 @@ const squash = (text: string): string => pipe(text, Str.replaceAll("\r", ""), St
 /** Whether `text` holds the draft placeholder, however its lines are wrapped. */
 const placeholder = (text: string): boolean => squash(text).includes(squash(DRAFT_BODY));
 
+/**
+ * The lines of `body` that are markdown, not a fenced code block and not inside an HTML comment: a
+ * heading in either is no section. A fence opens on a line of three or more backticks or tildes and
+ * closes on one of the same mark; a comment left open hides the rest.
+ */
+const prose = (body: string): ReadonlyArray<string> => {
+  const lines = pipe(body, Str.replaceAll("\r", ""), Str.replace(/<!--[\s\S]*?(?:-->|$)/g, ""), Str.split("\n"));
+
+  let fence: string | undefined;
+
+  return Arr.filter(lines, (line) => {
+    const mark = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1]?.[0];
+
+    if (fence === undefined) {
+      fence = mark;
+
+      return mark === undefined;
+    }
+
+    fence = mark === fence ? undefined : fence;
+
+    return false;
+  });
+};
+
 /** Whether `body` has a heading of level two or three that reads `name`, in any case (a quest brief writes `### Summary`). */
-const has = (body: string, name: string): boolean =>
-  pipe(body, Str.replaceAll("\r", ""), Str.split("\n"), Arr.some(heading(name)));
+const has = (body: string, name: string): boolean => Arr.some(prose(body), heading(name));
 
 const heading = (name: string) => {
   const pattern = new RegExp(`^#{2,3}\\s+${name.replaceAll(" ", "\\s+")}\\s*$`, "i");

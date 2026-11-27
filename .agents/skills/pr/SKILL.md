@@ -177,6 +177,6 @@ Our tools read the body, so it also holds:
 - **`## New names`**, when the diff exports a new name: one line per name, what the industry calls it, with a link to a source that says so. The merge queue refuses a PR whose diff exports a name this section does not name.
 - **Run `node .agents/skills/lead/scripts/land.ts check <pr>`** after you write or change the body, before `queue`. It runs the body checks `queue` runs (the leak grep on the title and description, the template's `## Summary`, `## Evidence` and `## Merge Danger` sections and no draft placeholder sentence, the `## New names` section, and each `fabrika close ticket` number), prints each missing name with its file, exits 1 on any, and changes nothing. Fix the body until it exits 0.
 - **Closing:** only when the merge finishes it, a tracker ticket takes `fabrika close ticket <N>` on a line of its own and a GitHub issue takes `Closes #<N>`; `land.ts check` refuses the first form for a number that is no open tracker ticket.
-- **A quest brief's `## pr` section** writes `### Summary` and `### Evidence`, because a one-word `## ` heading starts a new brief section and cuts the PR body short.
+- **A quest brief's `## pr` section** writes `### Summary`, `### Evidence` and `### Merge Danger`, because a one-word `## ` heading starts a new brief section and cuts the PR body short.
 - **The last line** is `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - **Never** quote a person's chat words, and never link a session.

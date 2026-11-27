@@ -56,6 +56,42 @@ describe("Sections: a description is the pr skill's template, not the draft plac
     );
   });
 
+  // Plant: match a prefix of the placeholder (`includes(squash(DRAFT_BODY).slice(0, 30))`), so a body that quotes part of the sentence is refused.
+  it.prop(
+    "property: a full body that quotes a prefix of the placeholder, or a changed form of it, passes",
+    {
+      cut: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Sections.DRAFT_BODY.length - 1 })),
+      word: Schema.Literals(["draft", "branch", "pushed", "ready", "steps"]),
+    },
+    ({ cut, word }) => {
+      const changed = Sections.DRAFT_BODY.replace(word, `${word}x`);
+
+      expect(Sections.refusal(`${body(all)}\n> ${Sections.DRAFT_BODY.slice(0, cut)}\n`)).toBeNull();
+      expect(Sections.refusal(`${body(all)}\n> ${changed}\n`)).toBeNull();
+    },
+  );
+
+  // Plants: read headings inside a fenced code block or an HTML comment as sections.
+  it.prop(
+    "property: a heading inside a fenced code block or an HTML comment is no section; one outside both still is",
+    { hidden: Schema.Literals(["```", "~~~", "comment"]), left: Section },
+    ({ hidden, left }) => {
+      const kept = all.filter((name) => name !== left);
+      const inside = `## ${left}\n\nWords.`;
+      const wrapped = hidden === "comment" ? `<!--\n${inside}\n-->` : `${hidden}md\n${inside}\n${hidden}`;
+      const said = Sections.refusal(`${body(kept)}\n${wrapped}\n`);
+
+      expect(said).toContain(`## ${left}`);
+      expect(said?.includes("## Summary") && left !== "Summary").toBeFalsy();
+      expect(Sections.refusal(`${wrapped}\n${body(all)}`)).toBeNull();
+    },
+  );
+
+  it("scenario: a one-line comment and a fence that closes do not hide the headings after them", () => {
+    expect(Sections.refusal(`<!-- a note -->\n\`\`\`text\n## Summary\n\`\`\`\n${body(all)}`)).toBeNull();
+    expect(Sections.refusal(`\`\`\`text\n## Summary\n## Evidence\n## Merge Danger\n\`\`\`\n`)).toContain("## Summary");
+  });
+
   it("scenario: the body that merged as pull request 2320, the placeholder and a New names section, is refused for both", () => {
     const said = Sections.refusal(`${Sections.DRAFT_BODY}\n\n## New names\n\n- \`X\`: the industry's word.\n`);
 

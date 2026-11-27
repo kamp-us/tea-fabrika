@@ -95,7 +95,11 @@ type World = {
   readonly mergeable?: "MERGEABLE" | "CONFLICTING" | "later";
   /** `ci-required` has not ended at the pushed head. */
   readonly pending?: boolean;
-  /** The pull request's description, with `\n` for a new line; a short line when left out. */
+  /** The quest's body file as `ready` reads it, first line the title; a full template body when left out. */
+  readonly readyBody?: string;
+  /** `ready` refuses the body file: the run stops there, before anything is pushed. */
+  readonly readyRefused?: boolean;
+  /** The pull request's description, with `\n` for a new line; a full template body when left out. */
   readonly body?: string;
   /** The tracker's open tickets, and GitHub's open issues, as space-separated numbers. */
   readonly tickets?: string;
@@ -205,7 +209,11 @@ const land = (world: World) => {
     }
 
     for (const [name, text] of [
-      ["body.md", "T652 fixture: one quest\n\nWhat the quest did.\n\nfabrika close ticket 652\n"],
+      [
+        "body.md",
+        world.readyBody ??
+          "T652 fixture: one quest\n\n### Summary\n\nWhat the quest did.\n\n### Evidence\n\nA test.\n\n### Merge Danger\n\n**Door:** two-way\n\nfabrika close ticket 652\n",
+      ],
       ["loosening.out", "loosening: 0 hits\n"],
     ] as const) {
       writeFileSync(join(dir, name), text);
@@ -222,6 +230,30 @@ const land = (world: World) => {
       join(dir, "plan.md"),
       ...lead,
     );
+
+    if (world.readyRefused) {
+      const beside: Array<{ code: string; err: string }> = [];
+
+      return {
+        code: said.status,
+        err: said.stderr,
+        out: said.stdout,
+        calls: existsSync(env.LAND_CALLS) ? readFileSync(env.LAND_CALLS, "utf8").trim().split("\n") : [],
+        before: [git(quest, "rev-parse", "HEAD")],
+        after: [git(quest, "rev-parse", "HEAD")],
+        parents: 0,
+        subject: "",
+        status: git(quest, "status", "--porcelain"),
+        strangerKept: true,
+        refsLeft: "",
+        beside,
+        lead: lead[1],
+        leadNoted: false,
+        state: "",
+        head: git(quest, "rev-parse", "HEAD"),
+        recorded: existsSync(join(dir, "boxes/state/t652f.land.json")),
+      };
+    }
 
     expect(said.status, said.stderr).toBe(0);
     const record = join(dir, "boxes/state/t652f.land.json");
@@ -323,6 +355,7 @@ const land = (world: World) => {
         spawnSync("/usr/bin/git", ["-C", quest, "notes", "--ref=fabrika", "show", lead[1]], { env }).status === 0,
       state: readFileSync(join(dir, "boxes/state/t652f.md"), "utf8"),
       head,
+      recorded: true,
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -577,6 +610,23 @@ describe("land.ts, today's tooling", () => {
       expect(good.code, good.err).toBe(0);
     }
   }, 180_000);
+
+  // Plants: leave the sections check out of `ready`, so a quest finds a placeholder body only at the queue, after its push.
+  it("scenario: `land.ts ready` refuses a body file that is the draft placeholder or lacks a pr skill section, names what is missing, and writes no record", () => {
+    for (const readyBody of [
+      `T652 fixture: one quest\n\n${Sections.DRAFT_BODY}\n`,
+      "T652 fixture: one quest\n\n### Summary\n\nx\n\n### Evidence\n\nx\n",
+    ]) {
+      const got = land({ ...fine, readyBody, readyRefused: true, command: ["check", "77"] });
+
+      expect(got.code, got.err).toBe(1);
+      expect(got.err).toContain(".agents/skills/pr/SKILL.md");
+      expect(got.err).toMatch(
+        /still the draft placeholder sentence|lacks the sections the pr skill requires: ## Merge Danger/,
+      );
+      expect(got.recorded).toBe(false);
+    }
+  }, 120_000);
 
   // Plants: pass a close line whose number is a GitHub issue (pull requests 2009 and 2004 did, and `merged` closed nothing), or check it in `queue` only.
   it("scenario: `land.ts check` and `queue` refuse a `fabrika close ticket` line that names a GitHub issue, say to use `Closes #N`, and pass an open tracker ticket", () => {

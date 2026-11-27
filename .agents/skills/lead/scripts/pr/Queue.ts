@@ -251,6 +251,17 @@ export const refusal = (found: Detail): string | null =>
             : null;
 
 /**
+ * Why a pull request's description may not merge, or `null`: it is the pr skill's template and not the draft placeholder
+ * (Sections.ts), and each new exported name is named under `## New names` (Names.ts). The one place `add`, `land.ts check`,
+ * the arm and the admin merge read it from, so the four cannot drift.
+ */
+export const description = Effect.fn("Queue.description")(function* (
+  found: Pick<Detail, "number" | "body">,
+): Effect.fn.Return<string | null, PullRequestsError, PullRequests> {
+  return Sections.refusal(found.body) ?? Names.refusal(found.body, yield* (yield* PullRequests).patches(found.number));
+});
+
+/**
  * The checks on a pull request's own words, which `add` runs and `land.ts check` runs alone, so a
  * body is known good before the queue is asked: the leak grep on its title and description, then
  * that it is the pr skill's template and not the draft placeholder (Sections.ts), then
@@ -264,15 +275,7 @@ export const body = Effect.fn("Queue.body")(function* (
 ): Effect.fn.Return<string | null, LeakGrepRefused | PullRequestsError, PullRequests | Pushes | Tickets> {
   yield* Leaks.text(dir, found);
 
-  const unwritten = Sections.refusal(found.body);
-
-  if (unwritten !== null) {
-    return unwritten;
-  }
-
-  const names = Names.refusal(found.body, yield* (yield* PullRequests).patches(found.number));
-
-  return names ?? (yield* unopenTickets(found.body));
+  return (yield* description(found)) ?? (yield* unopenTickets(found.body));
 });
 
 /**

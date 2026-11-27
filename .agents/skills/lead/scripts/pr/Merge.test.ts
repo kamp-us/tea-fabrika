@@ -37,6 +37,7 @@ import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
 import type * as Queue from "./Queue.ts";
+import * as Sections from "./Sections.ts";
 
 const oid = "0123456789abcdef0123456789abcdef01234567";
 
@@ -44,7 +45,8 @@ const branch = "fabrikalfa/decision-1415";
 
 const title = "Decision 0583: a room is one process";
 
-const body = "What it decides.";
+/** A description as the pr skill's template writes it. */
+const body = "## Summary\n\nWhat it decides.\n\n## Evidence\n\nA test.\n\n## Merge Danger\n\n**Door:** two-way\n";
 
 /** Which leak check refuses, by its method's name, or none. */
 const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
@@ -73,6 +75,9 @@ type World = {
   readonly files?: typeof Files.Type;
   readonly required?: "success" | "failure" | "pending";
   readonly title?: string;
+  readonly body?: string;
+  /** The one new export the diff adds, in `src/thing.ts`. */
+  readonly patch?: string;
   readonly head?: string;
   /** The pull request is a draft, as one is just before the lead marks it ready. */
   readonly draft?: boolean;
@@ -85,7 +90,12 @@ const memory = (w: World = {}) => {
     { number: 1415, head: w.head ?? branch, oid, state: "OPEN", draft: w.draft ?? false },
   ]);
 
-  github.more.set(1415, { title: w.title ?? title, body });
+  github.more.set(1415, { title: w.title ?? title, body: w.body ?? body });
+
+  if (w.patch !== undefined) {
+    github.patches.set(1415, [{ path: "src/thing.ts", patch: `@@ -0,0 +1 @@\n+export const ${w.patch} = 1;` }]);
+  }
+
   github.files.set(1415, FILES[w.files ?? "docs"]);
   const remote = PushesTest.remote();
 
@@ -150,6 +160,37 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
 
         if (merges) {
           expect(leaks).toEqual(gate);
+        }
+      }),
+  );
+
+  // Plants: leave the description check out of `Merge.admin`, so `--admin` merges a placeholder body, a body missing a section, or a diff whose new name the body does not name.
+  it.effect.prop(
+    "property: the admin route refuses a description with the draft placeholder, a missing required section or an unnamed new export, with the same words as the queue, and asks no merge",
+    {
+      placeholder: Schema.Boolean,
+      left: Schema.Literals(["none", "Summary", "Evidence", "Merge Danger"]),
+      unnamed: Schema.Boolean,
+    },
+    ({ placeholder, left, unnamed }) =>
+      Effect.gen(function* () {
+        const kept = ["Summary", "Evidence", "Merge Danger"].filter((name) => name !== left);
+        const text = `${placeholder ? `${Sections.DRAFT_BODY}\n\n` : ""}${kept.map((name) => `## ${name}\n\nWords.\n`).join("\n")}`;
+        const world = { body: text, ...(unnamed ? { patch: "newThing" } : {}) };
+        const bad = placeholder || left !== "none" || unnamed;
+
+        for (const route of [queue, admin()]) {
+          const m = memory(world);
+          const { answer } = yield* merged(m, route);
+
+          expect(answer._tag).toBe(bad ? "Failure" : "Success");
+
+          if (bad) {
+            const reason = answer._tag === "Failure" ? String(answer.failure.reason) : "";
+
+            expect(reason).toContain(placeholder || left !== "none" ? ".agents/skills/pr/SKILL.md" : "new names");
+            expect(m.github.calls).toEqual([]);
+          }
         }
       }),
   );

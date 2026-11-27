@@ -132,6 +132,7 @@ import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
+import * as Sections from "./pr/Sections.ts";
 import * as SweepsProcess from "./pr/SweepsProcess.ts";
 import * as TicketsCli from "./pr/TicketsCli.ts";
 
@@ -349,6 +350,13 @@ const ready = Command.make(
       return yield* new Refused({ check: "ready", reason: "the body file's first line is the PR title", output: "" });
     }
 
+    // The body file is the pull request's description: a placeholder or a missing section is found here, before a push, not at the queue.
+    const unwritten = pr === undefined ? null : Sections.refusal(prBody(yield* fs.readFileString(pr.body), "").body);
+
+    if (unwritten !== null) {
+      return yield* new Refused({ check: "ready", reason: `the body file: ${unwritten}`, output: "" });
+    }
+
     const head = yield* must("ready", "HEAD does not read", tree, "git", ["rev-parse", "HEAD"]);
     const lead: string[] = [];
 
@@ -439,6 +447,12 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ quest, ready, env 
   }
 
   const posted = prBody(yield* fs.readFileString(ready.pr.body), yield* fs.readFileString(ready.pr.loosening));
+  const unwritten = Sections.refusal(posted.body);
+
+  if (unwritten !== null) {
+    return yield* new Refused({ check: "ready", reason: `the PR body: ${unwritten}`, output: "" });
+  }
+
   const file = `${env.BOXES}/${quest}-land-body.md`;
   yield* fs.writeFileString(file, posted.body);
   yield* must("leak", "the leak grep refused the PR body", ready.tree, "sh", [`${HERE}/leakgrep.sh`, "--text", file]);
