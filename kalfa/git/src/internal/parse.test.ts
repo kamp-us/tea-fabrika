@@ -700,9 +700,21 @@ it("pinned: P18 a patch with a partial row after its last section, a marker with
     }
   }
 
-  // When the law above drew all its cases in this file, each kind of cut or bend was drawn, and a cut read as a shorter reading at
-  // least once. A run that drew fewer (a capped box, a filtered run) has no say on what a full run draws, so it checks nothing here.
-  if ((tally.get("case") ?? 0) >= P18_RUNS) {
+  // When the law above ran in this file, it drew exactly the cases it was given: its own count, or the box's cap when that is
+  // smaller. Each kind of cut or bend was drawn, and a cut read as a shorter reading at least once, but only a full run can say so:
+  // a capped run draws too few cases to reach every kind, so it skips the kinds. Both numbers are asserted, so a lost counter, a
+  // gate that moved or a count that changed fails here and never skips quietly.
+  if (tally.size > 0) {
+    const drawn = tally.get("case") ?? 0;
+    const cap = Number(process.env.MUTATE_RUNS) || P18_RUNS;
+    const full = drawn >= P18_RUNS;
+    expect(drawn, "P18 drew its cases").toBe(Math.min(P18_RUNS, cap));
+    expect(full, "P18 is read at full depth only").toBe(cap >= P18_RUNS);
+
+    if (!full) {
+      return;
+    }
+
     for (const kind of [
       "cut",
       "cut: a shorter reading",
