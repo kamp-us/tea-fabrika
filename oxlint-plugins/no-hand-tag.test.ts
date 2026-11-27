@@ -1,7 +1,9 @@
 // `no-hand-tag` (exam item 5): no hand-written `_tag` in next/; a read and a schema tool pass. Its plants
 // were the exam's (next/apps/fabrika/src/exam/no-hand-tag.integration.test.ts) until the exam-to-lint rule moved them here.
 // Plant: skip a class field named `_tag` (the rule's `PropertyDefinition` visitor), and line 6 stops firing; read a computed key as never `_tag` (the
-// `computed ||` of the rule's `check`), and every line of `computed` below stops firing.
+// `computed ||` of the rule's `check`), and every line of `computed` below stops firing; read a string-literal key as `_tag` whatever it says (the
+// `key.value === TAG` of `isTag`), and `passes` fires; read a template with a hole as its first text (the `expressions.length === 0` of `written`), a
+// `let` as a constant (the `kind !== "const"` of `constantsOf`), and `computedPasses` fires; stop reading through `satisfies` or `!`, and lines 11 and 12 of `computed` stop firing.
 
 import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
@@ -43,6 +45,8 @@ const computed = Arr.join(
     'export const c = {[`_tag`]: "z"};', // 8
     'const ALIAS = "_tag" as const;', // 9
     'export const d = {[ALIAS]: "w"};', // 10
+    'export const e = {["_tag" satisfies string]: "v"};', // 11
+    'export const f = {["_tag"!]: "u"};', // 12
   ],
   "\n",
 );
@@ -55,6 +59,9 @@ const computedPasses = Arr.join(
     "export const b = (key: string) => ({[key]: 1});", // 3
     "export const c = {[Symbol.iterator]: 1};", // 4
     'export const d = {["type"]: 1};', // 5
+    'let LET = "_tag";', // 6
+    "export const e = {[LET]: 1};", // 7
+    "export const f = (suffix: string) => ({[`_tag${suffix}`]: 1});", // 8
   ],
   "\n",
 );
@@ -68,6 +75,8 @@ const passes = Arr.join(
     'export const a = value._tag === "x";',
     "export const {_tag} = value;",
     'export const b = {type: "plus"};',
+    'export const c = {"type": "plus"};',
+    'export const d = {1: "plus"};',
     'export const Send = Schema.TaggedStruct("send", {m: Schema.Unknown});',
   ],
   "\n",
@@ -92,7 +101,7 @@ describe("no-hand-tag", () => {
   });
 
   it("scenario: fires on a computed key that is `_tag`, written as a literal, a template or a constant", () => {
-    expect(all(CODE, COMPUTED)).toEqual([3, 4, 5, 6, 7, 8, 10]);
+    expect(all(CODE, COMPUTED)).toEqual([3, 4, 5, 6, 7, 8, 10, 11, 12]);
   });
 
   it("scenario: passes a computed key that is not `_tag`", () => {
