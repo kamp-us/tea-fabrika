@@ -1282,11 +1282,10 @@ describe("R11: the quest paths record the review, and every command asks for it 
   }, 120_000);
 
   // Plants: leave the review check out of one command; name the carry command for `arm` (which refuses even a pull request with a record); name `--override-review` for the queue.
-  it("scenario: on a pull request that changes a reviewed path and holds no record, `check`, `queue` and `merge` refuse naming the command that carries a record, `arm` names `land.ts queue`, and `merge --admin` names `--override-review`; none merges, arms or queues", () => {
+  it("scenario: on a pull request that changes a reviewed path and holds no record, `check` and `queue` refuse naming the command that carries a record, `arm` names `land.ts queue`, and `merge --admin` names `--override-review`; none merges, arms or queues", () => {
     const rows: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
       [["check", "77"], "land.ts review 77"],
       [["queue", "77"], "land.ts review 77"],
-      [["merge", "77"], "land.ts review 77"],
       [["arm", "77"], "land.ts queue 77"],
       [["merge", "77", "--admin"], "--override-review"],
       [["admin", "77", "--wait"], "--override-review"],

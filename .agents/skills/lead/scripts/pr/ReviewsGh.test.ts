@@ -1,8 +1,6 @@
 // Today's lead tooling. The Reviews service on `gh` (./ReviewsGh.ts): the reader asks for one full head's statuses, every page, and keeps
 // only those of context `review` (R5); the writer posts the comment and then the status, in that order, and posts no status for a comment
 // that failed (R6). `gh` is a stand-in that answers as told and keeps every call: nothing here asks GitHub.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder, runsFor } from "@kampus/vitest";
 import { Effect, Layer, Option, Result, Schema, Sink, Stream } from "effect";
@@ -10,6 +8,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Review from "./Review.ts";
 import { Reviews } from "./Reviews.ts";
 import * as ReviewsGh from "./ReviewsGh.ts";
+import * as Statuses from "./ReviewStatus.fixture.ts";
 
 const hex = (n: number): string => `${n.toString(16).padStart(2, "0")}ab`.repeat(20).slice(0, 40);
 
@@ -218,12 +217,8 @@ describe("R5: the reader (slice 1)", () => {
   );
 });
 
-// Recorded 2026-11-27 with `gh api --paginate --slurp repos/kamp-us/tea-fabrika/commits/<sha>/statuses`, once for the head a fresh record
-// was written on and once for the head a carry was written on, in the lead's live proof of slice 1 (a pull request of this repository, which
-// now holds commit statuses of context `review`). Each answer is the one status of that head, as GitHub gave it, in the one more array `--slurp`
-// makes of its pages. The creator's account name, id and links are replaced with a made-up account of the same shape: this repository is public.
-const recorded = (name: string): string => readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
-
+// Recorded 2026-11-27 from this repository's own pull request, in the lead's live proof of slice 1 (./ReviewStatus.fixture.ts says how, and what was
+// replaced): a fresh record's status and a carry's.
 describe("R5: the reader on this repository's own recorded statuses (slice 2)", () => {
   // Plants, each run once and restored: read the creator from the wrong key; read the description from `title`; match the context by prefix; let
   // a carry read as something other than the pass it carries.
@@ -233,8 +228,7 @@ describe("R5: the reader on this repository's own recorded statuses (slice 2)", 
       Effect.gen(function* () {
         const reads = [];
 
-        for (const name of ["review-status-pass.json", "review-status-carry.json"]) {
-          const text = recorded(name);
+        for (const text of [Statuses.PASS, Statuses.CARRY]) {
           const [row] = yield* ReviewsGh.decode(text);
           const head = /statuses\/([0-9a-f]{40})$/.exec(JSON.parse(text)[0][0].url)?.[1] ?? "";
 

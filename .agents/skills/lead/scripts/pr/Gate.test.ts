@@ -464,7 +464,7 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
       Effect.gen(function* () {
         const m = memory(
           needs ? ["unreviewed"] : [],
-          changed,
+          { ...changed, clean: "exempt" },
           broken === "paths" ? { paths: "git cannot be read" } : { read: "GitHub cannot be read" },
         );
 
@@ -520,12 +520,19 @@ describe("the merge gate: every way of merging a pull request asks it first, so 
   it.effect.prop(
     "property: a reason for an override is one trimmed line of 1 to 128 characters, and the admin way takes no other",
     {
-      pieces: Schema.Array(Schema.Literals(["a", "b", "é", " ", " ", "\t", "\n", "\r"])).check(Schema.isMaxLength(140)),
-      long: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
+      lead: Schema.Literals(["", "", "", " ", "\t"]),
+      // Lengths at the edge of the cap are drawn as often as any other, since a cap off by one is what this law is for.
+      length: Schema.Union([
+        Schema.Literals([0, 1, 127, 128, 129, 130]),
+        Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 140 })),
+      ]),
+      inner: Schema.Literals(["", "", "", " ", "\n", "\r", "é"]),
+      trail: Schema.Literals(["", "", "", " ", "\n"]),
     },
-    ({ pieces, long }) =>
+    ({ lead, length, inner, trail }) =>
       Effect.sync(() => {
-        const text = pieces.join("") + "x".repeat(long * 40);
+        const half = Math.floor(length / 2);
+        const text = `${lead}${"x".repeat(half)}${inner}${"x".repeat(length - half)}${trail}`;
         const fine = text.length > 0 && text.length <= 128 && text === text.trim() && !/[\r\n]/.test(text);
 
         expect(Schema.is(Gate.Way.cases.admin)({ _tag: "admin", override: text })).toBe(fine);
