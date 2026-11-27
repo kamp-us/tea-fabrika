@@ -19,8 +19,8 @@
  * hook can act between two calls. Nothing sleeps and nothing reads a clock: three `Deferred`s force the order.
  */
 import { expect } from "@effect/vitest";
-import { ConfigProvider, Deferred, Effect, Fiber, type FileSystem, Logger, References, Schema } from "effect";
-import type * as PlatformError from "effect/PlatformError";
+import { ConfigProvider, Deferred, Effect, Fiber, FileSystem, Layer, Logger, Path, References, Schema } from "effect";
+import * as PlatformError from "effect/PlatformError";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import {
@@ -63,15 +63,15 @@ export type CleanupDraw = typeof CleanupDraw.Type;
 /** Where writer A fails: its lock's create, its lock's write, or its rename is refused. */
 export type Fault = "create" | "write" | "rename";
 
-/** What is in A's folder at its clean-up. */
-export type Arrival = "lock" | "file" | "other" | "folder" | "none";
+/** What is in A's folder at its clean-up, or `refused`: nothing arrives, and the disk refuses the removal itself. */
+export type Arrival = "lock" | "file" | "other" | "folder" | "none" | "refused";
 
 /** Where writer B is at A's clean-up: holding its lock, finished, or not yet started. */
 export type Turn = "inside" | "finished" | "after";
 
 export const FAULTS: ReadonlyArray<Fault> = ["create", "write", "rename"];
 
-export const ARRIVALS: ReadonlyArray<Arrival> = ["lock", "file", "other", "folder", "none"];
+export const ARRIVALS: ReadonlyArray<Arrival> = ["lock", "file", "other", "folder", "none", "refused"];
 
 export const TURNS: ReadonlyArray<Turn> = ["inside", "finished", "after"];
 
@@ -120,6 +120,14 @@ export const sceneFor = (draw: CleanupDraw, site: Site, root: string) => {
     text: draw.cleanup.text,
     other: `${dir}/${draw.cleanup.other}.txt`,
     folder: `${dir}/${draw.cleanup.folder}`,
+    /** What the disk answers to a removal it refuses: a drawn refusal. */
+    refused: PlatformError.systemError({
+      // oxlint-disable-next-line fabrika/no-hand-tag -- edge: Effect PlatformError requires its own system error tag
+      _tag: draw.disk.read,
+      module: "FileSystem",
+      method: "removeEmptyDir",
+      pathOrDescriptor: dir,
+    }),
     faults: {
       create: createRefused(lock, draw.disk.create),
       write: writeRefused(lock, draw.disk.write),
@@ -141,11 +149,12 @@ const arrivedFile = (scene: Scene, arrival: Arrival): { readonly path: string; r
       return { path: scene.other, text: scene.text };
     case "folder":
     case "none":
+    case "refused":
       return undefined;
   }
 };
 
-/** Puts an arrival in A's folder, through the disk itself and never through a hook. */
+/** Puts an arrival in A's folder, through the disk itself and never through a hook. A refusal is the failure of the removal itself. */
 const arrive = (
   fs: FileSystem.FileSystem,
   scene: Scene,
@@ -157,7 +166,14 @@ const arrive = (
     return fs.writeFileString(file.path, file.text);
   }
 
-  return arrival === "folder" ? fs.makeDirectory(scene.folder) : Effect.void;
+  switch (arrival) {
+    case "folder":
+      return fs.makeDirectory(scene.folder);
+    case "refused":
+      return Effect.fail(scene.refused);
+    default:
+      return Effect.void;
+  }
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -225,8 +241,11 @@ export const shown = (found: Answer) =>
 // One writer.
 // ---------------------------------------------------------------------------------------------
 
+/** Where a set's removal of its folder goes: through the view's own edge, or through the package's default, which is Node's `rmdir`. */
+type Edge = "view" | "default";
+
 /** One `set` of `value` on a disk, with its answer and every log line it wrote. */
-const set = (scene: Scene, view: ReturnType<typeof MemoryFiles.hooked>, value: number) => {
+const set = (scene: Scene, view: ReturnType<typeof MemoryFiles.hooked>, value: number, edge: Edge = "view") => {
   const logs: Array<string> = [];
 
   const logger = Logger.map(Logger.formatStructured, (entry) => {
@@ -236,7 +255,9 @@ const set = (scene: Scene, view: ReturnType<typeof MemoryFiles.hooked>, value: n
   return SettingGroup.set(scene.group, scene.setting, value, scene.file, { repo: scene.repo }).pipe(
     Effect.exit,
     Effect.map((exit) => ({ answer: answer(exit), logs: [...logs] })),
-    Effect.provide(view.layer),
+    Effect.provide(
+      edge === "view" ? view.layer : Layer.merge(Layer.succeed(FileSystem.FileSystem)(view.fileSystem), Path.layer),
+    ),
     Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...scene.env } }))),
     Effect.provide(Logger.layer([logger])),
     Effect.provideService(References.MinimumLogLevel, "All"),
@@ -258,13 +279,15 @@ interface Cleaned {
 
 /**
  * A set into a place with no folder, on `base`: the hook fails A's planted step, and just before A removes its folder it puts
- * `arrival` in it, once, through the base disk.
+ * `arrival` in it, once, through the base disk. With `edge` set to `default` the set gets no edge of its own, so its removal
+ * is the package's default, which runs Node's `rmdir` on whatever path it is given.
  */
 export const cleanup = Effect.fnUntraced(function* (
   base: MemoryFiles.Platform,
   scene: Scene,
   fault: Fault,
   arrival: Arrival,
+  edge: Edge = "view",
 ) {
   yield* prepare(base.fileSystem, scene);
 
@@ -291,7 +314,7 @@ export const cleanup = Effect.fnUntraced(function* (
     }),
   );
 
-  const ran = yield* set(scene, view, scene.values.a);
+  const ran = yield* set(scene, view, scene.values.a, edge);
   const after = yield* survey(base.fileSystem, scene.root);
 
   return { answer: ran.answer, logs: ran.logs, order, before, after } satisfies Cleaned;
@@ -335,10 +358,20 @@ export const holdsCleanup = (found: Cleaned, none: Answer, scene: Scene, arrival
     `${label}: the folder is never listed or removed by another call`,
   ).toEqual([]);
 
+  // A folder left in place is no problem and logs nothing. A removal the disk refuses is logged once, and the set still fails as it fails alone.
   expect(
     found.logs.filter((line) => line.includes(`${scene.name}'s folder was not removed.`)),
-    `${label}: a folder left in place is no problem and logs nothing`,
-  ).toEqual([]);
+    `${label}: ${arrival === "refused" ? "a refused removal is logged once" : "a folder left in place logs nothing"}`,
+  ).toHaveLength(arrival === "refused" ? 1 : 0);
+};
+
+/**
+ * What a case leaves when the set's removal is the package's default edge: the folder is gone and the set fails as it fails
+ * alone. The hook never sees the removal, so no call of it is counted.
+ */
+export const holdsDefault = (found: Cleaned, none: Answer, label: string) => {
+  expect(found.after, `${label}: the folder the set made is gone, and nothing else changed`).toEqual(found.before);
+  expect(shown(found.answer), `${label}: the answer is the one of a failed set alone`).toEqual(shown(none));
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -350,6 +383,8 @@ interface Raced {
   readonly a: Answer;
   readonly b: Answer;
   readonly order: ReadonlyArray<{ readonly writer: "a" | "b"; readonly step: MemoryFiles.Step }>;
+  /** Whether B was held at the gate (it had asked A to go and was waiting for A to end) at the moment A's removal of its folder finished. */
+  readonly held: boolean | undefined;
   readonly before: State;
   readonly between?: State;
   readonly after: State;
@@ -374,8 +409,26 @@ export const race = (base: MemoryFiles.Platform, scene: Scene, fault: Fault, tur
     const aDone = yield* Deferred.make<void>();
     const order: Array<{ readonly writer: "a" | "b"; readonly step: MemoryFiles.Step }> = [];
     const refusal = scene.faults[fault];
+    let held = false;
+    let heldAtRemoval: boolean | undefined;
 
-    const viewA = MemoryFiles.hooked(base, (step) =>
+    // A's removal of its folder, wherever it ends, says whether B was held at that moment.
+    const removed = (path: string) =>
+      Effect.sync(() => {
+        if (path === scene.dir) {
+          heldAtRemoval = held;
+        }
+      });
+
+    const watched: MemoryFiles.Platform = {
+      fileSystem: {
+        ...base.fileSystem,
+        remove: (path, options) => base.fileSystem.remove(path, options).pipe(Effect.tap(() => removed(path))),
+      },
+      removeEmptyDir: (path) => base.removeEmptyDir(path).pipe(Effect.tap(() => removed(path))),
+    };
+
+    const viewA = MemoryFiles.hooked(watched, (step) =>
       Effect.suspend(() => {
         if (planted(refusal, step)) {
           order.push({ writer: "a", step: below(scene, step) });
@@ -387,6 +440,8 @@ export const race = (base: MemoryFiles.Platform, scene: Scene, fault: Fault, tur
           // The removal is noted once it is let go, so the record says when it did its work.
           return Deferred.succeed(aWaits, undefined).pipe(
             Effect.andThen(Deferred.await(go)),
+            // A gives B the turn once it is let go, so a B that is not held by the gate runs before A's removal ends.
+            Effect.andThen(Effect.yieldNow),
             Effect.andThen(
               Effect.sync(() => {
                 order.push({ writer: "a", step: below(scene, step) });
@@ -405,9 +460,19 @@ export const race = (base: MemoryFiles.Platform, scene: Scene, fault: Fault, tur
       Effect.suspend(() => {
         order.push({ writer: "b", step: below(scene, step) });
 
-        // B's first read of the file, after it made its lock: it lets A go and waits for A to end.
+        // B's first read of the file, after it made its lock: it lets A go and is held until A ends.
         return turn === "inside" && step.method === "readFileString" && step.path === scene.path
-          ? Deferred.succeed(go, undefined).pipe(Effect.andThen(Deferred.await(aDone)))
+          ? Effect.sync(() => {
+              held = true;
+            }).pipe(
+              Effect.andThen(Deferred.succeed(go, undefined)),
+              Effect.andThen(Deferred.await(aDone)),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  held = false;
+                }),
+              ),
+            )
           : Effect.void;
       }),
     );
@@ -458,6 +523,7 @@ export const race = (base: MemoryFiles.Platform, scene: Scene, fault: Fault, tur
       a: a.answer,
       b: b.answer,
       order,
+      held: heldAtRemoval,
       before,
       after,
       ...(between === undefined ? {} : { between }),
@@ -487,6 +553,9 @@ export const holdsRace = Effect.fnUntraced(function* (
   const at = found.order.findIndex(({ writer, step }) => writer === "a" && removal(dir, step));
 
   expect(at, `${label}: A removes its folder`).toBeGreaterThanOrEqual(0);
+  expect(found.held, `${label}: B is held at the gate when A's removal ends, and only in turn (i)`).toBe(
+    turn === "inside",
+  );
 
   const first = (predicate: (step: MemoryFiles.Step) => boolean) =>
     found.order.findIndex(({ writer, step }) => writer === "b" && predicate(step));

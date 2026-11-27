@@ -42,9 +42,11 @@ const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 }
 // red; count only plain files (`readDirectoryEntries`, `type === "File"`): (d) is lost, red. Drop `unmake`: with (n) the
 // folder is left, red. Skip the clean-up when the lock was never taken: with (c) and (n) the folder is left, red. On a refused
 // lock write, remove the folder with `recursive: true` inside `replace`: (w) loses the entry, red; the same on a refused
-// rename: (r), red. Log "left" at `Warn`: the line shows, red.
+// rename: (r), red. Log "left" at `Warn`: the line shows, red. For the refused removal: set the options of `Effect.ignore` in
+// `unmake` to `{}`: no line is logged, red; replace `Effect.ignore({...})` by `Effect.orDie`: the set dies and no longer fails
+// as it fails alone, red.
 it.effect.prop(
-  "CU1 a failed set's clean-up leaves what another writer put in the folder: for each place, each fault and each arrival, the folder stays with what arrived and the set fails as it fails with nothing arriving",
+  "CU1 a failed set's clean-up leaves what another writer put in the folder: for each place, each fault and each arrival, the folder stays with what arrived and the set fails as it fails with nothing arriving, and a removal the disk refuses is logged once and changes no answer",
   CleanupDraw.fields,
   (draw) =>
     Effect.gen(function* () {
@@ -80,8 +82,9 @@ it.effect.prop(
 
 // Plants, each run once and never kept. Today's `unmake`: (i) deletes B's lock, so B's rename fails `NotFound` and B fails, red.
 // Keep the folder only when it holds the file: (i) loses B's lock, red; keep it only when it holds a `.lock`: (j) loses B's
-// file, red. Drop `unmake`: for turn (a) the folder is still there between the writers, red. Take the gate out of `race` (B's
-// hook does not wait for `aDone`): the order check fails, red.
+// file, red. Drop `unmake`: A never reaches its removal, red. A removal that leaves the folder (`removeEmptyDir` that answers
+// "left" always): for turn (a) the folder is still there between the writers, red. Take the gate out of `race` (B's hook does
+// not wait for `aDone`): B is not held when A's removal ends, so the held check fails, red.
 it.live.prop(
   "CU2 two writers, in a forced order: A fails and B, whose folder A may not take away, finishes with its own text, whether B holds its lock, has finished or starts after A has ended",
   CleanupDraw.fields,

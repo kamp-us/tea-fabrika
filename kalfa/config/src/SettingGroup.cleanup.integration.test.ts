@@ -7,13 +7,16 @@
 //
 // CU3 is a property: each run draws the disk laws' draw, and on a fresh temp folder per case runs each turn of the race and
 // each of three arrivals of CU1 (a lock, a file of another name, nothing), with the fault drawn in turn so every fault is
-// reached, on the real folder and then in memory. CU4 is a scenario: five fixed calls, then the same five in memory.
+// reached, on the real folder and then in memory. One more case runs a failed set with nothing arriving through a layer that
+// holds the hooked file system and `Path` but no `RemoveEmptyDir`, so the package's own default edge runs Node's `rmdir` on the
+// real temp folder, and the folder must be gone: it is the one place the default is reached. CU4 is a scenario: five fixed calls, then the same five in memory.
 //
 // Plants, each run once and never kept, in internal/removeEmptyDir.ts. CU3: call `rm(path, { recursive: true })` in place of
 // `rmdir`: a lock that arrives or that B holds is deleted on the real folder, red; call `rm(path)` without `recursive`: Node
 // refuses every folder, so the empty folder stays on the real disk while the stand-in removes it, red. CU4: map `ENOTEMPTY` to
 // a failure: the second case fails, red; map `ENOENT` to a failure: the fourth fails, red. In MemoryFiles.test-support.ts,
-// answer `"removed"` for a folder that holds a file: the answers differ, red.
+// answer `"removed"` for a folder that holds a file: the answers differ, red. The default edge (the reference's `defaultValue`
+// in the same file): answer `"left"` without calling `rmdir`: the folder a failed set made stays on the real disk, red.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
@@ -27,6 +30,7 @@ import {
   FAULTS,
   type Fault,
   holdsCleanup,
+  holdsDefault,
   holdsRace,
   race,
   sceneFor,
@@ -100,6 +104,18 @@ const arrived = (draw: CleanupDraw, fault: Fault, arrival: Arrival) =>
     }),
   );
 
+/** A failed set with nothing arriving, on a real folder, where the set gets no edge of its own: the package's default removes the folder. */
+const defaulted = (draw: CleanupDraw, fault: Fault) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { real, scene, stand } = yield* disks(draw);
+      const alone = yield* cleanup(MemoryFiles.writable(), stand, fault, "none");
+      const found = yield* cleanup(real, scene, fault, "none", "default");
+
+      holdsDefault(found, alone.answer, `repo ${fault} the default edge, the temp folder`);
+    }),
+  );
+
 // Each case is on a disk of its own, and the fault is turned in the order of the cases, so each run reaches each fault.
 it.live.prop(
   "CU3 the race on a real disk: a failed set's clean-up and two writers in a forced order leave the same files, folders, answers and calls on a real temp folder as in memory, and what CU1 and CU2 say",
@@ -108,6 +124,7 @@ it.live.prop(
     Effect.gen(function* () {
       const reach = new Reach<string>([
         "u:repo",
+        "e:default",
         ...FAULTS.map((fault) => `f:${fault}`),
         ...TURNS.map((turn) => `t:${turn}`),
         ...ARRIVALS.map((arrival) => `a:${arrival}`),
@@ -124,6 +141,9 @@ it.live.prop(
         yield* arrived(draw, faultFor(n + TURNS.length), arrival);
         reach.mark("u:repo", `f:${faultFor(n + TURNS.length)}`, `a:${arrival}`);
       }
+
+      yield* defaulted(draw, faultFor(ARRIVALS.length + TURNS.length));
+      reach.mark("u:repo", "e:default", `f:${faultFor(ARRIVALS.length + TURNS.length)}`);
 
       reach.done();
     }).pipe(Effect.provide(NodeServices.layer)),
