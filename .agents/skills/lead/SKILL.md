@@ -365,6 +365,7 @@ Read the header before you run one; this table only says what each is for.
 | `land.ts last <pr or quest> [--attempts <n>]` | what the record under `runs/land/` says about the newest attempts (default 3) of the commands that ran for a pull request, or a quest: one plain line each, saying it ended (done, refused, failed or interrupted), is still running, or died with no end line. Reads one file, asks GitHub nothing, changes nothing; exits 1 only when it cannot read the file |
 | `land.ts wait <pr>` | wait until `ci-required` has ended at the pull request's current head, as `queue --wait-ci` and `admin --wait` do; exits 0 only on success, names a cancelled run; `--wait-minutes`, `--every-seconds` |
 | `land.ts check <pr>` | the merge gate, alone: the checks that `queue`, `merge`, `admin` and `arm` each run first, so a pull request that passes `check` is refused by none of them on these grounds. Run it after the body is written and before `queue`; it changes nothing and exits 1 on a `can/` branch, a `Plan:` title, a leak, a missing name, a `fabrika close ticket` line whose number is no open tracker ticket (an open GitHub issue is closed with `Closes #N`), or a commit nothing vouches for |
+| `land.ts review <pr> [--reviewed <sha> --reviewer <text> [--ticket <n>]]` | write the review verdict as a record on the pushed head: one pull request comment and one commit status `review`, under your own `gh` login. With `--reviewed` (the head the review report names) and `--reviewer` (who judged) it is a fresh record; with neither it carries the nearest earlier approval over a merge of main (`gh pr update-branch`), writes one status and no comment, and refuses when the two heads hold different changes. A head that is approved already gets nothing. Nothing reads the record yet |
 | `replay.ts <pr>` | run a changed check on the last 20 merged and every open pull request before it lands; its header says which checks it replays and which it lists as `not replayed`; see [How a change lands](#how-a-change-lands) |
 | `sizecap.ts` | a diff's or a plan's size, as advice only; run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
@@ -549,6 +550,7 @@ visible, and never weaken the rules to hide this message.
    [the pr skill](../pr/SKILL.md).
 9. **Land it:** the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
+   Record the review's verdict on the pushed head with `land.ts review <pr> --reviewed <sha> --reviewer "<who>"`; after a merge of main moves the head, run `land.ts review <pr>` to carry it. Nothing checks it yet.
    [The tests skill](../tests/SKILL.md#new-and-changed-laws) says what a new or changed law must be.
    Zero hits from loosening.sh mean no owner read is needed.
    The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list

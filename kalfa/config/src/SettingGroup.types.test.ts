@@ -34,6 +34,9 @@
 // - T6, one at a time, each on `Declaration.ts`: (a) type `make`'s schema as `C` again; (b) drop the brand line of
 //   `NotPlain`; (c) drop its "met before" check; (d) compare with "assignable one way" in place of `Same`; (e) answer
 //   `T` whole at the record line.
+// - T6, ticket 1996, on `Declaration.ts`: (f) test `T extends object` in place of the index signature at the record
+//   line; (g) before the last branch, accept an object that is no function and whose every field is plain data; (h) drop
+//   the record line, so every record falls to the last branch.
 import { expectTypeOf, it } from "@effect/vitest";
 import { Context, Effect, type FileSystem, Option, type Path, Redacted, Schema } from "effect";
 import type * as Digest from "effect/crypto/Digest";
@@ -402,6 +405,29 @@ const Deep = Schema.Struct({
 
 class Box extends Schema.Class<Box, { readonly brand: unique symbol }>("Box")({ size: Schema.Finite }) {}
 
+// An interface and a type with the same fields: the decision refuses the first and accepts the second, since a type
+// alias of an object literal has an implicit index signature and an interface has none.
+interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
+const Point: Schema.Codec<Point> = Schema.Struct({ x: Schema.Finite, y: Schema.Finite });
+
+type Spot = { readonly x: number; readonly y: number };
+
+const Spot: Schema.Codec<Spot> = Schema.Struct({ x: Schema.Finite, y: Schema.Finite });
+
+// An interface whose one key may be missing.
+interface Corner {
+  readonly x?: number;
+}
+
+const Corner: Schema.Codec<Corner> = Schema.Struct({ x: Schema.optionalKey(Schema.Finite) });
+
+// A nominal struct: its type is a class, so it is refused as one.
+class Person extends Schema.Opaque<Person, { readonly brand: "Person" }>()(Schema.Struct({ name: Schema.String })) {}
+
 const plain = () => [
   Setting.make("plain.slug", Slug),
   Setting.make("plain.weights", Weights),
@@ -410,6 +436,7 @@ const plain = () => [
   Setting.make("plain.pair", Schema.Struct({ a: Schema.optionalKey(Schema.Int), b: Schema.optionalKey(Schema.Int) })),
   Setting.make("plain.wait", Wait),
   Setting.make("plain.tree", Tree),
+  Setting.make("plain.spot", Spot),
 ];
 
 const notPlain = () => [
@@ -442,6 +469,24 @@ const notPlain = () => [
 
   // @ts-expect-error T6: a Date inside a recursive type is not plain data
   Setting.make("plain.dated", Dated),
+
+  // @ts-expect-error T6: an interface is not plain data, since the type cannot tell it from a class
+  Setting.make("plain.point", Point),
+
+  // @ts-expect-error T6: an interface with explicit type arguments is still refused
+  Setting.make<"plain.typed", Schema.Codec<Point>>("plain.typed", Point),
+
+  // @ts-expect-error T6: an interface whose key may be missing is not plain data
+  Setting.make("plain.corner", Corner),
+
+  // @ts-expect-error T6: an interface inside a record is not plain data
+  Setting.make("plain.at", Schema.Struct({ at: Point, n: Schema.Int })),
+
+  // @ts-expect-error T6: an interface in a union is not plain data
+  Setting.make("plain.either", Schema.Union([Point, Schema.Literal("none")])),
+
+  // @ts-expect-error T6: a Schema.Opaque type is a class, so it is not plain data
+  Setting.make("plain.person", Person),
 ];
 
 it("T6 type: a setting's value is plain data, and the part that is not is named", () => {
@@ -452,6 +497,9 @@ it("T6 type: a setting's value is plain data, and the part that is not is named"
     Setting.NotPlain<{ readonly commits: number; readonly time: Duration.Duration }>
   >().toEqualTypeOf<Duration.Duration>();
   expectTypeOf<Setting.NotPlain<{ readonly a: number; readonly b: ReadonlyArray<string> }>>().toEqualTypeOf<never>();
+  expectTypeOf<Setting.NotPlain<Point>>().toEqualTypeOf<Point>();
+  expectTypeOf<Setting.NotPlain<{ readonly at: Point; readonly n: number }>>().toEqualTypeOf<Point>();
+  expectTypeOf<Setting.NotPlain<Spot>>().toEqualTypeOf<never>();
 });
 
 // T7: the edit in memory. `SettingGroup.edit(group, text, file)` answers a `set` and a `remove`, each an Effect of the

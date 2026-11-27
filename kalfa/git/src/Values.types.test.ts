@@ -1,8 +1,10 @@
 // T1: the brands. Compile the exact bad expressions, never execute them.
 import { expectTypeOf, it } from "@effect/vitest";
+import type { Duration } from "effect";
 import type * as CommitId from "./CommitId.ts";
 import type * as Diff from "./Diff.ts";
 import type * as Ref from "./Ref.ts";
+import type * as Settings from "./Settings.ts";
 import type * as Tree from "./Tree.ts";
 
 // Plant: drop the brand on `BranchName`, so the `@ts-expect-error` lines below go unused.
@@ -112,4 +114,28 @@ const patchBrands = (
 it("type: a plain string, a CommitId, a TreeId and a BlobId are no PatchId, and a PatchId is none of them", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(patchBrands).toBeFunction();
+});
+
+// Plant: declare `kill` as `Schema.optionalKey(TimeText)`, so the first `@ts-expect-error` below goes unused; give it
+// `Schema.withDecodingDefaultKey`, so the encoded form takes limits without it and the second goes unused; declare it as
+// `Schema.DurationFromString`, so the decoded type is no `string`.
+const killTypes = (decoded: Settings.Settings, encoded: (typeof Settings.Settings)["Encoded"]) => {
+  const { kill: _decodedKill, ...decodedWithout } = decoded.limits;
+  const { kill: _encodedKill, ...encodedWithout } = encoded.limits;
+  // @ts-expect-error A decoded value without kill is not limits: kill is required.
+  const decodedLimits: Settings.Settings["limits"] = decodedWithout;
+  // @ts-expect-error An encoded value without kill is not limits: an app gives kill, and there is no default.
+  const encodedLimits: (typeof Settings.Settings)["Encoded"]["limits"] = encodedWithout;
+  // @ts-expect-error An encoded kill that is undefined is not text.
+  const undefinedKill: (typeof Settings.Settings)["Encoded"]["limits"] = { ...encoded.limits, kill: undefined };
+  expectTypeOf<Settings.Settings["limits"]["kill"]>().toEqualTypeOf<string>();
+  expectTypeOf<(typeof Settings.Settings)["Encoded"]["limits"]["kill"]>().toEqualTypeOf<string>();
+  expectTypeOf<typeof Settings.killWait>().returns.toEqualTypeOf<Duration.Duration>();
+
+  return [decodedLimits, encodedLimits, undefinedKill];
+};
+
+it("T5 type: limits.kill is required text in the decoded and the encoded settings, and Settings.killWait answers a Duration", () => {
+  // These compile-time laws need tsc, which the lead runs after build.
+  expectTypeOf(killTypes).toBeFunction();
 });

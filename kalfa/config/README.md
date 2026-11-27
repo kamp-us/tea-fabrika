@@ -78,8 +78,9 @@ in-memory file service above. `TomlParser.layer` supplies the TOML service. Snap
 
 A setting made with `Setting.make` from `@kalfa/config` holds plain data only: text, numbers,
 booleans, and arrays and records of those, branded or not. A `Date`, a `Duration`, a `URL`, a `Map`
-or a class does not compile. Declare a length of time or an address as text, and decode it where it
-is read:
+or a class does not compile. A value type written as an `interface` is refused too, since the type
+cannot tell an interface from a class: write it as a `type`. Declare a length of time or an address
+as text, and decode it where it is read:
 
 ```ts
 import { Setting } from "@kalfa/config";
@@ -194,7 +195,8 @@ The file is written the way git writes its config:
   no lock.
 - **The folder.** A set makes `.<app>/` when it is missing, and no folder above it: a missing parent fails `write`. A
   `$<APP>_HOME` that names a folder that is not there fails `write` too, since a typo there should not make a new folder.
-  A remove of a file or folder that is not there succeeds and writes nothing.
+  A set that fails after it made `.<app>/` takes the folder away again, but only while it is empty: a lock or a file
+  another writer has put in it since stays. A remove of a file or folder that is not there succeeds and writes nothing.
 - **No home.** With neither `$<APP>_HOME` nor `HOME`, there is no user configuration: a set fails `write`, and a remove has
   nothing to take out.
 

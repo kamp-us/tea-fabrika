@@ -5,10 +5,12 @@
 import { expect, it } from "@effect/vitest";
 import {
   Arbitrary,
+  Cause,
   ConfigProvider,
   Context,
   Duration,
   Effect,
+  Exit,
   Fiber,
   Layer,
   Option,
@@ -39,10 +41,10 @@ import {
 import { byBytes, bytes as objectBytes } from "./internal/object.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Ref from "./Ref.ts";
-import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
+import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import { settings } from "./RepositoryTest.ts";
-import * as Settings from "./Settings.ts";
+import type * as Settings from "./Settings.ts";
 import { gitTable, mergeTreeOutput, standIn, type Call, type Reply, type Table } from "./StandIn.test-support.ts";
 import * as Tree from "./Tree.ts";
 
@@ -185,21 +187,9 @@ it.effect.prop(
         );
 
         const context = yield* Layer.build(
-          ProcessRepository.layer({
-            path: PATH,
-            settings: Schema.decodeUnknownSync(Settings.Settings)({
-              limits: {
-                commits: 100,
-                refs: 100,
-                bytes: 100_000,
-                files: 100,
-                diff: 100_000,
-                blob: 100_000,
-                time: `${seconds} seconds`,
-              },
-              committer: COMMITTER,
-            }),
-          }).pipe(Layer.provide(stand.layer)),
+          ProcessRepository.layer({ path: PATH, settings: settings({ time: `${seconds} seconds` }) }).pipe(
+            Layer.provide(stand.layer),
+          ),
         );
 
         return { repo: Context.get(context, Repository.Repository), stand };
@@ -238,91 +228,161 @@ it.effect.prop(
   { arbitrary: { runs: 50, seed: 119120 } },
 );
 
-// Plant: no `forceKillAfter` in the spawn. A child that ignores the first signal is then never killed, so its scope
-// never ends and the call never ends; the law's own guard (the call has ended once the clock is past the limit plus
-// the kill time) fails it, so the plant is seen red and never hangs. The call runs detached: a child that is never
-// killed would otherwise hold the test's own scope open.
+/** The kill waits a run draws, one of each: under the old five seconds in millis, over it in seconds, and in minutes. */
+const killWaitsArb = Arbitrary.all({
+  millis: int(2, 4999),
+  seconds: int(6, 3600),
+  minutes: int(1, 60),
+});
+
+const KILL_CLASSES = ["under five seconds, in millis", "over five seconds, in seconds", "in minutes"];
+
+const CALL_CLASSES = ["readCommit", "readRefs", "walk", "mergeBases", "isAncestor", "diff"];
+
+const isBatchCheck = (call: Call): boolean => call.verb === "cat-file" && call.rest.includes("--batch-check");
+
+// Plant: (a) put `Duration.seconds(5)` back in the spawn, so every command carries five seconds and the kill comes late; (a)
+// `Duration.max(wait, 5 s)`; (b) `Duration.min(wait, 5 s)`, so the kill comes early; (c) read the number of the text as seconds
+// (`Duration.seconds(parseFloat(text))`), so "3 minutes" waits 3 seconds; (g) leave `forceKillAfter` out of `lister`'s child, so
+// `diff` never ends and the law's own guard (the call has not ended once the wait has passed) fails it and never hangs. The call
+// runs detached: a child that is never killed would otherwise hold the test's own scope open.
 it.effect.prop(
-  "P3 the time limit: a child that ignores the first signal is killed a short, fixed time later, and the call still ends",
-  { a: commitIdArb, seconds: int(1, 3600) },
-  ({ a, seconds }) =>
+  "P3k the kill wait: a child that ignores the first signal is killed limits.kill after the call's scope ends, no sooner and no later, and each command carries that wait",
+  { a: commitIdArb, seconds: int(1, 3600), drawn: killWaitsArb },
+  ({ a, seconds, drawn }) =>
     Effect.gen(function* () {
       const limit = Duration.seconds(seconds);
       const known = [a, `b${a.slice(1)}`];
-      const mode = { hang: false };
-
-      const { repo, stand } = yield* Effect.gen(function* () {
-        const stand = yield* standIn((call) =>
-          mode.hang && call.verb !== "version" ? "hang, ignores the first signal" : script(known, 200)(call),
-        );
-
-        const context = yield* Layer.build(
-          ProcessRepository.layer({
-            path: PATH,
-            settings: Schema.decodeUnknownSync(Settings.Settings)({
-              limits: {
-                commits: 100,
-                refs: 100,
-                bytes: 100_000,
-                files: 100,
-                diff: 100_000,
-                blob: 100_000,
-                time: `${seconds} seconds`,
-              },
-              committer: COMMITTER,
-            }),
-          }).pipe(Layer.provide(stand.layer)),
-        );
-
-        return { repo: Context.get(context, Repository.Repository), stand };
-      }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { PATH: "/bin" } }))));
-
-      mode.hang = true;
       const first = commitIdFrom(known[0] ?? a);
       const second = commitIdFrom(known[1] ?? a);
       const refName = Schema.decodeUnknownSync(Ref.RefName)("refs/heads/main");
 
-      const calls: ReadonlyArray<readonly [string, Effect.Effect<unknown, unknown>]> = [
-        ["readCommit", repo.readCommit(first)],
-        ["readRefs", repo.readRefs(refName)],
-        ["walk", repo.walk({ include: [first], exclude: [] })],
-        ["mergeBases", repo.mergeBases(first, second)],
-        ["isAncestor", repo.isAncestor(first, second)],
+      const kills: ReadonlyArray<readonly [string, string, Duration.Duration]> = [
+        [KILL_CLASSES[0] ?? "", `${drawn.millis} millis`, Duration.millis(drawn.millis)],
+        [KILL_CLASSES[1] ?? "", `${drawn.seconds} seconds`, Duration.seconds(drawn.seconds)],
+        [KILL_CLASSES[2] ?? "", `${drawn.minutes} minutes`, Duration.minutes(drawn.minutes)],
       ];
 
-      for (const [name, call] of calls) {
-        const before = yield* stand.ended;
-        const fiber = yield* Effect.forkDetach(call);
-        yield* Effect.yieldNow;
-        yield* TestClock.adjust(Duration.millis(1));
+      const reachedKills: Array<string> = [];
+      const reachedCalls: Array<string> = [];
 
-        const hanging = (yield* stand.calls).at(-1);
-        const killAfter = hanging?.forceKillAfter;
-        expect(killAfter, `${name}: the spawn says when to kill a child that ignores the first signal`).toBeDefined();
+      for (const [kind, text, wait] of kills) {
+        reachedKills.push(kind);
+        const mode = { hang: false };
 
-        if (killAfter === undefined) {
-          return;
+        // Once the layer is open every command hangs and ignores the first signal, but the size check, which `script` answers.
+        const stand = yield* standIn((call) =>
+          mode.hang && !isBatchCheck(call) ? "hang, ignores the first signal" : script(known, 200)(call),
+        );
+
+        const context = yield* Layer.build(
+          ProcessRepository.layer({ path: PATH, settings: settings({ time: `${seconds} seconds`, kill: text }) }).pipe(
+            Layer.provide(stand.layer),
+          ),
+        ).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { PATH: "/bin" } }))));
+
+        const repo = Context.get(context, Repository.Repository);
+        mode.hang = true;
+
+        const calls: ReadonlyArray<readonly [string, Effect.Effect<unknown, unknown>]> = [
+          ["readCommit", repo.readCommit(first)],
+          ["readRefs", repo.readRefs(refName)],
+          ["walk", repo.walk({ include: [first], exclude: [] })],
+          ["mergeBases", repo.mergeBases(first, second)],
+          ["isAncestor", repo.isAncestor(first, second)],
+          ["diff", repo.diff(first, second)],
+        ];
+
+        for (const [name, call] of calls) {
+          reachedCalls.push(name);
+          const fiber = yield* Effect.forkDetach(call);
+          yield* Effect.yieldNow;
+          yield* TestClock.adjust(Duration.millis(1));
+
+          // After the size check, which `script` answers, has ended: the child that hangs is the last one.
+          const before = yield* stand.ended;
+          const seen = yield* stand.calls;
+
+          for (const each of seen) {
+            expect(
+              each.forceKillAfter !== undefined && Duration.equals(each.forceKillAfter, wait),
+              `${name}, ${kind}: ${each.verb} carries the set wait`,
+            ).toBe(true);
+          }
+
+          if (name === "diff") {
+            expect(
+              seen.at(-1)?.rest.includes("-z"),
+              `${name}, ${kind}: the child that hangs is the raw list, read by the lister`,
+            ).toBe(true);
+          }
+
+          yield* TestClock.adjust(limit);
+          yield* TestClock.adjust(Duration.subtract(wait, Duration.millis(2)));
+          expect(
+            fiber.pollUnsafe(),
+            `${name}, ${kind}: the call has not ended before the wait is over`,
+          ).toBeUndefined();
+          expect(yield* stand.ended, `${name}, ${kind}: no child is killed before the wait is over`).toBe(before);
+
+          yield* TestClock.adjust(Duration.millis(2));
+          expect(fiber.pollUnsafe(), `${name}, ${kind}: the call has ended once the wait is over`).toBeDefined();
+          const error = yield* Effect.flip(Fiber.join(fiber)).pipe(Effect.orDie);
+          expect(isTimedOut(error), `${name}, ${kind}: fails with TimedOut`).toBe(true);
+
+          if (isTimedOut(error)) {
+            expect(Duration.equals(error.after, limit), `${name}, ${kind}: names the limit`).toBe(true);
+          }
+
+          expect((yield* stand.ended) > before, `${name}, ${kind}: the child was killed`).toBe(true);
         }
-
-        expect(Duration.isFinite(killAfter), `${name}: the kill time is finite`).toBe(true);
-        expect(Duration.isGreaterThan(killAfter, Duration.zero), `${name}: the kill time is above zero`).toBe(true);
-        expect(
-          Duration.isLessThanOrEqualTo(killAfter, Duration.minutes(1)),
-          `${name}: the kill time is short, not a wait of the call's own`,
-        ).toBe(true);
-
-        yield* TestClock.adjust(limit);
-        yield* TestClock.adjust(killAfter);
-        expect(
-          fiber.pollUnsafe(),
-          `${name}: the call has ended once the clock passed the limit and the kill time`,
-        ).toBeDefined();
-        const error = yield* Effect.flip(Fiber.join(fiber)).pipe(Effect.orDie);
-        expect(isTimedOut(error), `${name}: fails with TimedOut`).toBe(true);
-        expect((yield* stand.ended) > before, `${name}: the child was killed`).toBe(true);
       }
+
+      expect(reachedKills, "every kill wait class is reached").toEqual(KILL_CLASSES);
+      expect(reachedCalls, "every call that hangs is reached").toEqual(kills.flatMap(() => CALL_CLASSES));
     }),
   { arbitrary: { runs: 50, seed: 119120 } },
+);
+
+// Plant: (d) catch the decode in `layer` and fall back to five seconds, so the layer builds for a missing and for a bad `kill`;
+// decode the bare text (`Schema.decodeUnknownSync(Schema.DurationFromString)(settings.limits.kill)`), so the error does not name
+// `limits.kill`.
+it.effect(
+  "P3g scenario: a settings value built by hand with no kill, or a kill that is no duration, fails the layer at build and names limits.kill",
+  () =>
+    Effect.gen(function* () {
+      const good = settings();
+      const others = Object.entries(good.limits).filter(([key]) => key !== "kill");
+
+      // Built by hand and never decoded: the type refuses both, and the layer must too.
+      const withTen = Object.fromEntries([...others, ["kill", "ten"]]);
+      // @ts-expect-error limits with no kill key is not `Settings`.
+      const noKill: Settings.Settings = { limits: Object.fromEntries(others), committer: good.committer };
+      // @ts-expect-error limits built from a record are not `Settings`, whatever their kill holds.
+      const tenKill: Settings.Settings = { limits: withTen, committer: good.committer };
+
+      const given: ReadonlyArray<readonly [string, Settings.Settings]> = [
+        ["no kill", noKill],
+        ["a kill that is no duration", tenKill],
+      ];
+
+      for (const [label, bad] of given) {
+        const stand = yield* standIn(script([], 200));
+
+        const exit = yield* Layer.build(
+          ProcessRepository.layer({ path: PATH, settings: bad }).pipe(Layer.provide(stand.layer)),
+        ).pipe(Effect.exit, Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { PATH: "/bin" } }))));
+
+        expect(Exit.isFailure(exit), `${label}: building the layer fails`).toBe(true);
+
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasDies(exit.cause), `${label}: it dies, since the settings are no error to handle`).toBe(true);
+          expect(Cause.pretty(exit.cause), `${label}: the error names limits.kill`).toMatch(/limits\W+kill/);
+        }
+
+        expect(yield* stand.calls, `${label}: no command ran`).toEqual([]);
+      }
+    }),
 );
 
 const LABELS = ["plain", "Apple", "Windows"] as const;

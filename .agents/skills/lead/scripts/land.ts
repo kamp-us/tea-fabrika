@@ -65,6 +65,17 @@
 //     one line that lists the checks it passed and exits 0. `queue`, `run`, `merge`, `admin` and `arm` print that same line
 //     first (pr/Gate.ts `line`), unless the pull request was found merged already.
 //
+//   land.ts review <pr> [--reviewed <sha> --reviewer <text> [--ticket <n>]]
+//     the lead session, after a review said merge-ready: writes the review verdict as a record on the pull request's pushed head (pr/Review.ts,
+//     decision 0093): one pull request comment that holds the facts, and one commit status with the context `review` that points at it,
+//     both under the lead's own `gh` login. With `--reviewed` (the head the review report names) and `--reviewer` (who judged: tool, model,
+//     session) it is a fresh record, written only when that head is the pushed head or its ancestor and both hold the same change (one
+//     patch id of main..head). With neither it is a carry: after a merge of main moved the head (`gh pr update-branch`), it walks the
+//     head's first parents, only through the commits the pull request adds to main, to the nearest approval and writes that approval's
+//     `reviewed` on the new head, pointing at the first comment, and no new comment. A head that holds an approval already gets nothing.
+//     The words go through the leak grep first. Reads the statuses back and refuses unless the head reads as approved. It prints one line.
+//     Nothing reads this record yet: the merge gate does not ask for it.
+//
 //   land.ts arm <pr>
 //     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips; pr/Arm.ts): runs the merge gate
 //     first, as `queue` does (so a `can/` branch, a `Plan:` title, a leak or a grep that could not run, a body the pr skill's checks
@@ -147,6 +158,7 @@ import {
   Layer,
   Option,
   Path,
+  Predicate,
   Result,
   Schema,
   Stream,
@@ -172,6 +184,9 @@ import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
 import * as Recorded from "./pr/Recorded.ts";
+import * as Review from "./pr/Review.ts";
+import * as ReviewGit from "./pr/ReviewGit.ts";
+import * as ReviewsGh from "./pr/ReviewsGh.ts";
 import * as Sections from "./pr/Sections.ts";
 import { Signatures } from "./pr/Signatures.ts";
 import * as SignaturesGit from "./pr/SignaturesGit.ts";
@@ -192,6 +207,7 @@ const Check = Schema.Literals([
   "wait",
   "arm",
   "body",
+  "review",
   "last",
 ]);
 
@@ -979,6 +995,86 @@ const checkCommand = Command.make(
   ),
 );
 
+/** The ask a `land.ts review` command line makes: a fresh record needs both words, a carry needs neither. */
+const reviewAsk = Effect.fnUntraced(function* (
+  reviewed: Option.Option<string>,
+  reviewer: Option.Option<string>,
+  ticket: Option.Option<number>,
+) {
+  const refused = (reason: string) => new Refused({ check: "review", reason, output: "" });
+
+  if (Option.isNone(reviewed) && Option.isNone(reviewer) && Option.isNone(ticket)) {
+    return Review.Ask.cases.carry.make({});
+  }
+
+  if (Option.isNone(reviewed) || Option.isNone(reviewer)) {
+    return yield* refused(
+      "--reviewed and --reviewer come together for a fresh record; a carry names neither (nor --ticket)",
+    );
+  }
+
+  return yield* Review.Ask.cases.fresh
+    .makeEffect({ reviewed: reviewed.value, reviewer: reviewer.value, ticket: Option.getOrNull(ticket) })
+    .pipe(
+      Effect.mapError(() =>
+        refused(
+          "--reviewed is a full 40-character lowercase sha, --reviewer is one line of 300 characters at most, and --ticket is a whole number",
+        ),
+      ),
+    );
+});
+
+// The review record (pr/Review.ts): the one place the lead writes the verdict of a review on the pull request's head. A fresh record is
+// `--reviewed <sha> --reviewer <text>`; with neither it carries the nearest earlier approval to the head as it stands.
+const reviewCommand = Command.make(
+  "review",
+  {
+    pr: PrNumber,
+    reviewed: Flag.String("reviewed").pipe(Flag.optional),
+    reviewer: Flag.String("reviewer").pipe(Flag.optional),
+    ticket: Flag.Int("ticket").pipe(Flag.optional),
+  },
+  Effect.fn("land.reviewCommand")(
+    function* ({ pr, reviewed, reviewer, ticket }) {
+      const env = yield* loadEnv;
+      const ask = yield* reviewAsk(reviewed, reviewer, ticket);
+
+      const done = yield* Review.record({ dir: env.MAIN, pr, ask }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+            BranchesGit.layer(env.MAIN),
+            PushesProcess.layer(HERE),
+            ReviewsGh.layer(env.GH_REPO, env.MAIN),
+            ReviewGit.layer(env.MAIN),
+          ),
+        ),
+        Effect.mapError(
+          (e) =>
+            new Refused({
+              check: "review",
+              reason:
+                "reason" in e && Predicate.isString(e.reason)
+                  ? e.reason
+                  : `the checkout's git could not be opened (${e._tag})`,
+              output: "",
+            }),
+        ),
+      );
+
+      yield* Console.log(
+        Review.Recorded.match(done, {
+          fresh: (d) => `pr ${pr}: review recorded on ${d.head.slice(0, 12)} (reviewed ${d.reviewed.slice(0, 12)})`,
+          kept: (d) =>
+            `pr ${pr}: review carried to ${d.head.slice(0, 12)} from ${d.from.slice(0, 12)} (reviewed ${d.reviewed.slice(0, 12)}), kept`,
+          already: (d) => `pr ${pr}: review already recorded on ${d.head.slice(0, 12)}`,
+        }),
+      );
+    },
+    recorded("review", ({ pr }) => [forPr(pr)]),
+  ),
+);
+
 /** A refusal from a merge path: a leak grep that refused or could not run is the `leak` check's. */
 const refusedAt =
   (check: typeof Check.Type) =>
@@ -1185,6 +1281,7 @@ const land = Command.make("land").pipe(
     queueCommand,
     waitCommand,
     checkCommand,
+    reviewCommand,
     armCommand,
     mergeCommand,
     adminCommand,

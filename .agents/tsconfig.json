@@ -56,6 +56,7 @@
     "skills/lead/scripts/pr/Recorded.test.ts",
     "skills/lead/scripts/pr/Recorded.integration.test.ts",
     "skills/lead/scripts/pr/Recorded.fixture.ts",
+    "skills/lead/scripts/pr/Review*.ts",
     "skills/lead/scripts/box.ts",
     "skills/lead/scripts/box.rm.test.ts",
     "skills/lead/scripts/box/*.ts",
