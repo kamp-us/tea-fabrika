@@ -58,10 +58,38 @@ export const narrow = (chain: ReadonlyArray<string>, count: (base: string) => nu
   return low;
 };
 
-const git = (...args: ReadonlyArray<string>) =>
-  execFileSync("git", [...args], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+/** One `git` call: its stdout, or a throw with its stderr. */
+export type Git = (args: ReadonlyArray<string>) => string;
+
+const realGit: Git = (args) => execFileSync("git", [...args], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 
 const lines = (text: string) => text.split("\n").filter((line) => line !== "");
+
+/** What `plan` answers: the new base, the related tests (comma-separated), the files wanted before the cut, and the commits left out. */
+export interface Plan {
+  readonly base: string;
+  readonly related: string;
+  readonly wanted: number;
+  readonly left: number;
+}
+
+/** The range from `base` to `head` cut to at most `max` related test files, reading the history through `git`. */
+export const plan = (base: string, head: string, max: number, git: Git): Plan => {
+  const tracked = lines(git(["ls-tree", "-r", "--name-only", head]));
+  const tests = (from: string) => usable(lines(git(["diff", "--name-only", "--diff-filter=d", from, head])), tracked);
+
+  // The chain: the base, then each first-parent commit up to the head.
+  const chain = [base, ...lines(git(["rev-list", "--first-parent", "--reverse", `${base}..${head}`]))];
+  const at = narrow(chain, (from) => tests(from).length, max);
+  const start = chain[at] ?? base;
+
+  return {
+    base: start,
+    related: tests(start).join(","),
+    wanted: tests(base).length,
+    left: at === 0 ? 0 : lines(git(["rev-list", `${base}..${start}`])).length,
+  };
+};
 
 const flag = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -78,18 +106,10 @@ if (import.meta.main) {
     throw new Error("range: --base and --head are required, and MUTATION_MAX_RELATED is a whole number, at least 1");
   }
 
-  const tracked = lines(git("ls-tree", "-r", "--name-only", head));
+  const answer = plan(base, head, max, realGit);
 
-  const tests = (from: string) => usable(lines(git("diff", "--name-only", "--diff-filter=d", from, head)), tracked);
-
-  // The chain: the base, then each first-parent commit up to the head.
-  const chain = [base, ...lines(git("rev-list", "--first-parent", "--reverse", `${base}..${head}`))];
-  const wanted = tests(base).length;
-  const at = narrow(chain, (from) => tests(from).length, max);
-  const start = chain[at] ?? base;
-
-  console.log(`base=${start}`);
-  console.log(`related=${tests(start).join(",")}`);
-  console.log(`wanted=${wanted}`);
-  console.log(`left=${at === 0 ? 0 : lines(git("rev-list", `${base}..${start}`)).length}`);
+  console.log(`base=${answer.base}`);
+  console.log(`related=${answer.related}`);
+  console.log(`wanted=${answer.wanted}`);
+  console.log(`left=${answer.left}`);
 }

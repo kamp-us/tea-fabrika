@@ -4,12 +4,17 @@ name: mutation
 # It starts itself, so no person or session has to remember it (a session that dispatched it each
 # hour stopped on 2026-11-13, and nothing ran for 13 days):
 #
-#   - on a push to main, and on an hourly cron as the catch-up. The `gate` job (mutation-gate.mjs, the same
-#     shape as scheduled.yaml's gate) lets either start the work only when no run of this workflow
-#     started its job within the gap (`MUTATION_GAP_MINUTES`, default 60) and the head is not one a
-#     passing run already covered: at most 24 runs a day. GitHub's cron fires only about 3 times a
-#     day on this repo (34 starts in 11.7 days, measured on scheduled.yaml), so the push is the real
-#     clock and the cron the backup;
+#   - on a push to main, and on an hourly cron as the catch-up. No gap paces it: the `concurrency` group
+#     below keeps one run going and only the newest waiting one, so a burst of merges costs one more
+#     run up to the newest head, and a merge waits only for the run in progress and its own. Replayed
+#     on the real history that is about 44 runs a day, no merge waiting more than 16 minutes at the
+#     90th percentile, and no false alarm; a 60-minute gap gave 0.65 false alarms a day. The `gate` job
+#     (mutation-gate.mjs, the same shape as scheduled.yaml's gate) only skips a head a passing run
+#     already covered, and backs off a run that keeps failing: after `MUTATION_FAIL_STREAK` failed
+#     runs in a row, a push starts the work only when none started within
+#     `MUTATION_FAIL_GAP_MINUTES`, so a broken image cannot burn a slot all day, and a pass resets it.
+#     GitHub's cron fires only about 3 times a day on this repo (34 starts in 11.7 days, measured on
+#     scheduled.yaml), so the push is the real clock and the cron the backup;
 #   - by hand, which the gate always lets through, to re-run or to skip a range:
 #
 #       gh workflow run mutation.yaml -f base=<the commit to mutate from>
@@ -60,10 +65,12 @@ concurrency:
   group: mutation
   cancel-in-progress: false
 
-# The settings, read by mutation-gate.mjs and range.ts: the gap between two runs of the work, in minutes, and the most
-# related test files one run takes (mutbox's 900 s container limit is what bounds it).
+# The settings, read by mutation-gate.mjs and range.ts: how many failed runs in a row start the backoff, the gap
+# between two starts while it lasts (in minutes), and the most related test files one run takes (mutbox's 900 s
+# container limit is what bounds it).
 env:
-  MUTATION_GAP_MINUTES: "60"
+  MUTATION_FAIL_STREAK: "3"
+  MUTATION_FAIL_GAP_MINUTES: "60"
   MUTATION_MAX_RELATED: "12"
 
 jobs:

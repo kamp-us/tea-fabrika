@@ -94,21 +94,44 @@ export const passedRun = (gh, workflow, job) => {
 };
 
 /**
- * When the newest run on main of `workflow`, other than run `except`, started its job `job` (ms), or null.
+ * How the recent runs of `workflow` on main went, newest first, other than run `except`: when the newest run's job
+ * `job` started (ms, or null), and how many runs in a row, from the newest, failed (`failure` or `timed_out`) before
+ * one passed. A run whose job never ran (skipped, or canceled before it started) is no start and no failure, and
+ * a canceled job that did start ends neither streak. The walk stops at the first pass, or once `stop` failures are
+ * counted and a start is known, so a healthy repository reads few runs.
  * @param {Gh} gh
  * @param {string} workflow
  * @param {string} job
  * @param {number | null} except
- * @returns {number | null}
+ * @param {number} stop
+ * @returns {{ last: number | null, streak: number }}
  */
-export const startedAt = (gh, workflow, job, except) => {
+export const recent = (gh, workflow, job, except, stop) => {
+  /** @type {number | null} */
+  let last = null;
+  let streak = 0;
+
   for (const run of listRuns(gh, workflow, "branch=main")) {
     const found = run.id === except ? null : findJob(gh, run.id, job);
 
-    if (found !== null && found.conclusion !== "skipped" && found.startedAt !== null) {
-      return found.startedAt;
+    if (found === null || found.conclusion === "skipped" || found.startedAt === null) {
+      continue;
+    }
+
+    last ??= found.startedAt;
+
+    if (found.conclusion === "success") {
+      break;
+    }
+
+    if (found.conclusion === "failure" || found.conclusion === "timed_out") {
+      streak += 1;
+    }
+
+    if (streak >= stop) {
+      break;
     }
   }
 
-  return null;
+  return { last, streak };
 };

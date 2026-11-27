@@ -33,6 +33,8 @@ const CAPS = { mutation: 45, gate: 5, heartbeat: 10 } as const;
 const RANGES = {
   MUTATION_LATE_MINUTES: [105, 24 * 60],
   MUTATION_GAP_MINUTES: [10, 240],
+  MUTATION_FAIL_STREAK: [1, 10],
+  MUTATION_FAIL_GAP_MINUTES: [10, 240],
   MUTATION_MAX_RELATED: [1, 50],
 } as const;
 
@@ -55,6 +57,17 @@ const onlyMain = (job: Record<string, unknown>) =>
 
 const reads = (job: Record<string, unknown>) => map(job["permissions"])["actions"] === "read";
 
+/** A work job starts only when its gate said so. */
+const startsOnGate = (job: Record<string, unknown>) =>
+  Predicate.isString(job["if"]) && job["if"].includes("needs.gate.outputs.start == 'true'");
+
+/** What a job's step called `id` runs, or an empty string. */
+const runOf = (job: Record<string, unknown>, id: string) => {
+  const run = allSteps(job).find((step) => step["id"] === id)?.["run"];
+
+  return Predicate.isString(run) ? run : "";
+};
+
 /** `concurrency` holds one run at a time and cuts none short. */
 const oneAtATime = (workflow: Record<string, unknown>, group: string) => {
   const concurrency = map(workflow["concurrency"]);
@@ -66,7 +79,7 @@ const touchesIssues = (grant: unknown) => grant === "write-all" || (isMap(grant)
 
 /**
  * The laws on the hourly mutation run and its heartbeat. Each message starts with its workflow's
- * file name and a law's number, MU1 to MU11.
+ * file name and a law's number, MU1 to MU12.
  */
 export const lintMutation = (runText: string, heartbeatText: string): string[] => {
   const errors: string[] = [];
@@ -85,6 +98,9 @@ export const lintMutation = (runText: string, heartbeatText: string): string[] =
 
   const mutation = run.success;
   const dispatch = map(map(mutation["on"])["workflow_dispatch"]);
+  const gateJob = map(map(mutation["jobs"])["gate"]);
+  const workJob = map(map(mutation["jobs"])["mutation"]);
+  const rangeBase = map(map(allSteps(workJob).find((step) => step["id"] === "range"))["env"])["BASE"];
 
   require("mutation.yaml", "MU1", startsLike(
     map(mutation["on"]),
@@ -94,11 +110,6 @@ export const lintMutation = (runText: string, heartbeatText: string): string[] =
     mutation,
     "mutation",
   ), "one run at a time in the group `mutation`, and a running one is never cut short");
-
-  const gateJob = map(map(mutation["jobs"])["gate"]);
-  const workJob = map(map(mutation["jobs"])["mutation"]);
-  const rangeStep = allSteps(workJob).find((step) => step["id"] === "range");
-  const rangeBase = map(map(rangeStep)["env"])["BASE"];
 
   require("mutation.yaml", "MU3", map(map(dispatch["inputs"])["base"])["required"] !== true &&
     Predicate.isString(rangeBase) &&
@@ -112,10 +123,11 @@ export const lintMutation = (runText: string, heartbeatText: string): string[] =
     reads(gateJob) &&
     onlyMain(gateJob) &&
     onlyMain(workJob) &&
+    startsOnGate(workJob) &&
     JSON.stringify(workJob["needs"]) ===
       JSON.stringify([
         "gate",
-      ]), "the run list is readable (`actions: read` on the workflow and the gate), both jobs run only on main, and the work job needs the gate");
+      ]), "the run list is readable (`actions: read` on the workflow and the gate), both jobs run only on main, and the work job needs the gate and starts only when it says so");
 
   require("mutation.yaml", "MU10", Number(workJob["timeout-minutes"]) <= CAPS.mutation &&
     Number(gateJob["timeout-minutes"]) <=
@@ -123,10 +135,17 @@ export const lintMutation = (runText: string, heartbeatText: string): string[] =
 
   require("mutation.yaml", "MU11", settingsInRange(
     mutation,
-  ), "each setting is a whole number in its range (gap 10 to 240 minutes, related files 1 to 50)");
+  ), "each setting is a whole number in its range (fail streak 1 to 10, fail gap 10 to 240 minutes, related files 1 to 50)");
+
+  require("mutation.yaml", "MU12", /--workflow mutation\.yaml --job mutation\b/.test(runOf(gateJob, "gate")) &&
+    !runOf(gateJob, "gate").includes("--paced") &&
+    /scripts\/range\.ts --base "\$base" --head "\$head"/.test(
+      runOf(workJob, "range"),
+    ), "the gate reads this workflow's job `mutation`, with no gap (concurrency paces it), and the `range` step runs range.ts");
 
   const watcher = beat.success;
   const job = map(map(watcher["jobs"])["heartbeat"]);
+  const beatGate = map(map(watcher["jobs"])["gate"]);
 
   require("mutation-heartbeat.yaml", "MU4", startsLike(
     map(watcher["on"]),
@@ -147,8 +166,6 @@ export const lintMutation = (runText: string, heartbeatText: string): string[] =
     "ci-scheduled",
   ), "its issue never takes the `ci-scheduled` label, which switches on a sev1");
 
-  const beatGate = map(map(watcher["jobs"])["gate"]);
-
   require("mutation-heartbeat.yaml", "MU8", "MUTATION_PAUSE" in
     map(job["env"]), "the pause is a setting: the job's `env` names MUTATION_PAUSE");
 
@@ -156,10 +173,11 @@ export const lintMutation = (runText: string, heartbeatText: string): string[] =
     reads(job) &&
     onlyMain(beatGate) &&
     onlyMain(job) &&
+    startsOnGate(job) &&
     JSON.stringify(job["needs"]) ===
       JSON.stringify([
         "gate",
-      ]), "the run list is readable (`actions: read` on the gate and the check), both jobs run only on main, and the check needs the gate");
+      ]), "the run list is readable (`actions: read` on the gate and the check), both jobs run only on main, and the check needs the gate and starts only when it says so");
 
   require("mutation-heartbeat.yaml", "MU10", Number(job["timeout-minutes"]) <= CAPS.heartbeat &&
     Number(beatGate["timeout-minutes"]) <=
@@ -168,6 +186,13 @@ export const lintMutation = (runText: string, heartbeatText: string): string[] =
   require("mutation-heartbeat.yaml", "MU11", settingsInRange(
     watcher,
   ), "each setting is a whole number in its range (limit 105 to 1440 minutes, gap 10 to 240)");
+
+  require("mutation-heartbeat.yaml", "MU12", /--workflow mutation-heartbeat\.yaml --job heartbeat\b/.test(
+    runOf(beatGate, "gate"),
+  ) &&
+    runOf(beatGate, "gate").includes(
+      "--paced",
+    ), "the gate reads this workflow's job `heartbeat`, paced by a gap (the check installs, so a push may not start one each time)");
 
   return errors;
 };

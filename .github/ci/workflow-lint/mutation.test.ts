@@ -198,9 +198,16 @@ it("MU11: a setting outside its range, or no number, is refused wherever it is s
   map(g.run["env"])["MUTATION_MAX_RELATED"] = "500";
   expect(lint(g)).toEqual(only("MU11", "mutation.yaml"));
 
-  const h = files();
-  map(h.run["env"])["MUTATION_GAP_MINUTES"] = "0";
-  expect(lint(h)).toEqual(only("MU11", "mutation.yaml"));
+  for (const [name, bad] of [
+    ["MUTATION_FAIL_STREAK", "0"],
+    ["MUTATION_FAIL_STREAK", "11"],
+    ["MUTATION_FAIL_GAP_MINUTES", "1"],
+    ["MUTATION_FAIL_GAP_MINUTES", "1000"],
+  ] as const) {
+    const h = files();
+    map(h.run["env"])[name] = bad;
+    expect(lint(h), `${name}=${bad}`).toEqual(only("MU11", "mutation.yaml"));
+  }
 });
 
 it("pinned: the lint's range for the limit is the one heartbeat.ts enforces", () => {
@@ -214,5 +221,77 @@ it("pinned: the lint's range for the limit is the one heartbeat.ts enforces", ()
   for (const edge of [LATE_RANGE.least - 1, LATE_RANGE.most + 1]) {
     map(job(f.beat, "heartbeat")["env"])["MUTATION_LATE_MINUTES"] = String(edge);
     expect(lint(f), String(edge)).toEqual(only("MU11", "mutation-heartbeat.yaml"));
+  }
+});
+
+it("MU9 and MU12: the work jobs start only on their gate, and each gate and step names the right workflow, job and script", () => {
+  const f = files();
+  job(f.run, "mutation")["if"] = "github.ref == 'refs/heads/main'";
+  expect(lint(f)).toEqual(only("MU9", "mutation.yaml"));
+
+  const g = files();
+  job(g.beat, "heartbeat")["if"] = "github.ref == 'refs/heads/main'";
+  expect(lint(g)).toEqual(only("MU9", "mutation-heartbeat.yaml"));
+
+  const gateStep = (workflow: Record<string, unknown>, name: string) =>
+    allSteps(job(workflow, name)).find((s) => s["id"] === (name === "mutation" ? "range" : "gate"))!;
+
+  const plants: [string, (f: ReturnType<typeof files>) => void][] = [
+    [
+      "the mutation gate reads the wrong job",
+      (x) =>
+        (gateStep(x.run, "gate")["run"] = String(gateStep(x.run, "gate")["run"]).replace(
+          "--job mutation",
+          "--job gate",
+        )),
+    ],
+    [
+      "the mutation gate reads the wrong workflow",
+      (x) =>
+        (gateStep(x.run, "gate")["run"] = String(gateStep(x.run, "gate")["run"]).replace(
+          "--workflow mutation.yaml",
+          "--workflow mutation-heartbeat.yaml",
+        )),
+    ],
+    [
+      "the mutation gate is paced by a gap",
+      (x) => (gateStep(x.run, "gate")["run"] = `${String(gateStep(x.run, "gate")["run"])} --paced`),
+    ],
+    ["the range step does not call range.ts", (x) => (gateStep(x.run, "mutation")["run"] = "echo base=$BASE")],
+  ];
+
+  for (const [label, plant] of plants) {
+    const x = files();
+    plant(x);
+    expect(lint(x), label).toEqual(only("MU12", "mutation.yaml"));
+  }
+
+  const beats: [string, (f: ReturnType<typeof files>) => void][] = [
+    [
+      "the heartbeat gate reads another workflow",
+      (x) =>
+        (gateStep(x.beat, "gate")["run"] = String(gateStep(x.beat, "gate")["run"]).replace(
+          "--workflow mutation-heartbeat.yaml",
+          "--workflow mutation.yaml",
+        )),
+    ],
+    [
+      "the heartbeat gate reads another job",
+      (x) =>
+        (gateStep(x.beat, "gate")["run"] = String(gateStep(x.beat, "gate")["run"]).replace(
+          "--job heartbeat",
+          "--job gate",
+        )),
+    ],
+    [
+      "the heartbeat gate has no gap",
+      (x) => (gateStep(x.beat, "gate")["run"] = String(gateStep(x.beat, "gate")["run"]).replace(" --paced", "")),
+    ],
+  ];
+
+  for (const [label, plant] of beats) {
+    const x = files();
+    plant(x);
+    expect(lint(x), label).toEqual(only("MU12", "mutation-heartbeat.yaml"));
   }
 });

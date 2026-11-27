@@ -361,7 +361,13 @@ describe("the mutation heartbeat, today's tooling: what it asks GitHub", () => {
       ],
     });
 
-    expect(check(t, LIMIT, null, gh)).toMatchObject({ _tag: "late", merges: 2, lastPass: null });
+    // The oldest of the commits, not the newest: the older one has waited longest.
+    expect(check(t, LIMIT, null, gh)).toMatchObject({
+      _tag: "late",
+      merges: 2,
+      lastPass: null,
+      oldest: Date.parse("2026-11-26T10:00:00Z"),
+    });
     expect(calls).toEqual([
       ["api", RUNS],
       ["api", `${API}/commits?sha=main&per_page=100`],

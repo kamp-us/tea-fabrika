@@ -353,7 +353,9 @@ describe("kind siblings join the hourly pick (decision 0600, slice 2)", () => {
 
     expect(run).toMatch(/node \.agents\/skills\/mutation\/scripts\/range\.ts --base "\$base" --head "\$head"/);
     // The head's file list is read once and goes to the pick, so a changed file's kind siblings are found.
-    expect(script).toMatch(/const tracked = lines\(git\("ls-tree", "-r", "--name-only", head\)\)/);
-    expect(script).toMatch(/usable\(lines\(git\("diff", "--name-only", "--diff-filter=d", from, head\)\), tracked\)/);
+    expect(script).toMatch(/const tracked = lines\(git\(\["ls-tree", "-r", "--name-only", head\]\)\)/);
+    expect(script).toMatch(
+      /usable\(lines\(git\(\["diff", "--name-only", "--diff-filter=d", from, head\]\)\), tracked\)/,
+    );
   });
 });

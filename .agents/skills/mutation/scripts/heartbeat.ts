@@ -27,8 +27,8 @@ import { execFileSync } from "node:child_process"; // edge: the one `gh` call ev
  *   MUTATION_PAUSE         empty, or `{"until":"<ISO time>","reason":"<why>"}`
  *
  * 210 minutes is two full runs, as Prometheus's alerting practices ask of a batch job (an alert
- * waits "at least enough time for 2 full runs"): a merge waits up to one hour for the next run,
- * which takes up to the workflow's 45-minute limit, so one failed run is no alarm and two are. A
+ * waits "at least enough time for 2 full runs"): a merge waits for the run in progress and then for
+ * its own, each up to the workflow's 45-minute limit, so one failed run is no alarm and two are. A
  * pause is an Alertmanager silence's shape: it has an end and a reason (the commit that sets it
  * says who), and when the end passes the alarm turns on by itself. A pause with a bad end, no end
  * or no reason fails the check, so a typo never reads as "no pause". A skipped run (no test beside a
@@ -65,7 +65,7 @@ import {
 
 const MINUTE = 60_000;
 
-/** The default for `MUTATION_LATE_MINUTES`: two runs of an hour's wait and the workflow's 45 minutes. */
+/** The default for `MUTATION_LATE_MINUTES`: two full runs, each an hour of catch-up slack and the workflow's 45 minutes. */
 export const DEFAULT_LATE_MINUTES = 2 * (60 + 45);
 
 /** The title of the one open issue. */
@@ -190,8 +190,9 @@ export const issueText = (now: number, b: Beat): string =>
 // ---------------------------------------------------------------- the settings
 
 /**
- * The least `MUTATION_LATE_MINUTES` allows: a merge waits up to the gap for the next run and the run takes up to
- * its limit (60 and 45 minutes), so a lower limit alarms on a healthy run. The most is a day, past which
+ * The least `MUTATION_LATE_MINUTES` allows: a merge waits for the run in progress and then for its own, each up to
+ * the workflow's 45-minute limit (90 minutes), and the heartbeat's own gate may hold a check back by up to an hour
+ * of that, so a lower limit alarms on a healthy run. The most is a day, past which
  * the alarm is no alarm.
  */
 export const LATE_RANGE = { least: 105, most: 24 * 60 } as const;

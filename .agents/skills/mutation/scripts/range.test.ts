@@ -1,7 +1,7 @@
 import { Array as Arr } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { MAX_RELATED, narrow, PLAIN, usable } from "./range.ts";
+import { type Git, MAX_RELATED, narrow, PLAIN, plan, usable } from "./range.ts";
 
 // Today's lead tooling. Covers range.ts: the range is cut to what the container can finish.
 const options = { seed: 119120, numRuns: 300 };
@@ -97,5 +97,76 @@ describe("the mutation range, today's tooling: the related tests", () => {
     expect(PLAIN.test("a/x.test.ts")).toBe(true);
     expect(PLAIN.test("-a/x.test.ts")).toBe(false);
     expect(PLAIN.test("a/x;rm.test.ts")).toBe(false);
+  });
+});
+
+describe("the mutation range, today's tooling: the pick it hands to mutbox", () => {
+  // Plant: take `PLAIN.test(t)` out of `usable`.
+  it("scenario: a test path mutbox would refuse is left out even when it exists at the head", () => {
+    expect(usable(["-a/x.ts"], ["-a/x.ts", "-a/x.test.ts"])).toEqual([]);
+    expect(usable(["a/x.ts"], ["a/x.ts", "a/x.test.ts"])).toEqual(["a/x.test.ts"]);
+  });
+
+  // Plant: take the `/../` filter out of `usable`.
+  it("scenario: a path that climbs out of its folder is left out", () => {
+    expect(usable(["a/../b/x.ts"], ["a/../b/x.ts", "a/../b/x.test.ts"])).toEqual([]);
+  });
+
+  /** A history c0 (the base) to c5 (the head), each commit changing `f<i>.ts` with its test at the head. */
+  const history = (calls: string[][]): Git => {
+    const commits = ["c0", "c1", "c2", "c3", "c4", "c5"];
+    const files = commits.flatMap((_, i) => (i === 0 ? [] : [`f${i}.ts`, `f${i}.test.ts`]));
+
+    return (args) => {
+      calls.push([...args]);
+      const [verb, ...rest] = args;
+      const key = args.join(" ");
+
+      if (verb === "ls-tree") {
+        return files.join("\n");
+      }
+
+      if (key === "rev-list --first-parent --reverse c0..c5") {
+        return commits.slice(1).join("\n");
+      }
+
+      if (verb === "diff") {
+        const from = commits.indexOf(rest[2] ?? "");
+
+        return commits
+          .slice(from + 1)
+          .map((_, i) => `f${from + 1 + i}.ts`)
+          .join("\n");
+      }
+
+      const cut = /^rev-list c0\.\.(c\d)$/.exec(key)?.[1];
+
+      if (cut !== undefined) {
+        return commits.slice(1, commits.indexOf(cut) + 1).join("\n");
+      }
+
+      throw new Error(`unexpected git call: ${key}`);
+    };
+  };
+
+  it("scenario: the plan names the new base, its related tests, the files wanted and the commits left out, counted from the base to the new base", () => {
+    const calls: string[][] = [];
+
+    expect(plan("c0", "c5", 2, history(calls))).toEqual({
+      base: "c3",
+      related: "f4.test.ts,f5.test.ts",
+      wanted: 5,
+      left: 3,
+    });
+    expect(calls).toContainEqual(["rev-list", "c0..c3"]);
+  });
+
+  it("scenario: a range within the cap is whole, with nothing left out", () => {
+    expect(plan("c0", "c5", 9, history([]))).toEqual({
+      base: "c0",
+      related: "f1.test.ts,f2.test.ts,f3.test.ts,f4.test.ts,f5.test.ts",
+      wanted: 5,
+      left: 0,
+    });
   });
 });

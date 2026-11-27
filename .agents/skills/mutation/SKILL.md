@@ -164,9 +164,12 @@ the container at 900 s, so a range of hundreds of files could never pass and wou
 moves the base forward along main's first-parent commits until the range fits, and the job summary says
 how many commits it left unmutated (the first run after the 13-day gap left about 660). Commits cut away
 are never mutated unless you run them by hand with a `base`: a bigger `MUTATION_MAX_RELATED` in a pull
-request, or a dispatch with an older `base` (the cap applies to it too). The gate lets a push or the cron
-start the work only when no run started within `MUTATION_GAP_MINUTES` (default 60): at most 24 runs a
-day, the same shape as the full run's gate.
+request, or a dispatch with an older `base` (the cap applies to it too). No gap paces the run: replayed on
+the real history it is about 44 runs a day, with no merge waiting more than 16 minutes at the 90th percentile
+(a 60-minute gap gave 0.65 false alarms a day). The gate (`mutation-gate.mjs`) only skips a head a passing run
+already covered, and backs off a run that keeps failing: after `MUTATION_FAIL_STREAK` failed runs in a row
+(default 3), a push starts the work only when none started within `MUTATION_FAIL_GAP_MINUTES` (default 60),
+so a broken image cannot burn a slot all day; a pass resets the count.
 
 1. **Start it by hand** (only to re-run, or to skip a range). `base` is the commit to mutate from, and
    `head` is main's head unless you give one:
@@ -176,7 +179,7 @@ day, the same shape as the full run's gate.
    ```
 
    A hand run with a `head` older than main's leaves the next base at main's head when it started, not
-   at that `head`; give no `head` unless you mean it. A hand run always passes the gate.
+   at that `head`; give no `head` unless you mean it. A hand run always passes the gate, backoff included.
 
 2. **Find it.** The newest row is yours; a second run waits until the first ends:
 
@@ -202,7 +205,7 @@ A run with survivors passes. The job fails only when mutbox says `stuck`: the ru
 `.github/workflows/mutation-heartbeat.yaml` runs `scripts/heartbeat.ts --issue` on a push to
 main, each hour and by hand; its own gate lets a push or the cron through only when no check started in the last
 hour. It watches the outcome, so it alarms whichever way the runs stop
-(the push trigger, the cron, the gate, GitHub's scheduler, or runs that fail). When a merge on main has waited
+(the push trigger, the cron, the backoff, GitHub's scheduler, or runs that fail). When a merge on main has waited
 longer than the limit (210 minutes, two full runs) for a passing run, it goes red and opens one GitHub issue
 titled "The hourly mutation run is late", labeled `mutation-heartbeat` (not `ci-scheduled`, which
 switches on a sev1). A passing run closes the issue. The script's header holds the rules.
