@@ -56,6 +56,9 @@ case "$1 $2" in
   case "$3" in */issues?*) for n in $LAND_ISSUES; do echo "$n"; done; exit 0 ;; esac
   # The files the pull request changes, one JSON row each: one new export when a law names one.
   [ -z "\${LAND_PATCH:-}" ] || printf '{"path":"src/thing.ts","patch":"@@ -0,0 +1 @@\\\\n+export const %s = 1"}\\n' "$LAND_PATCH" ;;
+"api -X")
+  # A read of a workflow's runs: none, so a pull request arms as one with no run at its head.
+  [ "$3" != GET ] || echo '{"workflow_runs":[]}' ;;
 "api -i")
   # \`LAND_REQUIRED=pending\` is a check that has not ended.
   status=completed
@@ -485,7 +488,7 @@ describe("land.ts, today's tooling", () => {
     expect(got.calls.filter((c) => !c.startsWith("sign "))).toEqual([]);
   });
 
-  it("T652 scenario: an open PR is updated through the REST API, never gh pr edit (AGENTS.md)", () => {
+  it("T652 scenario: an open PR is updated through the REST API, never gh pr edit", () => {
     const got = land({ ...fine, open: "41" });
     expect(got.code, got.err).toBe(0);
     expect(got.calls).toContainEqual(
@@ -684,7 +687,7 @@ describe("land.ts, today's tooling", () => {
   for (const [name, world, says] of [
     ["is titled `Plan:`", { title: "Plan: a quest" }, "its title starts `Plan:`"],
     [
-      "holds a commit nothing vouches for",
+      "holds an unsigned commit",
       { unsignedCommit: true },
       "1 commit(s) since main are not signed or made by stepcommit.sh:",
     ],
@@ -702,8 +705,8 @@ describe("land.ts, today's tooling", () => {
     }, 300_000);
   }
 
-  // Plants: print the list of checks from `check` only, or a different one from a merge path.
-  it("scenario: `land.ts check` and every path that merges print the same line listing the checks the gate ran, first", () => {
+  // Plants: print the list of checks from `check` only, or a different one from a merge path, or leave it out of `run` or `arm`.
+  it("scenario: `land.ts check` and every path that merges print the same line listing the checks the gate ran", () => {
     const checked = land({ ...fine, command: ["check", "77"] });
     expect(checked.code, checked.err).toBe(0);
     const line = checked.out.trim();
@@ -714,11 +717,17 @@ describe("land.ts, today's tooling", () => {
       ["merge", "77", "--admin=false"],
       ["merge", "77", "--admin"],
       ["admin", "77", "--wait"],
+      ["arm", "77"],
     ]) {
       const got = land({ ...fine, command });
       expect(got.code, `${command.join(" ")}: ${got.err}`).toBe(0);
       expect(got.out.split("\n")[0], command.join(" ")).toBe(line);
     }
+
+    // `run` says its own steps first, then the gate's line, then the queue's.
+    const ran = land({ ...fine });
+    expect(ran.code, ran.err).toBe(0);
+    expect(ran.out.split("\n"), "run").toContain(line);
   }, 300_000);
 
   // Plants: skip the signature read in `check`, count only the branch's tip, or name no commit.

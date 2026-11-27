@@ -17,11 +17,11 @@
 // A merged pull request is no refusal here: each path answers one as "already merged" before it asks the gate, and `land.ts
 // check` reads merged ones too (replay.ts runs it on them).
 //
-// The review check (ticket 2338, the one that binds a review to the head it judged) plugs in at `CHECKS` below as a `Check` of its
-// own, last: its error joins `Unread` and its services join `Needs`. It is more than one more entry, though: it must tell the
-// route (an admin merge may go past it, with a reason the lead gives) and read the pull request's files (a change that needs no
-// review passes by a file rule), so `Ask` grows a `route` and the paths pass theirs (queue, arm, admin). Read through its
-// module: `Gate.before(...)`.
+// The review check (ticket 2338, decision 0093: .kalfa/decisions/0093-a-review-verdict-is-a-record-on-the-reviewed-head-and-ci-required-reads-it-on-the-queue.md)
+// plugs in at `CHECKS` below as a `Check` of its own, last: its error joins `Unread` and its services join `Needs`. It is more than
+// one more entry, though. The decision has an admin merge go past a missing verdict only with a written override reason, and only
+// changes under `next/` and `kalfa/` need a review, so `Ask` grows the route (queue, arm or admin, with the reason on admin) and the
+// pull request's files, and each path passes its own. Read through its module: `Gate.before(...)`.
 import { String as Str, pipe, Array as Arr, Effect } from "effect";
 
 import * as Leaks from "./Leaks.ts";

@@ -818,8 +818,6 @@ these caps. Each one came from a laptop that became unusable. This list is their
 
 ## Tool facts that cost us time
 
-- `gh pr edit` fails here with a classic Projects error. To change an open PR's title and body, run
-  `publish.ts <branch> --title <t> --body-file <f>`; it patches through the API and leaves the draft state alone.
 - On a draft pull request the required check is named `ci-required (draft)` on purpose
   (`.github/workflows/check.yaml`), so `gh pr checks <pr> --required` finds nothing. Use
   `gh pr checks <pr>` without the flag, or mark the pull request ready first. Right after that,

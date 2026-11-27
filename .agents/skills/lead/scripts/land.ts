@@ -33,7 +33,7 @@
 //     the lead session, for any pull request whose steps passed (pr/Queue.ts, a pull request whose steps passed lands on green CI and a clean leak check alone): first the merge gate
 //     below, which refuses one that is closed, not into main, in conflict with main, a `can/` branch or titled `Plan:`, that leaks (the
 //     leak grep on its net change, each of its commits and its title and description, which become the squash commit's text), whose
-//     body fails the pr skill's checks, or with a commit nothing vouches for; then marks a draft ready for
+//     body fails the pr skill's checks, or with an unsigned commit; then marks a draft ready for
 //     review, as `admin` does, which starts its real `ci-required`; reads `ci-required` at its
 //     head, once, or with --wait again each minute for up to an hour, in the background (a draft just
 //     marked ready has no `ci-required` yet, so give it --wait; a pull request that conflicts with main, or turns to
@@ -633,7 +633,7 @@ export const push = Effect.fn("land.push")(function* ({ ready }: Quest) {
   return { target, tip: yield* gitIn(ready.tree)("push", "HEAD does not read", "rev-parse", "HEAD") };
 });
 
-/** Opens the PR, or updates the open one through the REST API (`gh pr edit` fails here, AGENTS.md). */
+/** Opens the PR, or updates the open one through the REST API. */
 export const openPr = Effect.fn("land.openPr")(function* (
   { ready, env }: Quest,
   draft: { readonly title: string; readonly file: string },
@@ -836,7 +836,7 @@ const waitCommand = Command.make(
 );
 
 /**
- * The commits on the branch since main (merges of main included, oldest first) that no tool vouches for: no note on
+ * The commits on the branch since main (merges of main included, oldest first) that are unsigned: no note on
  * refs/notes/fabrika, no signature of a person's own, and not made by `stepcommit.sh` (a fix round's, which signs nothing, or a `--commit-only` commit, which `land.ts` signs later; its author is the bot's). A plain
  * `git commit` is the one that slips; CI never reads signatures on a PR branch, so the merge gate (pr/Gate.ts) is where it is found, on every path.
  * Fetches main and, when the head is not here, the head; changes nothing else. This is `Signatures.unsigned`, run on real git,

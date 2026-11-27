@@ -71,7 +71,7 @@ const Path = Schema.Literals(["check", "queue", "run", "merge", "mergeAdmin", "a
 
 type Path = typeof Path.Type;
 
-/** What the pull request is: a full body, a branch of the bot's, open, into main, and every commit vouched for, unless a defect says otherwise. */
+/** What the pull request is: a full body, a branch of the bot's, open, into main, and every commit signed, unless a defect says otherwise. */
 const memory = (defects: ReadonlyArray<Defect>) => {
   const has = (defect: Defect) => defects.includes(defect);
 
