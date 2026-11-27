@@ -208,7 +208,7 @@ here is a lint rule: no rule that "every subcommand is wrapped" exists, and `L13
 | L3 [secrets] The child output a `Refused` carries never reaches the file; only `check` and `reason` do. (100 runs) | test | fc.string: arbitrary text with a marker, as `output` (p) | Write `output` into `reason` or a new field, (p) red. |
 | L4 A record that cannot be written changes neither the command's result nor what it prints nor its exit; one line goes to stderr. (100 runs) | test | fc.constantFrom: a failing step (h) (i) (j) | Let the append error out, so a failing start line (h) red. The same for the ending line, (i) red. The same for a folder that cannot be made, (j) red. |
 | L5 While the command lives, one heartbeat line per period; none after its end; an interrupt stops the heartbeat too. (100 runs, TestClock) | test | fc.integer: the period in minutes, 1 to 60, and the run's length (s) | Leave the heartbeat running after the end, so a line follows it, (f) red. Read the period as seconds, (s) red. |
-| L6 A `LAND_LOG_MINUTES` that is not a whole number of at least 1 refuses the command at start, naming the variable. (100 runs) | test | fc.constantFrom: invalid values such as 0, -3, 2.5, "abc", "" (s) | Accept 0, so the heartbeat spins, (s) red. |
+| L6 A `LAND_LOG_MINUTES` that is not a whole number of at least 1 refuses the command at start, naming the variable. An empty value counts as unset (the environment provider reads it so, as for `GC_MINUTES`) and takes the default. (100 runs) | test | fc.constantFrom: invalid values such as 0, -3, 2.5, "abc" (s) | Accept 0, so the heartbeat spins, (s) red. |
 | L7 The file layer: one line per event, each ending in a newline; a record whose last line is torn takes the next line on a line of its own; a read skips a torn or blank line and counts it, and never fails. (100 runs) | test | fc.string: an encoded line cut at a random point, and blank lines between others (k) (l) | Append onto the torn line, (k) red. Fail the read on a bad line, as `ClosesFs.all` does, (l) red. Count a blank line as torn, (l) red. |
 | L8 The reader pairs an ending with its start by `attempt`, not by position: two attempts interleaved in one file give each its own standing. (100 runs) | test | fc.shuffledSubarray: the lines of two attempts, each kept in its own order (m) | Take the file's last line as every attempt's last, (m) red. |
 | L9 An open attempt is `alive` when its pid exists and `gone` when it does not; an ended attempt is `ended` and its pid is never probed. (100 runs) | test | fc.boolean: whether the probe finds the pid (n) | Call every open attempt gone, (n) red. Probe the pid of an ended attempt, (n) red. |
@@ -275,7 +275,7 @@ Each new file and new function, with what was searched.
 ## Is this a setting?
 
 - **Heartbeat period: yes.** `LAND_LOG_MINUTES`, whole minutes, at least 1, default 5, read from the environment as `gcloop.ts`
-  reads `GC_MINUTES` (Config, so `env.sh`'s way of setting a value from outside works). A wrong value refuses at start.
+  reads `GC_MINUTES` (Config, so `env.sh`'s way of setting a value from outside works). A wrong value refuses at start; an empty one counts as unset.
 - **How many attempts `last` prints: yes.** `--attempts <n>`, default 3.
 - **The folder: no.** `runs/land` in the main checkout, because `runs/` is where a live run's local state goes by rule
   (`AGENTS.md`). It is found the way every `land.ts` command finds its paths: `env.sh`'s `MAIN`.
