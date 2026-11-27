@@ -1,4 +1,4 @@
-Approved by the lead agent, builds ticket 2344; body 27e2d16eee59
+Approved by the lead agent, builds ticket 2344; body a65c2ef63946
 Plancheck-Version: 3
 
 # Plan: every `land.ts` command leaves a start and an end line, so a dead one is visible (ticket 2344)
