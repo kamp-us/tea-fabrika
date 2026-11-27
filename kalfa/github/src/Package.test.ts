@@ -108,8 +108,14 @@ const files = (): ReadonlyArray<string> =>
 // What the package must not name, so it holds nothing specific to the repo it sits in.
 const WORDS = [part("fab", "rika"), part("kam", "pus"), part("kamp", "-us"), part(".kal", "fa/")];
 
-// P2. Plant: write the repo's own name into the README, and that file is named in the failure.
-it("P2 scenario: no file of the package names this repo or its records, in any letter case", () => {
+// A lint directive names the rule it switches off, and the plugin that holds our rules is named after the repo. That one name, in the line
+// `// oxlint-disable-next-line <plugin>/<rule> -- <why>` (ticket 2018 switches `GitHubError`'s rule off so), is no mention of the repo as a
+// subject: the `<why>` after it and every other line are still read.
+const DIRECTIVE = new RegExp(String.raw`^(\s*// oxlint-disable-next-line )${part("fab", "rika")}/([\w-]+ -- )`, "gm");
+
+// P2. Plant: write the repo's own name into the README, and that file is named in the failure; write it in the `<why>` of a directive, or in a
+// comment that is no directive; drop the directive's exemption, and the one directive in `src/GitHub.ts` is named.
+it("P2 scenario: no file of the package names this repo or its records, in any letter case, bar the plugin's name in the lint directive that names a rule", () => {
   // scenario: the package's own files at head; no generated input says what a file holds.
   const found = files();
 
@@ -117,9 +123,9 @@ it("P2 scenario: no file of the package names this repo or its records, in any l
   expect(found, "and its entry point").toContain(join("src", "GitHub.ts"));
 
   const hits = found.flatMap((file) =>
-    WORDS.filter((word) => read(join(root, file)).toLowerCase().includes(word)).map(
-      (word) => `${relative(root, join(root, file))}: ${word}`,
-    ),
+    WORDS.filter((word) =>
+      read(join(root, file)).replaceAll(DIRECTIVE, "$1<plugin>/$2").toLowerCase().includes(word),
+    ).map((word) => `${relative(root, join(root, file))}: ${word}`),
   );
 
   expect(hits).toEqual([]);
