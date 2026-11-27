@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0093, 0066; body e73aa652f761
+Approved by the lead agent, builds 0093, 0066, amended; body d118ebb87a93
 Plancheck-Version: 3
 
 # Plan: a review verdict is a record on the reviewed head, and the merge gate reads it (ticket 2338)
