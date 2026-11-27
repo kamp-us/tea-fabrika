@@ -9,6 +9,8 @@
 //
 //   next-ledger.json, agents-ledger.json   file, rule and code (oxlint-plugins/ledger.ts), counted
 //   unreachable-ledger.json                scope, kind and id (code-graph's findingKey)
+//   .agents/tsconfig.json                  each `exclude` path: the lead files `pnpm typecheck` does not check yet (ticket 2358).
+//                                          A base with no `exclude` holds no list yet, so the change that writes the first one sets its start.
 //
 // It prints one JSON line per list, and a GitHub annotation for each list that grew. Exit 1 when a
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
@@ -46,6 +48,20 @@ const DeadRows = Schema.fromJsonString(
   }),
 );
 
+// A tsconfig is JSON with `//` comments. The lead's `exclude` list keeps one on the line above each path, so the reader
+// drops whole-line comments and reads the rest as JSON. A comment after a value does not parse, and a file that does
+// not parse is `not_a_list`: it fails closed.
+const TsconfigExclude = Schema.fromJsonString(
+  Schema.Struct({ exclude: Schema.optionalKey(Schema.Array(Schema.String)) }),
+);
+
+const withoutComments = (text: string) =>
+  pipe(
+    Str.split(text, "\n"),
+    Arr.filter((line) => !pipe(line, Str.trim, Str.startsWith("//"))),
+    Arr.join("\n"),
+  );
+
 /** Each renamed file's new path, by its old one: `git diff -M`'s renames from the base to the head. */
 type Renames = ReadonlyMap<string, string>;
 
@@ -62,10 +78,40 @@ const deadKeys = (text: string, _renames?: Renames) =>
     Effect.map(({ entries }) => Arr.map(entries, (row) => JSON.stringify([row.scope, row.kind, row.id]))),
   );
 
+/** A tsconfig's `exclude` as written: absent when the file has none. */
+const readExclude = (text: string) =>
+  Schema.decodeEffect(TsconfigExclude)(withoutComments(text)).pipe(Effect.map(({ exclude }) => exclude));
+
+/**
+ * The keys of a tsconfig's `exclude`: each path from the top of the repo, so a rename git saw keeps its row. `folder`
+ * is the tsconfig's own folder, which the paths in it are written from.
+ */
+const excludeKeys =
+  (folder: string) =>
+  (text: string, renames: Renames = new Map()) =>
+    readExclude(text).pipe(
+      Effect.map((exclude = []) =>
+        Arr.map(exclude, (file) => {
+          const path = `${folder}/${file}`;
+
+          return JSON.stringify([renames.get(path) ?? path]);
+        }),
+      ),
+    );
+
+/** A tsconfig that has no `exclude` yet holds no list, so the change that writes the first one sets its start. */
+const noExclude = (text: string) =>
+  readExclude(text).pipe(
+    Effect.map((exclude) => exclude === undefined),
+    Effect.orElseSucceed(() => false),
+  );
+
 /** One list file, and the key its own reader matches a row on. */
 interface List {
   readonly file: string;
   readonly keys: typeof lintKeys;
+  /** Whether a base's text holds no list yet. Such a base counts nothing as added: the head's rows are the start. */
+  readonly unstarted?: (text: string) => Effect.Effect<boolean>;
 }
 
 /** Each list file the ratchet holds, by its path from the top of the repo. */
@@ -73,6 +119,7 @@ export const LISTS: ReadonlyArray<List> = [
   { file: "next-ledger.json", keys: lintKeys },
   { file: "agents-ledger.json", keys: lintKeys },
   { file: "unreachable-ledger.json", keys: deadKeys },
+  { file: ".agents/tsconfig.json", keys: excludeKeys(".agents"), unstarted: noExclude },
 ];
 
 /** The keys `head` holds beyond `base`, counted, in head order: one more copy of a key is added. */
@@ -120,16 +167,20 @@ export const judge = Effect.fnUntraced(function* (
     return Answer.cases.done.make({ file: list.file });
   }
 
-  const before =
-    base === null
-      ? []
-      : yield* list.keys(base, renames).pipe(Effect.mapError(() => BaseUnreadable.make({ file: list.file })));
-
   const after = yield* list.keys(head).pipe(Effect.option);
 
   if (Option.isNone(after)) {
     return Answer.cases.stuck.make({ file: list.file, reason: "not_a_list", rows: [] });
   }
+
+  if (base !== null && list.unstarted !== undefined && (yield* list.unstarted(base))) {
+    return Answer.cases.done.make({ file: list.file });
+  }
+
+  const before =
+    base === null
+      ? []
+      : yield* list.keys(base, renames).pipe(Effect.mapError(() => BaseUnreadable.make({ file: list.file })));
 
   const rows = added(before, after.value);
 

@@ -4,7 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Array as Arr, Effect, Exit } from "effect";
 import * as fc from "fast-check";
-import { ROWS, text } from "./ratchet.test-support.ts";
+import { excludeKey, ROWS, text, tsconfigText } from "./ratchet.test-support.ts";
 
 import { added, judge, LISTS } from "./ratchet.ts";
 
@@ -13,8 +13,13 @@ const lintKey = (r: { file: string; rule: string; code: string }) => JSON.string
 
 const runs = { seed: 119120, numRuns: 100 };
 
-// SAFETY: LISTS names the three lists in this order: next, agents and dead.
-const [NEXT, AGENTS, DEAD] = LISTS as [(typeof LISTS)[0], (typeof LISTS)[0], (typeof LISTS)[0]];
+// SAFETY: LISTS names the four lists in this order: next, agents, dead and the lead's tsconfig.
+const [NEXT, AGENTS, DEAD, TSCONFIG] = LISTS as [
+  (typeof LISTS)[0],
+  (typeof LISTS)[0],
+  (typeof LISTS)[0],
+  (typeof LISTS)[0],
+];
 
 const answer = (list: (typeof LISTS)[0], base: string | null, head: string | null) =>
   Effect.runSync(judge(list, base, head));
@@ -120,8 +125,9 @@ describe("row identity follows each reader (L2)", () => {
 
 describe("a file that comes, goes or does not read (L3)", () => {
   it("L3 scenario: per list, a new file is all added, a deleted file is done, an unreadable head is not a list", () => {
-    for (const list of LISTS) {
-      // SAFETY: ROWS in ratchet.test-support.ts is written with one key for each `file` that LISTS in ratchet.ts names.
+    // The three ledgers: the tsconfig is no `entries` file, and L6 holds it.
+    for (const list of [NEXT, AGENTS, DEAD]) {
+      // SAFETY: ROWS in ratchet.test-support.ts is written with one key for each ledger `file` that LISTS in ratchet.ts names.
       const rows = ROWS[list.file as keyof typeof ROWS];
       const keys = Arr.map(rows, (r) => ("scope" in r ? deadKey(r) : lintKey(r)));
       expect(answer(list, null, text(rows))).toEqual({
@@ -188,5 +194,109 @@ describe("a renamed file keeps its rows (L5)", () => {
       ),
       runs,
     );
+  });
+});
+
+// Ticket 2358: `.agents/tsconfig.json` checks every lead file by glob and keeps the files that do not pass yet in `exclude`.
+// That list is a list file like the ledgers, so it only shrinks. Its text is JSON with `//` comment lines, and a path in
+// it is read from `.agents/`. Plants, each run once on ratchet.ts and restored: renames not read (red: the rename law);
+// comments not dropped (red: all three laws); the `.agents/` folder left off a path (red: all three laws); a base with
+// no `exclude` not read as the start (red: the scenario law).
+describe("the lead's tsconfig exclude list only shrinks (L6)", () => {
+  const path = fc.stringMatching(/^[a-z]{1,6}(\/[a-z]{1,6}){0,2}\.ts$/);
+
+  it("L6: a path added to exclude is added; fewer paths, a new order and a new comment are not", () => {
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(path, { minLength: 1, maxLength: 6 }).chain((paths) =>
+          fc.record({
+            paths: fc.constant(paths),
+            order: fc.shuffledSubarray(paths, { minLength: paths.length }),
+            fewer: fc.subarray(paths),
+            extra: path.filter((p) => !paths.includes(p)),
+            note: fc.constantFrom("fixed soon", "a, b", "x"),
+          }),
+        ),
+        ({ paths, order, fewer, extra, note }) => {
+          const base = tsconfigText(paths);
+          expect(answer(TSCONFIG, base, tsconfigText(order, note))).toEqual({ _tag: "done", file: TSCONFIG.file });
+          expect(answer(TSCONFIG, base, tsconfigText(fewer))).toEqual({ _tag: "done", file: TSCONFIG.file });
+          expect(answer(TSCONFIG, base, tsconfigText([...paths, extra]))).toEqual({
+            _tag: "stuck",
+            file: TSCONFIG.file,
+            reason: "row_added",
+            rows: [excludeKey(extra)],
+          });
+        },
+      ),
+      runs,
+    );
+  });
+
+  it("L6: a path whose file git renamed is the same row; a further path still is added", () => {
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(path, { minLength: 1, maxLength: 6 }).chain((paths) =>
+          fc.record({
+            paths: fc.constant(paths),
+            renamed: fc.subarray(paths),
+            extra: path.filter((p) => !paths.includes(p)),
+          }),
+        ),
+        ({ paths, renamed, extra }) => {
+          const renames = new Map(Arr.map(renamed, (file) => [`.agents/${file}`, `.agents/moved/${file}`]));
+          const head = Arr.map(paths, (file) => (renamed.includes(file) ? `moved/${file}` : file));
+          expect(Effect.runSync(judge(TSCONFIG, tsconfigText(paths), tsconfigText(head), renames))).toEqual({
+            _tag: "done",
+            file: TSCONFIG.file,
+          });
+          // Without the renames each moved path is a row added: the map is what admits them.
+          const unmapped = Effect.runSync(judge(TSCONFIG, tsconfigText(paths), tsconfigText(head)));
+          expect(unmapped._tag === "stuck" ? unmapped.rows.length : 0).toBe(renamed.length);
+          expect(Effect.runSync(judge(TSCONFIG, tsconfigText(paths), tsconfigText([...head, extra]), renames))).toEqual(
+            { _tag: "stuck", file: TSCONFIG.file, reason: "row_added", rows: [excludeKey(extra)] },
+          );
+        },
+      ),
+      runs,
+    );
+  });
+
+  it("L6 scenario: no exclude key is an empty list, and a base with none starts the list; a file that is not JSON, or has a comment after a value, is not a list", () => {
+    const base = tsconfigText(["a.ts"]);
+    expect(answer(TSCONFIG, base, '{ "include": [] }')).toEqual({ _tag: "done", file: TSCONFIG.file });
+    // The change that writes the first list sets its start; a head that does not read is still refused, and so is a growing list after.
+    expect(answer(TSCONFIG, '{ "include": [] }', base)).toEqual({ _tag: "done", file: TSCONFIG.file });
+    expect(answer(TSCONFIG, '{ "include": [] }', "{ not json")).toEqual({
+      _tag: "stuck",
+      file: TSCONFIG.file,
+      reason: "not_a_list",
+      rows: [],
+    });
+    expect(answer(TSCONFIG, '{ "include": [], "exclude": [] }', base)).toEqual({
+      _tag: "stuck",
+      file: TSCONFIG.file,
+      reason: "row_added",
+      rows: [excludeKey("a.ts")],
+    });
+    expect(answer(TSCONFIG, base, null)).toEqual({ _tag: "done", file: TSCONFIG.file });
+    expect(answer(TSCONFIG, null, tsconfigText(["a.ts"]))).toEqual({
+      _tag: "stuck",
+      file: TSCONFIG.file,
+      reason: "row_added",
+      rows: [excludeKey("a.ts")],
+    });
+
+    for (const head of ["{ not json", '{ "exclude": [ "a.ts" ] } // after a value', '{ "exclude": [1] }']) {
+      expect(answer(TSCONFIG, base, head)).toEqual({
+        _tag: "stuck",
+        file: TSCONFIG.file,
+        reason: "not_a_list",
+        rows: [],
+      });
+    }
+
+    // The base's own file does not read: main is broken, so the check fails closed.
+    expect(Exit.isFailure(Effect.runSyncExit(judge(TSCONFIG, "{ not json", base)))).toBe(true);
   });
 });

@@ -1,8 +1,14 @@
 {
-  // The quest scripts (0031, ticket 486): `scripts/typecheck.ts` checks them after the packages, so
-  // a change to the Agent interface or to tea fails `pnpm typecheck` here first. `.agents/` is no
-  // workspace package: its imports resolve from the root's own dependencies. The other skill
-  // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
+  // Lead tooling (the quest, plan, mutation and sev scripts, and every other skill script): `scripts/typecheck.ts`
+  // checks it after the packages, so a change to the Agent interface or to tea fails `pnpm typecheck` here first.
+  // `.agents/` is no workspace package: its imports resolve from the root's own dependencies.
+  //
+  // Every `.ts` file under `skills/` is checked the day it is added: `include` is a glob, so a new file needs no
+  // line here. The files that do not pass yet are in `exclude`, and that list only shrinks:
+  // `next/apps/fabrika/src/exam/ratchet.ts` fails CI on a line added to it (ticket 2358). When you fix a file, delete
+  // its line. To pass a new file, fix the file; do not add it to the list.
+  // The ratchet reads this file after stripping whole-line `//` comments and nothing else, so keep every comment on
+  // its own line, never after a value.
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "plugins": [
@@ -39,56 +45,99 @@
       }
     ]
   },
-  "include": [
-    "raw.d.ts",
-    "skills/lead/scripts/agents.ts",
-    "skills/lead/scripts/botdraft.test.ts",
-    "skills/lead/scripts/pr/BotDraft.ts",
-    "skills/lead/scripts/pr/PullRequestsGh.test.ts",
-    "skills/lead/scripts/ci/preflight.ts",
-    "skills/lead/scripts/ci/RunsGh.test.ts",
-    "skills/lead/scripts/pr/Arm.test.ts",
-    "skills/lead/scripts/pr/LandLog.ts",
-    "skills/lead/scripts/pr/LandLogFs.ts",
-    "skills/lead/scripts/pr/LandLogFs.test.ts",
-    "skills/lead/scripts/pr/LandLogTest.ts",
-    "skills/lead/scripts/pr/Recorded.ts",
-    "skills/lead/scripts/pr/Recorded.test.ts",
-    "skills/lead/scripts/pr/Recorded.integration.test.ts",
-    "skills/lead/scripts/pr/Recorded.fixture.ts",
-    "skills/lead/scripts/box.ts",
-    "skills/lead/scripts/box.rm.test.ts",
-    "skills/lead/scripts/box/*.ts",
-    "skills/lead/scripts/chain.ts",
-    "skills/lead/scripts/chain.test.ts",
-    "skills/lead/scripts/clauderow.ts",
-    "skills/lead/scripts/clauderow.test.ts",
-    "skills/lead/scripts/drive.ts",
-    "skills/lead/scripts/drive.test.ts",
-    "skills/lead/scripts/fieldrow.ts",
-    "skills/lead/scripts/fieldrow.test.ts",
-    "skills/lead/scripts/gc.ts",
-    "skills/lead/scripts/gc.test.ts",
-    "skills/lead/scripts/git/*.ts",
-    "skills/lead/scripts/keepruns.test.ts",
-    "skills/lead/scripts/quests.ts",
-    "skills/lead/scripts/quests.test.ts",
-    "skills/lead/scripts/mutbox.ts",
-    "skills/lead/scripts/mutbox.test.ts",
-    "skills/lead/scripts/flow/*.ts",
-    "skills/lead/scripts/flow/flows/*.ts",
-    "skills/mutation/scripts/heartbeat.ts",
-    "skills/mutation/scripts/heartbeat.test.ts",
-    "skills/mutation/scripts/range.ts",
-    "skills/mutation/scripts/range.test.ts",
-    "skills/mutation/scripts/limit.ts",
-    "skills/mutation/scripts/limit.test.ts",
-    "skills/lead/scripts/sizecap.ts",
-    "skills/lead/scripts/sizecap.test.ts",
-    "skills/mutation/scripts/scope.ts",
-    "skills/mutation/scripts/scope.test.ts",
-    "skills/mutation/scripts/survivors.ts",
-    "skills/mutation/scripts/survivors.test.ts",
-    "skills/sev/scripts/*.ts"
+  "include": ["raw.d.ts", "skills/**/*.ts"],
+  "exclude": [
+    // Fails on its own: the checks it breaks, with counts. Fix the file, then delete its line.
+    // TS2379
+    "skills/lead/scripts/botpush.test.ts",
+    // catchToOrElseSucceed x4
+    "skills/lead/scripts/boxfiles.ts",
+    // schemaClassMissingBrand
+    "skills/lead/scripts/ci/History.ts",
+    // schemaNumber x5, preferTypedSchemaDecoder x5, newSchemaClass x3, unnecessaryArrowBlock, TS7022
+    "skills/lead/scripts/ci/HistoryGh.ts",
+    // schemaNumber x2
+    "skills/lead/scripts/ci/HistoryTest.ts",
+    // schemaNumber x5, TS2550, TS7006
+    "skills/lead/scripts/ci/Speed.ts",
+    // newSchemaClass
+    "skills/lead/scripts/ci/typecheck.test.ts",
+    // allOfMapToForEach
+    "skills/lead/scripts/gcloop.test.ts",
+    // preferTypedSchemaDecoder
+    "skills/lead/scripts/land.test.ts",
+    // newSchemaClass x33, schemaClassMissingBrand x2, instanceOfSchema x2, catchToOrElseSucceed, preferTypedSchemaDecoder
+    "skills/lead/scripts/land.ts",
+    // TS2345 x2, TS2769
+    "skills/lead/scripts/leakgrep.patches.test.ts",
+    // newSchemaClass x7, preferTypedSchemaDecoder x3, schemaClassMissingBrand x2, schemaNumber, multipleCatchTag, catchToOrElseSucceed, TS2345
+    "skills/lead/scripts/movecheck.ts",
+    // preferTypedSchemaDecoder
+    "skills/lead/scripts/pr/ClosesFs.test.ts",
+    // newSchemaClass
+    "skills/lead/scripts/pr/ClosesTest.ts",
+    // newSchemaClass, TS2741
+    "skills/lead/scripts/pr/Merge.test.ts",
+    // schemaNumber x3, schemaClassMissingBrand, unnecessaryFailYieldableError, newSchemaClass
+    "skills/lead/scripts/pr/Merge.ts",
+    // newSchemaClass x3
+    "skills/lead/scripts/pr/Publish.test.ts",
+    // TS2322 x8, TS2339 x8, newSchemaClass x2, TS7006 x2, TS7053, TS2488
+    "skills/lead/scripts/pr/Queue.test.ts",
+    // newSchemaClass x2
+    "skills/lead/scripts/pr/SweepsProcess.ts",
+    // newSchemaClass
+    "skills/lead/scripts/pr/SweepsTest.ts",
+    // TS2345
+    "skills/lead/scripts/pr/Unlisted.test.ts",
+    // preferTypedSchemaDecoder x5, TS2375, missingEffectContext, instanceOfSchema
+    "skills/lead/scripts/replay.ts",
+    // TS7006 x3, TS2307 x2
+    "skills/mutation/scripts/depth.arbitrary.ts",
+    // TS2322
+    "skills/mutation/scripts/depth.ts",
+    // TS2345
+    "skills/mutation/scripts/gatecache.test.ts",
+    // schemaNumber
+    "skills/mutation/scripts/outside.setup.test.ts",
+    // TS2460
+    "skills/mutation/scripts/outside.setup.ts",
+    // TS7053
+    "skills/mutation/scripts/outside.test.ts",
+    // preferTypedSchemaDecoder x2
+    "skills/mutation/scripts/recheck.ts",
+    // TS2379 x3, TS2353
+    "skills/mutation/scripts/run.test.ts",
+    // TS2345 x4, TS18046 x2, TS2322 x2, TS2769, TS2532
+    "skills/mutation/scripts/sample.test.ts",
+    // preferTypedSchemaDecoder x3
+    "skills/mutation/scripts/sample.ts",
+    // TS2741
+    "skills/mutation/scripts/survivors.scope.test.ts",
+    // TS2769 x6
+    "skills/plan/scripts/plancheck.draft.test.ts",
+    // TS2769 x2
+    "skills/plan/scripts/plancheck.test.ts",
+    //
+    // Clean itself, but imports a file above, and tsc reports an imported file's errors in whichever file imports it.
+    // Delete its line once the file it names is fixed.
+    // imports boxfiles.ts
+    "skills/lead/scripts/boxfiles.test.ts",
+    // imports HistoryGh.ts, HistoryTest.ts, Speed.ts
+    "skills/lead/scripts/ci-speed.test.ts",
+    // imports History.ts, HistoryGh.ts, Speed.ts
+    "skills/lead/scripts/ci-speed.ts",
+    // imports movecheck.ts
+    "skills/lead/scripts/movecheck.test.ts",
+    // imports Merge.ts
+    "skills/lead/scripts/pr/Gate.test.ts",
+    // imports replay.ts
+    "skills/lead/scripts/replay.test.ts",
+    // imports depth.ts, vitest.config.ts
+    "skills/mutation/scripts/depth.config.ts",
+    // imports depth.ts
+    "skills/mutation/scripts/depth.test.ts",
+    // imports recheck.ts
+    "skills/mutation/scripts/recheck.test.ts"
   ]
 }

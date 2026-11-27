@@ -2,13 +2,13 @@
 // repository. It drives git and a temp folder, so it runs on the schedule (a test that needs a real resource runs only in main's full run); the core's laws
 // on generated rows are in ratchet.test.ts.
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Formatter, Schema } from "effect";
 
-import { ROWS, text } from "./ratchet.test-support.ts";
+import { excludeKey, ROWS, text, tsconfigText } from "./ratchet.test-support.ts";
 
 import { LISTS } from "./ratchet.ts";
 
@@ -82,6 +82,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
         { _tag: "stuck", file: "next-ledger.json", reason: "row_added", rows: [lintKey(extra)] },
         { _tag: "done", file: "agents-ledger.json" },
         { _tag: "done", file: "unreachable-ledger.json" },
+        { _tag: "done", file: ".agents/tsconfig.json" },
       ]);
       expect(out.stdout).toContain("::error file=next-ledger.json::");
     }),
@@ -155,6 +156,47 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       expect(out.stdout).toContain(
         pipe(Formatter.formatJson(lintKey({ ...extra, file: "a.integration.ts" })), Str.slice(1, -1)),
       );
+    }),
+  );
+
+  // L6 as CI meets it: the lead's tsconfig, with its comment lines, read from the committed HEAD.
+  it.effect(
+    "L6 scenario: a head that adds a path to the lead's tsconfig exclude exits 1; one that drops a path exits 0",
+    () =>
+      Effect.gen(function* () {
+        const { repo, commit, ratchet } = yield* scenario;
+        const tsconfig = join(repo, ".agents", "tsconfig.json");
+        mkdirSync(join(repo, ".agents"));
+        writeFileSync(tsconfig, tsconfigText(["skills/a.ts", "skills/b.ts"]));
+        const start = commit("two paths excluded");
+        writeFileSync(tsconfig, tsconfigText(["skills/a.ts"]));
+        commit("one fixed");
+        expect(ratchet(start).status).toBe(0);
+        writeFileSync(tsconfig, tsconfigText(["skills/a.ts", "skills/c.ts"]));
+        commit("a new file excluded");
+        const out = ratchet(start);
+        expect(out.status).toBe(1);
+        expect(jsonLines(out.stdout)).toContainEqual({
+          _tag: "stuck",
+          file: ".agents/tsconfig.json",
+          reason: "row_added",
+          rows: [excludeKey("skills/c.ts")],
+        });
+        expect(out.stdout).toContain("::error file=.agents/tsconfig.json::");
+      }),
+  );
+
+  it.effect("L6 scenario: a head that renames an excluded file and its path exits 0", () =>
+    Effect.gen(function* () {
+      const { repo, git, commit, ratchet } = yield* scenario;
+      mkdirSync(join(repo, ".agents", "skills"), { recursive: true });
+      writeFileSync(join(repo, ".agents", "skills", "a.ts"), "export const a = 1;\n");
+      writeFileSync(join(repo, ".agents", "tsconfig.json"), tsconfigText(["skills/a.ts"]));
+      const start = commit("a file excluded");
+      git("mv", ".agents/skills/a.ts", ".agents/skills/b.ts");
+      writeFileSync(join(repo, ".agents", "tsconfig.json"), tsconfigText(["skills/b.ts"]));
+      commit("renamed");
+      expect(ratchet(start).status).toBe(0);
     }),
   );
 });
