@@ -73,7 +73,7 @@
       "pure": false
     },
     "kalfa-ledger": {
-      "imports": [],
+      "imports": ["kalfa-diagnostics"],
       "pure": false
     },
     "kalfa-permissions": {

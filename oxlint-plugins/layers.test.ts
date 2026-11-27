@@ -717,7 +717,7 @@ describe("the real rule file on planted trees", () => {
       "kalfa-github": 2, // T1945's approved plan: the live Layer reads its settings through kalfa-config (1), so github ranks one above it
       "kalfa-cli": 2, // T2076's approved plan: it imports kalfa-diagnostics (0) only today, and kalfa-config (1) joins in ticket 2081, so it ranks above both
       "kalfa-secrets": 2, // T2053's approved plan: its settings read through kalfa-config (1), so secrets ranks one above it, beside github
-      "kalfa-ledger": 0, // T2082's approved plan: the Ledger imports no kalfa package, so it ranks lowest, beside source control and Markdown
+      "kalfa-ledger": 1, // T2082's approved plan (the lead's call at signing of the hidden-cause plan): the Ledger imports kalfa-diagnostics (0) for `Hidden.Cause`, so it ranks one above it
       "kalfa-permissions": 0, // T2092's approved plan, slice 1: it imports no other package, so it ranks with the lowest (slice 2 makes it 1, above the Ledger's error classes)
       "kalfa-transport": 0, // T2066's approved plan: transport imports no package of ours, so it ranks with the lowest
     });
@@ -964,7 +964,11 @@ describe("the patched code-graph", () => {
 // `lint:boundaries` only: `lint:layers` cannot see an import of it (ticket 1261, from the Markdown frontmatter
 // retro). The two rule files must move in step. Plant: delete the `kalfa-diagnostics` row from `layer-rules.json`,
 // and the law fails.
-const Boundaries = Schema.Struct({ libraries: Schema.Record(Schema.String, Schema.String) });
+const Boundaries = Schema.Struct({
+  libraryTypes: Schema.Record(Schema.String, Schema.Struct({ imports: Schema.Array(Schema.String) })),
+  libraries: Schema.Record(Schema.String, Schema.String),
+  libraryRoots: Schema.Array(Schema.String),
+});
 
 const BOUNDARIES = Schema.decodeUnknownSync(Boundaries)(
   JSON.parse(readFileSync(resolve(NEXT, "../boundary-rules.json"), "utf8")),
@@ -997,5 +1001,35 @@ describe("the layer rows and the boundary rows move in step", () => {
     const rows: Rules["layers"] = [{ name: "kalfa-a", layer: 1, paths: ["kalfa/a/src"], imports: [] }];
     expect(withoutLayerRow(libraries, rows)).toEqual(["kalfa/b"]);
     expect(withoutLayerRow(libraries, [])).toEqual(["kalfa/a", "kalfa/b"]);
+  });
+});
+
+// L3's boundary half, T2082 (the Ledger imports `kalfa-diagnostics` and ranks above it). The pin above reads `layer-rules.json` alone, so a package that is on the
+// right layer and missing from `boundary-rules.json` passes it, and `lint:boundaries` then never checks the package's imports. This reads both files: the Ledger's row in
+// each names `kalfa-diagnostics` and nothing else, its folder is a root in both, and the layer row ranks it above the row it imports.
+// Plant: delete the `kalfa-ledger` row from `libraryTypes` and its line from `libraries` in `boundary-rules.json`; drop `kalfa-diagnostics` from the row's imports in
+// `boundary-rules.json` alone; drop it from `layer-rules.json` alone; remove `kalfa/ledger/src` from the layer file's roots; point the folder at another name.
+describe("the Ledger's rows in the two rule files", () => {
+  it("pinned: both files give kalfa-ledger the one import kalfa-diagnostics, the folder as a root, and a layer above it", () => {
+    const layer = REAL.layers.find((row) => row.name === "kalfa-ledger");
+    const diagnostics = REAL.layers.find((row) => row.name === "kalfa-diagnostics");
+
+    expect(layer?.paths, "the layer file's row covers the package's source").toEqual(["kalfa/ledger/src"]);
+    expect(layer?.imports, "the layer file's row imports kalfa-diagnostics and nothing else").toEqual([
+      "kalfa-diagnostics",
+    ]);
+    expect(REAL.roots, "the source folder is a root of the layer file").toContain("kalfa/ledger/src");
+    expect(layer?.layer ?? 0, "the Ledger ranks above the package it imports").toBeGreaterThan(
+      diagnostics?.layer ?? Infinity,
+    );
+
+    expect(BOUNDARIES.libraries["kalfa/ledger"], "the boundary file names the folder kalfa-ledger").toBe(
+      "kalfa-ledger",
+    );
+    expect(
+      BOUNDARIES.libraryTypes["kalfa-ledger"]?.imports,
+      "the boundary file's row imports kalfa-diagnostics and nothing else",
+    ).toEqual(["kalfa-diagnostics"]);
+    expect(BOUNDARIES.libraryRoots, "the folder's parent is a root of the boundary file").toContain("kalfa");
   });
 });

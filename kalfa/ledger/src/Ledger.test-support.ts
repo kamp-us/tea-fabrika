@@ -332,23 +332,30 @@ export const counts = (texture: NumberTexture): ReadonlyArray<Count> => [
 
 // ---- child on what no type lets in: a name or a parent that breaks its own type
 
-/** What the misfit law draws once: a short name and parent, a parent of 255 characters, a character no id holds, and a place to put it. */
+/** The characters a name refuses and an id takes: a dot and a colon, each with the name a failure gives it. */
+const NAME_ONLY_BAD_CHARS: ReadonlyArray<readonly [string, string]> = [
+  ["a dot", "."],
+  ["a colon", ":"],
+];
+
+/** What the misfit law draws once: a short name and parent, a parent of 255 characters, a character no id holds and one no name holds, and a place to put it. */
 export const misfitTexture = Arbitrary.all({
   name: textBetween(NAME_CHARS, 1, 20),
   parent: textBetween(ID_CHARS, 1, 40),
   long: text(ID_CHARS, ID_LIMIT),
   bad: pick(BAD_CHARS.map(([, char]) => char)),
+  badName: pick([...BAD_CHARS, ...NAME_ONLY_BAD_CHARS].map(([, char]) => char)),
+  dotted: pick(NAME_ONLY_BAD_CHARS.map(([, char]) => char)),
   place: between(0, 100),
 });
 
 type MisfitTexture = Drawn<typeof misfitTexture>;
 
-/** A name and a parent as plain text, as an untyped caller can send them, and whether `child` must refuse them. */
+/** A name and a parent as plain text, as an untyped caller can send them. `child` must refuse each: none is an `EntryName` and an `EntryId`. */
 interface Misfit {
   readonly id: string;
   readonly name: string;
   readonly parent: string;
-  readonly mustRefuse: boolean;
 }
 
 /** The misfit classes, in the order `misfits` gives them. */
@@ -358,6 +365,10 @@ export const MISFIT_CLASSES = [
   "a bad character in a parent, joined short",
   "a bad character in a parent, joined long",
   "a bad character in both, joined short",
+  "a dot or a colon in a name, joined short",
+  "a dot or a colon in a name, joined long",
+  "a name ending in .h, given the hash another name's hashed id holds",
+  "a dot or a colon at the end of a name, joined short",
 ] as const;
 
 /** The text with `bad` put in at `place`, or at the end when `place` is past it. */
@@ -365,18 +376,28 @@ const withBad = (candidate: string, bad: string, place: number): string =>
   `${candidate.slice(0, place % (candidate.length + 1))}${bad}${candidate.slice(place % (candidate.length + 1))}`;
 
 /**
- * Pairs that break a type, one for each class: a name or a parent with a character no id holds, where the joined text is short enough to stay plain and
- * where it is long enough to be hashed. A parent that is hashed is read as bytes, so a bad character in it still gives a valid id.
+ * Pairs that break a type, one for each class: a name or a parent that is no `EntryName` or no `EntryId`, where the joined text is short enough to stay plain
+ * and where it is long enough to be hashed. A parent is no more read as bytes when it is hashed: a bad character in it is refused as well. A name with a dot or
+ * a colon is a name no `EntryName` takes, though every id takes both: `child("a.b", "p")` would be the id `a.b:p`, and `child("x.h", <the hash of a parent>)` would
+ * be the very id `child("x", <that parent>)` gives, so the one id would come from two pairs.
  */
 export const misfits = (texture: MisfitTexture): ReadonlyArray<Misfit> => {
-  const { name, parent, long, bad, place } = texture;
+  const { name, parent, long, bad, badName, dotted, place } = texture;
+
+  // The id of a valid pair that is hashed, and the 43 characters of its hash: what a name ending in `.h` would join to the same id.
+  const hashed = EntryId.child(entryName(name), entryId(long));
+  const hash = hashed.slice(`${name}.h:`.length);
 
   return [
-    { id: MISFIT_CLASSES[0], name: withBad(name, bad, place), parent, mustRefuse: true },
-    { id: MISFIT_CLASSES[1], name: withBad(name, bad, place), parent: long, mustRefuse: true },
-    { id: MISFIT_CLASSES[2], name, parent: withBad(parent, bad, place), mustRefuse: true },
-    { id: MISFIT_CLASSES[3], name, parent: withBad(long.slice(1), bad, place), mustRefuse: false },
-    { id: MISFIT_CLASSES[4], name: withBad(name, bad, place), parent: withBad(parent, bad, place), mustRefuse: true },
+    { id: MISFIT_CLASSES[0], name: withBad(name, badName, place), parent },
+    { id: MISFIT_CLASSES[1], name: withBad(name, badName, place), parent: long },
+    { id: MISFIT_CLASSES[2], name, parent: withBad(parent, bad, place) },
+    { id: MISFIT_CLASSES[3], name, parent: withBad(long.slice(1), bad, place) },
+    { id: MISFIT_CLASSES[4], name: withBad(name, bad, place), parent: withBad(parent, bad, place) },
+    { id: MISFIT_CLASSES[5], name: `${name}${dotted}${name}`, parent },
+    { id: MISFIT_CLASSES[6], name: `${name}${dotted}${name}`, parent: long },
+    { id: MISFIT_CLASSES[7], name: `${name}.h`, parent: hash },
+    { id: MISFIT_CLASSES[8], name: `${name}${dotted}`, parent },
   ];
 };
 

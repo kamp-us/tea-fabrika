@@ -450,6 +450,12 @@
       "imports": ["kalfa-diagnostics", "next-vitest"]
     },
     {
+      "name": "kalfa-ledger",
+      "layer": 1,
+      "paths": ["kalfa/ledger/src"],
+      "imports": ["kalfa-diagnostics"]
+    },
+    {
       "name": "next-id-test-support",
       "paths": ["next/packages/libfabrika/src/Id.test-support.ts"],
       "imports": ["next-shared"]
@@ -488,12 +494,6 @@
       "name": "kalfa-git",
       "layer": 0,
       "paths": ["kalfa/git/src"],
-      "imports": []
-    },
-    {
-      "name": "kalfa-ledger",
-      "layer": 0,
-      "paths": ["kalfa/ledger/src"],
       "imports": []
     },
     {

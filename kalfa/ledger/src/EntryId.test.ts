@@ -158,11 +158,12 @@ it.effect.prop(
   { arbitrary: { runs: 300, seed: SEED } },
 );
 
-// I3. Plant: delete the check of the plain form in `child` (a bad character in a name or a parent comes back as an id); delete the check of the hashed form (a
-// bad character in a name comes back as an id); check only the name and not the parent; make `child` repair a bad character by dropping it (the result is valid,
-// and the refusing classes are not refused).
+// I3. Plant: delete the check of the name in `child` (a name with a bad character, a dot or a colon comes back as an id: `child("a.b", "p")` is `a.b:p`, and
+// `child("x.h", <the hash in x's hashed id>)` is the very id `child("x", <that parent>)` gives); delete the check of the parent (a bad character in a parent comes back
+// as an id, joined short or hashed); check only the name; check only the parent; make `child` repair a bad character by dropping it (the result is valid, and the
+// classes are not refused); check the name only when the joined text is short, or the parent only when it is.
 it.effect.prop(
-  "I3 child: a name or a parent that breaks its type, sent by a caller that no type holds, is refused and never comes back as an id, and a parent of any bytes that is hashed gives a valid id",
+  "I3 child: a name that is no EntryName or a parent that is no EntryId, sent by a caller that no type holds, is refused, joined short or long, and never comes back as an id",
   { texture: misfitTexture },
   ({ texture }) =>
     Effect.sync(() => {
@@ -173,21 +174,16 @@ it.effect.prop(
         "the generator reaches every misfit class",
       ).toEqual(MISFIT_CLASSES);
 
-      for (const { id, name, parent, mustRefuse } of drawn) {
+      for (const { id, name, parent } of drawn) {
         // An untyped call: the arguments are plain text, which the types do not allow and a JavaScript caller can send.
         const made = Result.try(() =>
           Schema.decodeUnknownSync(Schema.String)(Reflect.apply(EntryId.child, undefined, [name, parent])),
         );
 
-        if (mustRefuse) {
-          expect(Result.isFailure(made), `${id}: refused, not given as an id`).toBe(true);
-        }
-
-        if (Result.isSuccess(made)) {
-          expect(isIdText(made.success), `${id}: what comes back is a valid id: ${JSON.stringify(made.success)}`).toBe(
-            true,
-          );
-        }
+        expect(
+          made,
+          `${id}: refused, not given as an id: ${JSON.stringify(name.slice(0, 40))} and ${JSON.stringify(parent.slice(0, 40))}`,
+        ).toSatisfy(Result.isFailure);
       }
     }),
   { arbitrary: { runs: 300, seed: SEED } },

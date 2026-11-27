@@ -1,5 +1,6 @@
 // P1 and E1: what the package's own files say. P1 reads the manifest at head, E1 the root entry point. They run in memory on every pull request.
-// The package stands alone: it names no other package of this repository and no `@demlik/` package, and its one dependency is held at an exact version.
+// The package stands alone: it names one other package of this repository, the diagnostics package that holds the hidden cause, as a workspace dependency, and no
+// `@demlik/` package; its other dependency, the hash, is held at an exact version.
 // The words P1 looks for are written in pieces, so this file does not hold them whole.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -35,18 +36,26 @@ const part = (...pieces: ReadonlyArray<string>): string => pieces.join("");
 /** A version that names one release and no range: three numbers with dots, nothing before them and nothing after. */
 const EXACT = /^\d+\.\d+\.\d+$/u;
 
-// P1. Plant: add `@kalfa/config` to the dependencies; make `fast-sha256` a range (`^1.3.0`); make the package public; add a second peer; mark `effect` an
-// optional peer; point `.` at another file; name a `@demlik/` package in the dev dependencies.
-it("P1 scenario: the manifest is a private package with one dependency held at an exact version, one peer, effect, and the root and manifest exports, each to a file that exists, and no package of this repository", () => {
+/** The one other package of this repository the Ledger names, and how: the diagnostics package, as a workspace dependency. */
+const DIAGNOSTICS = part("@kal", "fa/diagnostics");
+
+// P1. Plant: add `@kalfa/config` to the dependencies; make `fast-sha256` a range (`^1.3.0`); make `@kalfa/diagnostics` a range (`^0.0.0`); move it to the dev dependencies;
+// drop it; name it in the peers; make the package public; add a second peer; mark `effect` an optional peer; point `.` at another file; name a `@demlik/`
+// package in the dev dependencies.
+it("P1 scenario: the manifest is a private package with two dependencies, the hash held at an exact version and the diagnostics package as a workspace dependency, one peer, effect, and the root and manifest exports, each to a file that exists, and no other package of this repository", () => {
   // scenario: the package's own manifest at head; no generated input says what a manifest holds.
   const found = manifest();
 
-  // Everything the manifest says, but its own name: a package of this repository or of demlik named in a key, a version, a script or a note is a dependency it should not have.
-  const { name: _, ...rest } = Schema.decodeUnknownSync(
-    Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
-  )(readFileSync(join(root, "package.json"), "utf8"));
+  // Everything the manifest says, but its own name and the diagnostics dependency: a package of this repository or of demlik named in a key, a version, a script or a note is a dependency it should not have.
+  const {
+    name: _,
+    dependencies: __,
+    ...rest
+  } = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+    readFileSync(join(root, "package.json"), "utf8"),
+  );
 
-  const named = JSON.stringify(rest);
+  const named = JSON.stringify([rest, Object.keys(found.dependencies).filter((name) => name !== DIAGNOSTICS)]);
 
   expect(found.name).toBe(part("@kal", "fa/ledger"));
   expect(found.private, "private").toBe(true);
@@ -56,8 +65,12 @@ it("P1 scenario: the manifest is a private package with one dependency held at a
     ),
     "no other package of this repository, and no demlik package, named anywhere",
   ).toEqual([]);
-  expect(Object.keys(found.dependencies), "one dependency: the hash").toEqual(["fast-sha256"]);
-  expect(found.dependencies["fast-sha256"], "held at an exact version").toMatch(EXACT);
+  expect(Object.keys(found.dependencies).toSorted(), "two dependencies: the hash and the diagnostics package").toEqual(
+    [DIAGNOSTICS, "fast-sha256"].toSorted(),
+  );
+  expect(found.dependencies[DIAGNOSTICS], "the diagnostics package is a workspace dependency").toBe("workspace:*");
+  expect(found.dependencies["fast-sha256"], "the hash is held at an exact version").toMatch(EXACT);
+  expect(Object.keys(found.devDependencies), "the diagnostics package is no dev dependency").not.toContain(DIAGNOSTICS);
   expect(Object.keys(found.peerDependencies), "effect is the one peer").toEqual(["effect"]);
   expect(found.peerDependenciesMeta?.["effect"]?.optional, "and it is not optional").not.toBe(true);
   expect(Object.keys(found.optionalDependencies ?? {}), "no optional dependency").toEqual([]);
