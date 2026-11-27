@@ -306,6 +306,10 @@ export class GitTooOld extends Schema.TaggedError<GitTooOld, { readonly brand: u
 /**
  * Git could not answer. The `reason` says how.
  *
+ * **Details**
+ *
+ * The reason is also the error's JavaScript `cause`, so a printed error and a failed span's exception name the reason and what is under it. The wire holds the reason alone.
+ *
  * @category errors
  */
 export class GitUnavailable extends Schema.TaggedError<GitUnavailable, { readonly brand: unique symbol }>()(
@@ -313,7 +317,9 @@ export class GitUnavailable extends Schema.TaggedError<GitUnavailable, { readonl
   {
     reason: Schema.Union([NotStarted, Exited, Unreadable, GitTooOld]),
   },
-) {}
+) {
+  override readonly cause = this.reason;
+}
 
 /**
  * The path holds no git repository.

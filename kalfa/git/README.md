@@ -459,5 +459,5 @@ optional peers, needed only by `/test`.
 ## What it never does
 
 It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and a fetch's objects. It reads a
-remote and changes nothing on it: only a push will change one. It imports no Node module and no package of its repo. It puts no message, name, email, path, line or file
-content in a span: the diff's span says how many files and lines, the range's span names its merge base, and a read's span says whether there is a file and how big it is, and an edit's span says how many changes. Squash and push come in later tickets of this package.
+remote and changes nothing on it: only a push will change one. It imports no Node module and no package of its repo. No message, name, email, path, line or file
+content is ever a span attribute: the diff's span says how many files and lines, the range's span names its merge base, and a read's span says whether there is a file and how big it is, and an edit's span says how many changes. A failed span's exception carries the reason chain, since `GitUnavailable`'s `cause` is its `reason`: a git that cannot start names the command it was given there, the repository path included, and that command carries no environment and no secret. Squash and push come in later tickets of this package.

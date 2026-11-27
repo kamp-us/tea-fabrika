@@ -5,6 +5,7 @@ import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
 import { hiddenCause } from "./hidden-cause.ts";
+import { innerCause } from "./inner-cause.ts";
 import { integrationTestName } from "./integration-test-name.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
 import { jsdocs } from "./jsdocs.ts";
@@ -64,6 +65,7 @@ const plugin: Plugin = {
     "edge-comment": edgeComment,
     "effect-functions": effectFunctions,
     "hidden-cause": hiddenCause,
+    "inner-cause": innerCause,
     "integration-test-name": integrationTestName,
     "law-shape": lawShape,
     "isolate-boundary": isolateBoundary,

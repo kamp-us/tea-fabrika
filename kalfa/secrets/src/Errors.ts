@@ -53,6 +53,11 @@ export class SecretMissing extends Schema.TaggedError<SecretMissing, { readonly 
  * A secret could not be used now: its store could not answer, or the use could not be recorded. The reason is that failure, whose
  * cause is hidden, and no value is given.
  *
+ * **Details**
+ *
+ * The reason is also the error's JavaScript `cause`, so a printed error and a failed span's exception name the failure and end at the
+ * placeholder of its hidden cause. The wire holds the reason alone.
+ *
  * @category errors
  */
 export class SecretsUnavailable extends Schema.TaggedError<SecretsUnavailable, { readonly brand: unique symbol }>()(
@@ -62,7 +67,9 @@ export class SecretsUnavailable extends Schema.TaggedError<SecretsUnavailable, {
     store: Name.StoreId,
     reason: Schema.Union([StoreFailed, RecordFailed]),
   },
-) {}
+) {
+  override readonly cause = this.reason;
+}
 
 /**
  * The app declares a secret that no route points anywhere. It stops the start, naming the secret.
