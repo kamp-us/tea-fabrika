@@ -6,6 +6,7 @@
  * against a real temp folder, so a law that reads from it is as true as one on a disk.
  */
 import { Effect, FileSystem, Layer, Match, Path, PlatformError, Queue, Schema, Stream } from "effect";
+import { RemoveEmptyDir, type Removal } from "./internal/removeEmptyDir.ts";
 
 export interface Disk {
   /** The text of each file, by the path the program reads it from. */
@@ -379,7 +380,10 @@ export const live = (seed: LiveSeed = {}): Effect.Effect<LiveDisk> =>
 // - `rename` puts the old entry at the new path and replaces what was there, a link included, without following it;
 // - `remove` takes a link itself out, and `force` makes a missing path no failure;
 // - `makeDirectory` without `recursive` fails `AlreadyExists` for a path that is there and `NotFound` for a missing parent;
-// - `realPath` follows every link and fails `NotFound` for a path that is not there.
+// - `realPath` follows every link and fails `NotFound` for a path that is not there;
+// - `removeEmptyDir` copies the edge of internal/removeEmptyDir.ts: an empty folder goes, a folder that holds anything and a
+//   path that is not there are left, and a file or a link fails `BadResource`, as Node's `rmdir` answers `ENOTDIR`.
+//   SettingGroup.cleanup.integration.test.ts (CU4) checks it against Node's own `rmdir` on a temp folder.
 // ---------------------------------------------------------------------------------------------
 
 /** The calls a fault may name. */
@@ -426,8 +430,10 @@ export interface Seed {
 /** A disk a program changes, and what a law reads back from it. */
 export interface Writable {
   readonly fileSystem: FileSystem.FileSystem;
-  /** The file system and the path service, as `layer` gives them. */
+  /** The file system and the path service, as `layer` gives them, and `removeEmptyDir` as the edge `disk.ts` calls. */
   readonly layer: Layer.Layer<FileSystem.FileSystem | Path.Path>;
+  /** Removes a folder only when it is empty, as the edge `disk.ts` calls does. */
+  readonly removeEmptyDir: (path: string) => Effect.Effect<Removal, PlatformError.PlatformError>;
   /** The text of every file now, by path. A link is not a file. */
   readonly files: Effect.Effect<Readonly<Record<string, string>>>;
   /** Every folder now, but the root. */
@@ -595,6 +601,29 @@ export const writable = (seed: Seed = {}): Writable => {
           : Effect.fail(failure("BadResource", method, path));
     });
 
+  /** The edge's copy: an empty folder goes, a folder that holds anything or a path that is not there is left, and a file or a link fails. */
+  const removeEmptyDir = (path: string): Effect.Effect<Removal, PlatformError.PlatformError> =>
+    Effect.suspend(() => {
+      const at = resolve(path, false);
+      const held = entries.get(at);
+
+      if (held === undefined) {
+        return Effect.succeed<Removal>("left");
+      }
+
+      if (held.kind !== "folder") {
+        return Effect.fail(failure("BadResource", "removeEmptyDir", path));
+      }
+
+      if (below(at).length > 0) {
+        return Effect.succeed<Removal>("left");
+      }
+
+      entries.delete(at);
+
+      return Effect.succeed<Removal>("removed");
+    });
+
   const type = (held: Entry): FileSystem.File.Type =>
     Match.value(held).pipe(
       Match.when({ kind: "file" }, () => "File" as const),
@@ -734,13 +763,126 @@ export const writable = (seed: Seed = {}): Writable => {
 
   return {
     fileSystem,
-    layer: Layer.merge(Layer.succeed(FileSystem.FileSystem)(fileSystem), Path.layer),
+    layer: Layer.mergeAll(
+      Layer.succeed(FileSystem.FileSystem)(fileSystem),
+      Path.layer,
+      Layer.succeed(RemoveEmptyDir)(removeEmptyDir),
+    ),
+    removeEmptyDir,
     files: Effect.sync(() =>
       Object.fromEntries([...entries].flatMap(([path, held]) => (held.kind === "file" ? [[path, held.text]] : []))),
     ),
     folders: Effect.sync(() => [...entries].flatMap(([path, held]) => (held.kind === "folder" ? [path] : [])).sort()),
     links: Effect.sync(() =>
       Object.fromEntries([...entries].flatMap(([path, held]) => (held.kind === "link" ? [[path, held.target]] : []))),
+    ),
+  };
+};
+
+// ---------------------------------------------------------------------------------------------
+// A hooked disk: a hook that runs before each call, so a law can act between two calls of a program (ticket 2014).
+// It serves the writable stand-in and a real disk alike, which is what lets one race run on both.
+// ---------------------------------------------------------------------------------------------
+
+/** One call as a hook sees it: the method, the path it names first (for `rename`, the path it moves from; for `symlink`, the link's own path), and a write's flag. */
+export interface Step {
+  readonly method: Call | "removeEmptyDir";
+  readonly path: string;
+  /** For a write: `"wx"` is the exclusive create, `"w"` is any other write. */
+  readonly flag?: "w" | "wx" | undefined;
+}
+
+/** A file system and the edge that removes a folder only when it is empty, as one disk. A `Writable` is one. */
+export interface Platform {
+  readonly fileSystem: FileSystem.FileSystem;
+  readonly removeEmptyDir: (path: string) => Effect.Effect<Removal, PlatformError.PlatformError>;
+}
+
+/**
+ * `platform`, with `before` run at the start of each call of a `Call` method and of `removeEmptyDir`, before its work. A failure of `before` is the call's failure, so a hook can plant a fault; a hook that waits holds the call. `layer` gives both, as `writable(...).layer` does.
+ */
+export const hooked = (
+  platform: Platform,
+  before: (step: Step) => Effect.Effect<void, PlatformError.PlatformError>,
+): Platform & { readonly layer: Layer.Layer<FileSystem.FileSystem | Path.Path> } => {
+  const fs = platform.fileSystem;
+
+  const around =
+    <Args extends ReadonlyArray<unknown>, A>(
+      work: (...args: Args) => Effect.Effect<A, PlatformError.PlatformError>,
+      step: (...args: Args) => Step,
+    ) =>
+    (...args: Args): Effect.Effect<A, PlatformError.PlatformError> =>
+      Effect.flatMap(before(step(...args)), () => work(...args));
+
+  const flag = (options: { readonly flag?: FileSystem.OpenFlag | undefined } | undefined) =>
+    options?.flag === "wx" ? "wx" : "w";
+
+  const fileSystem: FileSystem.FileSystem = {
+    ...fs,
+    exists: around(
+      (path) => fs.exists(path),
+      (path) => ({ method: "exists", path }),
+    ),
+    makeDirectory: around(
+      (path, options) => fs.makeDirectory(path, options),
+      (path) => ({ method: "makeDirectory", path }),
+    ),
+    readDirectory: around(
+      (path, options) => fs.readDirectory(path, options),
+      (path) => ({ method: "readDirectory", path }),
+    ),
+    readDirectoryEntries: around(
+      (path) => fs.readDirectoryEntries(path),
+      (path) => ({ method: "readDirectoryEntries", path }),
+    ),
+    readFile: around(
+      (path) => fs.readFile(path),
+      (path) => ({ method: "readFile", path }),
+    ),
+    readFileString: around(
+      (path, encoding) => fs.readFileString(path, encoding),
+      (path) => ({ method: "readFileString", path }),
+    ),
+    readLink: around(
+      (path) => fs.readLink(path),
+      (path) => ({ method: "readLink", path }),
+    ),
+    realPath: around(
+      (path) => fs.realPath(path),
+      (path) => ({ method: "realPath", path }),
+    ),
+    remove: around(
+      (path, options) => fs.remove(path, options),
+      (path) => ({ method: "remove", path }),
+    ),
+    rename: around(
+      (from, to) => fs.rename(from, to),
+      (from) => ({ method: "rename", path: from }),
+    ),
+    symlink: around(
+      (target, path) => fs.symlink(target, path),
+      (_target, path) => ({ method: "symlink", path }),
+    ),
+    writeFile: around(
+      (path, data, options) => fs.writeFile(path, data, options),
+      (path, _data, options) => ({ method: "writeFile", path, flag: flag(options) }),
+    ),
+    writeFileString: around(
+      (path, data, options) => fs.writeFileString(path, data, options),
+      (path, _data, options) => ({ method: "writeFileString", path, flag: flag(options) }),
+    ),
+  };
+
+  const removeEmptyDir = around(platform.removeEmptyDir, (path: string): Step => ({ method: "removeEmptyDir", path }));
+
+  return {
+    fileSystem,
+    removeEmptyDir,
+    layer: Layer.mergeAll(
+      Layer.succeed(FileSystem.FileSystem)(fileSystem),
+      Path.layer,
+      Layer.succeed(RemoveEmptyDir)(removeEmptyDir),
     ),
   };
 };
