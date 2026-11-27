@@ -310,7 +310,7 @@ A third case where the adapters may differ, beside the two under "Reading a file
 
 ## Settings
 
-The limits are required and have no default. The app gives each one where it builds the layer.
+The limits are required and have no default: the kill wait is one of them. The app gives each one where it builds the layer.
 
 ```toml
 [limits]
@@ -321,6 +321,7 @@ files = 1000
 diff = 10000000
 blob = 10000000
 time = "10 seconds"
+kill = "5 seconds"
 
 [committer]
 name = "Delivery Bot"
@@ -330,10 +331,10 @@ email = "bot@example.test"
 `commits` is the most commits a walk or a merge-base answer holds. `refs` is the most refs one `readRefs` answer
 holds. `bytes` is the most bytes one commit object holds, to read or to write, and the most stderr an error keeps.
 `files` is the most files one diff names, and `diff` is the most bytes of file content one diff compares, and `blob` is the most bytes of one file `readFile` reads or `editTree` writes. `time` is the
-longest one call may take. `committer` is the name and email every commit the package writes names as its
+longest one call may take. `kill` is how long git has to stop, once a call has run out of time, before it is killed. `committer` is the name and email every commit the package writes names as its
 committer. A name takes what a signature's name takes (no `<`, `>`, line break or NUL) and an email what its email
 takes. A setting's value is plain data, so the time is duration text, which the package decodes. When a
-call runs out of time, git is asked to stop, and a git that ignores that is killed a fixed five seconds later, so the
+call runs out of time, git is asked to stop, and a git that ignores that is killed `limits.kill` later, so the
 call always ends.
 
 ## The laws
