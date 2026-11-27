@@ -2,13 +2,15 @@
 // format that is no JSON-RPC (F5), a tracer and a logger that keep what they were handed, and the forms a secret is written in.
 // Every generator is an Effect Arbitrary, so the package needs no fast-check. Each law applies, to each value it draws, one value
 // made from it for every class the plan names, so every class is reached in every run and no run can pass on less.
-import { assert } from "@effect/vitest";
+import { isDeepStrictEqual } from "node:util";
+import { assert, expect } from "@effect/vitest";
 import {
   Arbitrary,
   Array as Arr,
   Cause,
   Context,
   Deferred,
+  Duration,
   Effect,
   Exit,
   Fiber,
@@ -20,11 +22,12 @@ import {
   Queue,
   References,
   Schema,
+  Scope,
   Stream,
   Tracer,
 } from "effect";
 import { Socket } from "effect/socket";
-import { Format, FormatError, TraceState, Transport } from "./index.ts";
+import { Format, FormatError, NoSharedVersion, TraceState, Transport } from "./index.ts";
 import type { Frame } from "./index.ts";
 import * as MemorySocket from "./MemorySocket.ts";
 
@@ -127,7 +130,7 @@ export const progressMessage = (done: number, total = 100): Message => Progress.
 export const textMessage = (text: string): Message => Text.make({ text });
 
 /** What a law can run: a schema with no services. */
-type Plain = Schema.Codec<unknown, unknown, never, never>;
+export type Plain = Schema.Codec<unknown, unknown, never, never>;
 
 // ---- what a settled run gave
 
@@ -975,3 +978,1214 @@ export const reachable = (root: object): ReadonlyArray<string> => {
 /** A secret: a word no other part of a run holds, long enough that no form of it is found by chance. */
 export const secretFrom = (each: { readonly secret: string; readonly n: number }): string =>
   `zq9${each.secret}${(Math.abs(each.n) % 997).toString(36)}Xk`;
+
+// ---- the hello: the test app, the far end of a connection, the dialing stand-in and the cases the laws of the hello draw (2068)
+// Nothing here reads a name of the package at module load, so the older laws that share this file load as before.
+
+/** The test app's nonce: a text that is not empty, branded, so a challenge can be refused for its range. */
+const Nonce = Schema.NonEmptyString.pipe(Schema.brand("Nonce"));
+
+/** The test app's challenge. */
+export const Challenge = Schema.Struct({ nonce: Nonce });
+
+/** The test app's proof: a key and a signature made from the nonce, so a proof for another nonce fails the app's check. */
+export const Proof = Schema.Struct({ key: Schema.String, signature: Schema.String });
+
+/** What the test app answers a hello with: admitted, waiting or refused. */
+export const Admitted = Schema.TaggedStruct("admitted", { name: Schema.String });
+
+const Waiting = Schema.TaggedStruct("waiting", { code: Schema.String });
+
+export const Refused = Schema.TaggedStruct("refused", { reason: Schema.String });
+
+export const SignInAnswer = Schema.Union([Admitted, Waiting, Refused]);
+
+export type SignInAnswer = typeof SignInAnswer.Type;
+
+/** The app's own failure while it makes a proof. */
+class AppFailure extends Schema.TaggedError<AppFailure, { readonly brand: unique symbol }>()("AppFailure", {
+  word: Schema.String,
+}) {}
+
+/** A failure of a stage the caller wrote, that must come out of a chain as it went in. */
+export class StageError extends Schema.TaggedError<StageError, { readonly brand: unique symbol }>()("StageError", {
+  word: Schema.String,
+}) {}
+
+/** An app as the laws use it: its two schemas, how it makes a proof from a challenge, and how it checks a proof. */
+interface App {
+  readonly name: string;
+  readonly challenge: Plain;
+  readonly proof: Plain;
+  readonly make: (challenge: Plain["Type"]) => Effect.Effect<unknown, unknown>;
+  readonly valid: (proof: Plain["Type"], challenge: Plain["Type"]) => boolean;
+}
+
+const makeApp = <C, P>(options: {
+  readonly name: string;
+  readonly challenge: Schema.Codec<C, unknown>;
+  readonly proof: Schema.Codec<P, unknown>;
+  readonly make: (challenge: C) => P;
+  readonly valid: (proof: P, challenge: C) => boolean;
+}): App => {
+  const isChallenge = Schema.is(options.challenge);
+  const isProof = Schema.is(options.proof);
+
+  return {
+    name: options.name,
+    challenge: options.challenge,
+    proof: options.proof,
+    make: (challenge) =>
+      isChallenge(challenge) ? Effect.succeed(options.make(challenge)) : Effect.die("not the app's challenge"),
+    valid: (proof, challenge) => isProof(proof) && isChallenge(challenge) && options.valid(proof, challenge),
+  };
+};
+
+/** The key the test app signs with. */
+const KEY = "ed25519:AAAA";
+
+/** The proof the test app makes for a nonce. */
+export const signed = (nonce: string): typeof Proof.Type => ({ key: KEY, signature: `${KEY}/${nonce}` });
+
+/** A challenge of the test app. */
+export const challengeFrom = (nonce: string): typeof Challenge.Type => Challenge.make({ nonce: Nonce.make(nonce) });
+
+/** The sign-in app of the plan's sketch: a nonce, and a proof made from it. */
+export const signInApp: App = makeApp({
+  name: "sign-in",
+  challenge: Challenge,
+  proof: Proof,
+  make: ({ nonce }) => signed(nonce),
+  valid: (proof, { nonce }) => proof.key === KEY && proof.signature === signed(nonce).signature,
+});
+
+/** The same app, whose proof fails with the app's own error. */
+const failingApp = (word: string): App => ({
+  ...signInApp,
+  name: "failing",
+  make: () => Effect.fail(new AppFailure({ word })),
+});
+
+/** An app whose challenge is a value of one of the classes (a) to (d): the proof holds the challenge as its signature. */
+const classApp = (klass: { readonly id: string; readonly name: string; readonly schema: Plain }): App =>
+  makeApp({
+    name: klass.name,
+    challenge: klass.schema,
+    proof: Schema.Struct({ key: Schema.String, signature: klass.schema }),
+    make: (challenge) => ({ key: KEY, signature: challenge }),
+    valid: (proof, challenge) => proof.key === KEY && isDeepStrictEqual(proof.signature, challenge),
+  });
+
+/** An app whose proof is any value at all: a proof the hello can fail to write. */
+const looseApp: App = makeApp({
+  name: "loose",
+  challenge: Challenge,
+  proof: Schema.Unknown,
+  make: () => undefined,
+  valid: () => true,
+});
+
+// ---- the far end of a connection
+
+/** What a far end saw of one connection. */
+interface Seen {
+  /** Every frame it read, in order. */
+  readonly frames: Array<Frame>;
+  /** The challenges it sent. */
+  challenges: number;
+  /** The close that ended its reading. */
+  close: Option.Option<{ readonly code: number; readonly reason: string | undefined }>;
+  /** What a program failed with that was no socket's failure: a law of the hello reads this empty. */
+  readonly errors: Array<unknown>;
+  /** Done when the far end has read to the end of the connection. */
+  readonly ended: Deferred.Deferred<void>;
+}
+
+export const newSeen = (): Seen => ({
+  frames: [],
+  challenges: 0,
+  close: Option.none(),
+  errors: [],
+  ended: Deferred.makeUnsafe<void>(),
+});
+
+/** The far end's own tools: read one frame, send frames as one batch, close. */
+interface Far {
+  readonly read: Effect.Effect<Frame, Socket.SocketError>;
+  readonly send: (frames: readonly [Frame, ...Array<Frame>]) => Effect.Effect<void, Socket.SocketError>;
+  readonly close: (code: number, reason?: string) => Effect.Effect<void, Socket.SocketError>;
+}
+
+/** What a far end does on one connection. */
+export type Program = (far: Far, seen: Seen) => Effect.Effect<void, unknown, Format>;
+
+const textFrom = (chunk: string | Uint8Array): Frame =>
+  Predicate.isString(chunk) ? chunk : new TextDecoder().decode(chunk);
+
+const farEnd = (socket: Socket.Socket, seen: Seen): Effect.Effect<Far, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const reader = yield* Effect.orDie(socket.reader);
+    const writer = yield* socket.writer;
+    const kept: Array<Frame> = [];
+
+    const read = Effect.suspend(() => {
+      const first = kept.shift();
+
+      return first === undefined
+        ? Effect.map(reader.pull, (chunk) => {
+            const [head, ...rest] = Arr.map(chunk, textFrom);
+            kept.push(...rest);
+
+            return head;
+          })
+        : Effect.succeed(first);
+    }).pipe(Effect.tap((frame) => Effect.sync(() => seen.frames.push(frame))));
+
+    return {
+      read,
+      send: (frames) => writer.writeAll(frames),
+      close: (code, reason) => writer.write(new Socket.CloseEvent(code, reason)),
+    };
+  });
+
+const noted = (seen: Seen) => (cause: Cause.Cause<unknown>) =>
+  Effect.sync(() => {
+    const error = Cause.findErrorOption(cause);
+
+    if (Option.isSome(error) && Socket.isSocketError(error.value)) {
+      const closed = error.value;
+      seen.close = Option.orElse(seen.close, () => closeFrom(closed));
+    } else {
+      seen.errors.push(Option.isSome(error) ? error.value : Cause.pretty(cause));
+    }
+  });
+
+/** Runs a program on the far end of a socket, then reads on until the connection ends, so the close it ended with is seen. */
+export const serveFar = (program: Program, socket: Socket.Socket, seen: Seen): Effect.Effect<void, never, Format> =>
+  Effect.gen(function* () {
+    const far = yield* farEnd(socket, seen);
+    yield* program(far, seen).pipe(Effect.catchCause(noted(seen)));
+    yield* Effect.forever(far.read).pipe(Effect.catchCause(noted(seen)));
+    yield* Deferred.succeed(seen.ended, undefined);
+  }).pipe(Effect.scoped);
+
+/** What the far ends of a harness have seen in all. */
+export interface World {
+  /** How many times the client dialed: reader acquisitions of the stand-in, or sockets a server accepted. */
+  acquisitions: number;
+  /** One for each connection served, in order. */
+  readonly connections: Array<Seen>;
+}
+
+/** Where a law of the hello runs: a client socket, a far end to serve it, and a way to fail instead of hanging. */
+export interface Harness {
+  readonly world: World;
+  /** The next connection is served by this program. */
+  readonly serve: (program: Program) => Effect.Effect<void>;
+  /** The client's socket. */
+  readonly client: Layer.Layer<Socket.Socket>;
+  /** Runs an effect and fails when it does not end. */
+  readonly within: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E | Cause.TimeoutError, R>;
+}
+
+/** A far end that does nothing but read to the end of its connection. */
+export const idle: Program = () => Effect.void;
+
+/** How many scheduler turns a connection of the hello may take before it counts as stalled: a working one takes a few hundred. */
+export const TURNS = 10_000;
+
+/** A run that fails, with a name, when the effect never ends: a scheduler-turn count, no clock. */
+export const mustEnd = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.flatMap(
+    settled(effect, TURNS),
+    Option.match({
+      onNone: () => Effect.sync(() => assert.fail("the run stalled")),
+      onSome: (exit) => exit,
+    }),
+  );
+
+/**
+ * A client socket that dials like a real one: each reader acquisition makes a new memory pair, serves its far end with the next
+ * program, and counts one dial. The writer writes to the connection of the latest acquisition.
+ */
+export const dialing: Effect.Effect<Harness & { readonly socket: Socket.Socket }, never, Format> = Effect.gen(
+  function* () {
+    const format = yield* Format;
+    const world: World = { acquisitions: 0, connections: [] };
+    const programs: Array<Program> = [];
+    let current: Socket.Writer | undefined;
+
+    const socket = Socket.make({
+      reader: Effect.gen(function* () {
+        world.acquisitions += 1;
+        // The far end lives as long as its own connection, never as long as the client's reader: a server does not stop when its client leaves.
+        const farScope = yield* Scope.make();
+        const [near, far] = yield* MemorySocket.pair.pipe(Scope.provide(farScope));
+        const seen = newSeen();
+        world.connections.push(seen);
+        yield* Effect.forkDetach(
+          serveFar(programs.shift() ?? idle, far, seen).pipe(
+            Effect.provideService(Format, format),
+            Effect.ensuring(Scope.close(farScope, Exit.void)),
+          ),
+        );
+        current = yield* near.writer;
+
+        return yield* near.reader;
+      }),
+      writer: Effect.succeed({
+        write: (chunk) => (current === undefined ? Effect.void : current.write(chunk)),
+        writeAll: (chunks) => (current === undefined ? Effect.void : current.writeAll(chunks)),
+      }),
+    });
+
+    return {
+      socket,
+      world,
+      serve: (program) => Effect.sync(() => void programs.push(program)),
+      client: Layer.succeed(Socket.Socket, socket),
+      within: mustEnd,
+    };
+  },
+);
+
+// ---- the programs a far end runs
+
+/** The frame of a message. */
+const frameFrom = (value: Message) => Effect.map(framesFrom(Message, [value]), (frames) => frames[0] ?? "");
+
+/** The challenge frame the test app's schema accepts, written by hand. */
+export const goodChallenge = (nonce: string): Frame => notification("challenge", { nonce });
+
+/** The answer frame of a gateway, written by hand: the versions, the ping in milliseconds and the app's answer. */
+export const answerFrame = (version: number, ping: number, answer: Json): Frame =>
+  notification("answer", wire("Answer", { version, ping, answer }));
+
+/** A value of the wire written by hand, with a tag of any word: the laws hold no schema of the package for it. */
+export const wire = (tag: string, fields: Readonly<Record<string, Json>>): Json =>
+  Object.fromEntries([["_tag", tag], ...Object.entries(fields)]);
+
+/** A far end that sends a frame first, and after it reads the hello, sends another. Either is left out with `none`. */
+export const scripted =
+  (first: Option.Option<Frame>, after: Option.Option<Frame>): Program =>
+  (far) =>
+    Effect.gen(function* () {
+      if (Option.isSome(first)) {
+        yield* far.send([first.value]);
+      }
+
+      if (Option.isSome(after)) {
+        yield* far.read;
+        yield* far.send([after.value]);
+      }
+    });
+
+/** A far end that closes: before it sends anything, or after it sent a valid challenge and read the hello. */
+export const closing =
+  (
+    when: "before the challenge" | "after the hello",
+    code: number,
+    reason: string | undefined,
+    nonce: string,
+  ): Program =>
+  (far) =>
+    Effect.gen(function* () {
+      if (when === "after the hello") {
+        yield* far.send([goodChallenge(nonce)]);
+        yield* far.read;
+      }
+
+      yield* far.close(code, reason);
+    });
+
+/** The last value a gateway sends when the client's chain ends first: it says every value the client sent was read. */
+export const ACK = textMessage("ack");
+
+/** What an honest gateway does for one connection. */
+interface Honest {
+  readonly app: App;
+  readonly challenge: Plain["Type"];
+  /** The versions the gateway speaks. */
+  readonly versions: ReadonlyArray<number>;
+  /** The ping interval in whole milliseconds. */
+  readonly ping: number;
+  /** What it answers when the proof is right. */
+  readonly answer: SignInAnswer;
+  /** The values sent in the same batch as the answer. */
+  readonly batch: ReadonlyArray<Message>;
+  /** The values sent after, one write each. */
+  readonly later: ReadonlyArray<Message>;
+  /** How many values it reads from the client before it closes, when it closes first. */
+  readonly reads: number;
+  readonly closes: "never" | "after reading";
+}
+
+/** The gateway of the test app, built from the package's own `challenge`, `accept` and `answer`. */
+export const honest =
+  (each: Honest): Program =>
+  (far, seen) =>
+    Effect.gen(function* () {
+      yield* far.send([yield* Transport.challenge(each.app.challenge)(each.challenge)]);
+      seen.challenges += 1;
+
+      const hello = yield* Transport.accept({ versions: each.versions, hello: each.app.proof })(yield* far.read);
+
+      const reply: SignInAnswer = each.app.valid(hello.proof, each.challenge)
+        ? each.answer
+        : Refused.make({ reason: "the proof is wrong" });
+
+      const answered = yield* Transport.answer(SignInAnswer)({
+        version: hello.version,
+        ping: Duration.millis(each.ping),
+        answer: reply,
+      });
+
+      const batch = yield* Effect.forEach(each.batch, (value) => frameFrom(value), { concurrency: 1 });
+      yield* far.send([answered, ...batch]);
+
+      for (const value of each.later) {
+        yield* far.send([yield* frameFrom(value)]);
+      }
+
+      // It reads what the client sends, then closes, or sends one last value so the client knows all of it arrived: a chain that
+      // ended on the last value it read could end before its own last write.
+      yield* Effect.forEach(Array.from({ length: each.reads }), () => far.read, { discard: true, concurrency: 1 });
+
+      if (each.closes === "after reading") {
+        yield* far.close(1000);
+      } else {
+        yield* far.send([yield* frameFrom(ACK)]);
+      }
+    });
+
+/** The messages a far end read after the hello, as the values they carry. */
+const readBy = (seen: Seen) =>
+  Stream.fromIterable(seen.frames.slice(1)).pipe(Transport.decode(Message), Stream.runCollect);
+
+// ---- (a) to (z): what one drawn run holds, and the classes made from it
+
+/** What a drawn run holds for the hello: the made-up parts every class is built from. */
+interface HelloDraw {
+  readonly seeds: ReadonlyArray<Seed>;
+  readonly text: string;
+  readonly nonce: string;
+  /** Six different whole numbers of 1 or more: the versions the lists are made from. */
+  readonly pool: ReadonlyArray<number>;
+  readonly features: ReadonlyArray<string>;
+  /** The gateway's ping, in whole milliseconds, 1 to 600000. */
+  readonly ping: number;
+  readonly batch: ReadonlyArray<Message>;
+  readonly later: ReadonlyArray<Message>;
+  readonly sent: ReadonlyArray<Message>;
+  readonly code: number;
+  readonly reason: string;
+  readonly left: ReadonlyArray<number>;
+  readonly right: ReadonlyArray<number>;
+}
+
+export const helloDraw: Arbitrary.Arbitrary<HelloDraw> = Arbitrary.all({
+  seeds: Arbitrary.array(seed, { minLength: 1, maxLength: 2 }),
+  text: awkwardText,
+  nonce: word,
+  // A number made from n and its place is never another place's: the six are different.
+  pool: Arbitrary.array(between(1, 40), { minLength: 6, maxLength: 6 }).pipe(
+    Arbitrary.map((numbers) => numbers.map((n, index) => n * 6 + index)),
+  ),
+  features: Arbitrary.array(word, { maxLength: 4 }),
+  ping: between(1, 600_000),
+  batch: Arbitrary.array(message, { minLength: 1, maxLength: 10 }),
+  later: Arbitrary.array(message, { maxLength: 10 }),
+  sent: Arbitrary.array(message, { maxLength: 20 }),
+  code: between(4000, 4999),
+  reason: word,
+  left: Arbitrary.array(between(-5, 60), { maxLength: 6 }),
+  right: Arbitrary.array(between(-5, 60), { maxLength: 6 }),
+});
+
+// ---- (n) and (o): the lists of versions
+
+/** Two lists of versions, and the version the pick must give, when they share one. */
+interface Lists {
+  readonly id: "n" | "o";
+  readonly name: string;
+  readonly client: ReadonlyArray<number>;
+  readonly gateway: ReadonlyArray<number>;
+  readonly picked: Option.Option<number>;
+}
+
+/** The names of the classes (n) and (o), in order. */
+export const LIST_CLASSES = [
+  "n: one shared",
+  "n: several shared, the highest wins",
+  "n: unordered",
+  "n: with repeats",
+  "n: the gateway's highest is missing from the client's",
+  "o: disjoint",
+  "o: the client's list is empty",
+  "o: the gateway's list is empty",
+] as const;
+
+export const versionLists = (pool: ReadonlyArray<number>): ReadonlyArray<Lists> => {
+  const [p0 = 1, p1 = 2, p2 = 3, p3 = 4] = pool;
+  const top = Math.max(...pool) + 1;
+
+  const make = (
+    id: Lists["id"],
+    name: (typeof LIST_CLASSES)[number],
+    client: ReadonlyArray<number>,
+    gateway: ReadonlyArray<number>,
+    picked: number | undefined,
+  ): Lists => ({ id, name, client, gateway, picked: Option.fromNullishOr(picked) });
+
+  return [
+    make("n", LIST_CLASSES[0], [p0, p1], [p0, p2], p0),
+    make("n", LIST_CLASSES[1], [p0, p1, p2], [p2, p0, p3], Math.max(p0, p2)),
+    make("n", LIST_CLASSES[2], [p2, p0, p1], [p1, p3, p0], Math.max(p0, p1)),
+    make("n", LIST_CLASSES[3], [p0, p0, p1, p1], [p1, p1, p2, p0], Math.max(p0, p1)),
+    make("n", LIST_CLASSES[4], [p0, p1], [p0, top], p0),
+    make("o", LIST_CLASSES[5], [p0, p1], [p2, p3], undefined),
+    make("o", LIST_CLASSES[6], [], [p0, p1], undefined),
+    make("o", LIST_CLASSES[7], [p0, p1], [], undefined),
+  ];
+};
+
+// ---- the cases of a connection that succeeds: (m), (n), (r), (k), (t)
+
+/** The three answers (m) the test app gives, each holding the drawn awkward text. */
+export const answersFrom = (text: string): ReadonlyArray<SignInAnswer> => [
+  Admitted.make({ name: text }),
+  Waiting.make({ code: text }),
+  Refused.make({ reason: text }),
+];
+
+/** One connection that succeeds, and what must come of it. */
+export interface ConnectionCase {
+  readonly name: string;
+  readonly app: App;
+  readonly challenge: Plain["Type"];
+  readonly client: { readonly versions: ReadonlyArray<number>; readonly features: ReadonlyArray<string> };
+  readonly gateway: Pick<Honest, "versions" | "ping" | "answer">;
+  /** The version the pick gives. */
+  readonly picked: number;
+  readonly batch: ReadonlyArray<Message>;
+  readonly later: ReadonlyArray<Message>;
+  readonly sent: ReadonlyArray<Message>;
+  /** Which end's chain ends first. */
+  readonly first: "client" | "gateway";
+}
+
+/**
+ * The connections a drawn run makes: one for each of the 14 values of (r), the sign-in app and the 13 classes (a) to (d), each with
+ * one of the three answers (m), one of the lists (n) that share, a batch of values (k) and the values (t) each end sends.
+ */
+export const connectionCases = (draw: HelloDraw): ReadonlyArray<ConnectionCase> => {
+  const sharing = versionLists(draw.pool).filter(({ id }) => id === "n");
+  const answers = answersFrom(draw.text);
+
+  const challenges: ReadonlyArray<{ readonly app: App; readonly challenge: Plain["Type"]; readonly name: string }> = [
+    {
+      app: signInApp,
+      challenge: challengeFrom(`${draw.nonce}${draw.text}`),
+      name: "r: the sign-in app with an awkward nonce",
+    },
+    ...valueClasses(draw.seeds).flatMap((klass) =>
+      klass.values.map((challenge) => ({ app: classApp(klass), challenge, name: `r: ${klass.name}` })),
+    ),
+  ];
+
+  return challenges.map(({ app, challenge, name }, index) => {
+    const lists = Arr.getUnsafe(sharing, index % sharing.length);
+    const answer = Arr.getUnsafe(answers, index % answers.length);
+
+    return {
+      name: `${name}, ${lists.name}, ${answer._tag}`,
+      app,
+      challenge,
+      client: { versions: lists.client, features: draw.features },
+      gateway: { versions: lists.gateway, ping: draw.ping, answer },
+      picked: Option.getOrThrow(lists.picked),
+      batch: draw.batch,
+      later: draw.later,
+      sent: draw.sent,
+      first: index % 2 === 0 ? "client" : "gateway",
+    };
+  });
+};
+
+/** What one connection came to. */
+interface CaseOutcome {
+  readonly version: number;
+  readonly ping: Duration.Duration;
+  readonly answer: unknown;
+  /** What `make` was called with, in order. */
+  readonly made: ReadonlyArray<unknown>;
+  /** The values the client's chain read. */
+  readonly read: ReadonlyArray<Message>;
+  /** The values the gateway read after the hello. */
+  readonly gatewayRead: ReadonlyArray<Message>;
+  /** The far end's view of the connection, once it ended. */
+  readonly seen: Seen;
+  /** How many times the client dialed, and how many connections were served, for this connection alone. */
+  readonly dials: number;
+  readonly served: number;
+}
+
+/** Runs one connection of a case on a harness, with a chain on the socket `connect` gave, and waits for the far end to end. */
+export const runCase = (harness: Harness, each: ConnectionCase) =>
+  Effect.gen(function* () {
+    const before = { dials: harness.world.acquisitions, served: harness.world.connections.length };
+
+    yield* harness.serve(
+      honest({
+        app: each.app,
+        challenge: each.challenge,
+        versions: each.gateway.versions,
+        ping: each.gateway.ping,
+        answer: each.gateway.answer,
+        batch: each.batch,
+        later: each.later,
+        reads: each.sent.length,
+        closes: each.first === "gateway" ? "after reading" : "never",
+      }),
+    );
+
+    const made: Array<unknown> = [];
+
+    const run = yield* harness.within(
+      Effect.gen(function* () {
+        const connected = yield* Transport.connect({
+          versions: each.client.versions,
+          features: each.client.features,
+          challenge: each.app.challenge,
+          hello: {
+            schema: each.app.proof,
+            make: (challenge: Plain["Type"]) => {
+              made.push(challenge);
+
+              return each.app.make(challenge);
+            },
+          },
+          answer: SignInAnswer,
+        });
+
+        const read = yield* end({
+          socket: connected.socket,
+          send: Stream.fromIterable(each.sent),
+          // The client's chain ends on the last value of the gateway, or, when the gateway closes first, on its close.
+          expected: each.first === "client" ? each.batch.length + each.later.length + 1 : Number.MAX_SAFE_INTEGER,
+          chain: through(Message),
+        });
+
+        return { connected, read };
+      }).pipe(Effect.scoped, Effect.provide(harness.client)),
+    );
+
+    const seen = harness.world.connections[before.served];
+
+    if (seen === undefined) {
+      return assert.fail(`${each.name}: no connection was served`);
+    }
+
+    yield* harness.within(Deferred.await(seen.ended));
+
+    const gatewayRead = yield* readBy(seen);
+
+    const outcome: CaseOutcome = {
+      version: run.connected.version,
+      ping: run.connected.ping,
+      answer: run.connected.answer,
+      made,
+      read: Schema.decodeUnknownSync(Schema.Array(Message))(run.read).slice(0, each.batch.length + each.later.length),
+      gatewayRead,
+      seen,
+      dials: harness.world.acquisitions - before.dials,
+      served: harness.world.connections.length - before.served,
+    };
+
+    return outcome;
+  });
+
+// ---- the connections that do not succeed: (a) to (j)
+
+/** What a failed `connect` must come to. */
+type Expected =
+  | { readonly kind: "format"; readonly reason: FormatError["reason"] }
+  | { readonly kind: "noShared"; readonly client: ReadonlyArray<number>; readonly gateway: ReadonlyArray<number> }
+  | { readonly kind: "app"; readonly error: AppFailure };
+
+/** One connection that fails, and how. */
+interface Handshake {
+  readonly id: string;
+  readonly name: string;
+  readonly app: App;
+  readonly client: { readonly versions: ReadonlyArray<number>; readonly features: ReadonlyArray<string> };
+  readonly program: Program;
+  readonly expected: Expected;
+  /** The steps of `connect` that are reached, in order. */
+  readonly steps: ReadonlyArray<"challenge" | "hello" | "answer">;
+  /** Whether the far end reads a hello frame. */
+  readonly hello: boolean;
+  /** The close `connect` writes when it fails: 1000, or a refusal of Transport's own, which is a code of 4000 to 4999. */
+  readonly close: 1000 | "refused";
+}
+
+const STEPS = ["challenge", "hello", "answer"] as const;
+
+/** The codes a refusal of Transport's own may close with: the range a browser lets a client use for its own. */
+export const REFUSED = { low: 4000, high: 4999 } as const;
+
+/** The names of the classes of `handshakes`, in order. */
+export const HANDSHAKE_CLASSES = [
+  "a: no JSON",
+  "a: a batch",
+  "a: a notification with an id",
+  "b: a value notification",
+  "b: a hello notification",
+  "b: an answer notification",
+  "b: a notification of the method Challenge",
+  "c: a nonce of the wrong type",
+  "c: no nonce",
+  "c: an empty nonce, out of the branded range",
+  "d: the app's make fails",
+  "g: an answer that is no JSON",
+  "g: an answer that is a batch",
+  "g: an answer that is a notification with an id",
+  "g: an answer of the method value",
+  "g: an answer of the method challenge",
+  "g: an answer of the method Answer",
+  "h: the app's answer is refused by its schema",
+  "h: a ping of 0",
+  "h: a ping of -1",
+  "h: a ping of 1.5",
+  "h: a ping that is a text",
+  "h: no ping",
+  "h: a version of 0",
+  "h: no version",
+  "h: an unknown tag",
+  "i: the gateway's NoSharedVersion reply",
+  "j: an answer naming a version the client did not list",
+] as const;
+
+/** The connections that fail, one for each class: each is a far end that sends the frames of its class, and what `connect` must come to. */
+export const handshakes = (draw: HelloDraw): ReadonlyArray<Handshake> => {
+  const [p0 = 1, p1 = 2] = draw.pool;
+  const client = { versions: [p0, p1], features: draw.features };
+  const good = goodChallenge(draw.nonce);
+  const admitted = Admitted.make({ name: draw.text });
+  const valid = answerFrame(p0, draw.ping, admitted);
+
+  // An answer value with one thing wrong: a field changed, or taken out with `undefined`, or another tag.
+  const answerValue = (changes: Readonly<Record<string, Json | undefined>>, tag = "Answer") => {
+    const value: Record<string, Json | undefined> = {
+      version: p0,
+      ping: draw.ping,
+      answer: admitted,
+      ...changes,
+    };
+
+    return notification(
+      "answer",
+      wire(
+        tag,
+        Object.fromEntries(Object.entries(value).filter((entry): entry is [string, Json] => entry[1] !== undefined)),
+      ),
+    );
+  };
+
+  // The far end sends this frame first and nothing more: no hello is read.
+  const first = (id: string, name: (typeof HANDSHAKE_CLASSES)[number], frame: Frame, reason: FormatError["reason"]) =>
+    ({
+      id,
+      name,
+      app: signInApp,
+      client,
+      program: scripted(Option.some(frame), Option.none()),
+      expected: { kind: "format", reason },
+      steps: STEPS.slice(0, 1),
+      hello: false,
+      close: "refused",
+    }) satisfies Handshake;
+
+  // The far end sends a good challenge, reads the hello, and answers with this frame.
+  const answered = (
+    id: string,
+    name: (typeof HANDSHAKE_CLASSES)[number],
+    frame: Frame,
+    expected: Expected,
+  ): Handshake => ({
+    id,
+    name,
+    app: signInApp,
+    client,
+    program: scripted(Option.some(good), Option.some(frame)),
+    expected,
+    steps: STEPS,
+    hello: true,
+    close: "refused",
+  });
+
+  const refused = (id: string, name: (typeof HANDSHAKE_CLASSES)[number], frame: Frame) =>
+    answered(id, name, frame, { kind: "format", reason: "value" });
+
+  const unlisted = Math.max(...draw.pool) + 1;
+
+  return [
+    first("a", HANDSHAKE_CLASSES[0], `~${draw.nonce}`, "text"),
+    first("a", HANDSHAKE_CLASSES[1], `[${good}]`, "message"),
+    first("a", HANDSHAKE_CLASSES[2], notification("challenge", { nonce: draw.nonce }, { id: 1 }), "message"),
+    first("b", HANDSHAKE_CLASSES[3], notification("value", { nonce: draw.nonce }), "method"),
+    first("b", HANDSHAKE_CLASSES[4], notification("hello", { nonce: draw.nonce }), "method"),
+    first("b", HANDSHAKE_CLASSES[5], notification("answer", { nonce: draw.nonce }), "method"),
+    first("b", HANDSHAKE_CLASSES[6], notification("Challenge", { nonce: draw.nonce }), "method"),
+    first("c", HANDSHAKE_CLASSES[7], notification("challenge", { nonce: 7 }), "value"),
+    first("c", HANDSHAKE_CLASSES[8], notification("challenge", {}), "value"),
+    first("c", HANDSHAKE_CLASSES[9], notification("challenge", { nonce: "" }), "value"),
+    {
+      id: "d",
+      name: HANDSHAKE_CLASSES[10],
+      app: failingApp(draw.reason),
+      client,
+      program: scripted(Option.some(good), Option.none()),
+      expected: { kind: "app", error: new AppFailure({ word: draw.reason }) },
+      steps: STEPS.slice(0, 2),
+      hello: false,
+      close: 1000,
+    },
+    answered("g", HANDSHAKE_CLASSES[11], `~${draw.nonce}`, { kind: "format", reason: "text" }),
+    answered("g", HANDSHAKE_CLASSES[12], `[${valid}]`, { kind: "format", reason: "message" }),
+    answered("g", HANDSHAKE_CLASSES[13], notification("answer", wire("Answer", {}), { id: 1 }), {
+      kind: "format",
+      reason: "message",
+    }),
+    answered(
+      "g",
+      HANDSHAKE_CLASSES[14],
+      notification("value", wire("Answer", { version: p0, ping: draw.ping, answer: admitted })),
+      {
+        kind: "format",
+        reason: "method",
+      },
+    ),
+    answered(
+      "g",
+      HANDSHAKE_CLASSES[15],
+      notification("challenge", wire("Answer", { version: p0, ping: draw.ping, answer: admitted })),
+      {
+        kind: "format",
+        reason: "method",
+      },
+    ),
+    answered(
+      "g",
+      HANDSHAKE_CLASSES[16],
+      notification("Answer", wire("Answer", { version: p0, ping: draw.ping, answer: admitted })),
+      {
+        kind: "format",
+        reason: "method",
+      },
+    ),
+    refused("h", HANDSHAKE_CLASSES[17], answerValue({ answer: wire("admitted", {}) })),
+    refused("h", HANDSHAKE_CLASSES[18], answerValue({ ping: 0 })),
+    refused("h", HANDSHAKE_CLASSES[19], answerValue({ ping: -1 })),
+    refused("h", HANDSHAKE_CLASSES[20], answerValue({ ping: 1.5 })),
+    refused("h", HANDSHAKE_CLASSES[21], answerValue({ ping: String(draw.ping) })),
+    refused("h", HANDSHAKE_CLASSES[22], answerValue({ ping: undefined })),
+    refused("h", HANDSHAKE_CLASSES[23], answerValue({ version: 0 })),
+    refused("h", HANDSHAKE_CLASSES[24], answerValue({ version: undefined })),
+    refused("h", HANDSHAKE_CLASSES[25], answerValue({}, draw.nonce)),
+    answered(
+      "i",
+      HANDSHAKE_CLASSES[26],
+      notification("answer", wire("NoSharedVersion", { client: draw.left, gateway: draw.right })),
+      { kind: "noShared", client: draw.left, gateway: draw.right },
+    ),
+    answered("j", HANDSHAKE_CLASSES[27], answerValue({ version: unlisted }), {
+      kind: "noShared",
+      client: client.versions,
+      gateway: [unlisted],
+    }),
+  ];
+};
+
+/** One `connect` that was tried on a stand-in, read while the caller's scope was still open. */
+interface Attempt {
+  /** How it ended, none when it stalled. */
+  readonly exit: Option.Option<Exit.Exit<unknown, unknown>>;
+  /** What `make` was called with, in order. */
+  readonly made: ReadonlyArray<unknown>;
+  readonly seen: Seen;
+  /** Whether the far end had read to the end of the connection before the caller's scope ended. */
+  readonly closedEarly: boolean;
+  readonly dials: number;
+}
+
+/** Tries `connect` against a far end program on a dialing stand-in, and gives what the far end saw while the scope was still open. */
+export const attempt = (each: {
+  readonly app: App;
+  readonly client: { readonly versions: ReadonlyArray<number>; readonly features: ReadonlyArray<string> };
+  readonly program: Program;
+}) =>
+  Effect.gen(function* () {
+    const standIn = yield* dialing;
+    yield* standIn.serve(each.program);
+    const made: Array<unknown> = [];
+    const scope = yield* Scope.make();
+
+    const exit = yield* settled(
+      Transport.connect({
+        versions: each.client.versions,
+        features: each.client.features,
+        challenge: each.app.challenge,
+        hello: {
+          schema: each.app.proof,
+          make: (challenge: Plain["Type"]) => {
+            made.push(challenge);
+
+            return each.app.make(challenge);
+          },
+        },
+        answer: SignInAnswer,
+      }).pipe(Effect.provideService(Socket.Socket, standIn.socket), Scope.provide(scope)),
+      TURNS,
+    );
+
+    const seen = standIn.world.connections[0];
+
+    if (seen === undefined) {
+      return assert.fail("no connection was served");
+    }
+
+    const ended = yield* settled(Deferred.await(seen.ended), TURNS);
+    yield* Scope.close(scope, Exit.void);
+
+    const result: Attempt = {
+      exit,
+      made,
+      seen,
+      closedEarly: Option.isSome(ended),
+      dials: standIn.world.acquisitions,
+    };
+
+    return result;
+  });
+
+/** What `connect` came to over a socket whose reader fails with a `SocketError` of its own, and what it was given to write. */
+interface ReaderFailure {
+  /** How `connect` ended, none when it stalled. */
+  readonly exit: Option.Option<Exit.Exit<unknown, unknown>>;
+  /** The codes of the closes written to the socket, in order. */
+  readonly closes: ReadonlyArray<number>;
+  /** How many frames of text were written to it. */
+  readonly frames: number;
+}
+
+/**
+ * Runs `connect` over a socket that is no memory pair: it gives the gateway's challenge when asked to, then its reader fails with a
+ * `SocketReadError`, before the challenge or after the hello was written. It keeps what it was given to write.
+ */
+export const readerFailure = (when: "before the challenge" | "after the hello", nonce: string) =>
+  Effect.gen(function* () {
+    const written: Array<string | Uint8Array | Socket.CloseEvent> = [];
+    let pulls = 0;
+
+    const socket = Socket.make({
+      reader: Effect.succeed({
+        pull: Effect.suspend(() => {
+          pulls += 1;
+
+          return when === "after the hello" && pulls === 1
+            ? Effect.succeed([goodChallenge(nonce)])
+            : Effect.fail(new Socket.SocketError({ reason: new Socket.SocketReadError({ cause: "the line broke" }) }));
+        }),
+        upgrade: Socket.SocketUpgradeError.unsupported,
+      }),
+      writer: Effect.succeed({
+        write: (chunk) =>
+          Effect.sync(() => {
+            written.push(chunk);
+          }),
+        writeAll: (chunks) =>
+          Effect.sync(() => {
+            written.push(...chunks);
+          }),
+      }),
+    });
+
+    const scope = yield* Scope.make();
+
+    const exit = yield* settled(
+      Transport.connect({
+        versions: [1],
+        features: [],
+        challenge: signInApp.challenge,
+        hello: { schema: signInApp.proof, make: (challenge: Plain["Type"]) => signInApp.make(challenge) },
+        answer: SignInAnswer,
+      }).pipe(Effect.provideService(Socket.Socket, socket), Scope.provide(scope)),
+      TURNS,
+    );
+
+    yield* Scope.close(scope, Exit.void);
+
+    const result: ReaderFailure = {
+      exit,
+      closes: written.filter(Socket.isCloseEvent).map(({ code }) => code),
+      frames: written.filter(Predicate.isString).length,
+    };
+
+    return result;
+  });
+
+/** Checks what a failed `connect` came to: the error, no defect, and what the far end saw. */
+export const checkFailed = (each: Handshake, run: Attempt) => {
+  const exit = Option.getOrElse(run.exit, () => assert.fail(`${each.name}: connect stalled`));
+  const { error, defect } = failureFrom(exit);
+  expect(defect, `${each.name}: never a defect`).toBe(false);
+
+  const expected = each.expected;
+
+  switch (expected.kind) {
+    case "format":
+      expect(
+        Option.map(error, (value) => (Schema.is(FormatError)(value) ? value.reason : value)),
+        `${each.name}: the frame is refused`,
+      ).toEqual(Option.some(expected.reason));
+      break;
+    case "noShared":
+      expect(
+        Option.map(error, (value) =>
+          Schema.is(NoSharedVersion)(value) ? { client: value.client, gateway: value.gateway } : value,
+        ),
+        `${each.name}: no version is shared`,
+      ).toEqual(Option.some({ client: expected.client, gateway: expected.gateway }));
+      break;
+    case "app":
+      assert.deepStrictEqual(Option.getOrUndefined(error), expected.error, `${each.name}: the app's own error`);
+      break;
+  }
+
+  expect(run.made.length, `${each.name}: make is called once for each step past the challenge`).toBe(
+    each.steps.includes("hello") ? 1 : 0,
+  );
+  expect(run.seen.errors, `${each.name}: the far end failed on nothing of its own`).toEqual([]);
+  expect(run.seen.frames.length, `${each.name}: the far end reads a hello frame only when one was sent`).toBe(
+    each.hello ? 1 : 0,
+  );
+  expect(run.closedEarly, `${each.name}: the connection is closed before the caller's scope ends`).toBe(true);
+  expect(
+    Option.map(run.seen.close, ({ code }) => (code >= REFUSED.low && code <= REFUSED.high ? "refused" : code)),
+    `${each.name}: the close code`,
+  ).toEqual(Option.some(each.close));
+};
+
+// ---- (e) and (f): the hello the client cannot write
+
+/** The names of the classes (e) of client versions, in order. */
+export const VERSION_CLASSES = ["e: 0", "e: -1", "e: 1.5", "e: NaN", "e: Infinity"] as const;
+
+/** The names of the classes (f) of proofs the hello schema cannot write, in order. */
+export const PROOF_CLASSES = LOOSE_CLASSES.map((name) => name.replace("e:", "f:"));
+
+/** Connections whose hello cannot be written: `connect` fails with a `FormatError` of `value`, and the hello is never sent. */
+export const unwritableHellos = (draw: HelloDraw): ReadonlyArray<Handshake> => {
+  const [p0 = 1] = draw.pool;
+  const good = Option.some(goodChallenge(draw.nonce));
+
+  const base = {
+    program: scripted(good, Option.none()),
+    expected: { kind: "format", reason: "value" },
+    steps: STEPS.slice(0, 2),
+    hello: false,
+    close: "refused",
+  } as const;
+
+  const versions = [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].map((bad, index): Handshake => ({
+    ...base,
+    id: "e",
+    name: VERSION_CLASSES[index] ?? "e",
+    app: signInApp,
+    client: { versions: [p0, bad], features: draw.features },
+  }));
+
+  const proofs = looseValues({ other: draw.nonce, n: draw.ping }).map(({ value }, index): Handshake => ({
+    ...base,
+    id: "f",
+    name: PROOF_CLASSES[index] ?? "f",
+    app: { ...looseApp, make: () => Effect.succeed(value) },
+    client: { versions: [p0], features: draw.features },
+  }));
+
+  return [...versions, ...proofs];
+};
+
+// ---- (p) to (r): the hellos a gateway reads
+
+/** A hello frame, and why `accept` refuses it. */
+interface HelloFrame {
+  readonly id: "p" | "q";
+  readonly name: string;
+  readonly frame: Frame;
+  readonly reason: FormatError["reason"];
+}
+
+/** The names of the classes (p) and (q), in order. */
+export const HELLO_CLASSES = [
+  "p: no JSON",
+  "p: a batch",
+  "p: a notification with an id",
+  "p: the method value",
+  "p: the method challenge",
+  "p: the method answer",
+  "p: the method Hello",
+  "q: no versions",
+  "q: versions that is no array",
+  "q: a version of 0",
+  "q: a version of 1.5",
+  "q: a version that is a text",
+  "q: features that hold a number",
+  "q: has in place of features",
+  "q: a proof the app's schema refuses",
+  "q: no proof",
+] as const;
+
+/** The value of a hello that fits, with a proof of the test app. */
+export const helloValue = (draw: HelloDraw, changes: Readonly<Record<string, Json | undefined>> = {}) => {
+  const [p0 = 1] = draw.pool;
+
+  const value: Record<string, Json | undefined> = {
+    versions: [p0],
+    features: draw.features,
+    proof: signed(draw.nonce),
+    ...changes,
+  };
+
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, Json] => entry[1] !== undefined));
+};
+
+export const hellos = (draw: HelloDraw): ReadonlyArray<HelloFrame> => {
+  const good = notification("hello", helloValue(draw));
+
+  const make = (
+    id: HelloFrame["id"],
+    name: (typeof HELLO_CLASSES)[number],
+    frame: Frame,
+    reason: HelloFrame["reason"],
+  ) => ({
+    id,
+    name,
+    frame,
+    reason,
+  });
+
+  const value = (name: (typeof HELLO_CLASSES)[number], changes: Readonly<Record<string, Json | undefined>>) =>
+    make("q", name, notification("hello", helloValue(draw, changes)), "value");
+
+  const { features: _features, ...withoutFeatures } = helloValue(draw);
+
+  return [
+    make("p", HELLO_CLASSES[0], `~${draw.nonce}`, "text"),
+    make("p", HELLO_CLASSES[1], `[${good}]`, "message"),
+    make("p", HELLO_CLASSES[2], notification("hello", helloValue(draw), { id: 2 }), "message"),
+    make("p", HELLO_CLASSES[3], notification("value", helloValue(draw)), "method"),
+    make("p", HELLO_CLASSES[4], notification("challenge", helloValue(draw)), "method"),
+    make("p", HELLO_CLASSES[5], notification("answer", helloValue(draw)), "method"),
+    make("p", HELLO_CLASSES[6], notification("Hello", helloValue(draw)), "method"),
+    value(HELLO_CLASSES[7], { versions: undefined }),
+    value(HELLO_CLASSES[8], { versions: draw.nonce }),
+    value(HELLO_CLASSES[9], { versions: [0] }),
+    value(HELLO_CLASSES[10], { versions: [1.5] }),
+    value(HELLO_CLASSES[11], { versions: ["1"] }),
+    value(HELLO_CLASSES[12], { features: [draw.ping] }),
+    make("q", HELLO_CLASSES[13], notification("hello", { ...withoutFeatures, has: draw.features }), "value"),
+    value(HELLO_CLASSES[14], { proof: { key: draw.ping } }),
+    value(HELLO_CLASSES[15], { proof: undefined }),
+  ];
+};
+
+// ---- (s): the pings a gateway cannot write
+
+/** The names of the classes (s) of pings, in order. */
+export const PING_CLASSES = ["s: zero", "s: a negative", "s: infinity", "s: a fraction of a millisecond"] as const;
+
+export const unwritablePings = (
+  draw: HelloDraw,
+): ReadonlyArray<{ readonly name: string; readonly ping: Duration.Duration }> => [
+  { name: PING_CLASSES[0], ping: Duration.zero },
+  { name: PING_CLASSES[1], ping: Duration.millis(-(draw.ping + 1)) },
+  { name: PING_CLASSES[2], ping: Duration.infinity },
+  { name: PING_CLASSES[3], ping: Duration.micros(BigInt(draw.ping) * 1000n + 500n) },
+];
+
+/** The notification a frame holds, as the keys of its method, its value and its params. */
+export const holds = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      method: Schema.String,
+      params: Schema.Struct({ value: Schema.Record(Schema.String, Schema.Unknown) }),
+    }),
+  ),
+);
+
+/** The value of a frame of one of the hello's methods, written by the package, as plain data. */
+export const valueFrom = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ method: Schema.String, params: Schema.Struct({ value: Schema.Json }) })),
+);
+
+// ---- what a connection that succeeded must show: the assertions of H1, H6 and O1, shared with the real socket's W2
+
+const isSignInAnswer = Schema.is(SignInAnswer);
+
+const sameSignInAnswer = Schema.toEquivalence(SignInAnswer);
+
+// Building an equivalence is the slow part of a check, so each schema's is built once.
+const equivalences = new Map<Plain, (left: Plain["Type"], right: Plain["Type"]) => boolean>();
+
+const equivalenceFor = (schema: Plain) => {
+  const known = equivalences.get(schema);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const made = Schema.toEquivalence(schema);
+  equivalences.set(schema, made);
+
+  return made;
+};
+
+/** H1: the answer comes back whole, with the version the pick gives, the ping, and a `make` called once with the challenge sent. */
+export const checkWhole = (each: ConnectionCase, out: CaseOutcome) => {
+  expect(out.version, `${each.name}: the highest version in both lists`).toBe(each.picked);
+  expect(Duration.toMillis(out.ping), `${each.name}: the gateway's ping`).toBe(each.gateway.ping);
+  expect(
+    isSignInAnswer(out.answer) && sameSignInAnswer(out.answer, each.gateway.answer),
+    `${each.name}: the app's answer, whole`,
+  ).toBe(true);
+  expect(out.made.length, `${each.name}: make is called once`).toBe(1);
+  expect(
+    equivalenceFor(each.app.challenge)(out.made[0], each.challenge),
+    `${each.name}: with the challenge the gateway sent`,
+  ).toBe(true);
+  expect(out.seen.errors, `${each.name}: the gateway failed on nothing of its own`).toEqual([]);
+};
+
+/** H6: the chain reads the frames of the answer's batch first, then the later ones, none lost and none twice, and the gateway reads what the client sent. */
+export const checkOrder = (each: ConnectionCase, out: CaseOutcome) => {
+  assert.deepStrictEqual(out.read, [...each.batch, ...each.later], `${each.name}: the values the chain read, in order`);
+  assert.deepStrictEqual(
+    out.gatewayRead,
+    [...each.sent].slice(0, out.gatewayRead.length),
+    `${each.name}: what the gateway read, in order`,
+  );
+  expect(out.gatewayRead.length, `${each.name}: and all of it`).toBe(each.sent.length);
+};
+
+/** O1: one dial, one connection served, one challenge sent, and the gateway reads the close 1000. */
+export const checkOneDial = (each: ConnectionCase, out: CaseOutcome) => {
+  expect(out.dials, `${each.name}: one dial`).toBe(1);
+  expect(out.served, `${each.name}: one connection served`).toBe(1);
+  expect(out.seen.challenges, `${each.name}: one challenge sent`).toBe(1);
+  expect(
+    Option.map(out.seen.close, ({ code }) => code),
+    `${each.name}: the connection ends with the close 1000`,
+  ).toEqual(Option.some(1000));
+};

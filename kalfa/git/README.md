@@ -1,10 +1,10 @@
 # @kalfa/git
 
 Read commits, refs and changes from a git repository that has no working copy, write a commit, move a ref and merge trees.
-One service, `Repository`, with ten read calls and three write calls, a helper that writes a merge commit, two adapters
+One service, `Repository`, with ten read calls and four write calls, helpers that write a merge commit and the commit of an edit, two adapters
 that answer the calls, and the laws both adapters pass.
 
-It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef` and `mergeTrees` change the
+It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef`, `mergeTrees` and `editTree` change the
 repository, and none sends anything to a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
 so anything can import it.
 
@@ -252,6 +252,62 @@ What git prints for each command, the config that could change it, and what pins
 2. **Names that are not UTF-8.** A `Path` is text, so the memory adapter holds none. git can hold a name of any bytes, and
    `readFile` never matches a `Path` to such a name.
 
+## Edit a tree, and commit the edit
+
+```ts
+import * as CommitEdit from "@kalfa/git/CommitEdit";
+
+const adopt = Effect.gen(function* () {
+  const repo = yield* Repository.Repository;
+  const changes = new Map([[path("config/app.toml"), utf8(next)], [path("old.toml"), "absent" as const]]);
+  const tree = yield* repo.editTree(main, changes); // TreeId; the same tree when nothing changes
+  // One parent, the caller's author and message, the settings' committer. NoChange when the edit changes nothing.
+  const commit = yield* CommitEdit.commitEdit({ parent: main, changes, message: "Adopt the live value\n", author });
+  return commit; // nothing moved: the caller moves a ref with moveRef, only if it is where it read it
+});
+```
+
+An **edit** is a map from a path to new bytes, or to `"absent"`, the word for a file that should not exist. `editTree(base,
+changes)` answers the id of the tree of `base`'s files with each change applied, which the repository then holds. Every other
+path keeps its entry, byte for byte. A replaced file keeps its mode, so an executable script stays executable, and a new file
+is `100644`. A folder left with no files goes, since git has no empty folder, and an edit that removes every file gives git's
+empty tree. `"absent"` on a path that holds nothing is no change, so a repeated adoption does not fail. An edit that changes
+nothing gives back `base`'s own tree and writes nothing. It moves no ref and reads no history.
+
+The checks run in this order, and nothing is written before the last passes: each new content is at most `limits.blob`
+(`FileTooLarge`, naming the first such path by UTF-8 bytes, before any command runs, so every file written can be read back),
+`base` is a commit (`NoSuchCommit`), each changed path is one `readFile` accepts (`NotAFile`, removal included, so a link is
+never replaced or removed), and in the result no new file sits below a file the edit keeps or below another new file
+(`PathInTheWay`, naming the first such new path and the shortest path in its way). A file removed and a file added below it, a
+file made a folder, is allowed.
+
+`CommitEdit.commitEdit({ parent, changes, message, author })` reads the parent, makes the tree, and fails `NoChange` and
+writes nothing when the tree is the parent's, else writes the commit with `writeCommit`: parent `[parent]`, the caller's
+author and message as given, the settings' committer. So `NoChange` comes before a NUL in the message is checked. It moves no
+ref. A refusal after `editTree` can leave the edit's unreachable objects behind, as a refused merge commit can.
+
+**How `@kalfa/git/process` makes the tree, and why.** It asks `cat-file --batch-check` for the commit and `<commit>^{tree}`,
+lists with `ls-tree -z` every folder on a changed path that the base has, top down, writes each new content with
+`hash-object -t blob -w --no-filters --stdin`, and then, deepest folder first, makes each changed folder with `mktree -z`.
+Each entry no change touches is passed as the exact bytes `ls-tree` printed, so a name that is not UTF-8, a submodule and an
+odd mode survive. A folder whose entries come out the same keeps its id and is never written again, so an edit that changes
+nothing runs no `mktree`. It uses no temporary index, which needs a file and a `GIT_INDEX_FILE` for each call, reads the
+whole tree and reads index config (`core.ignoreCase`, `index.*`, `core.splitIndex`). It does not use `hash-object -t tree`,
+which runs git's fsck in 2.40.1 (so `fsck.*` config can change what it accepts) and would need every name as text. `mktree`
+reads no config for the tree it writes, sorts as git does, keeps each name's bytes, and checks that every object it names
+exists.
+
+| Command | Could change what it prints | Pinned on the call |
+|---|---|---|
+| `hash-object -t blob -w --stdin` | `core.autocrlf`, `core.eol`, `core.safecrlf`, `filter.<driver>.clean`, `core.attributesFile`, `info/attributes`, `core.bigFileThreshold`: each acts through `--path` or a file read from disk | `--no-filters`, and no `--path` |
+| `mktree -z` | none: it reads no config for the tree it writes | `-z`, and no `--missing`, so every object it names must exist |
+
+A third case where the adapters may differ, beside the two under "Reading a file":
+
+3. **Trees git wrote in an odd form** (a zero-padded mode, an unsorted folder, from old tools). The git adapter keeps a
+   folder no change touches as it is, and writes a changed folder again in git's normal form. The memory adapter holds only
+   normal trees. A name that is not UTF-8 beside an edit survives byte for byte on git, and the memory adapter holds none.
+
 ## Settings
 
 The limits are required and have no default: the kill wait is one of them. The app gives each one where it builds the layer.
@@ -274,7 +330,7 @@ email = "bot@example.test"
 
 `commits` is the most commits a walk or a merge-base answer holds. `refs` is the most refs one `readRefs` answer
 holds. `bytes` is the most bytes one commit object holds, to read or to write, and the most stderr an error keeps.
-`files` is the most files one diff names, and `diff` is the most bytes of file content one diff compares, and `blob` is the most bytes of one file `readFile` reads. `time` is the
+`files` is the most files one diff names, and `diff` is the most bytes of file content one diff compares, and `blob` is the most bytes of one file `readFile` reads or `editTree` writes. `time` is the
 longest one call may take. `kill` is how long git has to stop, once a call has run out of time, before it is killed. `committer` is the name and email every commit the package writes names as its
 committer. A name takes what a signature's name takes (no `<`, `>`, line break or NUL) and an email what its email
 takes. A setting's value is plain data, so the time is duration text, which the package decodes. When a
@@ -294,4 +350,4 @@ optional peers, needed only by `/test`.
 
 It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and sends nothing
 to a remote. It imports no Node module and no package of its repo. It puts no message, name, email, path, line or file
-content in a span: the diff's span says how many files and lines, the range's span names its merge base, and a read's span says whether there is a file and how big it is. Rebase, squash, fetch and push come in later tickets of this package.
+content in a span: the diff's span says how many files and lines, the range's span names its merge base, and a read's span says whether there is a file and how big it is, and an edit's span says how many changes. Rebase, squash, fetch and push come in later tickets of this package.

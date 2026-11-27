@@ -142,6 +142,38 @@ const reportCarried = (error: UnknownSettingError) =>
 - Reporting stays one way in: `report` checks the fields, and only it hands the service a value. This package picks
   no exit code; the command that runs the subcommand does.
 
+## Hide a cause
+
+A typed error may hold a cause that quotes a value, as a secret store's own client does when it reports what it read. Hold it as
+`Hidden.Cause`: a `Redacted` in memory, which no rendering shows, and the fixed text `Hidden.placeholder` (`<redacted>`) in every
+codec that writes outward.
+
+Give the error a field `cause: Hidden.Cause` (or `Schema.optional(Hidden.Cause)`), import it with
+`import * as Hidden from "@kalfa/diagnostics/Hidden"`, and make a cause with `Redacted.make(cause)`. Then
+`Schema.toCodecJson` of the error writes `{ _tag: "StoreFailed", cause: "<redacted>" }`, whatever the cause was. The example in
+`Hidden.Cause`'s doc block shows the whole class.
+
+```ts
+import * as Hidden from "@kalfa/diagnostics/Hidden";
+import { Redacted, Schema } from "effect";
+
+export class StoreFailed extends Schema.TaggedError<StoreFailed, { readonly brand: unique symbol }>()("StoreFailed", {
+  cause: Hidden.Cause,
+}) {}
+
+// The cause is made with `Redacted.make`; `Schema.toCodecJson` of the error writes its `cause` as "<redacted>".
+const failed = new StoreFailed({ cause: Redacted.make(new Error("bad value")) });
+```
+
+- **Why not `Schema.Redacted`.** In Effect 4.1.3 `Schema.toCodecJson` of a `Schema.Redacted` writes the value it holds, in full. So an
+  error that crosses a socket would carry its cause. `Hidden.Cause` writes `<redacted>` there, whatever the cause was, and a label is
+  not written either.
+- **Read back.** A read of the JSON gives a hidden cause with nothing in it (`Redacted.value` is `undefined`): the value never left the
+  process. A wire cause of any other text is refused.
+- **In the process.** `Schema.toCodecIso` keeps the cause, so an optic does not lose it. Make a cause with `Redacted.make(cause)`, and
+  read it on purpose with `Redacted.value(error.cause)`. A cause that is not a `Redacted` does not compile.
+- **Optional.** `Schema.optional(Hidden.Cause)` leaves the key out when there is no cause.
+
 ## Test what was reported
 
 `TestDiagnostics.layer` provides `Diagnostics` and collects every report in order, repeats too. Each build of the

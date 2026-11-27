@@ -518,6 +518,9 @@ const isShorterReading = (whole: Reading, got: Reading): boolean => {
   );
 };
 
+// The cases P18 draws. The mutation box caps a property's count to `MUTATE_RUNS`, so the tally below is read only after all of these.
+const P18_RUNS = 400;
+
 const tally = new Map<string, number>();
 
 const counted = (kind: string): void => {
@@ -533,6 +536,7 @@ it.prop(
   "P18 parse.patch: a patch cut at any byte or bent in one place is unreadable, or a shorter reading of the whole, and never throws",
   { row: int(0, 1_000_000), kind: int(0, 6), pick: int(0, 1_000_000), flip: int(0, 1), junk: int(0, 3) },
   ({ row, kind, pick, flip, junk }) => {
+    counted("case");
     const chosen = readable[row % readable.length];
     expect(chosen, "a recorded row").toBeDefined();
 
@@ -664,7 +668,7 @@ it.prop(
       expect(encodeContents(read.success), `${note}: the same reading`).toEqual(whole);
     }
   },
-  { arbitrary: { runs: 400, seed: 119120 } },
+  { arbitrary: { runs: P18_RUNS, seed: 119120 } },
 );
 
 // The rows of P18 that were first found by hand, each the one-line row of the recording cut or bent, kept as they are.
@@ -696,8 +700,21 @@ it("pinned: P18 a patch with a partial row after its last section, a marker with
     }
   }
 
-  // When the law above ran in this file, each kind of cut or bend was drawn, and a cut read as a shorter reading at least once.
+  // When the law above ran in this file, it drew exactly the cases it was given: its own count, or the box's cap when that is
+  // smaller. Each kind of cut or bend was drawn, and a cut read as a shorter reading at least once, but only a full run can say so:
+  // a capped run draws too few cases to reach every kind, so it skips the kinds. Both numbers are asserted, so a lost counter, a
+  // gate that moved or a count that changed fails here and never skips quietly.
   if (tally.size > 0) {
+    const drawn = tally.get("case") ?? 0;
+    const cap = Number(process.env.MUTATE_RUNS) || P18_RUNS;
+    const full = drawn >= P18_RUNS;
+    expect(drawn, "P18 drew its cases").toBe(Math.min(P18_RUNS, cap));
+    expect(full, "P18 is read at full depth only").toBe(cap >= P18_RUNS);
+
+    if (!full) {
+      return;
+    }
+
     for (const kind of [
       "cut",
       "cut: a shorter reading",

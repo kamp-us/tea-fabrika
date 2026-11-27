@@ -26,16 +26,18 @@ type Workflow = Record<string, unknown> & {
   jobs: Record<string, Job>;
 };
 
-// The changed-tests rule's and the CI speed goal's binding constraint: automation opens issues here from two jobs alone,
-// scheduled.yaml's report and ci-speed.yaml's measure.
+// The changed-tests rule's and the CI speed goal's binding constraint: automation opens issues here from three jobs alone,
+// scheduled.yaml's report, ci-speed.yaml's measure and mutation-heartbeat.yaml's heartbeat.
 const RULE =
-  "only scheduled.yaml's report job and ci-speed.yaml's measure job may touch issues (the merge line runs only the tests a change reaches, and a schedule runs every test; CI speed has a goal, and a daily job measures it)";
+  "only scheduled.yaml's report job, ci-speed.yaml's measure job and mutation-heartbeat.yaml's heartbeat job may touch issues (the merge line runs only the tests a change reaches, and a schedule runs every test; CI speed has a goal, and a daily job measures it; the hourly mutation run has a heartbeat)";
 
 const SCHEDULED = ".github/workflows/scheduled.yaml";
 
 const SPEED = ".github/workflows/ci-speed.yaml";
 
-const ALLOWED: Record<string, string> = { [SCHEDULED]: "report", [SPEED]: "measure" };
+const HEARTBEAT = ".github/workflows/mutation-heartbeat.yaml";
+
+const ALLOWED: Record<string, string> = { [SCHEDULED]: "report", [SPEED]: "measure", [HEARTBEAT]: "heartbeat" };
 
 const grant = fc.constantFrom<unknown>(
   "write-all",
@@ -53,21 +55,27 @@ const other = fc.constantFrom(
 
 const realWorkflows = () =>
   Rec.fromEntries(
-    ["check.yaml", "host.yaml", "mutation.yaml", "scheduled.yaml", "ci-speed.yaml"].map((name) => [
-      `.github/workflows/${name}`,
-      read(name),
-    ]),
+    ["check.yaml", "host.yaml", "mutation.yaml", "mutation-heartbeat.yaml", "scheduled.yaml", "ci-speed.yaml"].map(
+      (name) => [`.github/workflows/${name}`, read(name)],
+    ),
   );
 
-it("pinned: the real workflows grant issues nowhere but scheduled.yaml's report and ci-speed.yaml's measure", () => {
+it("pinned: the real workflows grant issues nowhere but scheduled.yaml's report, ci-speed.yaml's measure and the heartbeat's job", () => {
   expect(lintIssues(realWorkflows())).toEqual([]);
 });
 
-it("property: a job that touches issues passes only as one of the two named jobs, by its file and its name", () => {
-  // Paths and job names are drawn from the two allowed pairs crossed with others, so a right file
+it("property: a job that touches issues passes only as one of the three named jobs, by its file and its name", () => {
+  // Paths and job names are drawn from the three allowed pairs crossed with others, so a right file
   // with a wrong job, and a right job name in a wrong file, are both generated.
-  const path = fc.constantFrom(SCHEDULED, SPEED, ".github/workflows/check.yaml", ".github/workflows/new.yaml");
-  const name = fc.constantFrom("report", "measure", "next", "a");
+  const path = fc.constantFrom(
+    SCHEDULED,
+    SPEED,
+    HEARTBEAT,
+    ".github/workflows/check.yaml",
+    ".github/workflows/new.yaml",
+  );
+
+  const name = fc.constantFrom("report", "measure", "heartbeat", "next", "a");
   fc.assert(
     fc.property(path, name, grant, (file, job, given) => {
       const workflow = { on: { push: {} }, jobs: { [job]: { "runs-on": "ubuntu-latest", permissions: given } } };
@@ -78,8 +86,15 @@ it("property: a job that touches issues passes only as one of the two named jobs
   );
 });
 
-it("property: a workflow-wide grant that touches issues fails in every file, the two named ones included", () => {
-  const path = fc.constantFrom(SCHEDULED, SPEED, ".github/workflows/check.yaml", ".github/workflows/new.yaml");
+it("property: a workflow-wide grant that touches issues fails in every file, the three named ones included", () => {
+  const path = fc.constantFrom(
+    SCHEDULED,
+    SPEED,
+    HEARTBEAT,
+    ".github/workflows/check.yaml",
+    ".github/workflows/new.yaml",
+  );
+
   fc.assert(
     fc.property(path, grant, (file, given) => {
       const workflow = { on: { push: {} }, permissions: given, jobs: {} };

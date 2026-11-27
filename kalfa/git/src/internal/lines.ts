@@ -41,8 +41,12 @@ export interface Block {
   readonly added: ReadonlyArray<Uint8Array>;
 }
 
-// A line's bytes as text, one character for each byte, so two lines are equal exactly when their texts are.
-const key = (line: Uint8Array): string => {
+/**
+ * A line's bytes as text, one character for each byte, so two lines are equal exactly when their texts are.
+ *
+ * @internal
+ */
+export const key = (line: Uint8Array): string => {
   let text = "";
 
   for (const octet of line) {

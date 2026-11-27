@@ -1,0 +1,224 @@
+// What the platform laws share (slice 1 of ticket 2067): the generator of the closes a socket can see, and the client that
+// talks to the probe Worker (`platform-worker.test-support.ts`) over a real WebSocket. Every generator is an Effect Arbitrary,
+// built on the pieces `../Transport.test-support.ts` exports, which this file imports and never edits. Each law makes, from
+// each draw, one input for every class it names, so every class is reached in every run.
+import { request } from "node:http";
+import { createServer } from "node:net";
+import { NodeSocket } from "@effect/platform-node";
+import { Arbitrary, Clock, Console, Deferred, Effect, Formatter, Option, Predicate, Queue } from "effect";
+import type { Scope } from "effect";
+import { Socket } from "effect/socket";
+import { between, word } from "../Transport.test-support.ts";
+
+// ---- (r) the closes a socket can see
+
+/** What one drawn run holds for a close: the made-up parts every class is built from. */
+interface CloseSeed {
+  readonly high: number;
+  readonly low: number;
+  readonly word: string;
+  readonly value: string;
+}
+
+/**
+ * The generator `platformCloses`, the class (r) of the plan: a seed from which a server close (1000, and 3000 to 4999 with a
+ * reason) and a client close (1000, and 3000 to 4999) are made, each with a reason of up to 123 bytes of UTF-8.
+ *
+ * A client close has no 1001 (the plan had one): the client of these laws is the platform's `WebSocket`, whose `close(code)` accepts
+ * only 1000 and 3000 to 4999 and throws `InvalidAccessError` for any other, 1001 included, which a browser sends only of its
+ * own accord when a page ends. See `clientMayClose`.
+ */
+export const platformCloses: Arbitrary.Arbitrary<CloseSeed> = Arbitrary.all({
+  high: between(3000, 4999),
+  low: between(3000, 4999),
+  word,
+  value: word,
+});
+
+/** One close a law makes: who starts it, with what code and reason, and the value the socket's attachment holds first. */
+export interface Close {
+  readonly id: (typeof CLOSE_CLASSES)[number];
+  readonly by: "server" | "client";
+  readonly code: number;
+  readonly reason: string;
+  readonly attached: string;
+}
+
+/** The classes of (r) a law must reach, in order. */
+export const CLOSE_CLASSES = ["server 1000", "server 3000 to 4999", "client 1000", "client 3000 to 4999"] as const;
+
+/**
+ * Whether a platform `WebSocket` may close with `code`: 1000, or 3000 to 4999, as the WHATWG WebSocket standard says ("validate close code
+ * and reason") and as undici writes it, in `validateCloseCodeAndReason` of `lib/web/websocket/util.js`, lines 290 to 295 of undici
+ * 8.12.4: `if (code !== 1000 && (code < 3000 || code > 4999)) throw new DOMException('invalid code', 'InvalidAccessError')`. Node 26 carries
+ * undici 8.12.2 inside it, and `new WebSocket(url).close(1001)` throws that error there too.
+ */
+export const clientMayClose = (code: number): boolean => code === 1000 || (code >= 3000 && code <= 4999);
+
+/**
+ * One close for each class of (r), for each seed. The reasons are empty, ASCII, and letters past ASCII, each far under the 123
+ * bytes RFC 6455 allows.
+ */
+export const closesFrom = (seeds: ReadonlyArray<CloseSeed>): ReadonlyArray<Close> =>
+  seeds.flatMap((seed, index) => {
+    const reasons = ["", seed.word, `çok güzel ${seed.word} ü`];
+    // The four closes of a draw take the three reasons in turn, so each draw has a close with a reason and one with none.
+    let turn = index;
+
+    const made = (id: Close["id"], by: Close["by"], code: number): Close => ({
+      id,
+      by,
+      code,
+      reason: reasons[turn++ % reasons.length] ?? "",
+      attached: `${seed.value}-${index}`,
+    });
+
+    return [
+      made("server 1000", "server", 1000),
+      made("server 3000 to 4999", "server", seed.high),
+      made("client 1000", "client", 1000),
+      made("client 3000 to 4999", "client", seed.low),
+    ];
+  });
+
+// ---- a client of the probe Worker
+
+/** The client's end of one real WebSocket. */
+export interface Client {
+  readonly send: (text: string) => Effect.Effect<void, Socket.SocketError>;
+  /** A close with no `reason` argument is the one the core makes (`new Socket.CloseEvent(1000)`). */
+  readonly close: (code: number, reason?: string) => Effect.Effect<void, Socket.SocketError>;
+  /** The text frames the server sent, in order. */
+  readonly inbox: Queue.Queue<string>;
+  /** Set once, with the error the socket ended with (Effect's reader ends every socket with one, a clean close included) and when. */
+  readonly ended: Deferred.Deferred<Ended>;
+  /** The socket's address and the time it opened, in milliseconds, for a line that says which socket and how long it lived. */
+  readonly url: string;
+  readonly opened: number;
+}
+
+/** How a client's socket ended, and the clock's milliseconds when it did. */
+interface Ended {
+  readonly error: Socket.SocketError;
+  readonly at: number;
+}
+
+/**
+ * What a server answers to a WebSocket upgrade request for `url`, in words: the status, the headers and the start of the body when
+ * it is no upgrade, or that it upgraded. A WebSocket client says only that the handshake failed, and this says why.
+ */
+export const dial = (url: string): Effect.Effect<string> =>
+  Effect.callback<string>((resume) => {
+    const asked = request(url.replace(/^ws/, "http"), {
+      headers: {
+        connection: "Upgrade",
+        upgrade: "websocket",
+        "sec-websocket-version": "13",
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+      },
+    });
+
+    asked.on("upgrade", (response, socket) => {
+      socket.destroy();
+      resume(
+        Effect.succeed(
+          `upgraded with status ${response.statusCode} and headers ${Formatter.formatJson(response.headers)}`,
+        ),
+      );
+    });
+    asked.on("response", (response) => {
+      let body = "";
+
+      response.setEncoding("utf8");
+      response.on("data", (chunk: string) => {
+        body += chunk;
+      });
+      response.on("end", () => {
+        resume(
+          Effect.succeed(
+            `no upgrade: status ${response.statusCode}, headers ${Formatter.formatJson(response.headers)}, body ${Formatter.formatJson(body.slice(0, 600))}`,
+          ),
+        );
+      });
+    });
+    asked.on("error", (error) => resume(Effect.succeed(`the request failed: ${error.message}`)));
+    asked.end();
+
+    return Effect.sync(() => asked.destroy());
+  }).pipe(Effect.timeoutOption("5 seconds"), Effect.map(Option.getOrElse(() => "no answer in 5 seconds")));
+
+/** The client end of a socket that is already made, read in the background until the scope ends; `url` only names it in what it says. */
+export const clientOn = (socket: Socket.Socket, url: string): Effect.Effect<Client, Socket.SocketError, Scope.Scope> =>
+  Effect.gen(function* () {
+    const writer = yield* socket.writer;
+
+    const { pull } = yield* socket.reader.pipe(
+      Effect.tapError((error) =>
+        Effect.flatMap(dial(url), (answered) =>
+          Console.log(
+            `R0 OPEN FAILED dialing ${url}: ${Formatter.format(error.reason)}; a plain upgrade request gets ${answered}`,
+          ),
+        ),
+      ),
+    );
+
+    const inbox = yield* Queue.unbounded<string>();
+    const ended = yield* Deferred.make<Ended>();
+    const opened = yield* Clock.currentTimeMillis;
+    const decoder = new TextDecoder();
+
+    yield* Effect.forkScoped(
+      Effect.forever(
+        Effect.flatMap(pull, (chunks) =>
+          Queue.offerAll(
+            inbox,
+            chunks.map((chunk) => (Predicate.isString(chunk) ? chunk : decoder.decode(chunk))),
+          ),
+        ),
+      ).pipe(
+        Effect.catch((error) =>
+          Effect.flatMap(Clock.currentTimeMillis, (at) => Deferred.succeed(ended, { error, at })),
+        ),
+      ),
+    );
+
+    // A write that fails says which socket and why: Effect's own message is only "An error occurred during Write".
+    const told = <A>(call: string, written: Effect.Effect<A, Socket.SocketError>) =>
+      Effect.tapError(written, (error) =>
+        Console.log(`R0 WRITE FAILED on ${url} (${call}): ${Formatter.format(error.reason)}`),
+      );
+
+    return {
+      send: (text) => told("send", writer.write(text)),
+      close: (code, reason) => told("close", writer.write(new Socket.CloseEvent(code, reason))),
+      inbox,
+      ended,
+      url,
+      opened,
+    };
+  });
+
+/** Connects to `url` and reads it in the background until the scope ends. A failed open is told, with what the server answers. */
+export const connect = (url: string): Effect.Effect<Client, Socket.SocketError, Scope.Scope> =>
+  Effect.flatMap(Effect.provide(Socket.Socket, NodeSocket.layerWebSocket(url)), (socket) => clientOn(socket, url));
+
+/** A TCP port on 127.0.0.1 that was free a moment ago. The probe's Worker binds it right after, in this process's own run. */
+export const freePort: Effect.Effect<number> = Effect.callback<number>((resume) => {
+  const server = createServer();
+
+  server.listen({ port: 0, host: "127.0.0.1", exclusive: true }, () => {
+    const address = server.address();
+    const port = Predicate.hasProperty(address, "port") ? Number(address.port) : 0;
+
+    server.close(() => resume(Effect.succeed(port)));
+  });
+});
+
+/**
+ * What real workerd did after a server close, as R0 recorded it (the CI proof run
+ * https://github.com/kamp-us/tea-fabrika/actions/runs/45321159935, with workerd as Alchemy 2.0.0-beta.85 installs it): a close event
+ * comes later, once the client's Close frame is back, in an event of its own. It carries the code and reason of the client's Close
+ * frame, which a platform `WebSocket` writes as the server's code and no reason, so `reason` is empty whatever the server sent; it
+ * is clean; and the attachment is still readable in it. The stand-in copies this, and `M4` holds it to it on both worlds.
+ */
+export const SERVER_CLOSE_EVENT = { reason: "", wasClean: true, attachment: "kept" } as const;

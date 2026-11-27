@@ -5,41 +5,18 @@
  *
  * Each is a plain function of streams that keeps nothing from one frame to the next, so a socket sits in a chain of stages as one more stage: `encode`, `socket`, `decode`. The format is the `Format` service and the socket is Effect's own `Socket`, so any Layer of either works.
  */
-import { Array as Arr, Data, Effect, Option, Predicate, Schema, Stream } from "effect";
+import { Array as Arr, Data, Effect, Option, Predicate, Stream } from "effect";
+import type { Schema } from "effect";
 import { Socket } from "effect/socket";
-import { Format, FormatError } from "./Format.ts";
+import type { Format, FormatError } from "./Format.ts";
 import type { Frame } from "./Frame.ts";
+import { text } from "./internal/connection.ts";
+import * as Message from "./internal/message.ts";
 import type { Traced } from "./Traced.ts";
 
-// The one method word of a value's frame. A frame with another word is another message of the protocol, never a value.
-const METHOD = "value";
+const send = Message.send("value");
 
-const send = <S extends Schema.Top>(schema: S) =>
-  Effect.fnUntraced(function* ({ value, trace }: Traced<S["Type"]>) {
-    const format = yield* Format;
-
-    const written = yield* Schema.encodeUnknownEffect(format.codecFor(schema))(value).pipe(
-      Effect.mapError(() => new FormatError({ reason: "value" })),
-    );
-
-    return yield* format.write({ method: METHOD, value: written, trace });
-  });
-
-const receive = <S extends Schema.Top>(schema: S) =>
-  Effect.fnUntraced(function* (frame: Frame) {
-    const format = yield* Format;
-    const { method, value, trace } = yield* format.read(frame);
-
-    if (method !== METHOD) {
-      return yield* new FormatError({ reason: "method" });
-    }
-
-    const read: S["Type"] = yield* Schema.decodeUnknownEffect(format.codecFor(schema))(value).pipe(
-      Effect.mapError(() => new FormatError({ reason: "value" })),
-    );
-
-    return { value: read, trace };
-  });
+const receive = Message.receive("value");
 
 /**
  * Writes each value of a stream as one frame, with no trace.
@@ -144,12 +121,37 @@ const framed = (connection: Socket.Socket): Socket.Socket =>
           Effect.addFinalizer(() => Effect.ignore(writer.write(new Socket.CloseEvent(1000)))),
         ),
         {
-          pull: Effect.map(pull, (chunk) =>
-            Arr.map(chunk, (frame) => (Predicate.isString(frame) ? frame : new TextDecoder().decode(frame))),
-          ),
+          pull: Effect.map(pull, (chunk) => Arr.map(chunk, (frame) => text(frame))),
           upgrade,
         },
       ),
     ),
     writer: connection.writer,
   });
+
+export {
+  /**
+   * Reads a hello frame and picks the highest version both ends list.
+   *
+   * @category gateway
+   */
+  accept,
+  /**
+   * Writes the answer to a hello.
+   *
+   * @category gateway
+   */
+  answer,
+  /**
+   * Writes the challenge, the gateway's first frame.
+   *
+   * @category gateway
+   */
+  challenge,
+  /**
+   * Connects as a client: the challenge, the hello and the answer, on one connection.
+   *
+   * @category client
+   */
+  connect,
+} from "./Hello.ts";

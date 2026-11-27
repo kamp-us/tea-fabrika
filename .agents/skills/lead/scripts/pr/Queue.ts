@@ -3,9 +3,12 @@
 // so nothing here merges main in, waits on a check or runs one again. Today's lead tooling, run on
 // our own laptop; it is not product.
 //
-//   add      the pull request is open, into main and not in conflict with main -> leak grep on its net change and on each
-//            of its commits, each failing closed -> the body checks (`body`, which `land.ts check` runs alone): the leak grep on its
-//            title and description, and each new exported name named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word), and each `fabrika close ticket <N>` line naming an open tracker ticket (an open GitHub issue is closed by `Closes #<N>`) -> a draft whose head has a CI run
+//   add      the merge gate (./Gate.ts, which `land.ts check` and every other merge path run too): the pull request is open, into main, not in
+//            conflict with main, not a `can/` branch and not titled `Plan:`; the leak grep on its net change, each of its commits, its title
+//            and its description; the description is the pr skill's template (its `## Summary`, `## Evidence` and `## Merge Danger`) and not
+//            the draft placeholder (Sections.ts), with each new exported name named under `## New names` (Names.ts, a new helper names the
+//            tools it searched, and a new name cites the industry's word) and each `fabrika close ticket <N>` line naming an open tracker
+//            ticket (an open GitHub issue is closed by `Closes #<N>`); every commit since main signed -> a draft whose head has a CI run
 //            (never in the seconds after a push; with a wait, one is given time to appear, and a wait ends at once with a refusal
 //            when the pull request turns to conflict with main, since GitHub starts no check on one) is marked ready
 //            (as `land.ts admin` does), which starts its real `ci-required` -> `ci-required`
@@ -13,17 +16,23 @@
 //            squash pinned to that head, which adds it to the queue
 //   settle   later, one read of the pull request and no wait: merged -> close each ticket its
 //            description names (a merge closes only the tickets its pull request names with our own phrase) and start one box cleanup sweep (box cleanup runs on a timer and after a merge, never on a step's start path); else say how it stands
+//   reconcile the timer's pass (gcloop.ts, after each sweep): the newest merged pull requests by merge time, out of the most
+//            recently updated ones, and the open tickets they name that the record (Closes.ts) does not hold yet, closed once
+//            each, so a missed `settle` is caught within one tick
 //
 // `add` answers "queued", never "merged": the merge is GitHub's, later. `settle` is how code learns
-// it happened. Read through its module: `Queue.add(...)`.
+// it happened. Read through its module: `Queue.add(...)`. Every close, by `settle`, `closeOnly` or
+// `reconcile`, is written to the record, so a ticket that a person reopens later is never closed again
+// by the timer. Each close reads the tracker again just before it, so a close another path made after
+// the first read is not repeated. Those reads and the close are not one atomic step: a race inside that
+// gap is still possible, and a lock around each close would close it.
 
-import { String as Str, pipe, Option, Array as Arr, Duration, Effect, Match, Schedule, Schema } from "effect";
+import { Option, Array as Arr, DateTime, Duration, Effect, Match, Result, Schedule, Schema } from "effect";
 
 import { Checks, type ChecksError, type Job } from "../ci/Checks.ts";
-import * as Leaks from "./Leaks.ts";
-import * as Names from "./Names.ts";
+import { Closes } from "./Closes.ts";
+import * as Gate from "./Gate.ts";
 import { Detail, PullRequests, PullRequestsError } from "./PullRequests.ts";
-import type { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import { Sweeps } from "./Sweeps.ts";
 import { Tickets } from "./Tickets.ts";
 
@@ -59,10 +68,6 @@ class Pending extends Schema.TaggedError<Pending, { readonly brand: unique symbo
 export class Conflicting extends Schema.TaggedError<Conflicting, { readonly brand: unique symbol }>()("Conflicting", {
   pr: Schema.Finite,
 }) {}
-
-/** What a refusal for a conflict says, and the commands that put main in. */
-export const conflictLine = (pr: number): string =>
-  `it conflicts with main, so no check runs on it; merge main in with \`gh pr update-branch ${pr}\` (a quest: \`land.ts run <quest> <ticket>\`), push, and queue it again`;
 
 /**
  * Fails with `Conflicting` when GitHub now says pull request `pr` conflicts with main. A read that
@@ -231,81 +236,7 @@ export const Added = Schema.TaggedUnion({
 
 export type Added = typeof Added.Type;
 
-/**
- * Why a pull request may not enter the queue as it stands, or `null` when it may. A draft is
- * refused here for callers that do not mark it ready (an admin merge with no wait); `add` marks
- * one ready itself and asks about it as ready.
- */
-export const refusal = (found: Detail): string | null =>
-  found.state === "CLOSED"
-    ? "closed, not merged"
-    : found.state !== "OPEN"
-      ? `in state ${found.state}, not merged; refused`
-      : found.draft
-        ? "draft, not merged; refused until it is ready for review"
-        : found.base !== "main"
-          ? `merges into ${found.base}, not main; refused`
-          : found.mergeable === "CONFLICTING"
-            ? conflictLine(found.number)
-            : null;
-
-/**
- * The checks on a pull request's own words, which `add` runs and `land.ts check` runs alone, so a
- * body is known good before the queue is asked: the leak grep on its title and description, then
- * each new exported name named under `## New names`, then each `fabrika close ticket <N>` line naming an open tracker ticket. Gives why it may not enter the queue, or
- * `null`; a leak grep that refuses or cannot run fails it. Reads the pull request's patches and
- * changes nothing.
- */
-export const body = Effect.fn("Queue.body")(function* (
-  dir: string,
-  found: Pick<Detail, "number" | "title" | "body">,
-): Effect.fn.Return<string | null, LeakGrepRefused | PullRequestsError, PullRequests | Pushes | Tickets> {
-  yield* Leaks.text(dir, found);
-
-  const names = Names.refusal(found.body, yield* (yield* PullRequests).patches(found.number));
-
-  return names ?? (yield* unopenTickets(found.body));
-});
-
-/**
- * Why a `fabrika close ticket <N>` line cannot close anything, or `null` when each N is an open tracker ticket. A GitHub issue
- * is closed by `Closes #<N>`, never by that line, so a number that is an open issue says so. A tracker that cannot be read
- * refuses too: a line that closes nothing is found after the merge, when it is too late.
- */
-const unopenTickets = Effect.fn("Queue.unopenTickets")(function* (
-  text: string,
-): Effect.fn.Return<string | null, PullRequestsError, PullRequests | Tickets> {
-  const named = namedTickets(text);
-
-  if (named.length === 0) {
-    return null;
-  }
-
-  const open = yield* (yield* Tickets).open.pipe(Effect.option);
-
-  if (open._tag === "None") {
-    return `cannot read the tracker, so cannot tell if its fabrika close ticket line names an open ticket: ${Arr.join(Arr.map(named, String), " ")}`;
-  }
-
-  const unopen = Arr.filter(named, (n) => !open.value.includes(n));
-
-  if (unopen.length === 0) {
-    return null;
-  }
-
-  const issues = yield* (yield* PullRequests).openIssues;
-
-  return Arr.join(
-    Arr.map(unopen, (n) =>
-      issues.includes(n)
-        ? `fabrika close ticket ${n}: ${n} is an open GitHub issue, not a tracker ticket; close it with a line \`Closes #${n}\` instead`
-        : `fabrika close ticket ${n}: ${n} is not an open tracker ticket (closed, or no such ticket), and not an open GitHub issue; fix the number or take the line out`,
-    ),
-    "; ",
-  );
-});
-
-const conflicted = (pr: number) => NotQueued.make({ reason: `pr ${pr}: ${conflictLine(pr)}` });
+const conflicted = (pr: number) => NotQueued.make({ reason: `pr ${pr}: ${Gate.conflictLine(pr)}` });
 
 export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   const prs = yield* PullRequests;
@@ -315,20 +246,14 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
     return Added.cases.merged.make({ pr: found.number, commit: found.mergeCommit ?? found.oid });
   }
 
-  // A draft is not refused for being a draft: it is marked ready below, once every refusal that needs no ready pull request has passed.
-  const marking = found.state === "OPEN" && found.draft;
-  const refused = refusal(marking ? { ...found, draft: false } : found);
+  // The gate, which every merge path asks first. A draft is not refused for being a draft: it is marked ready below, once the gate has passed.
+  const refused = yield* Gate.before({ dir: a.dir, found, marksReady: true });
 
   if (refused !== null) {
     return yield* NotQueued.make({ reason: `pr ${found.number}: ${refused}` });
   }
 
-  yield* Leaks.diff(a.dir, found);
-  const unnamed = yield* body(a.dir, found);
-
-  if (unnamed !== null) {
-    return yield* NotQueued.make({ reason: `pr ${found.number}: ${unnamed}` });
-  }
+  const marking = found.state === "OPEN" && found.draft;
 
   // Marking a draft ready starts its real `ci-required`, which has not registered yet: a read with no wait finds it missing and
   // refuses, and a read with a wait gives it time to appear and end. It waits first for the push's own run to start, so a ready
@@ -380,25 +305,6 @@ export const line = (added: Added): string =>
 
 // ---------------------------------------------------------------- after the merge
 
-const PHRASE = /^[ \t]*fabrika close ticket ([0-9]+)[ \t]*$/;
-
-/**
- * The tickets a description names, each once, in order: only a line of its own that reads
- * `fabrika close ticket <N>` (a merge closes only the tickets its pull request names with our own phrase). No GitHub keyword, trailer or commit subject names one.
- */
-export const namedTickets = (body: string): ReadonlyArray<number> => [
-  ...new Set(
-    pipe(
-      body,
-      Str.replaceAll("\r", ""),
-      Str.split("\n"),
-      Arr.map((row) => PHRASE.exec(row)?.[1]),
-      Arr.filter((n) => n !== undefined),
-      Arr.map(Number),
-    ),
-  ),
-];
-
 /** The comment a closed ticket gets: the pull request and its merge commit. */
 export const closeNote = (repo: string, pr: number, commit: string): string =>
   `Closed by the merge of https://github.com/${repo}/pull/${pr}, merge commit ${commit}.\n`;
@@ -411,10 +317,44 @@ export const Settled = Schema.TaggedUnion({
 
 export type Settled = typeof Settled.Type;
 
+/**
+ * Comments on ticket `n` and closes it, then records the close: the one close every path makes, so the
+ * record holds each ticket this tooling closed. Says how it went: `closed` is whether the ticket is closed
+ * now (a record that was not written still closed it), and `line` says so for a log. A failed comment or
+ * close is a line, never a failure, and it is not recorded, so a later pass tries that ticket again.
+ */
+const closeOne = Effect.fn("Queue.closeOne")(function* (repo: string, pr: number, commit: string, n: number) {
+  const tickets = yield* Tickets;
+  const closes = yield* Closes;
+  const said = (text: string) => `pr ${pr}: ${text}`;
+
+  const commented = yield* Effect.result(tickets.comment(n, closeNote(repo, pr, commit)));
+
+  if (Result.isFailure(commented)) {
+    return { closed: false, line: said(`ticket ${n} not closed, the comment failed: ${commented.failure.reason}`) };
+  }
+
+  const closed = yield* Effect.result(tickets.close(n));
+
+  if (Result.isFailure(closed)) {
+    return { closed: false, line: said(`ticket ${n} not closed: ${closed.failure.reason}`) };
+  }
+
+  const at = DateTime.formatIso(yield* DateTime.now);
+  const recorded = yield* Effect.result(closes.record({ at, pr, ticket: n, commit }));
+
+  return {
+    closed: true,
+    line: Result.isFailure(recorded)
+      ? said(`closed ticket ${n}, but the record was not written: ${recorded.failure.reason}`)
+      : said(`closed ticket ${n}`),
+  };
+});
+
 /** Closes each open ticket the merged description names; trouble is a line, never a failure. */
 const closeNamed = Effect.fn("Queue.closeNamed")(function* (repo: string, found: Detail, commit: string) {
   const tickets = yield* Tickets;
-  const named = namedTickets(found.body);
+  const named = Gate.namedTickets(found.body);
   const said = (text: string) => `pr ${found.number}: ${text}`;
 
   if (named.length === 0) {
@@ -435,18 +375,20 @@ const closeNamed = Effect.fn("Queue.closeNamed")(function* (repo: string, found:
       continue;
     }
 
-    lines.push(
-      yield* tickets.comment(n, closeNote(repo, found.number, commit)).pipe(
-        Effect.matchEffect({
-          onFailure: (e) => Effect.succeed(said(`ticket ${n} not closed, the comment failed: ${e.reason}`)),
-          onSuccess: () =>
-            Effect.match(tickets.close(n), {
-              onFailure: (e) => said(`ticket ${n} not closed: ${e.reason}`),
-              onSuccess: () => said(`closed ticket ${n}`),
-            }),
-        }),
-      ),
-    );
+    // The last look before the close: another path may have shut the ticket since the first read.
+    const again = yield* tickets.open.pipe(Effect.option);
+
+    if (Option.isNone(again)) {
+      lines.push(said(`cannot read the tracker again before closing ticket ${n}; left as it is`));
+      continue;
+    }
+
+    if (!again.value.includes(n)) {
+      lines.push(said(`ticket ${n} is not open (already closed, or no such ticket); left as it is`));
+      continue;
+    }
+
+    lines.push((yield* closeOne(repo, found.number, commit, n)).line);
   }
 
   return lines;
@@ -535,4 +477,110 @@ export const settle = Effect.fn("Queue.settle")(function* (a: { readonly repo: s
     commit: at.commit,
     lines: [`pr ${at.found.number}: merged at ${at.commit}`, ...closed, ...swept],
   });
+});
+
+// ---------------------------------------------------------------- the timer's pass
+
+/**
+ * What one pass did: the tickets it closed, the tickets whose comment or close failed (the next pass tries
+ * them again), why it stopped early when it did (a read that failed, or its time ran out), and one line for
+ * each thing it said. gcloop.ts keeps it in the sweep's record, so `status` can say it.
+ */
+export const Pass = Schema.Struct({
+  closed: Schema.Array(Schema.Finite),
+  failed: Schema.Array(Schema.Finite),
+  stopped: Schema.NullOr(Schema.String),
+  lines: Schema.Array(Schema.String),
+});
+
+export type Pass = typeof Pass.Type;
+
+/**
+ * The timer's pass (gcloop.ts runs it after each sweep, under the sweep's lock). Reads the newest `limit`
+ * pull requests merged into main, by merge time, out of the `scan` most recently updated merged ones, and
+ * closes each open ticket one of them names, once: a ticket the record already holds is left as it is, so a
+ * ticket a person reopened after this tooling closed it stays open. One read each of GitHub, the tracker and
+ * the record, however many pull requests there are, and no tracker read when no merge names a ticket. The
+ * newest merge that names a ticket is the one credited. Each close reads the tracker and the record again
+ * first. A read that fails closes no more tickets and says why; a close that fails is one line, and the next
+ * pass tries it again.
+ */
+export const reconcile = Effect.fn("Queue.reconcile")(function* (a: {
+  readonly repo: string;
+  readonly limit: number;
+  readonly scan: number;
+}) {
+  const prs = yield* PullRequests;
+  const tickets = yield* Tickets;
+  const closes = yield* Closes;
+  const stop = (reason: string) => Pass.make({ closed: [], failed: [], stopped: reason, lines: [reason] });
+
+  const listed = yield* Effect.result(prs.merged(a.scan));
+
+  if (Result.isFailure(listed)) {
+    return stop(`cannot read the merged pull requests: ${listed.failure.reason}; no tickets closed`);
+  }
+
+  // The scan is in update order, which a late comment can change, so the credited merges are the newest by merge time.
+  const newest = listed.success.toSorted((x, y) => Date.parse(y.mergedAt) - Date.parse(x.mergedAt)).slice(0, a.limit);
+  const named = newest.flatMap((pr) => Gate.namedTickets(pr.body).map((ticket) => ({ pr, ticket })));
+
+  if (named.length === 0) {
+    return Pass.make({ closed: [], failed: [], stopped: null, lines: [] });
+  }
+
+  const open = yield* Effect.result(tickets.open);
+
+  if (Result.isFailure(open)) {
+    return stop(`cannot read the tracker: ${open.failure.reason}; no tickets closed`);
+  }
+
+  const recorded = yield* Effect.result(closes.all);
+
+  if (Result.isFailure(recorded)) {
+    return stop(`cannot read the closes record: ${recorded.failure.reason}; no tickets closed`);
+  }
+
+  // A ticket joins `done` once this pass has tried it, so an older merge that names it does not try again.
+  const done = new Set(recorded.success.map((close) => close.ticket));
+  const stillOpen = new Set(open.success);
+  const closed: Array<number> = [];
+  const failed: Array<number> = [];
+  const lines: Array<string> = [];
+
+  for (const { pr, ticket } of named) {
+    if (done.has(ticket) || !stillOpen.has(ticket)) {
+      continue;
+    }
+
+    done.add(ticket);
+
+    // The last look before the close: another path may have shut the ticket, or recorded it, since the first reads.
+    const again = yield* Effect.result(
+      Effect.all({ open: tickets.open, recorded: closes.all }, { concurrency: "unbounded" }),
+    );
+
+    if (Result.isFailure(again)) {
+      const reason = `cannot read the tracker or the record before a close: ${again.failure.reason}; no more tickets closed`;
+
+      return Pass.make({ closed, failed, stopped: reason, lines: [...lines, reason] });
+    }
+
+    if (!again.success.open.includes(ticket) || again.success.recorded.some((close) => close.ticket === ticket)) {
+      lines.push(`pr ${pr.number}: ticket ${ticket} was shut or recorded since the first read; left as it is`);
+      continue;
+    }
+
+    const shut = yield* closeOne(a.repo, pr.number, pr.mergeCommit, ticket);
+
+    lines.push(shut.line);
+
+    if (shut.closed) {
+      closed.push(ticket);
+    } else {
+      failed.push(ticket);
+    }
+  }
+
+  return Pass.make({ closed, failed, stopped: null, lines });
 });

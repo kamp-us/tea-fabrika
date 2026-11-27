@@ -627,6 +627,17 @@ export type Shown = typeof Shown.Type;
  */
 export const settledOf = (shown: Shown): boolean => shown.ready && shown.saving.length === 0;
 
+/**
+ * What a write's call answers an agent with, in place of the whole view (the view's `answers`): the
+ * write's own outcome, never the page of every ticket and pull request, which a ledger of 1300
+ * tickets made 287,135 characters long. `failed` says why a write did not land; it leaves out the
+ * write, which the agent sent itself.
+ */
+export const wroteOf = (shown: Shown) => ({ failed: shown.failed === null ? null : { why: shown.failed.why } });
+
+/** What a `file` answers with: the number of the ticket it filed (`null`: it did not land), and `wroteOf`. */
+export const filedOf = (shown: Shown) => ({ filed: shown.filed, ...wroteOf(shown) });
+
 /** A title the search finds: every title for "", else one with the text in it, in any case. */
 export const finds = (find: string, title: string): boolean => {
   const text = find.trim().toLowerCase();

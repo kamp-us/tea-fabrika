@@ -19,6 +19,14 @@
 //                        before and after; then the lock goes
 //   status               the newest sweep that ran (not a skipped one), and `LATE` when it started
 //                        more than two periods ago, or none is recorded
+//   ticket pass          after gc, still under the lock: Queue.reconcile closes each open ticket that one of the
+//                        newest GC_RECONCILE_PRS merged pull requests names (default 200, by merge time), out of the
+//                        GC_RECONCILE_SCAN most recently updated ones (default 1000), once. It is stopped after one
+//                        period. Its lines and any stop reason go into this sweep's line in BOXES/state/gc.jsonl, so
+//                        `status` says them. The record is BOXES/state/closes.jsonl. A sweep skipped behind a live
+//                        holder runs none, since the holder runs it. A merge that `land.ts merged` missed is closed by
+//                        the next sweep, and a ticket a person reopened after a close stays open.
+//                        The pass runs before the sweep's record: a kill during it leaves no record for that sweep.
 //
 // The timer is installed once per laptop, from the main checkout (the unit's template is ../gc.plist):
 //
@@ -45,8 +53,9 @@
 //   - GitHub scheduled workflows
 //     (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule):
 //     a CI runner cannot see this laptop's boxes.
-// The repo had no laptop timer before this: the hourly mutation run is a CI workflow a person or a
-// session dispatches by hand (.github/workflows/mutation.yaml).
+// The repo had no laptop timer before this. The hourly mutation run is no laptop job either: it is a
+// CI workflow that starts itself on a push to main and an hourly cron (.github/workflows/mutation.yaml),
+// so a sleeping laptop never stops it, and a heartbeat workflow alarms when it does stop.
 
 import {
   String as Str,
@@ -60,6 +69,7 @@ import {
   Effect,
   Exit,
   FileSystem,
+  Layer,
   Path,
   Predicate,
   Result,
@@ -74,6 +84,10 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 
 import { variable } from "./drive.ts";
 import { spoken } from "./flow/Beat.ts";
+import * as ClosesFs from "./pr/ClosesFs.ts";
+import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import * as Queue from "./pr/Queue.ts";
+import * as TicketsCli from "./pr/TicketsCli.ts";
 
 // ---------------------------------------------------------------- the setting
 
@@ -82,6 +96,17 @@ import { spoken } from "./flow/Beat.ts";
 export const MINUTES = Config.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)), "GC_MINUTES").pipe(
   Config.withDefault(30),
 );
+
+/** How many of the newest merged pull requests, by merge time, each sweep's ticket pass credits (Queue.reconcile). A count, not a span of days: merges older than the newest this many are not read, so a laptop that sleeps past more merges than this loses the ones that fall out. From the environment, as MINUTES is. */
+export const RECONCILE_PRS = Config.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)), "GC_RECONCILE_PRS").pipe(
+  Config.withDefault(200),
+);
+
+/** How many merged pull requests the ticket pass asks GitHub for, most recently updated first. A merge falls out of that list only when more than this many were updated after it, and a late comment on an old merge does that. GitHub's search gives at most 1000. From the environment, as MINUTES is. */
+export const RECONCILE_SCAN = Config.schema(
+  Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+  "GC_RECONCILE_SCAN",
+).pipe(Config.withDefault(1000));
 
 /** The launchd job's name. */
 export const LABEL = "local.tea-fabrika.gc";
@@ -130,6 +155,8 @@ export const Sweep = Schema.Struct({
   freeKb: Schema.Struct({ before: Schema.NullOr(Schema.Finite), after: Schema.NullOr(Schema.Finite) }),
   /** mutbox's line when its Docker sweep was stopped at its time limit. */
   mutbox: Schema.NullOr(Schema.String),
+  /** The ticket pass that ran after gc. Absent for a sweep skipped behind a live holder, and in a record written before passes were kept. */
+  pass: Schema.optionalKey(Queue.Pass),
 });
 
 export type Sweep = typeof Sweep.Type;
@@ -205,6 +232,25 @@ const ended = (s: Sweep): string => {
   return `ok in ${took}, removed ${r.boxes.length} boxes and ${trees}, ${s.freedMb} MB; kept ${s.kept.length}`;
 };
 
+/** The ticket pass of a sweep, in words: what it closed or failed to, or why it stopped; empty when no pass ran. */
+const ticketsSaid = (s: Sweep): string => {
+  if (s.pass === undefined) {
+    return "";
+  }
+
+  const { closed, failed, stopped } = s.pass;
+
+  if (stopped !== null) {
+    return `; tickets stopped: ${stopped}`;
+  }
+
+  if (closed.length === 0 && failed.length === 0) {
+    return "; tickets: none to close";
+  }
+
+  return `; tickets: closed ${closed.length}${failed.length > 0 ? `, failed ${failed.length}` : ""}`;
+};
+
 /** Who holds the lock, as it says of itself. */
 export const Holder = Schema.Struct({ pid: Schema.Finite, startedAt: Schema.String });
 
@@ -226,7 +272,7 @@ export const says = (
   const body =
     last === null
       ? "no sweep recorded"
-      : `last swept ${spoken(now - Date.parse(last.startedAt))} ago (${last.trigger}), ${ended(last)}`;
+      : `last swept ${spoken(now - Date.parse(last.startedAt))} ago (${last.trigger}), ${ended(last)}${ticketsSaid(last)}`;
 
   const tail = [
     `every ${minutes}m`,
@@ -302,17 +348,17 @@ const exec = Effect.fn("gcloop.exec")(function* (command: string, args: Readonly
   return { code: Number(code), out, err };
 }, Effect.scoped);
 
-/** MAIN and BOXES from env.sh, as every lead script finds them. */
+/** MAIN, BOXES and GH_REPO from env.sh, as every lead script finds them. */
 export const paths = Effect.fn("gcloop.paths")(
   function* () {
     const path = yield* Path.Path;
     const env = path.join(import.meta.dirname, "env.sh");
-    const r = yield* exec("sh", ["-c", '. "$0" && printf "%s\\n%s" "$MAIN" "$BOXES"', env]);
-    const [main = "", boxes = ""] = pipe(r.out, Str.split("\n"));
+    const r = yield* exec("sh", ["-c", '. "$0" && printf "%s\\n%s\\n%s" "$MAIN" "$BOXES" "$GH_REPO"', env]);
+    const [main = "", boxes = "", repo = ""] = pipe(r.out, Str.split("\n"));
 
-    return r.code === 0 && main !== "" && boxes !== ""
-      ? { main, boxes, state: path.join(boxes, "state") }
-      : yield* Broken.make({ reason: `env.sh gave no MAIN or BOXES: ${Str.trim(r.err)}` });
+    return r.code === 0 && main !== "" && boxes !== "" && repo !== ""
+      ? { main, boxes, repo, state: path.join(boxes, "state") }
+      : yield* Broken.make({ reason: `env.sh gave no MAIN, BOXES or GH_REPO: ${Str.trim(r.err)}` });
   },
   Effect.catchTag("PlatformError", () => Effect.fail(Broken.make({ reason: "env.sh could not run" }))),
 );
@@ -445,7 +491,19 @@ export interface Ask {
   /** How long gc may run before it is stopped: one period on the timer. */
   readonly limit: Duration.Duration;
   readonly pid: number;
+  /**
+   * The ticket pass: run under this sweep's lock after gc, and never by a sweep that was skipped. It is stopped
+   * after its own `limit`, one period on the timer.
+   */
+  readonly tickets?: { readonly run: Effect.Effect<Queue.Pass>; readonly limit: Duration.Duration };
 }
+
+/**
+ * How old the lock may be before its holder counts as dead: gc's budget, the ticket pass's budget, and one
+ * period to spare. A sweep that uses both budgets in full is never taken over.
+ */
+export const staleAfter = (ask: Pick<Ask, "limit" | "minutes" | "tickets">): Duration.Duration =>
+  Duration.sum(Duration.sum(ask.limit, ask.tickets?.limit ?? Duration.millis(0)), Duration.minutes(ask.minutes));
 
 const append = Effect.fn("gcloop.append")(
   function* (state: string, sweep: Sweep) {
@@ -470,6 +528,9 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
     before: number | null,
     after: number | null,
   ) {
+    // The ticket pass runs under the lock this sweep holds, before the record, so the record says how it ended. A
+    // skipped sweep runs none: the sweep that holds the lock runs it.
+    const pass = outcome._tag === "skipped" || ask.tickets === undefined ? undefined : yield* runPass(ask.tickets);
     const now = yield* DateTime.now;
 
     const done = Sweep.make({
@@ -483,6 +544,7 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
       code,
       ...read,
       freeKb: { before, after },
+      ...(pass === undefined ? {} : { pass }),
     });
 
     yield* append(ask.state, done);
@@ -492,8 +554,8 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
 
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      // A sweep is stopped after one period, so a lock older than two is a dead one's.
-      const holder = yield* lock(ask.state, me, Duration.minutes(2 * ask.minutes));
+      // gc and the ticket pass each have a budget; a lock older than both and one period more is a dead sweep's.
+      const holder = yield* lock(ask.state, me, staleAfter(ask));
 
       if (holder !== null) {
         const reason = Option.match(holder, {
@@ -559,6 +621,30 @@ export const status = Effect.fn("gcloop.status")(function* (state: string, minut
   return says(yield* sweeps(state), now, minutes, going);
 });
 
+// ---------------------------------------------------------------- the ticket pass
+
+/**
+ * One ticket pass, stopped at its own limit, so a read that hangs cannot hold the sweep's lock past it. A pass
+ * that is stopped says so, and the next sweep runs the pass again; a close it made before the stop is in the record.
+ */
+const runPass = Effect.fn("gcloop.runPass")(function* (tickets: NonNullable<Ask["tickets"]>) {
+  const ran = yield* tickets.run.pipe(Effect.timeoutOption(tickets.limit));
+  const reason = `ran out of time after ${spoken(Duration.toMillis(tickets.limit))}; the next sweep goes on`;
+
+  return Option.match(ran, {
+    onNone: () => Queue.Pass.make({ closed: [], failed: [], stopped: reason, lines: [reason] }),
+    onSome: (pass) => pass,
+  });
+});
+
+/** The live services a ticket pass reads: GitHub through `gh`, the tracker through its own CLI, and the record beside gc's. */
+const ticketServices = (folders: { readonly main: string; readonly repo: string; readonly state: string }) =>
+  Layer.mergeAll(
+    PullRequestsGh.layer(folders.repo, folders.main),
+    TicketsCli.layer(folders.main, TicketsCli.defaultHome()),
+    ClosesFs.layer(folders.state),
+  );
+
 // ---------------------------------------------------------------- the commands
 
 const trigger = Flag.Literals("trigger", TRIGGERS).pipe(Flag.withDefault("hand" as const));
@@ -568,14 +654,27 @@ const sweepCommand = Command.make("sweep", { trigger }, ({ trigger }) =>
     const folders = yield* paths();
     const path = yield* Path.Path;
     const minutes = yield* MINUTES;
-    yield* sweep({
+    const limit = yield* RECONCILE_PRS;
+    const scan = yield* RECONCILE_SCAN;
+
+    const done = yield* sweep({
       state: folders.state,
       gc: ["nice", "-n", "15", "sh", path.join(import.meta.dirname, "box.sh"), "gc"],
       trigger,
       minutes,
       limit: Duration.minutes(minutes),
       pid: process.pid,
+      tickets: {
+        run: Queue.reconcile({ repo: folders.repo, limit, scan }).pipe(
+          Effect.provide(ticketServices(folders)),
+          Effect.provide(NodeServices.layer),
+        ),
+        limit: Duration.minutes(minutes),
+      },
     });
+
+    // Serial on purpose: the lines print in the order the pass gave them.
+    yield* Effect.forEach(done.pass?.lines ?? [], (line) => Console.log(line), { concurrency: 1, discard: true });
     yield* Console.log((yield* status(folders.state, minutes)).text);
   }),
 );

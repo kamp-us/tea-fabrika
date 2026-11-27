@@ -109,6 +109,7 @@
   },
   "dependencies": {
     "@decimalturn/toml-patch": "3.3.2",
+    "@kalfa/diagnostics": "workspace:*",
     "toml-eslint-parser": "catalog:"
   },
   "peerDependencies": {

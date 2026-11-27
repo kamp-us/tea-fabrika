@@ -10,6 +10,7 @@ import {
   refQueries,
   refsModel,
   toPlain,
+  type ChangeList,
   type Committer,
   type FlatSignature,
   type History,
@@ -21,7 +22,7 @@ import * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
 import type { Seeded, Subject } from "./RepositoryTest.ts";
 import type * as Settings from "./Settings.ts";
-import type * as Tree from "./Tree.ts";
+import * as Tree from "./Tree.ts";
 
 export const commitIdFrom = (text: string): CommitId.CommitId => Schema.decodeUnknownSync(CommitId.CommitId)(text);
 
@@ -83,6 +84,15 @@ export const readRefsBack = (seeded: Seeded, history: History, label: string): E
   );
 
 export const isTooShort = Schema.is(Repository.HistoryTooShort);
+
+/** An edit as `editTree` takes it. Each new content is a copy the law does not keep, and `reversed` inserts the changes the other way round. */
+export const editFrom = (changes: ChangeList, reversed: boolean): Repository.Edit =>
+  new Map(
+    (reversed ? changes.toReversed() : changes).map(
+      ([path, change]) =>
+        [Schema.decodeUnknownSync(Tree.Path)(path), change === "absent" ? change : change.slice()] as const,
+    ),
+  );
 
 export const toSignature = (flat: FlatSignature): Commit.Signature =>
   new Commit.Signature({ name: flat.name, email: flat.email, at: { seconds: flat.seconds, offset: flat.offset } });

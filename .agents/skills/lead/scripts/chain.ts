@@ -36,8 +36,8 @@
 //                      goes on, and the last line says why
 //   loosening  Check   loosening.sh on the quest's exam diff, its output posted on the PR (the lead merges once every step passed, and waits on the owner only for real loosening or a new design call):
 //                      0 hits goes on, any hit parks for the lead's hand check, an error is stuck
-//   landing    Act     ./pr/Queue.ts: the leak checks on the change, each commit and the PR's title
-//                      and description, a wait for `ci-required` at the head within
+//   landing    Act     ./pr/Queue.ts: the merge gate (./pr/Gate.ts: the leak checks on the change, each commit and the PR's title
+//                      and description, the branch, title and signature checks), a wait for `ci-required` at the head within
 //                      `CHAIN_QUEUE_MINUTES` (60), then one squash pinned to that head, which adds
 //                      the PR to GitHub's merge queue (a pull request whose steps passed lands on green CI and a clean leak check alone). GitHub tests it on newest main and
 //                      merges it later; the chain never merges main in and never waits for the merge
@@ -171,6 +171,7 @@ import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
+import * as SignaturesGit from "./pr/SignaturesGit.ts";
 import * as TicketsCli from "./pr/TicketsCli.ts";
 import { pinFolder, stepOf, wipBranch } from "./quest.ts";
 import * as RunId from "./runid.ts";
@@ -2063,6 +2064,7 @@ const services = (env: Env) =>
     PullRequestsGh.layer(env.GH_REPO, env.MAIN),
     ChecksGh.layer(env.GH_REPO),
     TicketsCli.layer(env.MAIN, TicketsCli.defaultHome()),
+    SignaturesGit.layer,
   ).pipe(Layer.provideMerge(Layer.merge(NodeServices.layer, Digest.layerWebCrypto)));
 
 /**

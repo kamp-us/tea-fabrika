@@ -164,3 +164,91 @@ describe("PullRequestsGh merge queue read", () => {
     }).pipe(Effect.provide(queueLayers('{"errors":[{"message":"nope"}]}'))),
   );
 });
+
+describe("PullRequestsGh merged read", () => {
+  const listLayers = (out: string) => {
+    const spawner = Recorder.layer(ChildProcessSpawner.ChildProcessSpawner, {
+      spawn: () => Effect.succeed(handle(0, out)),
+    });
+
+    return Layer.merge(spawner, PullRequestsGh.layer("owner/repo", ".").pipe(Layer.provide(spawner)));
+  };
+
+  const listed = JSON.stringify([
+    {
+      number: 2317,
+      body: "Done.\nfabrika close ticket 1307",
+      mergeCommit: { oid: "a".repeat(40) },
+      mergedAt: "2026-11-26T00:00:00Z",
+    },
+    { number: 2318, body: "", mergeCommit: null, mergedAt: "2026-11-26T01:00:00Z" },
+  ]);
+
+  /** The arguments `gh pr list` gets for a merged read of `scan` pull requests. */
+  const mergedArgs = (scan: number): ReadonlyArray<string> => [
+    "pr",
+    "list",
+    "-R",
+    "owner/repo",
+    "--state",
+    "merged",
+    "--base",
+    "main",
+    "--search",
+    "sort:updated-desc",
+    "--limit",
+    String(scan),
+    "--json",
+    "number,body,mergeCommit,mergedAt",
+  ];
+
+  // Plant: read open pull requests, count a row with no merge commit, or read a shape it does not know as none.
+  it.effect(
+    "scenario: merged asks for the newest merges into main with their descriptions and merge commits, and drops a row with no merge commit",
+    () =>
+      Effect.gen(function* () {
+        expect(yield* (yield* PullRequests).merged(1000)).toEqual([
+          {
+            number: 2317,
+            body: "Done.\nfabrika close ticket 1307",
+            mergeCommit: "a".repeat(40),
+            mergedAt: "2026-11-26T00:00:00Z",
+          },
+        ]);
+
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+        const command = calls[0]?.[0];
+
+        if (command === undefined || !ChildProcess.isStandardCommand(command)) {
+          return yield* Effect.die("expected one command");
+        }
+
+        expect(commandArgs(command)).toEqual(mergedArgs(1000));
+      }).pipe(Effect.provide(listLayers(listed))),
+  );
+
+  // Plant: ask for one fixed count whatever the caller gives, so a scan other than the one given is read.
+  it.effect.prop(
+    "property: merged asks GitHub for exactly the scan it is given, for each scan from 1 to 1000",
+    { scan: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })) },
+    ({ scan }) =>
+      Effect.gen(function* () {
+        yield* (yield* PullRequests).merged(scan);
+
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+        const command = calls[0]?.[0];
+
+        if (command === undefined || !ChildProcess.isStandardCommand(command)) {
+          return yield* Effect.die("expected one command");
+        }
+
+        expect(commandArgs(command)).toEqual(mergedArgs(scan));
+      }).pipe(Effect.provide(listLayers(listed))),
+  );
+
+  it.effect("scenario: an answer in a shape we do not read fails", () =>
+    Effect.gen(function* () {
+      expect((yield* Effect.flip((yield* PullRequests).merged(200)))._tag).toBe("PullRequestsError");
+    }).pipe(Effect.provide(listLayers('{"number":1}'))),
+  );
+});

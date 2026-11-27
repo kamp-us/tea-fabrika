@@ -1433,6 +1433,514 @@ export const reachedReadClasses = (carrier: ReadCarrier): ReadonlyArray<string> 
   return READ_CLASSES.filter((label) => reached.has(label));
 };
 
+// ---------------------------------------------------------------------------------------------------------
+// Edits: what `editTree` must answer (ticket 1935, slice 2)
+// ---------------------------------------------------------------------------------------------------------
+
+/** What an edit does to one path: the file's new bytes, or `"absent"`. */
+export type PathChange = Uint8Array | "absent";
+
+/** An edit as a law hands it to `editTree`: each path once, in the order the law inserts them. */
+export type ChangeList = ReadonlyArray<readonly [path: string, change: PathChange]>;
+
+/** What `editTree` must answer for an edit over some files: the files of the tree it makes, or the refusal. */
+export type EditModel =
+  | { readonly kind: "files"; readonly files: ReadonlyArray<FileSpec> }
+  | { readonly kind: "too-large"; readonly path: string; readonly most: number }
+  | { readonly kind: "not-a-file"; readonly path: string; readonly holds: "folder" | "link" }
+  | { readonly kind: "in-the-way"; readonly path: string; readonly other: string };
+
+/**
+ * The model of `editTree`, in the plan's check order: the first changed path by bytes whose new content is over `limit`; the
+ * first changed path by bytes that `readFile` refuses, removal included; then the result, in which the first new path by bytes
+ * with a file at one of its folders names the shortest such folder. A replaced file keeps its mode, a new file is `100644`.
+ */
+export const editModel = (files: ReadonlyArray<FileSpec>, changes: ChangeList, limit: number): EditModel => {
+  const sorted = changes.toSorted(([a], [b]) => byBytes(a, b));
+  const large = sorted.find(([, change]) => change !== "absent" && change.length > limit);
+
+  if (large !== undefined) {
+    return { kind: "too-large", path: large[0], most: limit };
+  }
+
+  for (const [path] of sorted) {
+    const read = readModel(files, path);
+
+    if (read.kind === "not-a-file") {
+      return { kind: "not-a-file", path: read.path, holds: read.holds };
+    }
+  }
+
+  const result = new Map(files.map((each) => [each.path, each]));
+
+  for (const [path, change] of sorted) {
+    if (change === "absent") {
+      result.delete(path);
+    } else {
+      result.set(path, { path, mode: result.get(path)?.mode ?? "100644", content: change });
+    }
+  }
+
+  for (const [path, change] of sorted) {
+    const parts = path.split("/");
+
+    for (let n = 1; change !== "absent" && n < parts.length; n++) {
+      const other = parts.slice(0, n).join("/");
+
+      if (result.has(other)) {
+        return { kind: "in-the-way", path, other };
+      }
+    }
+  }
+
+  return { kind: "files", files: [...result.values()] };
+};
+
+/** What the generator reaches for edits, each in every run (the letters are the plan's generator classes). */
+export const TREE_EDIT_CLASSES = [
+  "(k) one file replaced",
+  "(k) several files in several folders in one call",
+  "(k) a new file in a new folder three deep",
+  "(k) a file removed",
+  "(k) the last files of a folder removed, so the folder goes",
+  "(k) the last file of three nested folders removed, so all three go",
+  "(k) every file removed, the empty tree",
+  "(k) a file made a folder",
+  "(k) a folder emptied, then a file at its path",
+  "(k) a file added to the empty tree",
+  "(k) a name that starts others and a name that others start",
+  "(k) a random edit",
+  "(k) a random edit on an edited tree",
+  "(l) an empty edit",
+  "(l) a file replaced with its own bytes",
+  "(l) an executable file replaced with its own bytes",
+  "(l) absent on a path that holds nothing",
+  "(l) absent below a file",
+  "(l) absent in a folder that does not exist",
+  "(l) an edit on the empty tree that changes nothing",
+  "(m) an executable file replaced stays 100755",
+  "(m) a new file is 100644 beside an executable one",
+  "(m) a new file is 100644 in a folder of executable files",
+  "(n) a changed path that is a folder",
+  "(n) absent at a folder",
+  "(n) a folder's files removed and a file added at its path",
+  "(n) a link replaced",
+  "(n) a link removed",
+  "(n) a change below a link",
+  "(n) absent below a link",
+  "(n) a new file below a file the edit keeps",
+  "(n) two new files, one below the other",
+  "(p) content too large at a folder's path",
+  "(p) a change at a folder beside a new file in the way",
+  "(p) two folders changed",
+  "(p) two new files in the way",
+  "(q) the sort traps among the changed names of one folder",
+  "(q) the sort traps added and removed in one folder",
+  "(q) names on the object prototype",
+] as const;
+
+/** What an edit case is meant to come to, on a store with room for every file. */
+export type EditIntent = "tree" | "no change" | "not-a-file" | "in-the-way";
+
+/** One edit: the commit it is made on, what it changes, and the commit whose tree is its answer when it makes one. */
+export interface TreeEditCase {
+  readonly label: string;
+  readonly classes: ReadonlyArray<string>;
+  readonly intent: EditIntent;
+  readonly base: number;
+  readonly changes: ChangeList;
+  /** The history's commit whose files are the answer, for an edit that makes a tree: `base` itself when nothing changes. */
+  readonly node: number | undefined;
+  /** A limit on a file's size under which the same edit fails `FileTooLarge` first, for an edit made to show that order. */
+  readonly tight: number | undefined;
+}
+
+export interface TreeEditCarrier {
+  readonly history: History;
+  readonly cases: ReadonlyArray<TreeEditCase>;
+  /** The first commit of each kind of base: the mixed tree, the tree with a link, the empty tree, one file, one file in a folder. */
+  readonly bases: {
+    readonly mixed: number;
+    readonly link: number;
+    readonly empty: number;
+    readonly one: number;
+    readonly deep: number;
+  };
+}
+
+/**
+ * Edits over five trees: one with every sort trap, a deep file, an executable, a link, an empty file and names on the object
+ * prototype; one with a link; the empty tree; one file; one file in a folder. Each edit is made in every run from the run's
+ * drawn value, and for each that makes a tree the history holds a commit with exactly the model's files, so its tree id is the
+ * answer. Edits drawn at random join the ones made for a class, and some are made again on an edited tree.
+ */
+export const treeEditCarrier = (texture: Texture): TreeEditCarrier => {
+  const draw = new Draw(texture);
+  const word = draw.word();
+  const author = draw.signature(draw.int(4_000_000_000));
+  const committer = draw.signature(0);
+  const [p, q, r] = [at(texture.parts, 0), at(texture.parts, 1), at(texture.parts, 2)];
+  const top = `s${p}`;
+
+  // A file's bytes: a drawn blob and a mark no `fresh` content has, so a replaced file always changes.
+  const held = (k: number): Uint8Array => Uint8Array.from([...at(texture.blobs, k), 0xb0, k]);
+  const fresh = (k: number): Uint8Array => Uint8Array.from([...at(texture.blobs, k), 0xf0, k]);
+
+  const mixed: ReadonlyArray<FileSpec> = [
+    file(`${top}/c`, held(0)),
+    file(`${top}-b`, held(1)),
+    file(`${top}.b`, held(2)),
+    file(`${top}0`, held(3)),
+    file(`d1${p}/d2${q}/d3${r}/z`, held(4)),
+    file(`x${p}`, held(5), "100755"),
+    file(`e${p}`, new Uint8Array()),
+    file(`m${p}/one`, held(6)),
+    file(`m${p}/two`, held(7)),
+    file(`ex${p}/run`, held(0), "100755"),
+    file(`ex${p}/go`, held(1), "100755"),
+    file("__proto__", held(2)),
+    file(`constructor/${p}`, held(3)),
+  ];
+
+  const linked: ReadonlyArray<FileSpec> = [
+    textFile(`k${p}`, `t${q}`, "120000"),
+    file(`t${q}`, held(4)),
+    file(`ld${p}/inner`, held(5)),
+  ];
+
+  const lone: ReadonlyArray<FileSpec> = [file(`o${p}`, held(6))];
+  const deep: ReadonlyArray<FileSpec> = [file(`f${q}/only${p}`, held(7))];
+  const starts: ReadonlyArray<ReadonlyArray<FileSpec>> = [mixed, linked, [], lone, deep];
+  const index = { mixed: 0, link: 1, empty: 2, one: 3, deep: 4 } as const;
+
+  const nodes: Array<Node> = [];
+
+  const addNode = (parents: ReadonlyArray<number>, files: ReadonlyArray<FileSpec>): number => {
+    nodes.push({
+      parents,
+      author,
+      committer: { ...committer, seconds: BASE_SECONDS + nodes.length },
+      message: word,
+      files,
+    });
+
+    return nodes.length - 1;
+  };
+
+  for (const files of starts) {
+    addNode(nodes.length === 0 ? [] : [nodes.length - 1], files);
+  }
+
+  const cases: Array<TreeEditCase> = [];
+  const GENEROUS = Number.MAX_SAFE_INTEGER;
+
+  const make = (
+    label: string,
+    classes: ReadonlyArray<string>,
+    base: number,
+    changes: ChangeList,
+    tight?: number,
+  ): number | undefined => {
+    const files = nodes[base]?.files ?? [];
+    const model = editModel(files, changes, GENEROUS);
+    let node: number | undefined;
+    let intent: EditIntent;
+
+    if (model.kind === "files") {
+      const same = nodes.findIndex((each) => sameFiles(each.files, model.files));
+      const unchanged = sameFiles(files, model.files);
+      intent = unchanged ? "no change" : "tree";
+      node = unchanged ? base : same === -1 ? addNode([base], model.files) : same;
+    } else {
+      intent = model.kind === "in-the-way" ? "in-the-way" : "not-a-file";
+    }
+
+    cases.push({ label, classes, intent, base, changes, node, tight });
+
+    return node;
+  };
+
+  const [mix, link, empty, one, deepBase] = [index.mixed, index.link, index.empty, index.one, index.deep];
+  const [a, b, c, d] = [fresh(0), fresh(1), fresh(2), fresh(3)];
+  const copy = (name: string): Uint8Array => Uint8Array.from(mixed.find((each) => each.path === name)?.content ?? []);
+
+  // (k) edits that change.
+  make("one file replaced", ["(k) one file replaced"], mix, [[`${top}-b`, a]]);
+  make("a top file replaced", ["(k) one file replaced"], mix, [[`e${p}`, b]]);
+
+  make("several files in several folders", ["(k) several files in several folders in one call"], mix, [
+    [`m${p}/one`, a],
+    [`e${p}`, b],
+    [`d1${p}/d2${q}/d3${r}/z`, c],
+    [`${top}/c`, d],
+  ]);
+
+  make("a new file three folders deep", ["(k) a new file in a new folder three deep"], mix, [
+    [`n1${p}/n2${q}/n3${r}/new`, a],
+  ]);
+
+  make("a new file in a folder that exists", ["(k) a new file in a new folder three deep"], mix, [
+    [`m${p}/n1${q}/n2${r}/new`, a],
+    [`m${p}/three`, b],
+  ]);
+
+  make("a file removed in a folder", ["(k) a file removed"], mix, [[`m${p}/one`, "absent"]]);
+  make("a top file removed", ["(k) a file removed"], mix, [[`e${p}`, "absent"]]);
+  make("an executable file removed", ["(k) a file removed"], mix, [[`x${p}`, "absent"]]);
+
+  make("every file of a folder removed", ["(k) the last files of a folder removed, so the folder goes"], mix, [
+    [`m${p}/two`, "absent"],
+    [`m${p}/one`, "absent"],
+  ]);
+
+  make(
+    "the one file of three nested folders removed",
+    ["(k) the last file of three nested folders removed, so all three go"],
+    mix,
+    [[`d1${p}/d2${q}/d3${r}/z`, "absent"]],
+  );
+
+  make("the one file removed", ["(k) every file removed, the empty tree"], one, [[`o${p}`, "absent"]]);
+  make("the one file of a folder removed", ["(k) every file removed, the empty tree"], deepBase, [
+    [`f${q}/only${p}`, "absent"],
+  ]);
+
+  make(
+    "every file of the mixed tree removed",
+    ["(k) every file removed, the empty tree"],
+    mix,
+    mixed.map((each) => [each.path, "absent"] as const).toReversed(),
+  );
+
+  const made = make("a file made a folder", ["(k) a file made a folder"], mix, [
+    [`e${p}/inner`, a],
+    [`e${p}`, "absent"],
+  ]);
+
+  if (made !== undefined) {
+    const gone = make("the folder emptied", ["(k) a folder emptied, then a file at its path"], made, [
+      [`e${p}/inner`, "absent"],
+    ]);
+
+    if (gone !== undefined) {
+      make("a file where the folder was", ["(k) a folder emptied, then a file at its path"], gone, [[`e${p}`, b]]);
+    }
+  }
+
+  make("a file added to the empty tree", ["(k) a file added to the empty tree"], empty, [[`a${p}`, a]]);
+  make("files added to the empty tree, deep", ["(k) a file added to the empty tree"], empty, [
+    [`a${p}/b${q}/c${r}`, b],
+    [`z${p}`, c],
+  ]);
+
+  make(
+    "a name that starts others and names others start",
+    ["(k) a name that starts others and a name that others start"],
+    mix,
+    [
+      ["s", a],
+      [`${top}-b0`, b],
+      [`${top}.bx`, c],
+      [`${top}00`, d],
+      [`${top}/c0`, a],
+    ],
+  );
+
+  // (l) edits that change nothing.
+  make("an empty edit", ["(l) an empty edit"], mix, []);
+  make("a file replaced with its own bytes", ["(l) a file replaced with its own bytes"], mix, [
+    [`${top}-b`, copy(`${top}-b`)],
+  ]);
+  make("an empty file replaced with its own bytes", ["(l) a file replaced with its own bytes"], mix, [
+    [`e${p}`, new Uint8Array()],
+  ]);
+  make("an executable file replaced with its own bytes", ["(l) an executable file replaced with its own bytes"], mix, [
+    [`x${p}`, copy(`x${p}`)],
+    [`ex${p}/go`, copy(`ex${p}/go`)],
+  ]);
+  make("absent on a path that holds nothing", ["(l) absent on a path that holds nothing"], mix, [
+    [`nothing${p}`, "absent"],
+  ]);
+  make("absent below a file", ["(l) absent below a file"], mix, [[`e${p}/z`, "absent"]]);
+  make("absent in a folder that does not exist", ["(l) absent in a folder that does not exist"], mix, [
+    [`nof${p}/a/b`, "absent"],
+  ]);
+  make("several that change nothing", ["(l) a file replaced with its own bytes"], mix, [
+    [`nothing${p}`, "absent"],
+    [`m${p}/two`, copy(`m${p}/two`)],
+    [`nof${p}/a`, "absent"],
+  ]);
+  make("an empty edit on the empty tree", ["(l) an edit on the empty tree that changes nothing"], empty, []);
+  make("absent on the empty tree", ["(l) an edit on the empty tree that changes nothing"], empty, [
+    [`x${p}/y`, "absent"],
+  ]);
+
+  // (m) modes.
+  make("an executable file replaced", ["(m) an executable file replaced stays 100755"], mix, [
+    [`x${p}`, a],
+    [`ex${p}/go`, b],
+  ]);
+  make("new files beside an executable one", ["(m) a new file is 100644 beside an executable one"], mix, [
+    [`a${p}`, a],
+    [`z${p}`, b],
+    [`xn${p}`, c],
+  ]);
+  make("a new file among executable files", ["(m) a new file is 100644 in a folder of executable files"], mix, [
+    [`ex${p}/a`, a],
+    [`ex${p}/n`, b],
+    [`ex${p}/z`, c],
+  ]);
+
+  // (n) refused.
+  make("a folder replaced by a file", ["(n) a changed path that is a folder"], mix, [[`m${p}`, a]]);
+  make("a deep folder replaced by a file", ["(n) a changed path that is a folder"], mix, [[`d1${p}/d2${q}`, a]]);
+  make("a folder made absent", ["(n) absent at a folder"], mix, [[`m${p}`, "absent"]]);
+  make("a folder emptied and given a file", ["(n) a folder's files removed and a file added at its path"], mix, [
+    [`m${p}/one`, "absent"],
+    [`m${p}/two`, "absent"],
+    [`m${p}`, a],
+  ]);
+  make("a link replaced", ["(n) a link replaced"], link, [[`k${p}`, a]]);
+  make("a link removed", ["(n) a link removed"], link, [[`k${p}`, "absent"]]);
+  make("a link beside a change that works", ["(n) a link removed"], link, [
+    [`ld${p}/inner`, a],
+    [`k${p}`, "absent"],
+  ]);
+  make("a file below a link", ["(n) a change below a link"], link, [[`k${p}/z`, a]]);
+  make("a file deep below a link", ["(n) a change below a link"], link, [[`k${p}/z/y`, a]]);
+  make("absent below a link", ["(n) absent below a link"], link, [[`k${p}/z`, "absent"]]);
+  make("a file below a file the edit keeps", ["(n) a new file below a file the edit keeps"], mix, [[`x${p}/below`, a]]);
+  make("a file deep below a file the edit keeps", ["(n) a new file below a file the edit keeps"], mix, [
+    [`x${p}/a/b`, a],
+  ]);
+  make("a file below a file the edit replaces", ["(n) a new file below a file the edit keeps"], mix, [
+    [`x${p}`, a],
+    [`x${p}/below`, b],
+  ]);
+  make("two new files, one below the other", ["(n) two new files, one below the other"], mix, [
+    [`nw${p}/below`, b],
+    [`nw${p}`, a],
+  ]);
+
+  // (p) the order of the checks.
+  const big = Uint8Array.from({ length: 64 }, (_, i) => (i * 5 + 3) & 255);
+  make(
+    "a large file at a folder's path",
+    ["(p) content too large at a folder's path"],
+    mix,
+    [[`m${p}`, big]],
+    big.length - 1,
+  );
+  make("a folder changed beside a file in the way", ["(p) a change at a folder beside a new file in the way"], mix, [
+    [`x${p}/below`, a],
+    [`m${p}`, b],
+  ]);
+  make("two folders changed", ["(p) two folders changed"], mix, [
+    [`${top}`, a],
+    [`m${p}`, b],
+  ]);
+  make("two new files in the way", ["(p) two new files in the way"], mix, [
+    [`x${p}/b2`, a],
+    [`e${p}/a1`, b],
+  ]);
+
+  // (q) the sort traps and the object prototype among the changed names of one folder.
+  make("every sort trap replaced", ["(q) the sort traps among the changed names of one folder"], mix, [
+    [`${top}0`, a],
+    [`${top}.b`, b],
+    [`${top}/c`, c],
+    [`${top}-b`, d],
+  ]);
+  make("sort traps added and removed", ["(q) the sort traps added and removed in one folder"], mix, [
+    [`${top}-bb`, a],
+    [`${top}.bb`, b],
+    [`${top}0b`, c],
+    [`${top}/c2`, d],
+    [`${top}.b`, "absent"],
+    [`${top}/c`, "absent"],
+  ]);
+  make("names on the object prototype", ["(q) names on the object prototype"], mix, [
+    ["__proto__", a],
+    [`constructor/${p}`, b],
+    ["toString", c],
+    [`hasOwnProperty/${p}`, d],
+  ]);
+  make("a name on the object prototype removed", ["(q) names on the object prototype"], mix, [["__proto__", "absent"]]);
+
+  // Edits drawn at random over the five trees, then over trees an edit made.
+  const randomEdit = (files: ReadonlyArray<FileSpec>, tag: string): ChangeList => {
+    const plain = files.filter((each) => each.mode !== "120000");
+    const used = new Set<string>();
+    const out: Array<readonly [string, PathChange]> = [];
+
+    const add = (path: string, change: PathChange): void => {
+      if (!used.has(path) && Schema.is(Path)(path)) {
+        used.add(path);
+        out.push([path, change]);
+      }
+    };
+
+    for (let n = 0, count = 1 + draw.int(4); n < count; n++) {
+      const kind = draw.int(8);
+      const target = plain.length === 0 ? undefined : at(plain, draw.int(plain.length));
+      const name = `${tag}${n}${draw.part()}`;
+      const content = Uint8Array.from([...draw.blob(), 0xf0, n]);
+      const folder = target === undefined ? "" : target.path.split("/").slice(0, -1).join("/");
+      const inFolder = (leaf: string): string => (folder === "" ? leaf : `${folder}/${leaf}`);
+
+      if (target === undefined || kind === 2) {
+        add(name, content);
+      } else if (kind === 0) {
+        add(target.path, content);
+      } else if (kind === 1) {
+        add(target.path, "absent");
+      } else if (kind === 3) {
+        add(inFolder(name), content);
+      } else if (kind === 4) {
+        add(`${target.path}/${name}`, content);
+      } else if (kind === 5) {
+        add(`${target.path}x`, content);
+      } else if (kind === 6) {
+        add(Array.from(target.path).slice(0, -1).join(""), content);
+      } else {
+        add(draw.int(2) === 0 ? name : folder === "" ? target.path : folder, "absent");
+      }
+    }
+
+    return out;
+  };
+
+  for (const [k, start] of [mix, mix, mix, mix, mix, mix, link, empty, one, deepBase].entries()) {
+    make(`a random edit, ${k}`, ["(k) a random edit"], start, randomEdit(nodes[start]?.files ?? [], `r${k}`));
+  }
+
+  const edited = cases.flatMap((each) =>
+    each.intent === "tree" && each.node !== undefined && each.node >= starts.length ? [each.node] : [],
+  );
+
+  for (const [k, start] of [...new Set(edited)].slice(0, 4).entries()) {
+    make(
+      `a random edit on an edited tree, ${k}`,
+      ["(k) a random edit on an edited tree"],
+      start,
+      randomEdit(nodes[start]?.files ?? [], `t${k}`),
+    );
+  }
+
+  return { history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] }, cases, bases: index };
+};
+
+/** The classes of `TREE_EDIT_CLASSES` that the cases of a carrier reach, in the list's order. */
+export const reachedTreeEditClasses = (carrier: TreeEditCarrier): ReadonlyArray<string> => {
+  const reached = new Set(carrier.cases.flatMap((each) => each.classes));
+
+  return TREE_EDIT_CLASSES.filter((label) => reached.has(label));
+};
+
+/** Whether a carrier reaches every class of `TREE_EDIT_CLASSES`. */
+export const everyTreeEditClassNames = (carrier: TreeEditCarrier): boolean =>
+  reachedTreeEditClasses(carrier).length === TREE_EDIT_CLASSES.length;
+
 /** The same history with a canary in every message, name and email, so a span that leaks one is seen. */
 export const CANARY = "canary-7f3a9c";
 
