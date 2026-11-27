@@ -86,8 +86,8 @@ Rules:
   R1b), and a wrapper of refusals does the same (`ChatRefused` in `kalfa/ledger/src/Ledger.test-support.ts`). The line is
   typed as the reason, so `error.cause._tag` reads without a cast, and the wire is unchanged: `cause` is no schema field. One
   exception: `GitHubError` (`kalfa/github/src/GitHub.ts`) keeps no cause, because its reason holds GitHub's text and the caller's
-  input, and its approved law C9 holds that nothing under `reason` reaches a span; the rule is switched off on its class line with
-  that reason.
+  input, and its approved law C9 holds that nothing under `reason` reaches a span; the lint config allows that one class by name,
+  `"fabrika/inner-cause": ["error", { "allow": { "kalfa/github/src/GitHub.ts": ["GitHubError"] } }]`, with that reason in a comment beside it.
 - **Pick the cause's form from the call sites.** Read every place that makes the error. If each
   one has a cause, the field is required. If one has none, it is `Schema.optional`. Never
   `Schema.optionalKey`.

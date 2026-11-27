@@ -104,7 +104,7 @@ the `GitHub` service gives.
 
 `GitHubError` has no `message` and no `cause`, on purpose: a failed span renders only those, so nothing under `reason`
 reaches a trace. It is the one kalfa error that holds an inner failure and does not set it as its cause, so the lint rule that asks a
-wrapper for a cause is switched off on its class line, with this reason (law C9).
+wrapper for a cause is told, in the lint config and by name, to leave this class alone, with this reason (law C9).
 
 ## The span
 
