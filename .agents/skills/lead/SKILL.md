@@ -855,3 +855,5 @@ these caps. Each one came from a laptop that became unusable. This list is their
 
 Update the skill it teaches, in the same pull request as the field note. A rule that lives only in
 one brief is lost with that brief.
+
+t2338p scratch line: a throwaway proof of the review record. Safe to delete.
