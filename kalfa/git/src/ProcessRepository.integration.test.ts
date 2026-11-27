@@ -7,12 +7,16 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Match, Option, Predicate, Result, Schema, Tracer } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as FileSystem from "effect/FileSystem";
+import type { ChildProcessSpawner } from "effect/process";
 import * as Commit from "./Commit.ts";
 import * as CommitEditTest from "./CommitEdit.test-support.ts";
 import * as CommitEdit from "./CommitEdit.ts";
 import * as CommitId from "./CommitId.ts";
+import * as Credentials from "./Credentials.ts";
 import * as Diff from "./Diff.ts";
+import * as FetchTest from "./Fetch.test-support.ts";
 import {
+  refsModel,
   TREE_CARRIER_CLASSES,
   editCarrier,
   readCarrier,
@@ -33,6 +37,7 @@ import {
   git,
   importCommit,
   openRepository,
+  processFetchSubject,
   processSubject,
   setConfigTable,
 } from "./ProcessSeed.test-support.ts";
@@ -77,6 +82,23 @@ MergeCommitTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 }
 
 // I1 for the commit edit helper (S34, S35), the same laws as on `/memory`, over real bare repositories.
 CommitEditTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 });
+
+// I1 for fetch (F1 to F8), the same laws as on `/memory`, over two real bare repositories each, a remote and a local one, at 3 runs. This file is
+// refused on the laptop by its name, so none of the plants below was run here: CI runs them, one edit of ProcessRepository.ts at a time, each
+// undone after its run, and each must turn the named law red. The suite's time is not measured here either; the lead's proof run measures it
+// and cuts the runs past 850 s of this file's 1020 s step.
+// Plant (F1): read back with `refs/fetched/${under}*` as the `for-each-ref` pattern, so `<under>-2` is answered; fetch `+${under}/*:refs/fetched/${under}/*`,
+// so the exact ref is missing; fetch `+refs/heads/*:refs/fetched/refs/heads/*`, so a ref outside the branches is missing; read back the exact ref only,
+// so a folder is missing; answer only the refs whose commit the repository lacked.
+// Plant (F2): fetch with git's default mapping, `+${under}*:${under}*`, so the local branch moves; run the transfer with `run` (the repository's own
+// `--git-dir`) in place of `there`, so the scratch refs land in the repository; drop the `shallow` question and fetch into a repository that is shallow.
+// Plant (F3): pass `remote.name` as the URL of a named remote, so git reads `origin` as a path; read an unknown name as a URL; map `FetchFailed` to `[]`;
+// look a URL up among the names first.
+// Plant (F4): drop `--update-shallow` from the transfer flags, so a cut remote answers without its ref; drop `whole(there)`, so a cut remote answers;
+// count with `>=` in place of `>`, so exactly the limit fails; skip the repository's shallow question, so the transfer runs and fails `FetchFailed`.
+// Plant (F5): keep each answer by URL and `under` in the layer. Plant (F6): fetch before the slot is asked. Plant (F7): put the user name in a span,
+// a log line or `FetchFailed.stderr`. Plant (F8): put the URL in the span; write `fetch` with `Effect.fnUntraced`.
+FetchTest.suite("process", processFetchSubject, { runs: 3, timeout: 1_800_000 });
 
 const signature = (flat: FlatSignature): Commit.Signature =>
   new Commit.Signature({ name: flat.name, email: flat.email, at: { seconds: flat.seconds, offset: flat.offset } });
@@ -1049,4 +1071,125 @@ it.effect(
         (yield* git(dir, ["rev-parse", `${first}^{tree}`])).trim(),
       );
     }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+/** The keys of a repository's config that could steer a fetch: a program to run for the remote, a rewrite of the URL, a login helper, and the rest. */
+const wayIn = (
+  local: string,
+  remote: string,
+  decoy: string,
+  tools: string,
+  markers: string,
+): Effect.Effect<void, never, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const asUrl = `file://${remote}`;
+
+    // A program that leaves a mark where it ran, and then does what it was meant to.
+    const tool = (name: string, then: string) =>
+      Effect.gen(function* () {
+        const file = `${tools}/${name}`;
+        yield* fs.writeFileString(file, `#!/bin/sh\ntouch "${markers}/${name}"\n${then}\n`, { mode: 0o755 });
+
+        return file;
+      });
+
+    const upload = yield* tool("uploadpack", 'exec git-upload-pack "$@"');
+    const askpass = yield* tool("askpass", "echo x");
+    const nothing = yield* tool("quiet", "exit 0");
+    const hook = yield* tool("packobjects", 'exec "$@"');
+    const helper = yield* tool("helper", "exit 0");
+
+    const keys: ReadonlyArray<readonly [string, string]> = [
+      [`remote.${remote}.uploadpack`, upload],
+      [`remote.${asUrl}.uploadpack`, upload],
+      ["remote.origin.uploadpack", upload],
+      ["credential.helper", `!${helper}`],
+      ["core.askPass", askpass],
+      ["fetch.recurseSubmodules", "true"],
+      ["core.alternateRefsCommand", nothing],
+      ["core.alternateRefsPrefixes", "refs/heads/nothing/"],
+      ["transfer.unpackLimit", "1000000"],
+      ["fetch.unpackLimit", "1000000"],
+      ["uploadpack.packObjectsHook", hook],
+    ];
+
+    for (const [key, value] of keys) {
+      yield* git(local, ["config", key, value]);
+    }
+
+    // The same rewrite twice, for a path and for a file URL: the fetch would go to another repository.
+    yield* git(local, ["config", "--add", `url.${decoy}.insteadOf`, remote]);
+    yield* git(local, ["config", "--add", `url.${decoy}.insteadOf`, asUrl]);
+
+    // The same keys again, in a file the config includes.
+    const included = `${tools}/included.config`;
+
+    for (const [key, value] of keys) {
+      yield* git(local, ["config", "--file", included, key, value]);
+    }
+
+    yield* git(local, ["config", "--file", included, "--add", `url.${decoy}.insteadOf`, remote]);
+    yield* git(local, ["config", "include.path", included]);
+  }).pipe(Effect.orDie);
+
+// Plant (F12): run the transfer in the repository itself with `-c` pins only, so the `uploadpack` program of `remote.<url>.uploadpack` runs and
+// its mark appears; read `ls-remote --get-url` for the URL, so the `url.<other>.insteadOf` rewrite sends the fetch to the other repository and
+// the answer is the other's. The credential helper and `core.askPass` can only act over HTTP, which F20 of slice 2 covers.
+it.effect.prop(
+  "F12 scenario: no key of the repository's config acts on a fetch: with a program to run for the remote, a rewrite of its URL, a login helper, an ask-pass program, alternate-ref keys, unpack limits, a pack hook and all of them again in an included file, a fetch by name and by URL answers the given remote's refs, and no program ran",
+  { texture: textureArb },
+  ({ texture }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const carrier = FetchTest.fetchCarrier(texture);
+        const scenario = carrier.scenarios.plain;
+        const seeded = yield* processFetchSubject.seed(scenario.remote, scenario.local, settings);
+        const [local = "", remote = ""] = seeded.hidden;
+
+        // Another repository, whose refs are at a commit the remote does not hold.
+        const first = scenario.remote.nodes[0];
+
+        if (first === undefined) {
+          return yield* Effect.die(new Error("the remote history holds no commit"));
+        }
+
+        const decoy = yield* processSubject.seed(
+          {
+            nodes: [{ ...first, parents: [], message: "decoy" }],
+            refs: scenario.remote.refs.map((ref) => ({ ...ref, commit: 0 })),
+            shallow: [],
+          },
+          settings,
+        );
+
+        const tools = yield* fs.makeTempDirectoryScoped();
+        const markers = yield* fs.makeTempDirectoryScoped();
+        yield* wayIn(local, remote, decoy.hidden[0] ?? "", tools, markers);
+
+        const none = Credentials.none;
+
+        for (const under of ["refs/heads/main", "refs/heads"]) {
+          const expected = refsModel(scenario.remote, under).map((ref) => ({
+            name: ref.name,
+            commit: seeded.remoteIds[ref.commit],
+          }));
+
+          for (const via of [seeded.named, ...seeded.urls]) {
+            const answer = yield* seeded.repository
+              .fetch({ remote: via, under: refNameFrom(under) })
+              .pipe(Effect.provide(none));
+
+            expect(
+              answer.map((ref) => ({ name: ref.name, commit: ref.commit })),
+              `${via._tag} ${under}: the given remote's refs`,
+            ).toEqual(expected);
+          }
+        }
+
+        expect(yield* fs.readDirectory(markers), "no program of the config ran").toEqual([]);
+      }).pipe(Effect.orDie),
+    ).pipe(Effect.provide(NodeServices.layer)),
+  { arbitrary: { runs: 3, seed: 119120 }, timeout: 1_800_000 },
 );

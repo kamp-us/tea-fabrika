@@ -18,6 +18,7 @@ import {
   Result,
   Schema,
 } from "effect";
+import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
@@ -55,6 +56,9 @@ const commitIdFrom = (text: string): CommitId.CommitId => Schema.decodeUnknownSy
 
 const PATH = "repo.git";
 
+// The layer needs a file system for the folder a fetch makes. No law here fetches, so one that does nothing stands in.
+const NO_DISK = FileSystem.layerNoop({});
+
 /** The answers git gives while a layer opens, and the cheap questions before a call; `rest` answers the call itself. */
 const script =
   (known: ReadonlyArray<string>, size: number, rest: (call: Call) => Reply = () => ({ code: 0 })) =>
@@ -83,7 +87,9 @@ const open = (
     const stand = yield* standIn(run);
 
     const context = yield* Layer.build(
-      ProcessRepository.layer({ path: PATH, settings: config }).pipe(Layer.provide(stand.layer)),
+      ProcessRepository.layer({ path: PATH, settings: config }).pipe(
+        Layer.provide(Layer.mergeAll(stand.layer, NO_DISK)),
+      ),
     );
 
     return { repo: Context.get(context, Repository.Repository), stand };
@@ -188,7 +194,7 @@ it.effect.prop(
 
         const context = yield* Layer.build(
           ProcessRepository.layer({ path: PATH, settings: settings({ time: `${seconds} seconds` }) }).pipe(
-            Layer.provide(stand.layer),
+            Layer.provide(Layer.mergeAll(stand.layer, NO_DISK)),
           ),
         );
 
@@ -277,7 +283,7 @@ it.effect.prop(
 
         const context = yield* Layer.build(
           ProcessRepository.layer({ path: PATH, settings: settings({ time: `${seconds} seconds`, kill: text }) }).pipe(
-            Layer.provide(stand.layer),
+            Layer.provide(Layer.mergeAll(stand.layer, NO_DISK)),
           ),
         ).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { PATH: "/bin" } }))));
 
@@ -370,7 +376,9 @@ it.effect(
         const stand = yield* standIn(script([], 200));
 
         const exit = yield* Layer.build(
-          ProcessRepository.layer({ path: PATH, settings: bad }).pipe(Layer.provide(stand.layer)),
+          ProcessRepository.layer({ path: PATH, settings: bad }).pipe(
+            Layer.provide(Layer.mergeAll(stand.layer, NO_DISK)),
+          ),
         ).pipe(Effect.exit, Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { PATH: "/bin" } }))));
 
         expect(Exit.isFailure(exit), `${label}: building the layer fails`).toBe(true);

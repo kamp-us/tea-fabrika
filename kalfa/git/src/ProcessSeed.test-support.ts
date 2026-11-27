@@ -7,8 +7,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as CommitId from "./CommitId.ts";
+import type { FetchSeeded, FetchSubject } from "./Fetch.test-support.ts";
 import type { FileSpec, FlatSignature, History } from "./History.test-support.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
+import * as Remote from "./Remote.ts";
 import * as Repository from "./Repository.ts";
 import type { Seeded, Subject } from "./RepositoryTest.ts";
 import type { Settings } from "./Settings.ts";
@@ -169,21 +171,27 @@ export const fastImport = (dir: string, stream: Uint8Array): Effect.Effect<Reado
     return ids;
   }).pipe(Effect.orDie);
 
-/** The service on the repository at `dir`, built with the real spawner in the context. */
+/** The service on the repository at `dir`, built with the real spawner and the real file system in the context. */
 export const openRepository = (
   dir: string,
   settings: Settings,
 ): Effect.Effect<
   Repository.Repository["Service"],
   Repository.GitTooOld | Repository.NoRepository | Repository.GitUnavailable | Repository.TimedOut,
-  ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
+  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Scope.Scope
 > =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const fs = yield* FileSystem.FileSystem;
 
     const context = yield* Layer.build(
       ProcessRepository.layer({ path: dir, settings }).pipe(
-        Layer.provide(Layer.succeed(ChildProcessSpawner.ChildProcessSpawner)(spawner)),
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.succeed(ChildProcessSpawner.ChildProcessSpawner)(spawner),
+            Layer.succeed(FileSystem.FileSystem)(fs),
+          ),
+        ),
       ),
     );
 
@@ -299,3 +307,49 @@ export const setConfigTable = (dir: string): Effect.Effect<void, never, Needs> =
       yield* git(dir, ["config", key, value]);
     }
   }).pipe(Effect.orDie);
+
+const urlFrom = (text: string): Remote.Url => Schema.decodeUnknownSync(Remote.Url)(text);
+
+/**
+ * A subject for the laws of fetch: the remote and the local repository are two real bare repositories, and the local one's config names the remote
+ * `origin`, by its path. The remote is also reached by its path and by a `file://` URL, with no name.
+ */
+export const processFetchSubject: FetchSubject = {
+  seed: (remote, local, settings) =>
+    Effect.gen(function* () {
+      const services = yield* Layer.build(NodeServices.layer);
+
+      return yield* Effect.gen(function* () {
+        const there = yield* seed(remote, settings);
+        const here = yield* seed(local, settings);
+        const remoteDir = there.hidden[0] ?? "";
+        const localDir = here.hidden[0] ?? "";
+        yield* git(localDir, ["config", "remote.origin.url", remoteDir]);
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+        const seeded: FetchSeeded = {
+          repository: here.repository,
+          remote: there.repository,
+          ids: here.ids,
+          remoteIds: there.ids,
+          named: Remote.named(Schema.decodeUnknownSync(Remote.Name)("origin")),
+          configured: urlFrom(remoteDir),
+          urls: [Remote.url(urlFrom(remoteDir)), Remote.url(urlFrom(`file://${remoteDir}`))],
+          nowhere: urlFrom(`${remoteDir}-nowhere`),
+          shallow: git(localDir, ["rev-parse", "--is-shallow-repository"]).pipe(
+            Effect.map((printed) => printed.trim() === "true"),
+            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          ),
+          fingerprint: here.fingerprint,
+          hidden: [localDir, remoteDir],
+          moveRemoteRef: (ref, commit) =>
+            git(remoteDir, ["update-ref", ref, there.ids[commit] ?? ""]).pipe(
+              Effect.asVoid,
+              Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+            ),
+        };
+
+        return seeded;
+      }).pipe(Effect.provide(services));
+    }),
+};

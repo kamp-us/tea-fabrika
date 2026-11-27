@@ -1546,8 +1546,9 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // point `refs/heads/main` at the commit it wrote; leave `diff` or `rangePatchId` out of the service, or let `rangePatchId` be a
     // call an adapter writes, so it is in `Raw` too. Ticket 1935, slice 1: leave `readFile` out of the service, or
     // let `readText` be a call an adapter writes, so it is in `Raw` too; let a read write an object, so the fingerprint moves: red.
+    // Ticket 1938, slice 1: leave `fetch` out of the service: red on the keys. `fetch` is not in the list of reads, since it adds objects.
     it.effect.prop(
-      "S10 no working copy: the service has the ten read calls and the four write calls, no list of reads changes the store, and no list of writes, edits or merges moves a ref",
+      "S10 no working copy: the service has the ten read calls, `fetch` and the four write calls, no list of reads changes the store, and no list of writes, edits or merges moves a ref",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), DEFAULT, (seeded, shape) =>
@@ -1555,6 +1556,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             expect(Object.keys(seeded.repository).sort(), `${shape.label}: the keys`).toEqual([
               "diff",
               "editTree",
+              "fetch",
               "isAncestor",
               "mergeBases",
               "mergeTrees",
