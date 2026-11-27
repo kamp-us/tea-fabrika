@@ -4,8 +4,8 @@
  * **Details**
  *
  * Every package that keeps entries in the Ledger names them with an `EntryId`, so the writer's own id is this type under its own name with no mapping.
- * `child` is pure and never fails: a name and a parent always give a valid id, as the plain text `<name>:<parent>` when that fits in 255 characters and
- * as `<name>.h:<hash of the parent>` when it does not.
+ * `child` is pure and never fails for a name and a parent of their types: they always give a valid id, as the plain text `<name>:<parent>` when that fits in
+ * 255 characters and as `<name>.h:<hash of the parent>` when it does not. A text that is no name or no id, sent past the types, is refused.
  */
 import { Schema } from "effect";
 import { Base64Url } from "effect/encoding";
@@ -45,6 +45,10 @@ export type EntryName = typeof EntryName.Type;
 
 const encoder = new TextEncoder();
 
+const decodeName = Schema.decodeUnknownSync(EntryName);
+
+const decodeId = Schema.decodeUnknownSync(EntryId);
+
 /**
  * The id of an entry that follows from another: `<name>:<parent>` when that is 255 characters or fewer, else `<name>.h:` and the parent's SHA-256 in
  * base64url, 43 characters.
@@ -52,16 +56,20 @@ const encoder = new TextEncoder();
  * **Details**
  *
  * A plain id's text before its first `:` is its name, and a hashed id's is `<name>.h`. No name holds `.`, so the two never meet, and no name holds `:`,
- * so a plain id splits back into one name and one parent.
+ * so a plain id splits back into one name and one parent. For that to hold, `child` reads both arguments as the types they are before it joins them: a
+ * name with a `.` or a `:` would make `child("a.b", "p")` the id `a.b:p`, and `child("x.h", <the hash in x's hashed id>)` the very id `child("x", <that
+ * parent>)` gives. A caller that sends a text past the types, from JavaScript, gets the `SchemaError` of the decode, joined short or long, and no id.
  *
  * @category constructors
  */
 export const child = (name: EntryName, parent: EntryId): EntryId => {
-  const plain = `${name}:${parent}`;
+  const checkedName = decodeName(name);
+  const checkedParent = decodeId(parent);
+  const plain = `${checkedName}:${checkedParent}`;
 
   if (plain.length <= ID_LIMIT) {
-    return Schema.decodeUnknownSync(EntryId)(plain);
+    return decodeId(plain);
   }
 
-  return Schema.decodeUnknownSync(EntryId)(`${name}.h:${Base64Url.encode(hash(encoder.encode(parent)))}`);
+  return decodeId(`${checkedName}.h:${Base64Url.encode(hash(encoder.encode(checkedParent)))}`);
 };

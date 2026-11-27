@@ -10,7 +10,8 @@
  * a caller makes it with `Redacted.make(cause)`, and code that needs the cause reads it on purpose with `Redacted.value(error.cause)`. A failure crosses a
  * wire with its tag and its cause written as the text `<redacted>`, and is read back with an empty hidden cause: the value never leaves the process.
  */
-import { Redacted, Schema, SchemaGetter } from "effect";
+import * as Hidden from "@kalfa/diagnostics/Hidden";
+import { Schema } from "effect";
 import { Revision } from "./Entry.ts";
 
 /**
@@ -70,26 +71,13 @@ export class EmptyTypes extends Schema.TaggedError<EmptyTypes, { readonly brand:
   }
 }
 
-// What a failure's cause is written as in JSON: a fixed text, so a wire shows that a cause was held and never what it was.
-const PLACEHOLDER = "<redacted>";
-
-// A failure's cause is hidden twice: held as a `Redacted`, and written to JSON as the placeholder. It is read back as a hidden `undefined`: the value stays
-// in the process that made it.
-const Hidden = Schema.declare((candidate): candidate is Redacted.Redacted<unknown> => Redacted.isRedacted(candidate), {
-  toCodecJson: () =>
-    Schema.link<Redacted.Redacted<unknown>>()(Schema.Literal(PLACEHOLDER), {
-      decode: SchemaGetter.transform(() => Redacted.make(undefined)),
-      encode: SchemaGetter.transform((): typeof PLACEHOLDER => PLACEHOLDER),
-    }),
-});
-
 /**
  * The Ledger could not be reached. Its cause is hidden.
  *
  * @category failures
  */
 export class Unreachable extends Schema.TaggedError<Unreachable, { readonly brand: unique symbol }>()("Unreachable", {
-  cause: Hidden,
+  cause: Hidden.Cause,
 }) {}
 
 /**
@@ -98,7 +86,7 @@ export class Unreachable extends Schema.TaggedError<Unreachable, { readonly bran
  * @category failures
  */
 export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
-  cause: Hidden,
+  cause: Hidden.Cause,
 }) {}
 
 /**
@@ -108,7 +96,7 @@ export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique 
  */
 export class StorageFailed extends Schema.TaggedError<StorageFailed, { readonly brand: unique symbol }>()(
   "StorageFailed",
-  { cause: Hidden },
+  { cause: Hidden.Cause },
 ) {}
 
 /**
