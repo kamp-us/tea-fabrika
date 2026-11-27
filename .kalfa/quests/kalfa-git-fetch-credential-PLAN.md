@@ -35,17 +35,20 @@ program.pipe(Effect.provide(CodehostGit.credentials)); // later, ticket 1968: fr
 
 - **The ruling says "askpass helper"; git's own non-interactive way is a credential helper. Open question 1.** Slice 2
   is written to the ruling. Slice 1 does not depend on the answer.
-- **The slot is the call's requirement, not the layer's, 75%.** `fetch` returns `Effect<..., ..., Credentials>`.
+- **The slot is the call's requirement, not the layer's, 85%.** `fetch` returns `Effect<..., ..., Credentials>`.
   Effect's own guide builds a service's needs into its layer. Here the slot is asked on every call and a program that
-  never fetches never picks one. The cost: a service method with a requirement, which Effect's guide does not show.
-  What would settle it: the review or the lead preferring the layer. Then `make` takes the service at build and every
-  layer build provides `Credentials.none`, about 15 lines more in tests.
+  never fetches never picks one. Effect does the same in its own services: `FileSystem.makeTempDirectoryScoped` returns
+  `Effect<string, PlatformError, Scope>`, a service method that needs what the caller holds. What would settle it the
+  other way: the lead preferring the layer. Then `make` takes the service at build and every layer build provides
+  `Credentials.none`, about 15 lines more in tests.
 - **`fetch` takes one `under`, the shape `readRefs` takes, 80%.** It fits how git fetches (one glob refspec), and it
   gives the push ticket (https://github.com/kamp-us/tea-fabrika/issues/1940) the proof that a ref is gone: an empty
   answer. A caller that needs two folders fetches twice.
-- **The transfer runs in a fresh git directory, 85%.** Measured below: it reads none of the repository's config, keeps
-  `shallow` and the scratch refs out of the repository, and with `--negotiation-tip` downloads only what is missing.
-  The cost: `ProcessRepository.layer` needs `FileSystem` from slice 1, so every layer build in the tests provides one.
+- **The transfer runs in a fresh git directory with its own object folder, 85%.** Measured below: it reads none of the
+  repository's config, keeps `shallow`, the scratch refs and any partial pack out of the repository, reads the
+  repository's refs as alternate refs so it downloads only what is missing, and its pack joins the repository by a
+  rename only after a good answer. The cost: `ProcessRepository.layer` needs `FileSystem` from slice 1, so every layer
+  build in the tests provides one.
 
 ## Records read
 
@@ -82,8 +85,9 @@ program.pipe(Effect.provide(CodehostGit.credentials)); // later, ticket 1968: fr
   source: `effect/process/ChildProcess` takes `Redacted<string>` env values ("passed to the child unchanged and never
   shown in errors"), and `@effect/platform-node-shared`'s `NodeChildProcessSpawner` unwraps them only when it spawns;
   `Schema.Redacted(schema, { disallowJsonEncode })`; `Redacted`'s `toString` and `toJSON` print `<redacted>`;
-  `effect/FileSystem` has `makeTempDirectoryScoped` (its release removes the folder), `writeFileString` with a `mode`,
-  and `layerNoop` for tests.
+  `effect/FileSystem` has `makeTempDirectory` with a `directory` and a `prefix`, `remove` with `recursive`, `rename`,
+  `writeFileString` with a `mode`, and `layerNoop` for tests; `@effect/platform-node-shared` 4.1.3's
+  `makeTempDirectoryScoped` releases with `Effect.orDie(removeDirectory(...))`.
 - Run by hand by this plan step on the laptop's git 2.40.1, in scratch bare repositories with no user or system config:
   - A refspec `+refs/heads/main*:<dest>/refs/heads/main*` fetches `main` and `main-2`, exits 0, and writes no
     `FETCH_HEAD` with `--no-write-fetch-head`. An exact refspec for a ref the remote lacks exits 128; a glob that
@@ -96,15 +100,26 @@ program.pipe(Effect.provide(CodehostGit.credentials)); // later, ticket 1968: fr
   - **The fresh git directory (design b), measured.** A remote of 200 commits, the repository holding the first 199. A
     fetch in the repository itself took 3 new objects. A fetch with `--git-dir=<fresh>` and
     `GIT_OBJECT_DIRECTORY=<repo>/objects` and no tips took 600, the whole history again. The same with
-    `--negotiation-tip=<the repository's tip id>` took 3, and so did copying the tip in as a ref. So tips as arguments
-    cost nothing: no ref is written anywhere.
+    `--negotiation-tip=<the repository's tip id>` took 3, and so did copying the tip in as a ref. The recheck then found
+    that `--negotiation-tip` leaves the connectivity check walking the whole history (0.33 s against 0.033 s on 20,000
+    commits, since the fresh directory's `--not --all` stops nothing) and that 5,000 refs put 295 KB in argv. Both are
+    gone with the next item.
+  - **The fresh directory with its own object folder (the recheck's point C), measured.** Its `objects/info/alternates`
+    names the repository's object folder, and `-c transfer.unpackLimit=1` keeps what arrives as one pack. A remote of
+    300 commits, the repository holding the first 299: 4 objects arrived, against 900 when the repository had no refs.
+    git's trace shows a child `git --git-dir=<repo> for-each-ref --format=%(objectname)` and `rev-list ... --not --all
+    --alternate-refs`: the repository's refs are the haves and bound the check, with nothing on the command line. After
+    renaming the `.pack` and `.idx` into the repository's `objects/pack`, the repository read the new tip and walked
+    its 300 commits. A SIGTERM during a large transfer left a 49 MB `tmp_pack_*` in the fresh directory's own
+    `objects/pack`, and the repository's stayed empty. A sha256 repository fetched from a sha256 remote with
+    `init --object-format=sha256`; a sha1 fresh directory against it failed "mismatched algorithms", exit 128.
   - In that fresh directory, a repository config holding `remote.<file url>.uploadpack` that touches a file, a
     `url.<other>.insteadOf=<url>` that sends the fetch elsewhere, and a `credential.helper` that touches a file: none
     acted, and the fetch reached the URL it was given. In the repository itself, the `uploadpack` ran and the
     `insteadOf` sent the fetch to the other repository.
   - From a shallow remote, the fresh directory became shallow (`rev-parse --is-shallow-repository` there said `true`)
-    and the repository stayed `false`. The fetched objects sit unreferenced in the repository; `rev-list` on their tip
-    there fails with "Could not read", exit 128, never an answer.
+    and the repository stayed `false`. With its own object folder, those objects stay in the fresh directory and go
+    with it.
   - Into a repository that is already shallow, the fresh directory does not know the cut, and the fetch fails "did not
     send all necessary objects", exit 1. So a shallow repository is refused before the transfer.
   - `git --git-dir=<new> init --bare --quiet --template=` makes the directory, with `start`'s pins on.
@@ -288,48 +303,81 @@ export const layer = (store: Store, settings: Settings.Settings, remotes: Remote
 `Url` refuses is `BadRemoteUrl` `refused`. Nothing else of the repository's config is read for a fetch, and nothing of
 it acts on the transfer, so a named remote's URL is the configured text exactly: no `insteadOf` applies.
 
-`fetch` runs the transfer in a fresh git directory made for the call, the design the review's point 1 called (b):
+`fetch` runs the transfer in a fresh git directory made for the call, the design the review's point 1 called (b), with
+the object folder of the recheck's point C: its own `objects/`, which borrows the repository's through
+`objects/info/alternates`.
 
 ```text
-in the repository:
-git <start(repo)> rev-parse --is-shallow-repository --path-format=absolute --git-path objects
-    "true": HistoryTooShort, before any transfer; the second line is the object folder
-git <start(repo)> for-each-ref --count=<refs> --format=%(objectname) refs/
-    the tips git tells the remote it has; past `limits.refs` only the first ones, which costs download, never an answer
+in the repository, one command:
+git <start(repo)> rev-parse --is-shallow-repository --show-object-format --absolute-git-dir
+                            --path-format=absolute --git-path objects
+    four lines: "true" is HistoryTooShort before any transfer; the hash format (sha1, sha256); the git directory;
+    the object folder
 
-in a folder from FileSystem.makeTempDirectoryScoped, with GIT_OBJECT_DIRECTORY=<object folder> on every command:
-git <start(<tmp>/fetch.git)> init --bare --quiet --template=
+a folder from fs.makeTempDirectory({ directory: <git directory>, prefix: "kalfa-fetch-" }), inside the repository's
+git directory so each move below is a rename on one file system, opened in our own acquireRelease:
+git <start(<tmp>/fetch.git)> init --bare --quiet --template= --object-format=<hash format>
+write <tmp>/fetch.git/objects/info/alternates: "<object folder>\n"
 git <start(<tmp>/fetch.git)> -c protocol.allow=never -c protocol.file.allow=always -c protocol.https.allow=always
+    -c transfer.unpackLimit=1
     fetch --quiet --no-tags --no-write-fetch-head --no-recurse-submodules --update-shallow
-          --no-auto-gc --no-auto-maintenance --no-write-commit-graph --negotiation-tip=<tip> ...
+          --no-auto-gc --no-auto-maintenance --no-write-commit-graph
           -- <url> +<under>*:refs/fetched/<under>*
-git <start(<tmp>/fetch.git)> rev-parse --is-shallow-repository      "true": HistoryTooShort
+git <start(<tmp>/fetch.git)> rev-parse --is-shallow-repository      "true": HistoryTooShort, and nothing is moved
 git <start(<tmp>/fetch.git)> for-each-ref --count=<refs + 1> --format=%(objectname) %(objecttype) %(symref) %(refname)
     refs/fetched/<under>                                            the readRefs rule: exact, and below `under/`
+on a good answer only: rename each <tmp>/fetch.git/objects/pack/pack-<id>.pack, then its .rev if git wrote one, then
+its .idx last, into <object folder>/pack/ (git finds a pack by its .idx, so a reader never sees half of one)
 ```
+
+- **What it tells the remote it has.** git reads an alternate's refs as "haves" (`rev-list ... --not --all
+  --alternate-refs` in its trace) through a child `git --git-dir=<repo> for-each-ref --format=%(objectname)`. So the
+  repository's own refs drive the negotiation and bound the connectivity check, with no ref copied and no tip on the
+  command line. Measured: 4 objects against 900 when the repository had no refs.
+- **Why `transfer.unpackLimit=1`:** git then always keeps what it receives as one pack, never loose objects, so the
+  move is the pack's few files.
+- **The hash format.** The fresh directory is made with the repository's own `--object-format`, read in the first
+  command. A sha256 repository fetched from a sha256 remote this way; a sha1 fresh directory against it failed
+  "mismatched algorithms", exit 128 (`FetchFailed`, never an answer). The package's `CommitId` takes sha-1 only, so a
+  sha256 repository fails earlier calls already; this keeps fetch from being the place it breaks silently.
 
 - **Why this closes every way in.** git reads config from the system, the user and the git directory. The first two
   are already `/dev/null`, and the git directory is the fresh one, whose config `init` wrote. So no
   `http.<url>.*` key (`sslVerify`, `sslCAInfo`, `proxy`, `extraHeader`, `cookieFile`), no
   `remote.<url>.uploadpack`, no `url.<base>.insteadOf`, no `credential.*`, no `core.askPass`, no `fetch.*`
   (`bundleURI`, `negotiationAlgorithm`, `recurseSubmodules`), no `include.path` and no key added by a later git acts.
-  One rule, no list to keep current. The repository's objects are the only thing it shares.
-- **What lands in the repository:** only objects, in its object folder. Its refs, config and `shallow` file are never
-  written: the scratch refs and any `shallow` file live in the fresh directory.
-- Env of the transfer in slice 1: `PATH`, `PINNED` (the constant, as it is on main or as 2315 grows it),
-  `GIT_OBJECT_DIRECTORY`, and `GIT_ASKPASS=""`, so git never prompts.
+  One rule, no list to keep current. The repository's objects and refs are read, never written.
+- **The alternate-refs child reads the repository's config.** git unsets `GIT_CONFIG_PARAMETERS` for it, so the `-c`
+  pins do not reach it, and it reads the repository's config as any `for-each-ref` there does. Tried on 2.40.1, with
+  each of these in the repository's config: `core.alternateRefsCommand` and `core.alternateRefsPrefixes` (git reads
+  both from the fetching directory, so neither acted, and the haves were unchanged), `fetch.unpackLimit` and
+  `transfer.unpackLimit` (read by the fetching process; the pack stayed one pack), `uploadpack.packObjectsHook` (read
+  only on the serving side; it did not run) and an `include.path` holding an `insteadOf` and a prefix (nothing acted).
+  A `for-each-ref` that prints object ids runs no command a config key names, so what the repository's config can do
+  there is change which refs it lists, which changes download size, never an answer. F12 seeds these keys too.
+- **What lands in the repository:** only a whole pack, renamed into its object folder after a good answer. Its refs,
+  config and `shallow` file are never written, and a fetch that fails (`HistoryTooShort` from a shallow remote
+  included) leaves its objects in the fresh directory, which goes.
+- Env of the transfer in slice 1: `PATH`, `PINNED` (the constant, as it is on main or as 2315 grows it), and
+  `GIT_ASKPASS=""`, so git never prompts. No `GIT_OBJECT_DIRECTORY`: the fresh directory's own folder and its
+  alternates file do that job.
 - A non-zero exit of `fetch` is `FetchFailed { url, code, stderr }`, never `[]`. The glob matches `main-2` too; the
   read back leaves it out, as `readRefs` does. Its objects stay, unreferenced, as any fetched object does until gc.
 - The read back names the remote's ref (the `refs/fetched/` prefix taken off), and a ref at a tag fails
   `RefNotCommit` naming the remote's ref.
-- **The cleanup is the folder's release.** `makeTempDirectoryScoped` opens the folder in an `acquireRelease`, and its
-  release removes the whole folder, every scratch ref, `.lock` file and `shallow` file in it, after every ending: an
-  answer, a failure, an interruption and `TimedOut`. The release is bounded by `limits.kill`, since a time limit waits
-  for the interrupted call's finalizers before it answers (the review's tryout). A release that fails or runs out of
-  time is dropped, and never replaces the call's own answer or failure.
-- **What a hard kill leaves:** the temporary folder, outside the repository, and any partial pack git was writing in
-  the repository's object folder (`objects/pack/tmp_pack_*`), which git's own gc removes. No ref, lock or `shallow` file
-  of the repository.
+- **The cleanup is our own release.** Not `makeTempDirectoryScoped`: in `@effect/platform-node-shared` 4.1.3 its
+  release is `Effect.orDie(removeDirectory(...))`, which can be neither bounded nor dropped, and `layerNoop` dies on it
+  (read in the installed source, as the recheck found). So the folder comes from `fs.makeTempDirectory` inside an
+  `Effect.acquireRelease` of our own, whose release is `fs.remove(dir, { recursive: true })` timed out by `limits.kill`,
+  with its failure and its timeout ignored. It runs after every ending: an answer, a failure, an interruption and
+  `TimedOut`, and it removes every scratch ref, `.lock` file, `shallow` file and unmoved pack in the folder. A time
+  limit waits for the interrupted call's finalizers before it answers (the review's tryout), so the bound keeps a call
+  within `limits.time` plus `limits.kill`, and a release that fails never replaces the call's own answer or failure.
+- **What an interrupt or a kill leaves.** A SIGTERM during the transfer, tried on 2.40.1, left a 49 MB
+  `tmp_pack_*` in the fresh directory's own `objects/pack` and nothing in the repository's. Our release removes it. A
+  hard kill of our own process skips the release and leaves one `kalfa-fetch-*` folder in the repository's git
+  directory: git ignores an unknown folder there, and no ref, lock, pack or `shallow` file of the repository is
+  touched. Findings 4 is the ticket for sweeping such folders.
 
 ### Slice 2: the credential reaches git (to the ruling: askpass)
 
@@ -389,21 +437,23 @@ with askpass, the user name in the script's argv, which `ps` shows (open questio
 3. `/process` `remoteUrl`: `config --null --get-all remote.origin.url` prints `https://github.com/kamp-us/x.git\0`. It
    decodes as a `Url`.
 4. `make` asks the slot with that URL. `none` answers `Option.none()`. The span gets `kalfa.git.credential: false`.
-5. `rev-parse` in the repository prints `false` and the object folder. `for-each-ref` prints the tips, `a1` among them.
-6. A temporary folder opens, and `init` makes `fetch.git` in it.
-7. `fetch --negotiation-tip=a1 ... -- https://github.com/kamp-us/x.git +refs/heads/main*:refs/fetched/refs/heads/main*`,
-   with `GIT_OBJECT_DIRECTORY` set and `GIT_ASKPASS=""`. The remote holds `main` at `b2` and `main-old` at `c3`. Only
-   their new objects arrive, into the repository's object folder. Exit 0.
+5. `rev-parse` in the repository prints `false`, `sha1`, the git directory and the object folder.
+6. A folder `kalfa-fetch-<random>` opens in the git directory; `init --object-format=sha1` makes `fetch.git` in it, and
+   its alternates file names the repository's object folder.
+7. `fetch ... -- https://github.com/kamp-us/x.git +refs/heads/main*:refs/fetched/refs/heads/main*`, with
+   `GIT_ASKPASS=""`. git reads the repository's refs, `a1` among them, as haves. The remote holds `main` at `b2` and
+   `main-old` at `c3`. Only their new objects arrive, as one pack in `fetch.git/objects/pack`. Exit 0.
 8. `rev-parse --is-shallow-repository` in `fetch.git` prints `false`.
 9. `for-each-ref --count=1001 ... refs/fetched/refs/heads/main` prints `b2 commit refs/fetched/refs/heads/main`.
    `main-old` sits beside it, not below it, so it is not listed.
-10. The folder's release removes `fetch.git`. The answer is `[{ name: "refs/heads/main", commit: "b2" }]`,
+10. The pack's `.pack`, then `.idx`, are renamed into the repository's `objects/pack`, and the release removes the
+    folder. The answer is `[{ name: "refs/heads/main", commit: "b2" }]`,
     `kalfa.git.refs: 1`. The local `refs/heads/main` is still at `a1`. `walk({ include: [b2], exclude: [a1] })` now
     answers.
 
 With `under: "refs/heads/gone"`, step 7 matches nothing and exits 0, step 9 prints nothing, and the answer is `[]`: the
-proof a delete push needs. With a shallow remote, step 8 prints `true`, the call fails `HistoryTooShort`, and the
-repository's `rev-parse --is-shallow-repository` still prints `false`.
+proof a delete push needs. With a shallow remote, step 8 prints `true`, the call fails `HistoryTooShort`, no pack is
+moved, and the repository's `rev-parse --is-shallow-repository` still prints `false`.
 
 ## Generators
 
@@ -436,7 +486,7 @@ For the `/process` laws, on the stand-in and on real git:
   (`https://u:<canary>@host/r`).
 - (t) a repository config that holds a way in to the transfer: `remote.<url>.uploadpack` that touches a file,
   `url.<other>.insteadOf=<url>` that points at another remote, `credential.helper` and `core.askPass` that touch a file,
-  `fetch.recurseSubmodules=true`, `include.path` to a file that sets all of these; and in slice 2's HTTP law,
+  `fetch.recurseSubmodules=true`, `core.alternateRefsCommand` that touches a file, `core.alternateRefsPrefixes`, `transfer.unpackLimit` and `uploadpack.packObjectsHook`, `include.path` to a file that sets all of these; and in slice 2's HTTP law,
   `http.<url>.extraHeader` with a canary, `http.<url>.proxy` at a closed port and `http.<url>.sslVerify=false`.
 - (u) a remote ref at a tag object: `for-each-ref` prints `tag`.
 - (v) a `fetch` that exits non-zero with stderr, 1 and 128.
@@ -475,11 +525,11 @@ the canary filler (o). Seed 119120.
 | F6, the slot is asked once on every fetch, with the URL: two fetches give the recorder two asks; each holds the URL of (j), and for (h) the configured URL; (p) fails `NoCredential` and the store is as it was (memory: `fingerprint`; process: its objects count and F2's reads), and, on process, no transfer ran (F10); 100 runs | test (`it.effect.prop`) | Effect Arbitrary: textureArb | ask once per layer (`Effect.cached`): one ask, red; ask with the name text: red; (p) fetch first, then ask: the store changed, red | kalfa/git/src/Fetch.test-support.ts |
 | F7, [secrets] the credential stays out of every output: with (o), across fetches in (a), (i), (k), (l) and (n), neither the user name nor the password is in any span's name, attribute or event (all spans of the trace), any log line (a logger that records each message and annotation), the answer, any failure (`JSON.stringify`, `String`, `Cause.pretty` and each field), or the memory store (`MemoryStore.get`, JSON with `Redacted` shown); 100 runs | test (`it.effect.prop`) | Effect Arbitrary: credentialArb | (o) annotate `git.fetch` with the user name: red; `Effect.logDebug` the credential's password value in `make`: red; put the user name in `FetchFailed.stderr` in memory: red; memory keeps the last credential in its cell: red | kalfa/git/src/Fetch.test-support.ts |
 | F8, the span: each fetch makes one `git.fetch`, ended, with `kalfa.git.remote`, `kalfa.git.under`, `kalfa.git.credential` and, on an answer, `kalfa.git.refs`; no key holds the URL, the name or a path; `hidden` (both repositories' paths) is in no `git.` span; 100 runs | test (`it.effect.prop`) | Effect Arbitrary: textureArb | put the URL in the span: red; write `fetch` with `Effect.fnUntraced`: no span, red; annotate the count before the call: wrong count, red | kalfa/git/src/Fetch.test-support.ts |
-| F10, the commands of a fetch, on the stand-in: for (h), `config --null --get-all remote.<name>.url` in the repository; `rev-parse --is-shallow-repository --path-format=absolute --git-path objects` and `for-each-ref` in the repository; then `init`, `fetch`, `rev-parse` and `for-each-ref`, each with `--git-dir` naming `fetch.git` in the folder the `FileSystem` recorder made, never the repository; `fetch` with exactly the flags above, one `--negotiation-tip` per tip, `--` before the URL, the URL as given and one refspec `+<under>*:refs/fetched/<under>*`; the transfer's env is exactly `PATH`, `PINNED` (imported, not copied), `GIT_OBJECT_DIRECTORY` naming the object folder git printed, and `GIT_ASKPASS=""`; (p) and (q) make no folder and run no `fetch` | test (`it.effect`) | scenario: stand-in replies for each verb, with a `FileSystem.layerNoop` recorder | (t) run the transfer with the repository's `--git-dir`: red; drop `GIT_OBJECT_DIRECTORY`: the objects stay in the folder, red; drop `--update-shallow`: red; drop `--`: red; drop `protocol.allow=never`: red; drop the tips: red; (p) ask the slot after `fetch`: red | kalfa/git/src/ProcessFetch.test.ts |
+| F10, the commands of a fetch, on the stand-in: for (h), `config --null --get-all remote.<name>.url` in the repository; one `rev-parse` in the repository with the four queries; then `init --object-format=<the format it printed>`, `fetch`, `rev-parse` and `for-each-ref`, each with `--git-dir` naming `fetch.git` in the folder the `FileSystem` recorder made inside the printed git directory, never the repository; the alternates file holds exactly the printed object folder; `fetch` with exactly the flags and `-c transfer.unpackLimit=1` above, no `--negotiation-tip`, `--` before the URL, the URL as given and one refspec `+<under>*:refs/fetched/<under>*`; the transfer's env is exactly `PATH`, `PINNED` (imported, not copied) and `GIT_ASKPASS=""`; after an answer the recorder saw the `.pack`, then any `.rev`, then the `.idx` renamed into the object folder's `pack/`, and after any failure no rename; (p) and (q) make no folder and run no `fetch` | test (`it.effect`) | scenario: stand-in replies for each verb, with a `FileSystem.layerNoop` recorder | (t) run the transfer with the repository's `--git-dir`: red; leave the alternates file out: red; init with no `--object-format`: red; rename the `.idx` first: red; rename after a `HistoryTooShort`: red; drop `--update-shallow`: red; drop `--`: red; drop `protocol.allow=never`: red; (p) ask the slot after `fetch`: red | kalfa/git/src/ProcessFetch.test.ts |
 | F11, a named remote's config: exit 1 fails `NoSuchRemote`; (r) fails `BadRemoteUrl` `several` for two URLs, and `refused` for the URL with a password, and no failure field, span or log holds any part of the configured text; no transfer ran in either | test (`it.effect`) | scenario: config replies | (r) read the value with `--get`, the last one: red; put the configured text in the failure: red | kalfa/git/src/ProcessFetch.test.ts |
 | F12, (t) no way in acts, on real git: with each key of (t) in the repository's config, a fetch by name and by URL answers the remote's refs, the touched files do not exist, and the answer is the given remote's, not the `insteadOf` one's; 3 runs, CI only | test (`it.effect`), real git | scenario: a repository config of every (t) key | (t) run the transfer in the repository with `-c` pins only: the `uploadpack` and `credential.helper` files appear, red; read `ls-remote --get-url` for the URL: the `insteadOf` remote answers, red | kalfa/git/src/ProcessRepository.integration.test.ts |
 | F13, (u) a remote ref at a tag fails `RefNotCommit` naming the remote's ref, not the `refs/fetched/` name | test (`it.effect`) | scenario: `for-each-ref` prints a tag | (u) name the scratch ref in the failure: red | kalfa/git/src/ProcessFetch.test.ts |
-| F14, (v) a `fetch` that exits 1 or 128 fails `FetchFailed` with the code and the stderr git said; after an answer and after `FetchFailed`, `TooMany`, `HistoryTooShort`, `RefNotCommit` and `TimedOut` (a hang, with `TestClock`) the recorder saw the folder removed; a removal that fails, or hangs past `limits.kill`, leaves the call's own answer or failure as it was, and the call ends within `limits.time` plus `limits.kill` | test (`it.effect`) | scenario: stand-in replies and a `FileSystem` recorder whose remove fails or hangs | (v) read exit 1 as an answer: `[]`, red; remove the folder only after an answer: red; let the removal's failure replace the call's: red; leave the release unbounded: the hang holds the call, red | kalfa/git/src/ProcessFetch.test.ts |
+| F14, (v) a `fetch` that exits 1 or 128 fails `FetchFailed` with the code and the stderr git said; after an answer and after `FetchFailed`, `TooMany`, `HistoryTooShort`, `RefNotCommit` and `TimedOut` (a hang, with `TestClock`) the recorder saw `remove(dir, { recursive: true })` on the folder `makeTempDirectory` gave; a removal that fails, or hangs past `limits.kill`, leaves the call's own answer or failure as it was, and the call ends within `limits.time` plus `limits.kill` | test (`it.effect`) | scenario: stand-in replies and a `FileSystem` recorder whose remove fails or hangs | (v) read exit 1 as an answer: `[]`, red; remove the folder only after an answer: red; use `makeTempDirectoryScoped`: its release dies on the recorder's failing remove, red; let the removal's failure replace the call's: red; leave the release unbounded: the hang holds the call, red | kalfa/git/src/ProcessFetch.test.ts |
 | F15, the URL: every text of (w) to (z) is refused (slice 2: except the loopback ones of (y)); `https://host/path`, `https://host:8443/a/b.git`, `file:///abs/r.git` and `/abs/r.git` pass, each decoding to itself; 200 runs | test (`it.prop`) | Effect Arbitrary: urlArb | (w) delete the control character check: the tab URL passes, red; (x) delete the user check: red; (y) take `http` to any host: red, and in slice 2 refuse it everywhere: the loopback ones fail, red; (z) take a relative path: red | kalfa/git/src/Remote.test.ts |
 | F16, the name and the credential: a name passes exactly when `refs/remotes/<name>/x` is a `RefName` and it does not start with `-`; a credential refuses a CR, LF or NUL in either field; its password decodes to `Redacted`, whose `String` is `<redacted>`, and JSON encoding the credential fails; 200 runs | test (`it.prop`) | Effect Arbitrary: credentialArb | take `-x` as a name: red; drop the line check on the password: red; declare the password `Schema.String`: JSON holds it, red | kalfa/git/src/Remote.test.ts |
 | F17, the types: `fetch`'s requirement is exactly `Credentials` (a program that yields it and is run with no `Credentials` does not compile); its error union is exactly the seven above with `Fails`; `Remote.url("https://x/y")` with a plain string does not compile; `Credential["password"]` is `Redacted<string>`; `Credentials.none` is `Layer<Credentials>`; `Raw` has `remoteUrl` and `fetch` and no `Credentials`; `ProcessRepository.layer` needs `ChildProcessSpawner` and `FileSystem` | type (`expectTypeOf` and `@ts-expect-error`) | type | capture the slot at layer build (`R` never): the `@ts-expect-error` goes unused, red; declare the password `string`: red | kalfa/git/src/Fetch.types.test.ts |
@@ -509,7 +559,7 @@ Slice 2 branches from main after slice 1 lands. A file touched in both slices ha
 | 1 | kalfa/git/src/Credentials.ts | build | 45 | new: `Credential`, `NoCredential`, `Credentials`, `none` |
 | 1 | kalfa/git/src/Repository.ts | build | 40 | `fetch` in the service and its doc line, `Raw` gains `remoteUrl` and `fetch`, `make` writes `fetch` |
 | 1 | kalfa/git/src/MemoryRepository.ts | build | 65 | `Remotes`, `layer`'s third argument, `remoteUrl`, `fetch` with the copy |
-| 1 | kalfa/git/src/ProcessRepository.ts | build | 105 | `remoteUrl`, `fetch` in its temporary folder, the tips, the read back with the prefix taken off, the bounded release; `calls` gets a runner for another git directory; `layer` needs `FileSystem`; the header comment |
+| 1 | kalfa/git/src/ProcessRepository.ts | build | 115 | `remoteUrl`, `fetch` in its folder with its alternates file, the read back with the prefix taken off, the pack renames, our own bounded release; `calls` gets a runner for another git directory; `layer` needs `FileSystem`; the header comment |
 | 1 | kalfa/git/package.json | build | 2 | `./Remote` and `./Credentials` in `exports` |
 | 1 | kalfa/git/README.md | build | docs | "Fetch", the top paragraph, "What it never does" |
 | 1 | kalfa/git/GLOSSARY.md | build | docs | **Credential**: the one that gives none |
@@ -559,8 +609,8 @@ How this plan stays clear:
   `Fetch.types.test.ts`. None goes into the history, values or service type test files that 2315 changes, and the
   fetch suite has its own subject, so the shared `Subject` and `suite` stay as they are.
 - **The errors and values live in `Remote.ts` and `Credentials.ts`,** so `Repository.ts` gains only the call.
-- **The per-command env.** 2315's slice 2 gives `replay` its own env, and this plan gives the transfer `GIT_OBJECT_DIRECTORY`
-  and, in slice 2, the credential. Whichever lands first owns the shape `run(args, { input, env })`, and the second
+- **The per-command env.** 2315's slice 2 gives `replay` its own env, and this plan runs the transfer in another git directory
+  and, in slice 2, gives it the credential. Whichever lands first owns the shape `run(args, { input, env })`, and the second
   builds on it. Until then this plan builds its runner with the existing `runner(spawner, path, env, settings, kill)`,
   which already takes a git directory and an env, so it changes no signature. F10 checks the env against `PINNED`
   imported from the module, so 2315's added pin passes it without an edit.
@@ -584,9 +634,10 @@ How this plan stays clear:
 - `kalfa/git/src/Credentials.ts`: searched `kalfa/` for a credential or slot service (`rg -n "Credential|Redacted"`).
   `@kalfa/secrets` holds secrets by name and signs with them; it ranks above Configuration and would break 0047's rule
   that Source control imports no kalfa package. Effect's `Redacted` and `Schema.Redacted` hold the password.
-- The fresh git directory: `FileSystem.makeTempDirectoryScoped`, whose release removes the folder, in place of a
-  cleanup of our own; git's own `init`, `GIT_OBJECT_DIRECTORY` and `--negotiation-tip`. Searched the package for a
-  temporary folder and found only the test seeds', which use the same `FileSystem`.
+- The fresh git directory: `fs.makeTempDirectory`, `fs.remove` and `fs.rename` in our own `acquireRelease`; not
+  `makeTempDirectoryScoped`, whose release cannot be bounded (it dies on a failed remove). git's own `init`,
+  `objects/info/alternates` and `transfer.unpackLimit`. Searched the package for a temporary folder and found only the
+  test seeds', which use the same `FileSystem`.
 - `remoteUrl` and `fetch` in `ProcessRepository.ts`: reuse `runner`, `succeeded`, `stdoutText`, `Parse.refs` and the
   `--count=<refs + 1>` rule of `readRefs`.
 - `fetch` in `MemoryRepository.ts`: reuses `readRefs`' rule and `add`; the copy walk is new, a dozen lines over
@@ -608,7 +659,8 @@ How this plan stays clear:
 - **`insteadOf` not applying to a fetch:** no. A setting would reopen the way in that the fresh directory closes.
 - **`http` to loopback only, slice 2, 85%.** A credential over plain `http` to another host is a leak; a local test
   server and a local mirror need loopback.
-- **How many tips go to `--negotiation-tip`:** `limits.refs`, the existing limit. Fewer tips cost download only.
+- **Which refs tell the remote what we have:** all of the repository's, as git reads an alternate's refs. No limit:
+  git reads them in a child and nothing lands in argv.
 - **Which filler:** the slot itself; the app picks one by name.
 
 ## New names
@@ -635,15 +687,15 @@ How this plan stays clear:
 
 ## Size
 
-1. Slice 1, fetch with the slot, both adapters, no login reaches git: 342 lines (`Remote.ts` 85, `Credentials.ts` 45,
-   `Repository.ts` 40, `MemoryRepository.ts` 65, `ProcessRepository.ts` 105, the manifest 2), the README and one
+1. Slice 1, fetch with the slot, both adapters, no login reaches git: 352 lines (`Remote.ts` 85, `Credentials.ts` 45,
+   `Repository.ts` 40, `MemoryRepository.ts` 65, `ProcessRepository.ts` 115, the manifest 2), the README and one
    glossary line, and about 1200 lines of laws. It lands whole: Delivery and the push ticket can fetch from a local
    path, a `file://` URL, a `/memory` remote and a public https remote on both adapters, with no repository config
    able to steer the transfer, and Code hosting's filler can be built and tested on `/memory`.
 2. Slice 2, the credential reaches git: 53 lines (`ProcessRepository.ts` 45, `Remote.ts` 8), the README, and about 500
    lines of laws and the HTTP test server. It lands whole: a remote that needs a login fetches on `/process`.
 
-About 395 product lines in all, 75% sure: the doubt is `/process`'s fetch, whose two git directories and bounded
+About 405 product lines in all, 75% sure: the doubt is `/process`'s fetch, whose fresh directory, pack renames and bounded
 release may take more lines than sketched, and F20's server, which may need more lines to speak CGI. About 8 agent
 hours across the steps. Steps: tests, build and one review per slice, and one likely send-back each. Priced at about
 $12 a step on list prices, as the rebase plan's larger slices were: tests and build on Sonnet, the review on Opus.
@@ -652,14 +704,16 @@ Estimate: 8 steps, $96
 
 ## What this cannot tell us
 
-- That git 2.38 and 2.39 take every flag (`--negotiation-tip` with an id, `--path-format=absolute`,
-  `--no-auto-maintenance`). They ran here only on 2.40.1; CI's git is the proof.
+- That git 2.38 and 2.39 take every flag and read alternate refs the same way (`--path-format=absolute`,
+  `--show-object-format`, `--no-auto-maintenance`, `--alternate-refs` in the check). They ran here only on 2.40.1; CI's git is the proof.
 - That git reads no config but system, user and the git directory's. That is git's documented order, and F12 checks
   the keys we know of; a git that adds a new config source (an environment variable we do not pin) would not be seen.
 - That git runs `GIT_ASKPASS` with no shell and asks "Username" before "Password". That is from memory and the
   review's tryout; F20 is the first law that shows it.
-- What a fetch from a shallow remote leaves: its objects, with parents missing, unreferenced in the repository's object
-  folder until gc. `rev-list` on them fails, never answers; `git fsck` may name them as broken.
+- That no key of the repository's config acts in the alternate-refs child. The keys tried did not; a `for-each-ref`
+  runs no named command, and the worst case found is a different set of haves, which changes download size only.
+- That a rename of a pack is safe beside a running `git gc` in the same repository. Nothing here runs gc; a gc that
+  repacks while a pack is renamed in keeps both, as it does for any fetch.
 - Whether a fetch of a big remote fits in `limits.time` as the app sets it (Findings 1).
 - That the environment is a safe enough place. Anyone running as the same user can read a running process's
   environment, and with askpass the user name in argv.
@@ -670,16 +724,21 @@ Estimate: 8 steps, $96
 
 - The slot is asked in `make`, once per call, with the URL `remoteUrl` gave: 90%. Both adapters then ask alike, and a
   named remote is asked with its configured URL, as ruling 7 says.
-- The slot is the call's requirement, not the layer's: 75% (the doubt at the top).
+- The slot is the call's requirement, not the layer's: 85% (the doubt at the top).
 - `fetch` takes one `under` and answers like `readRefs`: 80% (the doubt at the top).
 - **Design (b), the fresh git directory, over design (a), a refusal of local config keys plus pins: 85%.** Evidence,
   all on 2.40.1 and listed under Records: (b) ignored `uploadpack`, `insteadOf` and `credential.helper` that acted in
-  the repository; with `--negotiation-tip` it downloaded 3 objects, as a fetch in the repository did, against 600
-  without; and it kept the repository unshallow. (a) needs a list of keys that must be kept current with git
+  the repository; with its own object folder and the repository as its alternate it downloaded 4 objects, against 900
+  with no haves, and a SIGTERM left its partial pack outside the repository; and it kept the repository unshallow. (a) needs a list of keys that must be kept current with git
   (`fetch.bundleURI` came in a later git, and URL-scoped keys need their own patterns), refuses a repository whose config
   holds a harmless key such as `http.<url>.lowSpeedLimit`, and still writes `shallow` and scratch refs into the
   repository. The cost of (b): `FileSystem` in the layer from slice 1, and a shallow repository is refused before any
   transfer, since the fresh directory cannot know its cut.
+- **Point C, its own object folder with the repository as alternate, over B's `refs/have/*` copy: 85%.** C keeps
+  partial packs out of the repository, needs no copy of the refs and no argv, and moves only a whole pack after a good
+  answer. B would still leave a partial pack in the repository's object folder on any interrupt. The doubt: the
+  alternate-refs child reads the repository's config, tried and harmless above.
+- The fresh directory uses the repository's hash format, read with `--show-object-format`: 95%.
 - A shallow repository fails `HistoryTooShort` before the transfer, and a shallow remote fails it after, leaving the
   repository as it was: 85%.
 - A named remote's URL is its configured text, with no `insteadOf`: 80%. The fresh directory reads no `insteadOf`, and
@@ -713,3 +772,6 @@ Estimate: 8 steps, $96
    by `-c`, and a URL-scoped or subsection key beats a `-c` pin for the keys that have one. None of those calls reaches
    a remote, so no credential is at stake, and this plan does not change them. If a later review wants the same rule
    for them, the fresh-directory idea does not fit (they need the repository's refs), so it would be its own ticket.
+4. **A hard kill leaves a `kalfa-fetch-*` folder in the git directory.** git ignores it, and it holds no secret in
+   slice 1 (slice 2's askpass script holds none either). A ready ticket: "Git: sweep `kalfa-fetch-*` folders older than
+   a day when a layer opens", with an age so a running fetch of another process is never removed.
