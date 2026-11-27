@@ -362,6 +362,7 @@ Read the header before you run one; this table only says what each is for.
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
+| `land.ts last <pr or quest> [--attempts <n>]` | what the record under `runs/land/` says about the newest attempts (default 3) of the commands that ran for a pull request, or a quest: one plain line each, saying it ended (done, refused, failed or interrupted), is still running, or died with no end line. Reads one file, asks GitHub nothing, changes nothing; exits 1 only when it cannot read the file |
 | `land.ts wait <pr>` | wait until `ci-required` has ended at the pull request's current head, as `queue --wait-ci` and `admin --wait` do; exits 0 only on success, names a cancelled run; `--wait-minutes`, `--every-seconds` |
 | `land.ts check <pr>` | the merge gate, alone: the checks that `queue`, `merge`, `admin` and `arm` each run first, so a pull request that passes `check` is refused by none of them on these grounds. Run it after the body is written and before `queue`; it changes nothing and exits 1 on a `can/` branch, a `Plan:` title, a leak, a missing name, a `fabrika close ticket` line whose number is no open tracker ticket (an open GitHub issue is closed with `Closes #N`), or a commit nothing vouches for |
 | `replay.ts <pr>` | run a changed check on the last 20 merged and every open pull request before it lands; its header says which checks it replays and which it lists as `not replayed`; see [How a change lands](#how-a-change-lands) |
@@ -575,7 +576,13 @@ visible, and never weaken the rules to hide this message.
    `disablePullRequestAutoMerge` and read again. Main takes changes only
    through that queue. For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
-   Read a backgrounded land command's exit code and its log before you report it.
+   Read a backgrounded land command's exit code and its log before you report it, and `land.ts last <pr>`
+   (or the quest's name) when you come back to it in a later session. Every `land.ts` command leaves a
+   start line, a heartbeat line every few minutes and one end line in `runs/land/<pr>.jsonl`, and `last`
+   reads them. **Run `land.ts last` before you run a `land.ts` command again.** A start with no end whose
+   process is gone *died*: run it again. One whose process still lives is *still running*: start no other.
+   A `done` from `queue` says `queued`, not merged: run `land.ts merged <pr>`, which is recorded too. A
+   hand-written `gh pr view` poll is not.
    For any other pull request, write the body with the [pr skill](../pr/SKILL.md), run `land.ts check <pr>`
    until it exits 0 (the merge gate that every merge path runs first, alone: it prints each new exported name missing from `## New names` with its
    file, and changes nothing), then run `land.ts queue <pr>` once its checks
