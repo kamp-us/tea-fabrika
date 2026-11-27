@@ -10,12 +10,50 @@ const read = (text: string) => Result.try(() => map(parse(text)));
 const sameKeys = (value: unknown, keys: readonly string[]) =>
   isMap(value) && JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify(keys.toSorted());
 
-/** A trigger map that starts on a push to main alone (the branch list is exactly `main`), a cron and by hand. */
+/** An hourly cron: one minute of the hour and a star for everything else, never every few minutes. */
+const HOURLY = /^\d{1,2} \* \* \* \*$/;
+
+/**
+ * A trigger map that starts on a push to main alone (the push holds only the branch list, exactly
+ * `main`: no tags, no paths-ignore), one hourly cron and by hand.
+ */
 const startsLike = (on: Record<string, unknown>) =>
   sameKeys(on, ["push", "schedule", "workflow_dispatch"]) &&
+  sameKeys(on["push"], ["branches"]) &&
   JSON.stringify(map(on["push"])["branches"]) === JSON.stringify(["main"]) &&
   Array.isArray(on["schedule"]) &&
-  on["schedule"].length === 1;
+  on["schedule"].length === 1 &&
+  Predicate.isString(map(on["schedule"][0])["cron"]) &&
+  HOURLY.test(String(map(on["schedule"][0])["cron"]));
+
+/** The longest each job may run, in minutes: the work job's own limit, and a cheap gate or check's. */
+const CAPS = { mutation: 45, gate: 5, heartbeat: 10 } as const;
+
+/** The sane range of each setting a workflow may set, in minutes or files. heartbeat.ts holds `LATE_RANGE`. */
+const RANGES = {
+  MUTATION_LATE_MINUTES: [105, 24 * 60],
+  MUTATION_GAP_MINUTES: [10, 240],
+  MUTATION_MAX_RELATED: [1, 50],
+} as const;
+
+/** The settings a workflow sets, in its top-level `env` or a job's: each a whole number in its range. */
+const settingsInRange = (workflow: Record<string, unknown>) => {
+  const places = [map(workflow["env"]), ...Object.values(map(workflow["jobs"])).map((job) => map(map(job)["env"]))];
+
+  return places.every((env) =>
+    Object.entries(RANGES).every(([name, [least, most]]) => {
+      const value = env[name];
+
+      return value === undefined || (/^\d+$/.test(String(value)) && Number(value) >= least && Number(value) <= most);
+    }),
+  );
+};
+
+/** A job runs only on main: its `if` names `refs/heads/main`. */
+const onlyMain = (job: Record<string, unknown>) =>
+  Predicate.isString(job["if"]) && job["if"].includes("github.ref == 'refs/heads/main'");
+
+const reads = (job: Record<string, unknown>) => map(job["permissions"])["actions"] === "read";
 
 /** `concurrency` holds one run at a time and cuts none short. */
 const oneAtATime = (workflow: Record<string, unknown>, group: string) => {
@@ -28,7 +66,7 @@ const touchesIssues = (grant: unknown) => grant === "write-all" || (isMap(grant)
 
 /**
  * The laws on the hourly mutation run and its heartbeat. Each message starts with its workflow's
- * file name and a law's number, MU1 to MU8.
+ * file name and a law's number, MU1 to MU11.
  */
 export const lintMutation = (runText: string, heartbeatText: string): string[] => {
   const errors: string[] = [];
@@ -57,8 +95,35 @@ export const lintMutation = (runText: string, heartbeatText: string): string[] =
     "mutation",
   ), "one run at a time in the group `mutation`, and a running one is never cut short");
 
-  require("mutation.yaml", "MU3", map(map(dispatch["inputs"])["base"])["required"] !==
-    true, "the base is optional: a push or the cron gives none, and the `range` step reads the last passing run's");
+  const gateJob = map(map(mutation["jobs"])["gate"]);
+  const workJob = map(map(mutation["jobs"])["mutation"]);
+  const rangeStep = allSteps(workJob).find((step) => step["id"] === "range");
+  const rangeBase = map(map(rangeStep)["env"])["BASE"];
+
+  require("mutation.yaml", "MU3", map(map(dispatch["inputs"])["base"])["required"] !== true &&
+    Predicate.isString(rangeBase) &&
+    rangeBase.includes("needs.gate.outputs.base") &&
+    "base" in
+      map(
+        gateJob["outputs"],
+      ), "the dispatch's base is optional, and the `range` step falls back to the base the gate read (the last passing run's commit)");
+
+  require("mutation.yaml", "MU9", map(mutation["permissions"])["actions"] === "read" &&
+    reads(gateJob) &&
+    onlyMain(gateJob) &&
+    onlyMain(workJob) &&
+    JSON.stringify(workJob["needs"]) ===
+      JSON.stringify([
+        "gate",
+      ]), "the run list is readable (`actions: read` on the workflow and the gate), both jobs run only on main, and the work job needs the gate");
+
+  require("mutation.yaml", "MU10", Number(workJob["timeout-minutes"]) <= CAPS.mutation &&
+    Number(gateJob["timeout-minutes"]) <=
+      CAPS.gate, `the work job runs at most ${CAPS.mutation} minutes and the gate ${CAPS.gate}`);
+
+  require("mutation.yaml", "MU11", settingsInRange(
+    mutation,
+  ), "each setting is a whole number in its range (gap 10 to 240 minutes, related files 1 to 50)");
 
   const watcher = beat.success;
   const job = map(map(watcher["jobs"])["heartbeat"]);
@@ -82,8 +147,27 @@ export const lintMutation = (runText: string, heartbeatText: string): string[] =
     "ci-scheduled",
   ), "its issue never takes the `ci-scheduled` label, which switches on a sev1");
 
+  const beatGate = map(map(watcher["jobs"])["gate"]);
+
   require("mutation-heartbeat.yaml", "MU8", "MUTATION_PAUSE" in
     map(job["env"]), "the pause is a setting: the job's `env` names MUTATION_PAUSE");
+
+  require("mutation-heartbeat.yaml", "MU9", reads(beatGate) &&
+    reads(job) &&
+    onlyMain(beatGate) &&
+    onlyMain(job) &&
+    JSON.stringify(job["needs"]) ===
+      JSON.stringify([
+        "gate",
+      ]), "the run list is readable (`actions: read` on the gate and the check), both jobs run only on main, and the check needs the gate");
+
+  require("mutation-heartbeat.yaml", "MU10", Number(job["timeout-minutes"]) <= CAPS.heartbeat &&
+    Number(beatGate["timeout-minutes"]) <=
+      CAPS.gate, `the check runs at most ${CAPS.heartbeat} minutes and the gate ${CAPS.gate}`);
+
+  require("mutation-heartbeat.yaml", "MU11", settingsInRange(
+    watcher,
+  ), "each setting is a whole number in its range (limit 105 to 1440 minutes, gap 10 to 240)");
 
   return errors;
 };

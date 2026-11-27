@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
+import { LATE_RANGE } from "../../../.agents/skills/mutation/scripts/heartbeat.ts";
 import { lintMutation } from "./mutation.ts";
 import { allSteps, map } from "./shared.ts";
 
@@ -102,4 +103,116 @@ it("MU8: the pause is a setting in the heartbeat's job, empty by default", () =>
   const f = files();
   delete map(job(f.beat, "heartbeat")["env"])["MUTATION_PAUSE"];
   expect(lint(f)).toEqual([expect.stringContaining("mutation-heartbeat.yaml: MU8")]);
+});
+
+const only = (law: string, file: string) => [expect.stringContaining(`${file}: ${law}`)];
+
+it("MU1 and MU4: a push with tags or paths-ignore, or a cron more often than hourly, is refused in both workflows", () => {
+  for (const [file, law, pick] of [
+    ["mutation.yaml", "MU1", (f: ReturnType<typeof files>) => f.run],
+    ["mutation-heartbeat.yaml", "MU4", (f: ReturnType<typeof files>) => f.beat],
+  ] as const) {
+    for (const extra of [{ tags: ["v*"] }, { "paths-ignore": ["docs/**"] }, { paths: ["next/**"] }]) {
+      const f = files();
+      Object.assign(map(map(pick(f)["on"])["push"]), extra);
+      expect(lint(f), JSON.stringify(extra)).toEqual(only(law, file));
+    }
+
+    for (const cron of ["*/5 * * * *", "* * * * *", "0,30 * * * *", "31 */2 * * *", "31 * * * 1"]) {
+      const f = files();
+      map(pick(f)["on"])["schedule"] = [{ cron }];
+      expect(lint(f), cron).toEqual(only(law, file));
+    }
+  }
+});
+
+it("MU3: no base fallback from the gate, or a gate that gives none, is refused", () => {
+  const f = files();
+  const range = allSteps(job(f.run, "mutation")).find((s) => s["id"] === "range")!;
+  map(range["env"])["BASE"] = "the dispatch alone";
+  expect(lint(f)).toEqual(only("MU3", "mutation.yaml"));
+
+  const g = files();
+  delete map(job(g.run, "gate")["outputs"])["base"];
+  expect(lint(g)).toEqual(only("MU3", "mutation.yaml"));
+});
+
+it("MU9: each workflow keeps its run-list read, its main-only guard and its gate", () => {
+  const plants: [string, (f: ReturnType<typeof files>) => void][] = [
+    ["the workflow's actions read", (f) => delete map(f.run["permissions"])["actions"]],
+    ["the gate's actions read", (f) => delete map(job(f.run, "gate")["permissions"])["actions"]],
+    ["the gate's main guard", (f) => delete job(f.run, "gate")["if"]],
+    ["the work job's main guard", (f) => (job(f.run, "mutation")["if"] = "needs.gate.outputs.start == 'true'")],
+    ["the work job's gate", (f) => delete job(f.run, "mutation")["needs"]],
+  ];
+
+  for (const [label, plant] of plants) {
+    const f = files();
+    plant(f);
+    expect(lint(f), label).toEqual(only("MU9", "mutation.yaml"));
+  }
+
+  const beats: [string, (f: ReturnType<typeof files>) => void][] = [
+    ["the gate's actions read", (f) => delete map(job(f.beat, "gate")["permissions"])["actions"]],
+    ["the check's actions read", (f) => delete map(job(f.beat, "heartbeat")["permissions"])["actions"]],
+    ["the gate's main guard", (f) => delete job(f.beat, "gate")["if"]],
+    ["the check's main guard", (f) => (job(f.beat, "heartbeat")["if"] = "needs.gate.outputs.start == 'true'")],
+    ["the check's gate", (f) => delete job(f.beat, "heartbeat")["needs"]],
+  ];
+
+  for (const [label, plant] of beats) {
+    const f = files();
+    plant(f);
+    expect(lint(f), label).toEqual(only("MU9", "mutation-heartbeat.yaml"));
+  }
+});
+
+it("MU10: a job's timeout raised past its cap is refused", () => {
+  const f = files();
+  job(f.run, "mutation")["timeout-minutes"] = 46;
+  expect(lint(f)).toEqual(only("MU10", "mutation.yaml"));
+
+  const g = files();
+  job(g.run, "gate")["timeout-minutes"] = 6;
+  expect(lint(g)).toEqual(only("MU10", "mutation.yaml"));
+
+  const h = files();
+  job(h.beat, "heartbeat")["timeout-minutes"] = 11;
+  expect(lint(h)).toEqual(only("MU10", "mutation-heartbeat.yaml"));
+});
+
+it("MU11: a setting outside its range, or no number, is refused wherever it is set", () => {
+  for (const [name, bad] of [
+    ["MUTATION_LATE_MINUTES", "30"],
+    ["MUTATION_LATE_MINUTES", "99999"],
+    ["MUTATION_LATE_MINUTES", "soon"],
+    ["MUTATION_GAP_MINUTES", "1"],
+    ["MUTATION_GAP_MINUTES", "1000"],
+  ] as const) {
+    const f = files();
+    map(job(f.beat, "heartbeat")["env"])[name] = bad;
+    expect(lint(f), `${name}=${bad}`).toEqual(only("MU11", "mutation-heartbeat.yaml"));
+  }
+
+  const g = files();
+  map(g.run["env"])["MUTATION_MAX_RELATED"] = "500";
+  expect(lint(g)).toEqual(only("MU11", "mutation.yaml"));
+
+  const h = files();
+  map(h.run["env"])["MUTATION_GAP_MINUTES"] = "0";
+  expect(lint(h)).toEqual(only("MU11", "mutation.yaml"));
+});
+
+it("pinned: the lint's range for the limit is the one heartbeat.ts enforces", () => {
+  const f = files();
+
+  for (const edge of [LATE_RANGE.least, LATE_RANGE.most]) {
+    map(job(f.beat, "heartbeat")["env"])["MUTATION_LATE_MINUTES"] = String(edge);
+    expect(lint(f), String(edge)).toEqual([]);
+  }
+
+  for (const edge of [LATE_RANGE.least - 1, LATE_RANGE.most + 1]) {
+    map(job(f.beat, "heartbeat")["env"])["MUTATION_LATE_MINUTES"] = String(edge);
+    expect(lint(f), String(edge)).toEqual(only("MU11", "mutation-heartbeat.yaml"));
+  }
 });

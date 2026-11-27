@@ -1,24 +1,29 @@
+import { execFileSync } from "node:child_process"; // edge: the one `gh` call every read and write goes through
 /**
  * The hourly mutation run's heartbeat: is a merge on main waiting longer than the limit for a
  * passing run? Today's lead tooling. The run starts itself (a push to main, an hourly catch-up, or
  * a hand dispatch: `.github/workflows/mutation.yaml`), so this watches the outcome and not the
  * starter: whichever way the run stops starting, the alarm is the same. On 2026-11-13 the run
  * stopped, its dispatcher being a session that ended, and for 13 days about 630 merges went by
- * with no run and no word. `.github/workflows/mutation-heartbeat.yaml` runs this on every push to
- * main, each hour and by hand, and goes red when late:
+ * with no run and no word. `.github/workflows/mutation-heartbeat.yaml` runs this on a push to
+ * main (its gate lets one through an hour), each hour and by hand, and goes red when late:
  *
  *   node .agents/skills/mutation/scripts/heartbeat.ts [--issue]
  *   mutation heartbeat: late: 21 merges since the last passing run (2026-11-11T05:40:24Z), the oldest 3.6 h ago, past the 3.5 h limit
  *
- * It starts no run and reads no artifact; it reads the list of passing runs on main and main's
- * commits with `gh api`, in the repo `GH_REPO` names (gh's own setting). With `--issue` it also
+ * It starts no run and reads no artifact. It reads (through `gh`, in the repo `GH_REPO` names, which
+ * `runs.ts` wraps) the newest passing run of the `mutation` job on main, and counts the merges since the
+ * commit that run ended at with GitHub's compare API: its `ahead_by` is the whole count however many
+ * there are, and its first commit, oldest first, is the merge that has waited longest. A run counts as
+ * passing when its `mutation` job passed, so a run the gate skipped (`mutation-gate.mjs`) never hides a dead one.
+ * With `--issue` it also
  * keeps one GitHub issue, titled `TITLE` and labeled `LABEL`: late opens it (or comments on the open
  * one), a green check closes it, a pause leaves it as it was. The label is not `ci-scheduled`:
  * that one switches on a sev1 (sev skill), and whether a dead mutation run is one is the owner's call.
  *
  * Settings, each an environment variable the workflow sets (limits are settings):
  *
- *   MUTATION_LATE_MINUTES  how long a merge may wait for a passing run; default 210, which is 3.5 h
+ *   MUTATION_LATE_MINUTES  how long a merge may wait for a passing run; default 210, which is 3.5 h; 105 to 1440
  *   MUTATION_PAUSE         empty, or `{"until":"<ISO time>","reason":"<why>"}`
  *
  * 210 minutes is two full runs, as Prometheus's alerting practices ask of a batch job (an alert
@@ -55,10 +60,8 @@ import {
   Effect,
   Schema,
   String as Str,
-  Stream,
   pipe,
 } from "effect";
-import { ChildProcess } from "effect/process";
 
 const MINUTE = 60_000;
 
@@ -76,17 +79,23 @@ export const Pause = Schema.Struct({ until: Schema.Finite, reason: Schema.String
 
 export type Pause = typeof Pause.Type;
 
-const Waiting = { lastPass: Schema.NullOr(Schema.Finite), merges: Schema.Finite };
+const Counts = { lastPass: Schema.NullOr(Schema.Finite), merges: Schema.Finite };
 
 const Late = { oldest: Schema.Finite, limit: Schema.Finite };
 
 export const Beat = Schema.TaggedUnion({
-  ok: { ...Waiting },
-  late: { ...Waiting, ...Late, lapsed: Schema.NullOr(Pause) },
-  paused: { ...Waiting, ...Late, until: Schema.Finite, reason: Schema.String },
+  ok: { ...Counts },
+  late: { ...Counts, ...Late, lapsed: Schema.NullOr(Pause) },
+  paused: { ...Counts, ...Late, until: Schema.Finite, reason: Schema.String },
 });
 
 export type Beat = typeof Beat.Type;
+
+/** The merges on main since the last passing run: how many, and when the oldest landed (ms; null when none). */
+export interface Waiting {
+  readonly count: number;
+  readonly oldest: number | null;
+}
 
 /**
  * The heartbeat at `now`, from the last passing run's start, the merges on main since, the limit (ms)
@@ -95,14 +104,12 @@ export type Beat = typeof Beat.Type;
 export const beat = (
   now: number,
   lastPass: number | null,
-  merges: ReadonlyArray<number>,
+  { count, oldest }: Waiting,
   limit: number,
   pause: Pause | null,
 ): Beat => {
-  const oldest = Math.min(...merges);
-
-  if (merges.length === 0 || now - oldest <= limit) {
-    return Beat.cases.ok.make({ lastPass, merges: merges.length });
+  if (count === 0 || oldest === null || now - oldest <= limit) {
+    return Beat.cases.ok.make({ lastPass, merges: count });
   }
 
   const held = pause !== null && now < pause.until;
@@ -110,13 +117,13 @@ export const beat = (
   return held
     ? Beat.cases.paused.make({
         lastPass,
-        merges: merges.length,
+        merges: count,
         oldest,
         limit,
         until: pause.until,
         reason: pause.reason,
       })
-    : Beat.cases.late.make({ lastPass, merges: merges.length, oldest, limit, lapsed: pause });
+    : Beat.cases.late.make({ lastPass, merges: count, oldest, limit, lapsed: pause });
 };
 
 const iso = (ms: number | null) =>
@@ -182,9 +189,17 @@ export const issueText = (now: number, b: Beat): string =>
 
 // ---------------------------------------------------------------- the settings
 
-const LATE_MINUTES = Config.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)), "MUTATION_LATE_MINUTES").pipe(
-  Config.withDefault(DEFAULT_LATE_MINUTES),
-);
+/**
+ * The least `MUTATION_LATE_MINUTES` allows: a merge waits up to the gap for the next run and the run takes up to
+ * its limit (60 and 45 minutes), so a lower limit alarms on a healthy run. The most is a day, past which
+ * the alarm is no alarm.
+ */
+export const LATE_RANGE = { least: 105, most: 24 * 60 } as const;
+
+const LATE_MINUTES = Config.schema(
+  Schema.Int.check(Schema.isBetween({ minimum: LATE_RANGE.least, maximum: LATE_RANGE.most })),
+  "MUTATION_LATE_MINUTES",
+).pipe(Config.withDefault(DEFAULT_LATE_MINUTES));
 
 const PAUSE_TEXT = Config.schema(Schema.String, "MUTATION_PAUSE").pipe(Config.withDefault(""));
 
@@ -217,8 +232,13 @@ export const settings = (provider: ConfigProvider.ConfigProvider) =>
 
 // ---------------------------------------------------------------- the reads and writes
 
-const Runs = Schema.fromJsonString(
-  Schema.Struct({ workflow_runs: Schema.Array(Schema.Struct({ created_at: Schema.String })) }),
+const Compare = Schema.fromJsonString(
+  Schema.Struct({
+    ahead_by: Schema.Int,
+    commits: Schema.Array(
+      Schema.Struct({ commit: Schema.Struct({ committer: Schema.Struct({ date: Schema.String }) }) }),
+    ),
+  }),
 );
 
 const Commits = Schema.fromJsonString(
@@ -227,50 +247,104 @@ const Commits = Schema.fromJsonString(
 
 const Issues = Schema.fromJsonString(Schema.Array(Schema.Struct({ number: Schema.Int, title: Schema.String })));
 
-/** A `gh` call that failed, with its stderr. */
+/** A read or a write failed; `reason` is what threw. */
 class ReadFailed extends Schema.TaggedError<ReadFailed, { readonly brand: unique symbol }>()("ReadFailed", {
-  path: Schema.String,
   reason: Schema.String,
 }) {}
 
 /** The heartbeat is late; its line is already printed. */
 class IsLate extends Schema.TaggedError<IsLate, { readonly brand: unique symbol }>()("IsLate", {}) {}
 
-/** One `gh` call: its stdout, or a failure with its stderr. */
-const gh = Effect.fn("heartbeat.gh")(function* (args: ReadonlyArray<string>) {
-  const handle = yield* ChildProcess.make("gh", args);
+const REPO = "repos/{owner}/{repo}";
 
-  const [out, err, code] = yield* Effect.all(
-    [
-      Stream.mkString(Stream.decodeText(handle.stdout)),
-      Stream.mkString(Stream.decodeText(handle.stderr)),
-      handle.exitCode,
-    ],
-    { concurrency: 3 },
+/** One `gh` call: its stdout, or a throw with its stderr. */
+export type Gh = (args: ReadonlyArray<string>) => string;
+
+const realGh: Gh = (args) =>
+  execFileSync("gh", [...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 60_000 });
+
+/** The most runs one read looks at, newest first: past that, a pass is as good as none. */
+export const SCAN = 30;
+
+const Runs = Schema.fromJsonString(
+  Schema.Struct({
+    workflow_runs: Schema.Array(Schema.Struct({ id: Schema.Int, created_at: Schema.String, head_sha: Schema.String })),
+  }),
+);
+
+const Jobs = Schema.fromJsonString(
+  Schema.Struct({
+    jobs: Schema.Array(Schema.Struct({ name: Schema.String, conclusion: Schema.NullOr(Schema.String) })),
+  }),
+);
+
+/**
+ * The newest run on main of the `mutation` workflow whose job `mutation` concluded `success`: when it was
+ * created and the commit it ran on. A run the gate skipped ends `success` with its job `skipped`, and is no
+ * pass. `.github/ci/mutation-runs.mjs` reads the same thing for the gate, and a law holds the two to one answer.
+ */
+export const passedRun = (gh: Gh): { readonly createdAt: number; readonly headSha: string } | null => {
+  const runs = Schema.decodeSync(Runs)(
+    gh(["api", `${REPO}/actions/workflows/mutation.yaml/runs?status=success&branch=main&per_page=${SCAN}`]),
   );
 
-  return Number(code) === 0 ? out : yield* ReadFailed.make({ path: args.join(" "), reason: Str.trim(err) });
-}, Effect.scoped);
+  const passed = Arr.findFirst(runs.workflow_runs, (run) =>
+    Arr.some(
+      Schema.decodeSync(Jobs)(gh(["api", `${REPO}/actions/runs/${run.id}/jobs?per_page=100`])).jobs,
+      (job) => job.name === "mutation" && job.conclusion === "success",
+    ),
+  );
+
+  return passed._tag === "Some"
+    ? { createdAt: Date.parse(passed.value.created_at), headSha: passed.value.head_sha }
+    : null;
+};
+
+/**
+ * The merges on main since the last passing run, counted by GitHub's compare API: its `ahead_by` is the
+ * whole count, however many there are, and its first commit (oldest first, `per_page=1`) is the one
+ * that has waited longest. With no passing run ever, the newest 100 commits stand in, and the count
+ * stops at 100.
+ */
+export const waiting = (gh: Gh, passed: { readonly headSha: string } | null): Waiting => {
+  if (passed === null) {
+    const dates = Arr.map(Schema.decodeSync(Commits)(gh(["api", `${REPO}/commits?sha=main&per_page=100`])), (c) =>
+      Date.parse(c.commit.committer.date),
+    );
+
+    return { count: dates.length, oldest: dates.length === 0 ? null : Math.min(...dates) };
+  }
+
+  const answer = Schema.decodeSync(Compare)(gh(["api", `${REPO}/compare/${passed.headSha}...main?per_page=1`]));
+  const first = answer.commits[0];
+
+  return { count: answer.ahead_by, oldest: first === undefined ? null : Date.parse(first.commit.committer.date) };
+};
+
+/** The heartbeat, read from GitHub through `gh`: the last passing run of the `mutation` job, and the merges since. */
+export const check = (now: number, limit: number, pause: Pause | null, gh: Gh): Beat => {
+  const passed = passedRun(gh);
+
+  return beat(now, passed === null ? null : passed.createdAt, waiting(gh, passed), limit, pause);
+};
 
 /** The number of the open issue with `TITLE` and `LABEL`, or null. */
-const openIssue = Effect.gen(function* () {
-  const issues = yield* Schema.decodeEffect(Issues)(
-    yield* gh(["issue", "list", "--label", LABEL, "--state", "open", "--json", "number,title", "--limit", "20"]),
-  );
-
-  return Arr.findFirst(issues, (i) => i.title === TITLE).pipe((found) =>
-    found._tag === "Some" ? found.value.number : null,
-  );
-});
+export const openIssue = (gh: Gh): number | null =>
+  Arr.findFirst(
+    Schema.decodeSync(Issues)(
+      gh(["issue", "list", "--label", LABEL, "--state", "open", "--json", "number,title", "--limit", "20"]),
+    ),
+    (i) => i.title === TITLE,
+  ).pipe((found) => (found._tag === "Some" ? found.value.number : null));
 
 /** Does what `alarm` says. */
-const sync = Effect.fn("heartbeat.sync")(function* (now: number, b: Beat) {
-  const a = alarm(b, yield* openIssue);
+export const sync = (now: number, b: Beat, gh: Gh): void => {
+  const a = alarm(b, openIssue(gh));
 
   switch (a._tag) {
     case "open":
       // The label is there already after the first time, which `--force` allows.
-      yield* gh([
+      gh([
         "label",
         "create",
         LABEL,
@@ -280,51 +354,32 @@ const sync = Effect.fn("heartbeat.sync")(function* (now: number, b: Beat) {
         "The hourly mutation run is late",
         "--force",
       ]);
-      yield* gh(["issue", "create", "--title", TITLE, "--label", LABEL, "--body", issueText(now, b)]);
+      gh(["issue", "create", "--title", TITLE, "--label", LABEL, "--body", issueText(now, b)]);
       break;
     case "comment":
-      yield* gh(["issue", "comment", String(a.number), "--body", issueText(now, b)]);
+      gh(["issue", "comment", String(a.number), "--body", issueText(now, b)]);
       break;
     case "close":
-      yield* gh(["issue", "close", String(a.number), "--reason", "completed", "--comment", line(now, b)]);
+      gh(["issue", "close", String(a.number), "--reason", "completed", "--comment", line(now, b)]);
       break;
     case "none":
       break;
   }
-});
+};
 
 const main = Effect.gen(function* () {
   const now = yield* Clock.currentTimeMillis;
   const { limit, pause } = yield* settings(ConfigProvider.fromEnv());
 
-  // Passing runs on main only: a run a branch started never covers a merge on main.
-  const runs = yield* Schema.decodeEffect(Runs)(
-    yield* gh([
-      "api",
-      "repos/{owner}/{repo}/actions/workflows/mutation.yaml/runs?status=success&branch=main&per_page=1",
-    ]),
-  );
+  const run = <A>(work: () => A) =>
+    Effect.try({ try: work, catch: (cause) => ReadFailed.make({ reason: String(cause) }) });
 
-  const passed = runs.workflow_runs[0];
-  const lastPass = passed === undefined ? null : Date.parse(passed.created_at);
-  const since = lastPass === null ? "" : `&since=${iso(lastPass)}`;
-
-  const commits = yield* Schema.decodeEffect(Commits)(
-    yield* gh(["api", `repos/{owner}/{repo}/commits?sha=main&per_page=100${since}`]),
-  );
-
-  const b = beat(
-    now,
-    lastPass,
-    Arr.map(commits, (c) => Date.parse(c.commit.committer.date)),
-    limit,
-    pause,
-  );
+  const b = yield* run(() => check(now, limit, pause, realGh));
 
   yield* Console.log(line(now, b));
 
   if (process.argv.includes("--issue")) {
-    yield* sync(now, b);
+    yield* run(() => sync(now, b, realGh));
   }
 
   if (b._tag === "late") {

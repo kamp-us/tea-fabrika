@@ -10,7 +10,10 @@ name: mutation-heartbeat
 #
 # It starts on every push to main as well as on the hourly cron, because GitHub's cron fires only about
 # 3 times a day on this repo (measured on scheduled.yaml: 34 starts in 11.7 days, up to 17 hours
-# apart), and by hand. A late merge is a push, so each push reads the state fresh.
+# apart), and by hand. A late merge is a push, so each push reads the state fresh. The `gate` job (mutation-gate.mjs,
+# as in mutation.yaml) lets a push or the cron start the check only when no check started within the gap
+# (`MUTATION_GAP_MINUTES`, default 60), so a busy day does not install and run on each push: at most 24
+# checks a day.
 #
 # The settings are the `env` of the job below, each read by heartbeat.ts:
 #   MUTATION_LATE_MINUTES  the limit, in minutes (default 210, two full runs), set here only to change it
@@ -34,10 +37,41 @@ concurrency:
   group: mutation-heartbeat
   cancel-in-progress: false
 
+# The gap between two checks, in minutes: a setting beside the cron line, read by mutation-gate.mjs.
+env:
+  MUTATION_GAP_MINUTES: "60"
+
 jobs:
-  heartbeat:
-    # Main's copy of the workflow and of heartbeat.ts, never a branch's.
+  # Whether this run checks (mutation-gate.mjs). No install: Node alone runs mutation-gate.mjs.
+  gate:
+    # Main's copy of the workflow and of mutation-gate.mjs, never a branch's.
     if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      start: ${{ steps.gate.outputs.start }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node .github/ci/mutation-gate.mjs --workflow mutation-heartbeat.yaml --job heartbeat
+
+  heartbeat:
+    needs: [gate]
+    # Main's copy of the workflow and of heartbeat.ts, never a branch's.
+    if: github.ref == 'refs/heads/main' && needs.gate.outputs.start == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Reads the run list and main's commits, and writes the one issue.
