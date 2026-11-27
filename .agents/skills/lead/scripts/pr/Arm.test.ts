@@ -16,6 +16,7 @@ import * as Arm from "./Arm.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
+import * as Sections from "./Sections.ts";
 
 const oid = "e42d1dce6a74f4ccb246ed19b4db04ad72c0d899";
 
@@ -90,6 +91,7 @@ type World = {
   readonly draft?: boolean;
   readonly base?: string;
   readonly title?: string;
+  readonly body?: string;
   readonly files?: ReadonlyArray<string>;
   /** The jobs of the run that is read, for a law that builds its own. */
   readonly jobs?: ReadonlyArray<Job>;
@@ -98,6 +100,9 @@ type World = {
   /** Which leak check refuses, as PushesTest.layer takes it; none when absent. */
   readonly leak?: PushesTest.Failing;
 };
+
+/** A description as the pr skill's template writes it. */
+const full = "## Summary\n\nWhat it does.\n\n## Evidence\n\nA test.\n\n## Merge Danger\n\n**Door:** two-way\n";
 
 const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log: string }) => {
   const name = w.branch ?? branch;
@@ -110,6 +115,7 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
   github.more.set(1092, {
     base: w.base ?? "main",
     title: w.title ?? "Per-program quotas, in next/ (P34c slice 4)",
+    body: w.body ?? full,
     mergeCommit: w.state === "MERGED" ? older : null,
   });
   github.files.set(1092, w.files ?? ["next/apps/fabrika/src/worker-quotas.ts"]);
@@ -449,6 +455,30 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         expect([...plan.github.calls, ...done.github.calls]).toEqual([]);
       }),
   );
+  // Plants: leave the sections check out of `arm`, so `land.ts check` and `queue` refuse a body that arms merge when ready (pull request 2320 merged with the draft placeholder).
+  it.effect.prop(
+    "property: a green pull request whose description holds the draft placeholder or lacks a required section is refused with the pr skill's words and arms nothing; a full one arms",
+    { placeholder: Schema.Boolean, left: Schema.Literals(["none", "Summary", "Evidence", "Merge Danger"]) },
+    ({ placeholder, left }) =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const kept = ["Summary", "Evidence", "Merge Danger"].filter((name) => name !== left);
+        const body = `${placeholder ? `${Sections.DRAFT_BODY}\n\n` : ""}${kept.map((name) => `## ${name}\n\nWords.\n`).join("\n")}`;
+        const m = memory({ body }, red);
+
+        if (!placeholder && left === "none") {
+          yield* arm(m);
+          expect(m.github.calls).toEqual(armedAt);
+
+          return;
+        }
+
+        const refused = yield* Effect.flip(arm(m));
+        expect(refused.reason).toBe(`pr 1092: ${Sections.refusal(body)}`);
+        expect(m.github.calls).toEqual([]);
+      }),
+  );
+
   // Plants: skip the names check, or run it after the arm.
   it.effect(
     "scenario: a green pull request whose diff exports a name its description does not name is refused with that name and arms nothing; with the line it arms (a new helper names the tools it searched, and a new name cites the industry's word)",
@@ -471,7 +501,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const named = memory({}, red);
         named.github.more.set(1092, {
           ...named.github.more.get(1092),
-          body: "## New names\n\n- `Quota`: a quota (source).",
+          body: `${full}\n## New names\n\n- \`Quota\`: a quota (source).`,
         });
         named.github.patches.set(1092, [patch]);
         yield* arm(named);
@@ -495,7 +525,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const ran = [
           { method: "leakChange", args: [".", oid] },
           { method: "leakGrep", args: [".", oid] },
-          { method: "leakText", args: [".", "Per-program quotas, in next/ (P34c slice 4)\n\n\n"] },
+          { method: "leakText", args: [".", `Per-program quotas, in next/ (P34c slice 4)\n\n${full}\n`] },
         ];
 
         expect(leaks).toEqual(ran.slice(0, { clean: 3, leakChange: 1, leakGrep: 2, leakText: 3 }[leak]));

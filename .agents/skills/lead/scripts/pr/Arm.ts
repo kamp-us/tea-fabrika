@@ -2,8 +2,8 @@
 // way it is turned on. Today's lead tooling, run on our own laptop; it is not product.
 //
 //   arm   the pull request is open, into main, and no plan -> the leak gate (./Leaks.ts) passes on
-//         its change, its commits and its words -> each new exported name is named under
-//         `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> scheduled proof at its head, or automatic ready CI
+//         its change, its commits and its words -> the description is the pr skill's template and not the draft placeholder (Sections.ts) and each new exported name is named under
+//         `## New names` (Queue.description, the check `land.ts check`, `queue` and the admin merge run; Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> scheduled proof at its head, or automatic ready CI
 //         with related-test coverage, is read -> green: marked ready if a draft, then merge when ready on, as a
 //         squash pinned to that head
 //
@@ -42,8 +42,8 @@ import { Checks } from "../ci/Checks.ts";
 import { Job, type Run, Runs } from "../ci/Runs.ts";
 import { logText } from "../ci/typecheck.ts";
 import * as Leaks from "./Leaks.ts";
-import * as Names from "./Names.ts";
 import { type Detail, PullRequests } from "./PullRequests.ts";
+import * as Queue from "./Queue.ts";
 
 /** The separately started proof workflow, still authoritative when present at the current head. */
 export const WORKFLOW = "scheduled.yaml";
@@ -412,7 +412,7 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   // Merge when ready merges later with no one watching, so the leak gate runs before it is turned on.
   yield* Leaks.gate(a.dir, found);
 
-  const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
+  const unnamed = yield* Queue.description(found);
 
   if (unnamed !== null) {
     return yield* refuse(unnamed);

@@ -52,7 +52,7 @@
 //
 //   land.ts check <pr>
 //     the lead session, after it writes a pull request's body and before `queue`: runs exactly the body checks `queue`
-//     runs (Queue.body: the leak grep on the title and description, each new exported name named under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket),
+//     runs (Queue.body: the leak grep on the title and description, the pr skill's sections and no draft placeholder, each new exported name named under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket),
 //     one function shared with `queue`. It also checks that every commit on the branch since main is signed (a note on
 //     refs/notes/fabrika, or a person's own signature) or made by `stepcommit.sh` (a `--commit-only` commit, signed at
 //     `land.ts run`, and a fix round's, which signs nothing), and names each one that is neither. Changes nothing but the refs it
@@ -132,6 +132,7 @@ import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
+import * as Sections from "./pr/Sections.ts";
 import * as SweepsProcess from "./pr/SweepsProcess.ts";
 import * as TicketsCli from "./pr/TicketsCli.ts";
 
@@ -349,6 +350,13 @@ const ready = Command.make(
       return yield* new Refused({ check: "ready", reason: "the body file's first line is the PR title", output: "" });
     }
 
+    // The body file is the pull request's description: a placeholder or a missing section is found here, before a push, not at the queue.
+    const unwritten = pr === undefined ? null : Sections.refusal(prBody(yield* fs.readFileString(pr.body), "").body);
+
+    if (unwritten !== null) {
+      return yield* new Refused({ check: "ready", reason: `the body file: ${unwritten}`, output: "" });
+    }
+
     const head = yield* must("ready", "HEAD does not read", tree, "git", ["rev-parse", "HEAD"]);
     const lead: string[] = [];
 
@@ -439,6 +447,12 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ quest, ready, env 
   }
 
   const posted = prBody(yield* fs.readFileString(ready.pr.body), yield* fs.readFileString(ready.pr.loosening));
+  const unwritten = Sections.refusal(posted.body);
+
+  if (unwritten !== null) {
+    return yield* new Refused({ check: "ready", reason: `the PR body: ${unwritten}`, output: "" });
+  }
+
   const file = `${env.BOXES}/${quest}-land-body.md`;
   yield* fs.writeFileString(file, posted.body);
   yield* must("leak", "the leak grep refused the PR body", ready.tree, "sh", [`${HERE}/leakgrep.sh`, "--text", file]);
@@ -847,7 +861,7 @@ export const unsignedCommits = Effect.fn("land.unsignedCommits")(function* (tree
   return unsigned;
 });
 
-// The body checks `queue` runs, alone: the leak grep on the title and description, each new exported name named
+// The body checks `queue` runs, alone: the leak grep on the title and description, the pr skill's sections and no draft placeholder, each new exported name named
 // under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket. A lead runs it after writing a body and before `queue`; it asks GitHub for reads only and changes nothing.
 const checkCommand = Command.make(
   "check",
@@ -887,7 +901,7 @@ const checkCommand = Command.make(
     }
 
     yield* Console.log(
-      `pr ${pr}: the body checks pass (leak grep on the title and description, ## New names, fabrika close ticket lines, every commit since main signed)`,
+      `pr ${pr}: the body checks pass (leak grep on the title and description, the pr skill's sections, ## New names, fabrika close ticket lines, every commit since main signed)`,
     );
   }),
 );

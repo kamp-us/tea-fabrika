@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import * as Sections from "./pr/Sections.ts";
 
 // Today's tooling (ticket 652). Git and the leak grep are real, on disposable repos. The signer,
 // botpush and gh are stubs that say what they were asked. The stub signer adds a real
@@ -11,6 +12,9 @@ import { describe, expect, it } from "vitest";
 const script = join(import.meta.dirname, "land.ts");
 
 const planted = "plantedleakword652";
+
+/** A description as the pr skill's template writes it, with `\n` as the stub's JSON carries it. */
+const full = "## Summary\\n\\nWhat it does.\\n\\n## Evidence\\n\\nA test.\\n\\n## Merge Danger\\n\\n**Door:** two-way";
 
 const node = `#!/bin/sh
 case "$1" in
@@ -45,7 +49,7 @@ case "$1 $2" in
   # \`LAND_MERGEABLE=later\` is a pull request that conflicts with main from the second read on.
   mergeable=\${LAND_MERGEABLE:-MERGEABLE}
   [ "$mergeable" != later ] || { [ "$(grep -c "^gh pr view" "$LAND_CALLS")" -lt 2 ] && mergeable=MERGEABLE || mergeable=CONFLICTING; }
-  printf '{"number":%s,"headRefName":"fabrikalfa/t652-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":%s,"title":"%s","body":"%s","mergeCommit":null,"mergeable":"%s"}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" "$draft" "\${LAND_TITLE:-T652 fixture: one quest}" "\${LAND_BODY:-What the quest did.}" "$mergeable" ;;
+  printf '{"number":%s,"headRefName":"fabrikalfa/t652-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":%s,"title":"%s","body":"%s","mergeCommit":null,"mergeable":"%s"}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" "$draft" "\${LAND_TITLE:-T652 fixture: one quest}" "\${LAND_BODY:-}" "$mergeable" ;;
 "api graphql") echo '{"data":{"repository":{"mergeQueue":null}}}' ;;
 "api --paginate")
   # The open GitHub issues, one number a line, when it is the issues list that is asked for.
@@ -91,7 +95,13 @@ type World = {
   readonly mergeable?: "MERGEABLE" | "CONFLICTING" | "later";
   /** `ci-required` has not ended at the pushed head. */
   readonly pending?: boolean;
-  /** The pull request's description, with `\n` for a new line; a short line when left out. */
+  /** The quest's body file as `ready` reads it, first line the title; a full template body when left out. */
+  readonly readyBody?: string;
+  /** The body file changes to this text after `ready` took it and before the command runs. */
+  readonly laterBody?: string;
+  /** `ready` refuses the body file: the run stops there, before anything is pushed. */
+  readonly readyRefused?: boolean;
+  /** The pull request's description, with `\n` for a new line; a full template body when left out. */
   readonly body?: string;
   /** The tracker's open tickets, and GitHub's open issues, as space-separated numbers. */
   readonly tickets?: string;
@@ -136,7 +146,7 @@ const land = (world: World) => {
       LAND_DRAFT: world.draft ? "1" : "",
       LAND_STATE: world.state ?? "OPEN",
       LAND_MERGEABLE: world.mergeable ?? "MERGEABLE",
-      LAND_BODY: world.body ?? "What the quest did.",
+      LAND_BODY: world.body ?? full,
       LAND_PATCH: world.patch ?? "",
       LAND_TICKETS: world.tickets ?? "",
       LAND_ISSUES: world.issues ?? "",
@@ -201,7 +211,11 @@ const land = (world: World) => {
     }
 
     for (const [name, text] of [
-      ["body.md", "T652 fixture: one quest\n\nWhat the quest did.\n\nfabrika close ticket 652\n"],
+      [
+        "body.md",
+        world.readyBody ??
+          "T652 fixture: one quest\n\n### Summary\n\nWhat the quest did.\n\n### Evidence\n\nA test.\n\n### Merge Danger\n\n**Door:** two-way\n\nfabrika close ticket 652\n",
+      ],
       ["loosening.out", "loosening: 0 hits\n"],
     ] as const) {
       writeFileSync(join(dir, name), text);
@@ -219,7 +233,36 @@ const land = (world: World) => {
       ...lead,
     );
 
+    if (world.readyRefused) {
+      const beside: Array<{ code: string; err: string }> = [];
+
+      return {
+        code: said.status,
+        err: said.stderr,
+        out: said.stdout,
+        calls: existsSync(env.LAND_CALLS) ? readFileSync(env.LAND_CALLS, "utf8").trim().split("\n") : [],
+        before: [git(quest, "rev-parse", "HEAD")],
+        after: [git(quest, "rev-parse", "HEAD")],
+        parents: 0,
+        subject: "",
+        status: git(quest, "status", "--porcelain"),
+        strangerKept: true,
+        refsLeft: "",
+        beside,
+        lead: lead[1],
+        leadNoted: false,
+        state: "",
+        head: git(quest, "rev-parse", "HEAD"),
+        recorded: existsSync(join(dir, "boxes/state/t652f.land.json")),
+      };
+    }
+
     expect(said.status, said.stderr).toBe(0);
+
+    if (world.laterBody !== undefined) {
+      writeFileSync(join(dir, "body.md"), world.laterBody);
+    }
+
     const record = join(dir, "boxes/state/t652f.land.json");
     // SAFETY: land.ts writes this file with ReadyJson, a JSON object, so it parses to a record.
     const { quest: named, ...rest } = JSON.parse(readFileSync(record, "utf8")) as Record<string, unknown>;
@@ -319,6 +362,7 @@ const land = (world: World) => {
         spawnSync("/usr/bin/git", ["-C", quest, "notes", "--ref=fabrika", "show", lead[1]], { env }).status === 0,
       state: readFileSync(join(dir, "boxes/state/t652f.md"), "utf8"),
       head,
+      recorded: true,
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -524,7 +568,7 @@ describe("land.ts, today's tooling", () => {
           fc.record({ named: fc.boolean(), leak: fc.constant(leaking), exports: fc.boolean() }),
           ({ named, leak, exports }) => {
             const section = named ? "\\n\\n## New names\\n\\n- `newThing`: the industry's word, with its source." : "";
-            const body = `What it does.${leak ? ` ${planted}` : ""}${section}`;
+            const body = `${full}${leak ? ` ${planted}` : ""}${section}`;
             const world = { ...fine, body, ...(exports ? { patch: "newThing" } : {}) };
             const checked = land({ ...world, command: ["check", "77"] });
             const queued = land({ ...world, command: ["queue", "77"] });
@@ -549,9 +593,63 @@ describe("land.ts, today's tooling", () => {
     }, 300_000);
   }
 
+  // Plants: leave the sections check out of `check` or of `queue`, so one passes a body the other refuses (pull request 2320 merged with the draft placeholder and a New names section).
+  it("scenario: `land.ts check` and `queue` refuse the draft placeholder and a body missing a section the pr skill requires, name what is missing, and pass a full body", () => {
+    const placeholder = `${Sections.DRAFT_BODY}\\n\\n## New names\\n\\n- \`X\`: the industry's word, with its source.`;
+    const noEvidence = "## Summary\\n\\nx\\n\\n## Merge Danger\\n\\nx";
+
+    for (const command of [
+      ["check", "77"],
+      ["queue", "77"],
+    ]) {
+      const held = land({ ...fine, body: placeholder, command });
+      expect(held.code, held.err).toBe(1);
+      expect(held.err).toContain("still the draft placeholder sentence");
+      expect(held.err).toContain("## Summary, ## Evidence, ## Merge Danger");
+      expect(held.err).toContain(".agents/skills/pr/SKILL.md");
+
+      const short = land({ ...fine, body: noEvidence, command });
+      expect(short.code, short.err).toBe(1);
+      expect(short.err).toContain("lacks the sections the pr skill requires: ## Evidence");
+      expect(short.err).not.toContain("placeholder");
+
+      const good = land({ ...fine, body: full, command });
+      expect(good.code, good.err).toBe(0);
+    }
+  }, 180_000);
+
+  // Plants: leave the sections check out of `ready`, so a quest finds a placeholder body only at the queue, after its push.
+  it("scenario: `land.ts ready` refuses a body file that is the draft placeholder or lacks a pr skill section, names what is missing, and writes no record", () => {
+    for (const readyBody of [
+      `T652 fixture: one quest\n\n${Sections.DRAFT_BODY}\n`,
+      "T652 fixture: one quest\n\n### Summary\n\nx\n\n### Evidence\n\nx\n",
+    ]) {
+      const got = land({ ...fine, readyBody, readyRefused: true, command: ["check", "77"] });
+
+      expect(got.code, got.err).toBe(1);
+      expect(got.err).toContain(".agents/skills/pr/SKILL.md");
+      expect(got.err).toMatch(
+        /still the draft placeholder sentence|lacks the sections the pr skill requires: ## Merge Danger/,
+      );
+      expect(got.recorded).toBe(false);
+    }
+  }, 120_000);
+
+  // Plant: leave the sections check out of `draftPr`, so a body file edited after `ready` is pushed and opened as a draft.
+  it("scenario: `land.ts run` refuses a body file that turned to the draft placeholder after `ready` took it, and changes and pushes nothing", () => {
+    const got = land({ ...fine, laterBody: `T652 fixture: one quest\n\n${Sections.DRAFT_BODY}\n` });
+
+    expect(got.code, got.err).toBe(1);
+    expect(got.err).toContain("the PR body: its description is still the draft placeholder sentence");
+    expect(got.err).toContain(".agents/skills/pr/SKILL.md");
+    expect(got.calls.filter((c) => /^gh pr create|^gh api -X (PATCH|POST)/.test(c))).toEqual([]);
+    expect(got.after).toEqual(got.before);
+    expect(got.parents).toBe(1);
+  }, 120_000);
+
   // Plants: pass a close line whose number is a GitHub issue (pull requests 2009 and 2004 did, and `merged` closed nothing), or check it in `queue` only.
   it("scenario: `land.ts check` and `queue` refuse a `fabrika close ticket` line that names a GitHub issue, say to use `Closes #N`, and pass an open tracker ticket", () => {
-    const text = "What it does.\\n\\nfabrika close ticket 1843";
+    const text = `${full}\\n\\nfabrika close ticket 1843`;
     const issue = { ...fine, body: text, tickets: "5", issues: "1843" };
 
     for (const command of [
