@@ -548,7 +548,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD: ${{ github.sha }}
           MOST_INTEGRATION: 5
-          MOST_TOOLING: 2
+          MOST_TOOLING: 4
           LIMIT_INTEGRATION: &related-integration-limit 17
           LIMIT_TOOLING: &related-tooling-limit 30
           RECORD: ${{ runner.temp }}/related-set.json

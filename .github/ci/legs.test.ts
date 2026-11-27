@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, expect, it } from "@effect/vitest";
 import { Config, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
+import { vi } from "vitest";
 import { readers } from "./changes.mjs";
 import {
   budgetOf,
@@ -325,6 +326,89 @@ const budgets = fc.double({ min: 1, max: 1200, noNaN: true }).map((seconds) => (
 /** The longest of `count` legs' table seconds when `split` cuts `files`. */
 const longestOf = (files: readonly string[], count: number, table: Readonly<Record<string, number>>) =>
   Math.max(0, ...split(files, count, table).map((leg) => total(leg, table)));
+
+/** What `run` returns, and the lines it prints with console.log: a law reads them, and nothing shows. */
+const captured = <A>(run: () => A): { readonly value: A; readonly lines: string[] } => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+  try {
+    const value = run();
+
+    return { value, lines: log.mock.calls.map((args) => args.join(" ")) };
+  } finally {
+    log.mockRestore();
+  }
+};
+
+/** The line `fewest` prints when the cap holds the count below what the planner wants. */
+const warning = (most: number, planned: number) =>
+  `::warning::legs: the cap held the count at ${most}, but the planner wanted ${planned}, so a leg runs past its limit`;
+
+/**
+ * Up to 8 of the real next/ files, a scratch table that gives each a whole-second row or none, a cap
+ * of 0 to 3 legs, and a limit that is a whole percent of the table's total. So a cap often holds the
+ * count down, and a file alone can be over the limit. Doubles would lean on tiny rows, which fit any count.
+ */
+const capped = () =>
+  fc
+    .tuple(
+      fc.subarray(vitest, { maxLength: 8 }),
+      fc.array(fc.option(fc.integer({ min: 1, max: 600 }), { nil: undefined }), { minLength: 8, maxLength: 8 }),
+      fc.integer({ min: 0, max: 3 }),
+      fc.integer({ min: 0, max: 100 }),
+    )
+    .map(([files, rows, most, percent]) => {
+      const table: Record<string, number> = {};
+
+      for (const [i, path] of files.entries()) {
+        const row = rows[i];
+
+        if (row !== undefined) {
+          table[path] = row;
+        }
+      }
+
+      return { files, table, most, limit: (percent / 100) * total(files, table) };
+    });
+
+// fewest's warning: one line when the cap holds the count below the fewest legs that fit, naming both
+// counts, and none when the cap allows that count. A cap of 0 is a kind switched off, and a file alone
+// over the limit fits no count, so neither prints a line.
+it("property: fewest prints one line naming the cap and the planner's count when the cap holds the count down, and none when it does not", () => {
+  // Plants, each run once on legs.ts and restored: no line at all (red: a cap that holds the count is
+  // silent); a line on every call with a cap (red: a count the cap allows speaks); the two counts swapped
+  // in the line (red: the line names the wrong pair).
+  fc.assert(
+    fc.property(capped(), ({ files, table, most, limit }) => {
+      // The fewest legs that fit the limit, the count the planner wants; none when no count fits.
+      const fit = files.map((_, i) => longestOf(files, i + 1, table)).findIndex((share) => share <= limit);
+      const planned = fit === -1 ? undefined : fit + 1;
+      const { value, lines } = captured(() => fewest(files, most, limit, table));
+
+      expect(value).toBeLessThanOrEqual(most);
+      expect(lines).toEqual(most > 0 && planned !== undefined && planned > most ? [warning(most, planned)] : []);
+    }),
+    options,
+  );
+});
+
+it("pinned: four 500-second files under a cap of 2 print one line naming 2 and 4, and under a cap of 4 print none", () => {
+  // Two legs of two files each run 1,000 s, past the 830 s room; four legs of one file each run 500 s.
+  const files = ["a", "b", "c", "d"];
+  const table = { a: 500, b: 500, c: 500, d: 500 };
+
+  expect(captured(() => fewest(files, 2, 830, table))).toEqual({ value: 2, lines: [warning(2, 4)] });
+  expect(captured(() => fewest(files, 4, 830, table))).toEqual({ value: 4, lines: [] });
+});
+
+it("pinned: a cap of 0 prints none, and one file alone over the limit prints none, since no cap is to blame", () => {
+  // A cap of 0 switches its kind off. One file of 900 s is over the 830 s room, so no count fits.
+  expect(captured(() => fewest(["a", "b", "c", "d"], 0, 830, { a: 500, b: 500, c: 500, d: 500 }))).toEqual({
+    value: 0,
+    lines: [],
+  });
+  expect(captured(() => fewest(["a"], 1, 830, { a: 900 }))).toEqual({ value: 1, lines: [] });
+});
 
 /**
  * A budget, and either some of the real files with a scratch table, or up to 12 real vitest files
