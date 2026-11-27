@@ -26,6 +26,7 @@
 //                        `status` says them. The record is BOXES/state/closes.jsonl. A sweep skipped behind a live
 //                        holder runs none, since the holder runs it. A merge that `land.ts merged` missed is closed by
 //                        the next sweep, and a ticket a person reopened after a close stays open.
+//                        The pass runs before the sweep's record: a kill during it leaves no record for that sweep.
 //
 // The timer is installed once per laptop, from the main checkout (the unit's template is ../gc.plist):
 //
