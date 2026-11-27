@@ -112,6 +112,21 @@
 //     as `merged`, but only the ticket closes: no box cleanup sweep. For a pull request that merged
 //     at GitHub and was never settled, and for the after-fast-forward watcher.
 //
+//   land.ts last <pr | quest> [--attempts <n>]
+//     the lead session, before it runs a command again, or later in a new session: what the record below says about the newest
+//     attempts (default 3) of the commands that ran for a pull request (digits) or a quest (any other name). One plain line each:
+//     it ended (done, with what it printed; refused, failed or interrupted), it is still running (its process exists), or it
+//     died with no end line (its process does not). It reads one file, asks GitHub nothing and changes nothing; it exits 0 when it
+//     can read the file, a dead attempt included, and 1 only when it cannot.
+//
+// Every command but `last` leaves its trail in `runs/land/<pr>.jsonl` of the main checkout (`quest-<name>.jsonl` for `ready` and
+// `run`, which know no pull request yet; `merged` and `close-named` write to each pull request's file): a start line first, a
+// heartbeat line every `LAND_LOG_MINUTES` minutes (default 5) while it lives, and one ending line saying how it ended. A command that
+// dies with no chance to write, such as a killed shell or a sleeping laptop, leaves its start line and no ending, and `last` tells
+// that apart from one still running by asking whether its process exists (pr/Recorded.ts). `queue --wait-ci` returns at `queued`: the
+// merge after it is held by GitHub's queue, not by this process, so the record stops there and `merged` is the poll. The record
+// changes no result, no exit code and no output; a record that cannot be written costs one line on stderr.
+//
 // Every refusal of any command exits 1, after one line on stderr that names the check; a caller's `&&`
 // stops there.
 //
@@ -147,6 +162,8 @@ import * as Arm from "./pr/Arm.ts";
 import * as BranchesGit from "./pr/BranchesGit.ts";
 import * as ClosesFs from "./pr/ClosesFs.ts";
 import * as Gate from "./pr/Gate.ts";
+import { Key } from "./pr/LandLog.ts";
+import * as LandLogFs from "./pr/LandLogFs.ts";
 import * as MainFetch from "./pr/MainFetch.ts";
 import * as Merge from "./pr/Merge.ts";
 import { PullRequests } from "./pr/PullRequests.ts";
@@ -154,6 +171,7 @@ import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
+import * as Recorded from "./pr/Recorded.ts";
 import * as Sections from "./pr/Sections.ts";
 import { Signatures } from "./pr/Signatures.ts";
 import * as SignaturesGit from "./pr/SignaturesGit.ts";
@@ -174,6 +192,7 @@ const Check = Schema.Literals([
   "wait",
   "arm",
   "body",
+  "last",
 ]);
 
 class Refused extends Schema.TaggedError<Refused>()("Refused", {
@@ -268,6 +287,43 @@ const loadEnv = Effect.gen(function* () {
 
 const lastLines = (output: string) => output.trimEnd().split("\n").slice(-30).join("\n");
 
+/**
+ * The record a command leaves under `runs/land` of the main checkout (pr/Recorded.ts): its start, a heartbeat each period and its
+ * end, one record for each key. It is the last argument of a command's `Effect.fn`, so it wraps the handler as written. The
+ * result, the failures and what the command prints pass through unchanged; a wrong `LAND_LOG_MINUTES` refuses the command at its
+ * start. A refusal's `check` and `reason` are the only words the record keeps: what a child printed (`output`) goes to stderr as
+ * before and nowhere else.
+ */
+const recorded =
+  <In>(command: string, keys: (input: In) => ReadonlyArray<Key>) =>
+  <A, E, R>(handler: Effect.Effect<A, E, R>, input: In) =>
+    Effect.gen(function* () {
+      const env = yield* loadEnv;
+
+      const every = yield* Recorded.every.pipe(
+        Effect.mapError((e) => new Refused({ check: "env", reason: e.message, output: "" })),
+      );
+
+      return yield* Recorded.around(
+        {
+          command,
+          keys,
+          argv: process.argv.slice(2),
+          pid: process.pid,
+          every,
+          refusal: (e: E) =>
+            Schema.is(Refused)(e) ? Option.some({ check: e.check, reason: e.reason }) : Option.none(),
+        },
+        () => handler,
+      )(input).pipe(Effect.provide(LandLogFs.layer(`${env.MAIN}/runs/land`)));
+    });
+
+/** The record a pull request's commands write to. */
+const forPr = (pr: number): Key => Key.cases.pr.make({ pr });
+
+/** The record a quest's commands write to, before its pull request is known. A name that is no plain name is refused by the record, not here. */
+const forQuest = (name: string): Key => Key.cases.quest.make({ name });
+
 /** One line in the quest's state file, the one the status page and the next agent read. */
 const note = Effect.fnUntraced(function* (boxes: string, quest: string, line: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -324,87 +380,90 @@ const ready = Command.make(
     lead: Flag.String("lead").pipe(Flag.atLeast(0)),
     plan: Flag.String("plan").pipe(Flag.optional),
   },
-  Effect.fn("land.ready")(function* (ask) {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const env = yield* loadEnv;
-    const tree = path.resolve(ask.tree);
-    const branch = yield* must("ready", "the tree is on no branch", tree, "git", ["symbolic-ref", "--short", "HEAD"]);
+  Effect.fn("land.ready")(
+    function* (ask) {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const env = yield* loadEnv;
+      const tree = path.resolve(ask.tree);
+      const branch = yield* must("ready", "the tree is on no branch", tree, "git", ["symbolic-ref", "--short", "HEAD"]);
 
-    if (!branch.startsWith("fabrikalfa/")) {
-      return yield* new Refused({ check: "ready", reason: `branch ${branch} is not fabrikalfa/<name>`, output: "" });
-    }
-
-    const dirty = yield* must("ready", "git status failed", tree, "git", ["status", "--porcelain"]);
-
-    if (dirty !== "") {
-      return yield* new Refused({ check: "ready", reason: "the tree has changes: commit them first", output: dirty });
-    }
-
-    const given = Option.all({ body: ask.body, loosening: ask.loosening });
-    const some = [ask.body, ask.loosening].filter(Option.isSome).length;
-
-    if (some !== 0 && Option.isNone(given)) {
-      return yield* new Refused({
-        check: "ready",
-        reason: "give --body and --loosening together",
-        output: "",
-      });
-    }
-
-    const pr = Option.getOrUndefined(
-      Option.map(given, (files) => ({
-        body: path.resolve(files.body),
-        loosening: path.resolve(files.loosening),
-      })),
-    );
-
-    for (const [name, file] of Object.entries(pr ?? {})) {
-      const read = yield* fs.readFileString(file).pipe(Effect.option);
-
-      if (Option.isNone(read) || read.value.trim() === "") {
-        return yield* new Refused({ check: "ready", reason: `--${name} ${file} is missing or empty`, output: "" });
+      if (!branch.startsWith("fabrikalfa/")) {
+        return yield* new Refused({ check: "ready", reason: `branch ${branch} is not fabrikalfa/<name>`, output: "" });
       }
-    }
 
-    if (pr !== undefined && prBody(yield* fs.readFileString(pr.body), "").title === "") {
-      return yield* new Refused({ check: "ready", reason: "the body file's first line is the PR title", output: "" });
-    }
+      const dirty = yield* must("ready", "git status failed", tree, "git", ["status", "--porcelain"]);
 
-    // The body file is the pull request's description: a placeholder or a missing section is found here, before a push, not at the queue.
-    const unwritten = pr === undefined ? null : Sections.refusal(prBody(yield* fs.readFileString(pr.body), "").body);
+      if (dirty !== "") {
+        return yield* new Refused({ check: "ready", reason: "the tree has changes: commit them first", output: dirty });
+      }
 
-    if (unwritten !== null) {
-      return yield* new Refused({ check: "ready", reason: `the body file: ${unwritten}`, output: "" });
-    }
+      const given = Option.all({ body: ask.body, loosening: ask.loosening });
+      const some = [ask.body, ask.loosening].filter(Option.isSome).length;
 
-    const head = yield* must("ready", "HEAD does not read", tree, "git", ["rev-parse", "HEAD"]);
-    const lead: string[] = [];
+      if (some !== 0 && Option.isNone(given)) {
+        return yield* new Refused({
+          check: "ready",
+          reason: "give --body and --loosening together",
+          output: "",
+        });
+      }
 
-    for (const sha of ask.lead) {
-      lead.push(yield* must("ready", `--lead ${sha} is not a commit`, tree, "git", ["rev-parse", `${sha}^{commit}`]));
-    }
+      const pr = Option.getOrUndefined(
+        Option.map(given, (files) => ({
+          body: path.resolve(files.body),
+          loosening: path.resolve(files.loosening),
+        })),
+      );
 
-    const record = new Ready({
-      quest: ask.quest,
-      tree,
-      branch,
-      head,
-      lead,
-      pr,
-      plan: Option.getOrUndefined(Option.map(ask.plan, (p) => path.resolve(p))),
-      sentAt: DateTime.formatIso(yield* DateTime.now),
-    });
+      for (const [name, file] of Object.entries(pr ?? {})) {
+        const read = yield* fs.readFileString(file).pipe(Effect.option);
 
-    yield* fs.makeDirectory(`${env.BOXES}/state`, { recursive: true });
-    yield* fs.writeFileString(`${env.BOXES}/state/${ask.quest}.land.json`, Schema.encodeSync(ReadyJson)(record));
-    yield* note(
-      env.BOXES,
-      ask.quest,
-      `quest agent: ready ${pr ? "to land" : "for the -wip push of"} ${branch} at ${head.slice(0, 8)}; the lead runs land.ts run`,
-    );
-    yield* Console.log(`ready to land: ${ask.quest} ${branch} at ${head.slice(0, 8)}`);
-  }),
+        if (Option.isNone(read) || read.value.trim() === "") {
+          return yield* new Refused({ check: "ready", reason: `--${name} ${file} is missing or empty`, output: "" });
+        }
+      }
+
+      if (pr !== undefined && prBody(yield* fs.readFileString(pr.body), "").title === "") {
+        return yield* new Refused({ check: "ready", reason: "the body file's first line is the PR title", output: "" });
+      }
+
+      // The body file is the pull request's description: a placeholder or a missing section is found here, before a push, not at the queue.
+      const unwritten = pr === undefined ? null : Sections.refusal(prBody(yield* fs.readFileString(pr.body), "").body);
+
+      if (unwritten !== null) {
+        return yield* new Refused({ check: "ready", reason: `the body file: ${unwritten}`, output: "" });
+      }
+
+      const head = yield* must("ready", "HEAD does not read", tree, "git", ["rev-parse", "HEAD"]);
+      const lead: string[] = [];
+
+      for (const sha of ask.lead) {
+        lead.push(yield* must("ready", `--lead ${sha} is not a commit`, tree, "git", ["rev-parse", `${sha}^{commit}`]));
+      }
+
+      const record = new Ready({
+        quest: ask.quest,
+        tree,
+        branch,
+        head,
+        lead,
+        pr,
+        plan: Option.getOrUndefined(Option.map(ask.plan, (p) => path.resolve(p))),
+        sentAt: DateTime.formatIso(yield* DateTime.now),
+      });
+
+      yield* fs.makeDirectory(`${env.BOXES}/state`, { recursive: true });
+      yield* fs.writeFileString(`${env.BOXES}/state/${ask.quest}.land.json`, Schema.encodeSync(ReadyJson)(record));
+      yield* note(
+        env.BOXES,
+        ask.quest,
+        `quest agent: ready ${pr ? "to land" : "for the -wip push of"} ${branch} at ${head.slice(0, 8)}; the lead runs land.ts run`,
+      );
+      yield* Console.log(`ready to land: ${ask.quest} ${branch} at ${head.slice(0, 8)}`);
+    },
+    recorded("ready", (ask) => [forQuest(ask.quest)]),
+  ),
 );
 
 // The steps, one exported Effect each, so a flow (the lead drives work by writing a flow that one program runs, and no agent holds a loop, ticket 656) can run them one by one. Each
@@ -755,40 +814,43 @@ const rollback = Effect.fn("land.rollback")(function* ({ ready }: Quest) {
 const run = Command.make(
   "run",
   { quest: Argument.String("quest"), ticket: Argument.String("ticket") },
-  Effect.fn("land.run")(function* ({ quest: name, ticket }) {
-    const quest = yield* readReady(name, ticket);
-    const say = (line: string) => Effect.andThen(note(quest.env.BOXES, name, `land.ts: ${line}`), Console.log(line));
-    yield* checkTree(quest);
-    const draft = yield* draftPr(quest);
-    const back = yield* rollback(quest);
+  Effect.fn("land.run")(
+    function* ({ quest: name, ticket }) {
+      const quest = yield* readReady(name, ticket);
+      const say = (line: string) => Effect.andThen(note(quest.env.BOXES, name, `land.ts: ${line}`), Console.log(line));
+      yield* checkTree(quest);
+      const draft = yield* draftPr(quest);
+      const back = yield* rollback(quest);
 
-    // Every refusal before the push changes nothing.
-    const { main, signed, target, tip } = yield* Effect.gen(function* () {
-      const { main, merged } = yield* mergeMain(quest);
-      yield* leakCheck(quest, main);
-      const signed = yield* signLead(quest, main, merged);
+      // Every refusal before the push changes nothing.
+      const { main, signed, target, tip } = yield* Effect.gen(function* () {
+        const { main, merged } = yield* mergeMain(quest);
+        yield* leakCheck(quest, main);
+        const signed = yield* signLead(quest, main, merged);
 
-      return { main, signed, ...(yield* push(quest)) };
-    }).pipe(Effect.onError(() => back));
+        return { main, signed, ...(yield* push(quest)) };
+      }).pipe(Effect.onError(() => back));
 
-    yield* say(`main at ${main.slice(0, 8)}, signed ${signed} lead commits, pushed ${target} at ${tip.slice(0, 8)}`);
+      yield* say(`main at ${main.slice(0, 8)}, signed ${signed} lead commits, pushed ${target} at ${tip.slice(0, 8)}`);
 
-    if (draft === undefined) {
-      return;
-    }
+      if (draft === undefined) {
+        return;
+      }
 
-    const pr = yield* openPr(quest, draft);
-    yield* say(
-      `PR https://github.com/${quest.env.GH_REPO}/pull/${pr}; waiting for ${Queue.REQUIRED} to add it to the queue`,
-    );
-    const added = yield* queue(quest.env, pr, Queue.QUEST_WAIT, quest.ready.tree);
+      const pr = yield* openPr(quest, draft);
+      yield* say(
+        `PR https://github.com/${quest.env.GH_REPO}/pull/${pr}; waiting for ${Queue.REQUIRED} to add it to the queue`,
+      );
+      const added = yield* queue(quest.env, pr, Queue.QUEST_WAIT, quest.ready.tree);
 
-    for (const said of gateLines(pr, added._tag === "merged")) {
-      yield* say(said);
-    }
+      for (const said of gateLines(pr, added._tag === "merged")) {
+        yield* say(said);
+      }
 
-    yield* say(Queue.line(added));
-  }),
+      yield* say(Queue.line(added));
+    },
+    recorded("run", ({ quest }) => [forQuest(quest)]),
+  ),
 );
 
 const PrNumber = Argument.Int("pr");
@@ -808,20 +870,23 @@ const queueCommand = Command.make(
     wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)),
     ...waitFlags(Queue.QUEST_WAIT),
   },
-  Effect.fn("land.queueCommand")(function* ({ pr, waitCi, wait, minutes, every }) {
-    if (wait) {
-      return yield* new Refused({
-        check: "queue",
-        reason:
-          "--wait is now --wait-ci. --wait-ci waits for ci-required and then says queued: it does not wait for the merge, which GitHub's queue does later.",
-        output: "",
-      });
-    }
+  Effect.fn("land.queueCommand")(
+    function* ({ pr, waitCi, wait, minutes, every }) {
+      if (wait) {
+        return yield* new Refused({
+          check: "queue",
+          reason:
+            "--wait is now --wait-ci. --wait-ci waits for ci-required and then says queued: it does not wait for the merge, which GitHub's queue does later.",
+          output: "",
+        });
+      }
 
-    const added = yield* queue(yield* loadEnv, pr, waitCi ? { minutes, every } : undefined);
+      const added = yield* queue(yield* loadEnv, pr, waitCi ? { minutes, every } : undefined);
 
-    yield* Console.log(Arr.join([...gateLines(pr, added._tag === "merged"), Queue.line(added)], "\n"));
-  }),
+      yield* Console.log(Arr.join([...gateLines(pr, added._tag === "merged"), Queue.line(added)], "\n"));
+    },
+    recorded("queue", ({ pr }) => [forPr(pr)]),
+  ),
 );
 
 // The one wait for CI: reads `ci-required` at the pull request's head as it stands on each read (a push or an
@@ -830,28 +895,31 @@ const queueCommand = Command.make(
 const waitCommand = Command.make(
   "wait",
   { pr: PrNumber, ...waitFlags(Queue.QUEST_WAIT) },
-  Effect.fn("land.waitCommand")(function* ({ pr, minutes, every }) {
-    const env = yield* loadEnv;
+  Effect.fn("land.waitCommand")(
+    function* ({ pr, minutes, every }) {
+      const env = yield* loadEnv;
 
-    const at = yield* Queue.required("", { minutes, every }, pr).pipe(
-      Effect.provide(queueServices(env)),
-      Effect.mapError((e) =>
-        e._tag === "Conflicting"
-          ? new Refused({ check: "wait", reason: `pr ${pr}: ${Gate.conflictLine(pr)}`, output: "" })
-          : e._tag === "Gone"
-            ? new Refused({ check: "wait", reason: `pr ${pr}: it is ${e.state}, not open`, output: "" })
-            : new Refused({ check: "wait", reason: e.reason, output: "" }),
-      ),
-    );
+      const at = yield* Queue.required("", { minutes, every }, pr).pipe(
+        Effect.provide(queueServices(env)),
+        Effect.mapError((e) =>
+          e._tag === "Conflicting"
+            ? new Refused({ check: "wait", reason: `pr ${pr}: ${Gate.conflictLine(pr)}`, output: "" })
+            : e._tag === "Gone"
+              ? new Refused({ check: "wait", reason: `pr ${pr}: it is ${e.state}, not open`, output: "" })
+              : new Refused({ check: "wait", reason: e.reason, output: "" }),
+        ),
+      );
 
-    const said = Queue.verdict(env.GH_REPO, pr, at);
+      const said = Queue.verdict(env.GH_REPO, pr, at);
 
-    if (!said.ok) {
-      return yield* new Refused({ check: "wait", reason: said.text, output: "" });
-    }
+      if (!said.ok) {
+        return yield* new Refused({ check: "wait", reason: said.text, output: "" });
+      }
 
-    yield* Console.log(said.text);
-  }),
+      yield* Console.log(said.text);
+    },
+    recorded("wait", ({ pr }) => [forPr(pr)]),
+  ),
 );
 
 /**
@@ -874,38 +942,41 @@ export const unsignedCommits = Effect.fn("land.unsignedCommits")(
 const checkCommand = Command.make(
   "check",
   { pr: PrNumber },
-  Effect.fn("land.checkCommand")(function* ({ pr }) {
-    const env = yield* loadEnv;
+  Effect.fn("land.checkCommand")(
+    function* ({ pr }) {
+      const env = yield* loadEnv;
 
-    const checked = yield* Effect.gen(function* () {
-      const found = yield* (yield* PullRequests).view(pr);
+      const checked = yield* Effect.gen(function* () {
+        const found = yield* (yield* PullRequests).view(pr);
 
-      return { found, refusal: yield* Gate.before({ dir: env.MAIN, found, marksReady: true }) };
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
-          PushesProcess.layer(HERE),
-          TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
-          SignaturesGit.layer,
+        return { found, refusal: yield* Gate.before({ dir: env.MAIN, found, marksReady: true }) };
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+            PushesProcess.layer(HERE),
+            TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
+            SignaturesGit.layer,
+          ),
         ),
-      ),
-      Effect.mapError(
-        (e) =>
-          new Refused({
-            check: e._tag === "LeakGrepRefused" ? "leak" : e._tag === "SignaturesError" ? "check" : "body",
-            reason: e.reason,
-            output: "",
-          }),
-      ),
-    );
+        Effect.mapError(
+          (e) =>
+            new Refused({
+              check: e._tag === "LeakGrepRefused" ? "leak" : e._tag === "SignaturesError" ? "check" : "body",
+              reason: e.reason,
+              output: "",
+            }),
+        ),
+      );
 
-    if (checked.refusal !== null) {
-      return yield* new Refused({ check: "body", reason: `pr ${pr}: ${checked.refusal}`, output: "" });
-    }
+      if (checked.refusal !== null) {
+        return yield* new Refused({ check: "body", reason: `pr ${pr}: ${checked.refusal}`, output: "" });
+      }
 
-    yield* Console.log(Gate.line(checked.found));
-  }),
+      yield* Console.log(Gate.line(checked.found));
+    },
+    recorded("check", ({ pr }) => [forPr(pr)]),
+  ),
 );
 
 /** A refusal from a merge path: a leak grep that refused or could not run is the `leak` check's. */
@@ -917,25 +988,28 @@ const refusedAt =
 const armCommand = Command.make(
   "arm",
   { pr: PrNumber },
-  Effect.fn("land.armCommand")(function* ({ pr }) {
-    const env = yield* loadEnv;
+  Effect.fn("land.armCommand")(
+    function* ({ pr }) {
+      const env = yield* loadEnv;
 
-    const armed = yield* Arm.arm({ repo: env.GH_REPO, dir: env.MAIN, pr }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
-          PushesProcess.layer(HERE),
-          RunsGh.layer(env.GH_REPO, env.MAIN),
-          ChecksGh.layer(env.GH_REPO),
-          TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
-          SignaturesGit.layer,
+      const armed = yield* Arm.arm({ repo: env.GH_REPO, dir: env.MAIN, pr }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+            PushesProcess.layer(HERE),
+            RunsGh.layer(env.GH_REPO, env.MAIN),
+            ChecksGh.layer(env.GH_REPO),
+            TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
+            SignaturesGit.layer,
+          ),
         ),
-      ),
-      Effect.mapError(refusedAt("arm")),
-    );
+        Effect.mapError(refusedAt("arm")),
+      );
 
-    yield* Console.log(Arr.join([...gateLines(pr, armed._tag === "merged"), Arm.line(armed)], "\n"));
-  }),
+      yield* Console.log(Arr.join([...gateLines(pr, armed._tag === "merged"), Arm.line(armed)], "\n"));
+    },
+    recorded("arm", ({ pr }) => [forPr(pr)]),
+  ),
 );
 
 /** The admin route the sev log gives, read in the main checkout (Level.routeFromLog builds it, a sev fix is admin-merged one at a time on current main). */
@@ -991,11 +1065,14 @@ const mergeBy = Effect.fn("land.mergeBy")(function* (
 const mergeCommand = Command.make(
   "merge",
   { pr: PrNumber, admin: Flag.Boolean("admin") },
-  Effect.fn("land.mergeCommand")(function* ({ pr, admin }) {
-    const env = yield* loadEnv;
+  Effect.fn("land.mergeCommand")(
+    function* ({ pr, admin }) {
+      const env = yield* loadEnv;
 
-    yield* mergeBy(env, pr, admin ? yield* adminRoute(env) : Merge.Route.cases.queue.make({}));
-  }),
+      yield* mergeBy(env, pr, admin ? yield* adminRoute(env) : Merge.Route.cases.queue.make({}));
+    },
+    recorded("merge", ({ pr }) => [forPr(pr)]),
+  ),
 );
 
 // The one way the lead admin merges: marks a draft ready, waits for ci-required, merges, then reads the pull request once more.
@@ -1008,61 +1085,96 @@ const adminCommand = Command.make(
     queueMinutes: Flag.Int("queue-minutes").pipe(Flag.withDefault(Queue.QUEST_WAIT.minutes)),
     queueEvery: Flag.Int("queue-every-seconds").pipe(Flag.withDefault(Queue.QUEST_WAIT.every)),
   },
-  Effect.fn("land.adminCommand")(function* ({ pr, minutes, every, wait, queueMinutes, queueEvery }) {
-    const env = yield* loadEnv;
+  Effect.fn("land.adminCommand")(
+    function* ({ pr, minutes, every, wait, queueMinutes, queueEvery }) {
+      const env = yield* loadEnv;
 
-    yield* mergeBy(
-      env,
-      pr,
-      yield* adminRoute(env),
-      { minutes, every },
-      wait ? { minutes: queueMinutes, every: queueEvery } : undefined,
-    );
+      yield* mergeBy(
+        env,
+        pr,
+        yield* adminRoute(env),
+        { minutes, every },
+        wait ? { minutes: queueMinutes, every: queueEvery } : undefined,
+      );
 
-    // The merge happened, so this read only reports: a read that fails says so and the command still succeeds.
-    const found = yield* Effect.gen(function* () {
-      return yield* (yield* PullRequests).view(pr);
-    }).pipe(Effect.provide(PullRequestsGh.layer(env.GH_REPO, env.MAIN)), Effect.result);
+      // The merge happened, so this read only reports: a read that fails says so and the command still succeeds.
+      const found = yield* Effect.gen(function* () {
+        return yield* (yield* PullRequests).view(pr);
+      }).pipe(Effect.provide(PullRequestsGh.layer(env.GH_REPO, env.MAIN)), Effect.result);
 
-    yield* Console.log(
-      Result.isSuccess(found)
-        ? `pr ${pr}: ${found.success.state}, merge commit ${found.success.mergeCommit ?? "none yet"}`
-        : `pr ${pr}: merged, but its state could not be read afterward (${found.failure.reason})`,
-    );
-  }),
+      yield* Console.log(
+        Result.isSuccess(found)
+          ? `pr ${pr}: ${found.success.state}, merge commit ${found.success.mergeCommit ?? "none yet"}`
+          : `pr ${pr}: merged, but its state could not be read afterward (${found.failure.reason})`,
+      );
+    },
+    recorded("admin", ({ pr }) => [forPr(pr)]),
+  ),
 );
 
 const merged = Command.make(
   "merged",
   { prs: PrNumber.pipe(Argument.atLeast(1)) },
-  Effect.fn("land.merged")(function* ({ prs }) {
-    const env = yield* loadEnv;
+  Effect.fn("land.merged")(
+    function* ({ prs }) {
+      const env = yield* loadEnv;
 
-    for (const pr of prs) {
-      const settled = yield* Queue.settle({ repo: env.GH_REPO, pr }).pipe(
-        Effect.provide(queueServices(env)),
-        Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
-      );
+      for (const pr of prs) {
+        const settled = yield* Queue.settle({ repo: env.GH_REPO, pr }).pipe(
+          Effect.provide(queueServices(env)),
+          Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
+        );
 
-      yield* Console.log(settled.lines.join("\n"));
-    }
-  }),
+        yield* Console.log(settled.lines.join("\n"));
+      }
+    },
+    recorded("merged", ({ prs }) => prs.map(forPr)),
+  ),
 );
 
 const closeNamed = Command.make(
   "close-named",
   { prs: PrNumber.pipe(Argument.atLeast(1)) },
-  Effect.fn("land.closeNamed")(function* ({ prs }) {
+  Effect.fn("land.closeNamed")(
+    function* ({ prs }) {
+      const env = yield* loadEnv;
+
+      for (const pr of prs) {
+        const settled = yield* Queue.closeOnly({ repo: env.GH_REPO, pr }).pipe(
+          Effect.provide(queueServices(env)),
+          Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
+        );
+
+        yield* Console.log(settled.lines.join("\n"));
+      }
+    },
+    recorded("close-named", ({ prs }) => prs.map(forPr)),
+  ),
+);
+
+// What the record (pr/Recorded.ts) says about the commands that ran for one pull request or quest: one plain line for each of the
+// newest attempts. It reads one file, asks GitHub nothing and changes nothing; it is no recorded command itself, since a reader that
+// wrote a line would hide the very thing it reads.
+const lastCommand = Command.make(
+  "last",
+  { target: Argument.String("target"), attempts: Flag.Int("attempts").pipe(Flag.withDefault(3)) },
+  Effect.fn("land.lastCommand")(function* ({ target, attempts }) {
+    if (attempts < 1) {
+      return yield* new Refused({ check: "last", reason: "--attempts is at least 1", output: "" });
+    }
+
     const env = yield* loadEnv;
 
-    for (const pr of prs) {
-      const settled = yield* Queue.closeOnly({ repo: env.GH_REPO, pr }).pipe(
-        Effect.provide(queueServices(env)),
-        Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
-      );
+    const said = yield* Recorded.last({
+      key: /^\d+$/.test(target) ? forPr(Number(target)) : forQuest(target),
+      count: attempts,
+      alive: Recorded.pidExists,
+    }).pipe(
+      Effect.provide(LandLogFs.layer(`${env.MAIN}/runs/land`)),
+      Effect.mapError((e) => new Refused({ check: "last", reason: e.reason, output: "" })),
+    );
 
-      yield* Console.log(settled.lines.join("\n"));
-    }
+    yield* Console.log(said.join("\n"));
   }),
 );
 
@@ -1078,6 +1190,7 @@ const land = Command.make("land").pipe(
     adminCommand,
     merged,
     closeNamed,
+    lastCommand,
   ]),
 );
 

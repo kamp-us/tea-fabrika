@@ -68,7 +68,12 @@ const SUBPATHS = [
   "Cli",
 ];
 
-const STAGES = ["build", "pack", "install", "runtime", "imports", "private", "types"];
+/**
+ * The stages P2 records in its receipt: every one the installed archive passes, and no other. P2 adds one
+ * when the package gains a proof (`edit`, `config`), so the law "the stages P2 writes are these" in
+ * `related-selection.test.ts` reads P2's own source and fails the tooling tests (main's full run) the day the two differ.
+ */
+export const STAGES = ["build", "pack", "install", "runtime", "imports", "private", "edit", "config", "types"];
 
 const REFUSALS = ["source", "parser", "declarations", "workspace"];
 

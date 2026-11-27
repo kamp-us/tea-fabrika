@@ -19,6 +19,7 @@ import {
   run,
   select,
   type Sizing,
+  STAGES,
   wantsChecklistLaw,
   wantsConsumerLaw,
 } from "./related.ts";
@@ -891,8 +892,6 @@ const SUBPATHS = [
   "Cli",
 ] as const;
 
-const STAGES = ["build", "pack", "install", "runtime", "imports", "private", "types"] as const;
-
 const REFUSALS = ["source", "parser", "declarations", "workspace"] as const;
 
 const MAIN = "refs/heads/main";
@@ -1337,6 +1336,30 @@ for (const leg of LEGS) {
     { arbitrary: { seed: 119120, runs: 2, size: 100 } },
   );
 }
+
+// D2's stage list is a second copy of what P2 writes. On 2026-11-23 P2 gained `edit` and 2026-11-24 `config`, the
+// receipt check still asked for seven stages, and every full run on main failed its package receipt step with
+// "refused: stage" while all its tests passed (issue 2007). This law reads P2's own source, the four stages it
+// writes itself and the ones its consumer script must report, so the next stage added to P2 turns a plain tooling test
+// red, with the stage named in its failure. Plants, each run once on this law and restored: add a stage to P2's consumer schema only (red);
+// drop `edit` from the check's list only (red).
+it("scenario: D2 the stages the receipt check asks for are exactly the stages P2 records, read from P2's own source", () => {
+  const source = readFileSync(join(ROOT, PACKAGE), "utf8");
+
+  const own = /stages: \{ ([^}]*) \}/.exec(source)?.[1] ?? "";
+
+  const reported = /const runtime = [\s\S]*?Schema\.Struct\(\{([\s\S]*?)\}\),\s*\),\s*\)\(/.exec(source)?.[1] ?? "";
+
+  const recorded = [
+    ...own.matchAll(/(\w+): "passed"/g),
+    ...reported.matchAll(/(\w+): Schema\.Literal\("passed"\)/g),
+  ].map((found) => found[1]);
+
+  // Both readings found something, and the spread of the consumer's stages sits where the check expects it.
+  expect(own, "P2 writes its receipt's stages on one line").toContain("...runtime");
+  expect(recorded.length, "P2's stages were read").toBeGreaterThan(4);
+  expect([...recorded].sort()).toEqual([...STAGES].sort());
+});
 
 // D5. The fault decision: P1 is proven only when the faulted run fails for the export, the manifest's
 // bytes come back unchanged, and the second run passes, unskipped. CI only.
