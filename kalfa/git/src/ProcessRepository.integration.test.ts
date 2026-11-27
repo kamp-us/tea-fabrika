@@ -27,6 +27,7 @@ import {
   type FlatSignature,
   type History,
 } from "./History.test-support.ts";
+import { byBytes } from "./internal/object.ts";
 import { editFrom, encodeCommit } from "./Laws.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
 import { memorySubject } from "./MemorySeed.test-support.ts";
@@ -1062,7 +1063,7 @@ it.effect(
 // to what the call and the stand-in say: a repository's own inputs steer no rebase (I13), and the call answers what `git rebase` does.
 // ---------------------------------------------------------------------------------------------------------
 
-/** One file of ten lines, so git's rename detection finds it again after a move. */
+/** One file of ten lines, so git's rename detection finds it again after a move and a change of one line. */
 const lines = (word: string, changed = -1): Uint8Array =>
   new TextEncoder().encode(
     Array.from({ length: 10 }, (_, i) => (i === changed ? `${word} changed\n` : `${word} line ${i}\n`)).join(""),
@@ -1081,10 +1082,17 @@ const answered = <E>(result: Result.Result<ReadonlyArray<Commit.Commit>, E>) => 
     : ({ kind: "other", error: result.failure } as const);
 };
 
-// Plant (I13): delete the `merge.renameLimit` pin, (r) red; delete `GIT_ATTR_SOURCE`, (r) red. A repository whose own config and
-// attributes would change a merge: two files moved at once with `merge.renameLimit=1`, `diff.renameLimit=1` and `diff.renames=false`,
-// and a line both sides change with `* merge=union` read from `attr.tree` and from the tree `HEAD` names. The same commits are
-// rebased in a repository with none of it, and the answers are the same commit ids and the same conflict.
+// Plants (I13), each an edit to a product file and the law it turns red. Each is checked by hand on git 2.40.1 for what git answers;
+// the law itself runs only here, in CI's full run.
+//   1. ProcessRepository.ts, in MERGE_PINS, delete the line `"merge.renameLimit=7000",`. The configured repository's limit of 1
+//      is then in force, git finds no rename of `one` to `uno` and `two` to `dos` (each changed by one line, so no exact rename), and
+//      the rebase of "a rename against a change" answers a Conflict on `one` and `two` where the plain repository answers commits.
+//   2. ProcessRepository.ts, in PINNED, delete the line `GIT_ATTR_SOURCE: EMPTY_TREE,`. On a git that reads a tree's attributes (2.43
+//      and newer; older gits ignore the variable, so this plant stays green there) `attr.tree` and HEAD's `* merge=union` merge the
+//      clash by union, and "a clash" answers commits where the plain repository answers a Conflict on `clash`.
+// A repository's own inputs: two files renamed at once with `merge.renameLimit=1` and `diff.renameLimit=1`, `diff.renames=false`, and a
+// line both sides change with `* merge=union` read from `attr.tree` and from the tree `HEAD` names. The same commits are rebased in a
+// repository with none of it, and the answers are the same commit ids and the same conflict.
 it.effect(
   "I13 scenario: with a rename limit, no rename detection, `attr.tree` and HEAD's attributes that merge by union set on the repository, a rebase of a rename against a change and a rebase of a clash answer what a plain repository answers, the same commit ids and the same Conflict",
   () =>
@@ -1115,8 +1123,8 @@ it.effect(
       const history: History = {
         nodes: [
           node([], [file("one", one), file("two", two)], "base\n"),
-          node([0], [file("moved/one", one), file("moved/two", two)], "onto\n"),
-          node([0], [file("one", lines("one", 4)), file("two", two)], "change\n"),
+          node([0], [file("uno", lines("one", 5)), file("dos", lines("two", 5))], "onto\n"),
+          node([0], [file("one", lines("one", 4)), file("two", lines("two", 4))], "change\n"),
           node([], [file("clash", text("x\n"))], "clash base\n"),
           node([3], [file("clash", text("o\n"))], "clash onto\n"),
           node([3], [file("clash", text("t\n"))], "clash change\n"),
@@ -1198,15 +1206,16 @@ const gitRebased = (
     );
 
     if (ran.code !== 0) {
-      const unmerged = (yield* gitIn(copy.root, ["diff", "--name-only", "--diff-filter=U"])).stdout;
+      // `-z` leaves a name as it is: with no `-z`, git quotes a name that holds a byte past ASCII.
+      const unmerged = (yield* gitIn(copy.root, ["diff", "--name-only", "-z", "--diff-filter=U"])).stdout;
       yield* gitIn(copy.root, ["rebase", "--abort"]);
 
       return {
         kind: "conflict",
         paths: unmerged
-          .split("\n")
-          .filter((line) => line !== "")
-          .toSorted(),
+          .split("\0")
+          .filter((path) => path !== "")
+          .toSorted(byBytes),
       } as const;
     }
 
@@ -1220,14 +1229,20 @@ const gitRebased = (
     return { kind: "commits", made } as const;
   });
 
-/** A message without the blank lines `git rebase` removes from its start. */
-const withoutLeadingBlankLines = (message: string): string => message.replace(/^\n+/, "");
+/** A message without the lines `git rebase` removes from its start: each one empty or holding only spaces and tabs. */
+const withoutLeadingBlankLines = (message: string): string => message.replace(/^([ \t]*\n)+/, "");
 
-// Plant (I14): drop a commit that becomes empty, (q) red; drop a commit whose tree is its parent's, (q) red; add the committer's own
-// name to the message; read the clock for each commit. The cases are the ones the plan lists: git's rebase is run in a temporary clone with a
-// working copy, with `--force-rebase --empty=keep --reapply-cherry-picks`, which keeps every commit as the call does, and with
-// `--force-rebase` alone, which drops the commit that becomes empty and the patch the upstream holds. A message with leading blank lines is
-// the one place the commits themselves differ, since git strips them and the call keeps a message byte for byte.
+// Plants (I14), each an edit to Repository.ts, in `rebase`, and the case it turns red:
+//   1. After `const tree = yield* raw.mergeTrees(...)`, add `if (tree === (yield* raw.readCommit(tip)).tree) { continue; }`, so a commit
+//      that has no change is dropped: red at "a commit that starts empty" (the call keeps every commit, as git does with `--empty=keep`).
+//   2. In the `raw.writeCommit({ ... committer })` call, replace `committer` with `committer: commit.committer`: red at the first case,
+//      since git's committer is the one from its environment.
+//   3. In the same call, replace `author: commit.author` with `author: committer`: red at the first case.
+// The cases are the ones the plan lists: git's rebase is run in a temporary clone with a working copy, with
+// `--force-rebase --empty=keep --reapply-cherry-picks`, which keeps every commit as the call does, and with `--force-rebase` alone,
+// which drops the commit that becomes empty and the patch the upstream holds. A message with leading blank lines, or leading lines of
+// only spaces and tabs, is the one place the commits themselves differ, since git strips them and the call keeps a message byte for
+// byte. A conflict's paths are read with `-z` and sorted by UTF-8 bytes, as the call names them.
 it.effect.prop(
   "I14 against git rebase: for each case, the call's commit ids equal those of git rebase --force-rebase --empty=keep --reapply-cherry-picks, and against git rebase --force-rebase alone they differ only where git drops a commit that becomes empty or a patch the upstream holds, and where git strips a message's leading blank lines",
   { texture: textureArb },

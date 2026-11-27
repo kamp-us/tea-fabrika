@@ -173,9 +173,11 @@ it.effect.prop(
 );
 
 // Plant: drop the timeout from `Repository.make`; the law's own guard (the call has ended once the clock is
-// past the limit) fails it, so the plant is seen red and never hangs.
+// past the limit) fails it, so the plant is seen red and never hangs. Plant (rebase): replace `limited(` in `rebase` with
+// `((x) => x)(`, so the walk and the first merge are not under the limit; the child of the first merge hangs, and the law's guard
+// fails it the same way.
 it.effect.prop(
-  "P3 the time limit: a child that never exits ends the call with TimedOut once the clock passes limits.time",
+  "P3 the time limit: a child that never exits ends the call with TimedOut once the clock passes limits.time, rebase's included, where the child that hangs is the first merge after the walk answered",
   { a: commitIdArb, seconds: int(1, 3600) },
   ({ a, seconds }) =>
     Effect.gen(function* () {
@@ -202,15 +204,71 @@ it.effect.prop(
       const second = commitIdFrom(known[1] ?? a);
       const refName = Schema.decodeUnknownSync(Ref.RefName)("refs/heads/main");
 
-      const calls: ReadonlyArray<readonly [string, Effect.Effect<unknown, unknown>]> = [
-        ["readCommit", repo.readCommit(first)],
-        ["readRefs", repo.readRefs(refName)],
-        ["walk", repo.walk({ include: [first], exclude: [] })],
-        ["mergeBases", repo.mergeBases(first, second)],
-        ["isAncestor", repo.isAncestor(first, second)],
+      // A rebase of one own commit: the walk answers, the merge after it is the child that never exits, so the limit that ends the
+      // call is the one around the whole of `rebase`.
+      const id = (k: number): string => `${k.toString(16).padStart(2, "0")}${a.slice(2)}`;
+      const own = id(10);
+
+      const oldCommit = objectBytes({
+        tree: treeIdFrom(id(30)),
+        parents: [commitIdFrom(id(3))],
+        author: new Commit.Signature({ name: "ada", email: "ada@example.test", at: { seconds: 0, offset: "+0000" } }),
+        committer: new Commit.Signature({
+          name: "ada",
+          email: "ada@example.test",
+          at: { seconds: 0, offset: "+0000" },
+        }),
+        message: "own\n",
+      });
+
+      const table: Table = { commits: [id(1), id(2), id(3), own], trees: [id(30)], refs: [] };
+
+      const rebasing = yield* Effect.gen(function* () {
+        const stand = yield* standIn(
+          gitTable(table, (rest) => {
+            switch (rest.verb) {
+              case "rev-list":
+                return { code: 0, stdout: `${own}\n` };
+              case "cat-file":
+                return {
+                  code: 0,
+                  stdout: joined([
+                    encoder.encode(`${own} commit ${oldCommit.length}\n`),
+                    oldCommit,
+                    encoder.encode("\n"),
+                  ]),
+                };
+              case "merge-tree":
+                return "hang";
+              default:
+                return { code: 0 };
+            }
+          }),
+        );
+
+        const context = yield* Layer.build(
+          ProcessRepository.layer({ path: PATH, settings: settings({ time: `${seconds} seconds` }) }).pipe(
+            Layer.provide(stand.layer),
+          ),
+        );
+
+        return { repo: Context.get(context, Repository.Repository), stand };
+      }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { PATH: "/bin" } }))));
+
+      const calls: ReadonlyArray<readonly [string, Effect.Effect<unknown, unknown>, typeof stand]> = [
+        ["readCommit", repo.readCommit(first), stand],
+        ["readRefs", repo.readRefs(refName), stand],
+        ["walk", repo.walk({ include: [first], exclude: [] }), stand],
+        ["mergeBases", repo.mergeBases(first, second), stand],
+        ["isAncestor", repo.isAncestor(first, second), stand],
+        [
+          "rebase",
+          rebasing.repo.rebase({ upstream: commitIdFrom(id(1)), commit: commitIdFrom(own), onto: commitIdFrom(id(2)) }),
+          rebasing.stand,
+        ],
       ];
 
-      for (const [name, call] of calls) {
+      for (const [name, call, stand] of calls) {
         const before = yield* stand.ended;
         const fiber = yield* Effect.forkChild(call);
         yield* Effect.yieldNow;

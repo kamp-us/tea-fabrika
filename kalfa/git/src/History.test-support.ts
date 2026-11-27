@@ -4216,6 +4216,7 @@ export const AGAINST_GIT_CLASSES: ReadonlyArray<string> = [
   "a file added in a folder the other side renamed",
   "a message with no final newline",
   "a message with leading blank lines",
+  "a message with leading lines of spaces and tabs",
 ];
 
 /** One rebase to compare with `git rebase`: the three commits by index. */
@@ -4329,6 +4330,20 @@ export const againstGitCarrier = (
     [textFile(a, ten(w1)), kept, textFile(`${extra}-own`, ten(w3))],
     "\n\nleading blank lines\n",
   );
+
+  {
+    // `git rebase` also skips a line that holds only spaces and tabs; the first line with text keeps its own spaces.
+    const blank = Array.from({ length: 1 + draw.int(3) }, () => (draw.int(2) === 0 ? " " : "\t")).join("");
+    const first = draw.int(2) === 0 ? "" : " ";
+
+    one(
+      "a message with leading lines of spaces and tabs",
+      [textFile(a, ten(w1)), kept],
+      [textFile(a, ten(w1)), kept, textFile(extra, ten(w2))],
+      [textFile(a, ten(w1)), kept, textFile(`${extra}-spaced`, ten(w3))],
+      `${blank}\n${draw.int(2) === 0 ? "\n" : ""}${first}${w2}\n`,
+    );
+  }
 
   return { history: { nodes, refs: [], shallow: [] }, cases };
 };
