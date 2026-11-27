@@ -119,6 +119,16 @@ const FIRING_LINES: ReadonlyArray<(s: Spelling, i: number) => string> = [
   (s, i) => `${inner(s, i)} ${klass(s, i, `{ reason: In${i} }`, "static cause = this.reason;")}`,
   (s, i) => `${inner(s, i)} ${klass(s, i, `{ reason: In${i} }`, "cause() { return this.reason; }")}`,
   (s, i) => `${inner(s, i)} ${klass(s, i, `{ reason: In${i} }`, "other = this.reason;")}`,
+  // (m) `cause` read off another object, not off `this`: `this` is checked, never only the name of the member.
+  (s, i) => `${inner(s, i)} ${klass(s, i, `{ reason: In${i} }`, "override readonly cause = other.reason;")}`,
+  // (n) a union that names its members by a same-file `const` array, and an error class held by a same-file `const` as a class expression.
+  (s, i) => `${inner(s, i)} const M${i} = [In${i}]; ${klass(s, i, `{ reason: ${s.module}.Union(M${i}) }`)}`,
+  (s, i) =>
+    `${inner(s, i)} const M${i} = [${s.module}.String, In${i}]; const U${i} = M${i}; ${klass(s, i, `{ reason: ${s.module}.optional(${s.module}.Union(U${i})) }`)}`,
+  (s, i) =>
+    `const Ex${i} = class extends ${s.module}.TaggedError<Ex${i}>()("Ex${i}", {}) {}; ${klass(s, i, `{ reason: Ex${i} }`)}`,
+  (s, i) =>
+    `const Ex${i} = class extends ${s.module}.Error<Ex${i}>("Ex${i}")({}) {}; ${klass(s, i, `{ reason: ${s.module}.Union([${s.module}.String, Ex${i}]) }`)}`,
 ];
 
 /** Lines that name a failure and carry it as the cause, or hold none, and must pass. */
@@ -165,8 +175,17 @@ const PASSING_LINES: ReadonlyArray<(s: Spelling, i: number) => string> = [
   (s, i) => `class Plain${i} {} ${klass(s, i, `{ reason: Plain${i} }`)}`,
   (s, i) => `class Plain${i} extends Base {} ${klass(s, i, `{ reason: Plain${i} }`)}`,
   (s, i) => klass(s, i, `{ reason: ${s.module}.Union([, ${s.module}.String]) }`),
-  // A name that leads back to itself ends the walk.
+  // A name that leads back to itself ends the walk: through a plain `const`, through a union that holds itself, and through two unions that hold each other.
   (s, i) => `const A${i} = B${i}; const B${i} = A${i}; ${klass(s, i, `{ reason: A${i} }`)}`,
+  (s, i) => `const U${i} = ${s.module}.Union([U${i}]); ${klass(s, i, `{ reason: U${i} }`)}`,
+  (s, i) =>
+    `const A${i} = ${s.module}.Union([B${i}]); const B${i} = ${s.module}.Union([A${i}]); ${klass(s, i, `{ reason: A${i} }`)}`,
+  // A union named by a `const` array of no failure, and a class expression held by a `const` that is no error class.
+  (s, i) => `const M${i} = [${s.module}.String]; ${klass(s, i, `{ reason: ${s.module}.Union(M${i}) }`)}`,
+  (s, i) => `const P${i} = class {}; ${klass(s, i, `{ reason: P${i} }`)}`,
+  (s, i) => `const P${i} = class extends Base {}; ${klass(s, i, `{ reason: ${s.module}.optional(P${i}) }`)}`,
+  // A known miss, listed in the rule's opening comment: a union that spreads another.
+  (s, i) => `${inner(s, i)} const M${i} = [In${i}]; ${klass(s, i, `{ reason: ${s.module}.Union([...M${i}]) }`)}`,
   // (l) a class that is no error class: `Class` and `TaggedClass`, a tag alone, no `extends`, another base, a call that is no member, and a `Schema` that is not Effect's.
   (s, i) => `${inner(s, i)} class N${i} extends ${s.module}.Class<N${i}>("N${i}")({ reason: In${i} }) {}`,
   (s, i) =>
@@ -196,8 +215,34 @@ const piece = fc.oneof(
   fc.record({ kind: fc.constant("passes" as const), form: fc.nat({ max: PASSING_LINES.length - 1 }) }),
 );
 
+/** Where a file sits and what the config allows: the class `GitHubError` of `kalfa/github/src/GitHub.ts` is the one the config names. */
+const GITHUB = "kalfa/github/src/GitHub.ts";
+
+/** The option the rule reads: for each file, the names of the classes it allows. */
+type Allow = { allow: Record<string, Array<string>> };
+
+const ALLOW: Allow = { allow: { [GITHUB]: ["GitHubError"] } };
+
+const PLACES: ReadonlyArray<{
+  readonly filename: string;
+  readonly options: ReadonlyArray<Allow>;
+  readonly allowed: boolean;
+}> = [
+  // No allowance, in a file of kalfa.
+  { filename: CASE, options: [], allowed: false },
+  // The allowance is the config's, and the file is another: the same name fires there.
+  { filename: CASE, options: [ALLOW], allowed: false },
+  // The file the config names: the class it names passes, and every other class of the file still fires.
+  { filename: GITHUB, options: [ALLOW], allowed: true },
+  // The file the config names, with no allowance given.
+  { filename: GITHUB, options: [], allowed: false },
+];
+
 const generated = fc.record({
   spelling: fc.nat({ max: SPELLINGS.length - 1 }),
+  place: fc.nat({ max: PLACES.length - 1 }),
+  // One class named as the config's allowance names it, after the pieces.
+  named: fc.boolean(),
   alias: fc.stringMatching(/^[a-z]{2,6}$/).map((w) => `K${w}`),
   pieces: fc.array(piece, { minLength: 1, maxLength: 6 }),
 });
@@ -212,6 +257,9 @@ let drawn = 0;
 
 const everything = [
   ...SPELLINGS.map((_, form) => `spelling ${form}`),
+  ...PLACES.map((_, form) => `place ${form}`),
+  "named true",
+  "named false",
   ...FIRING_LINES.map((_, form) => `fires ${form}`),
   ...PASSING_LINES.map((_, form) => `passes ${form}`),
 ];
@@ -222,11 +270,14 @@ const everything = [
 // `cause` member (m).
 it("L1: reports exactly the classes that hold a failure and carry no cause, through every import spelling of Schema, every nesting and every form of cause", () => {
   fc.assert(
-    fc.property(generated, ({ spelling, alias, pieces }) => {
+    fc.property(generated, ({ spelling, place, named, alias, pieces }) => {
       const s = SPELLINGS[spelling]!(alias);
+      const where = PLACES[place]!;
 
       drawn += 1;
       reached.add(`spelling ${spelling}`);
+      reached.add(`place ${place}`);
+      reached.add(`named ${named}`);
 
       for (const { kind, form } of pieces) {
         reached.add(`${kind} ${form}`);
@@ -238,6 +289,15 @@ it("L1: reports exactly the classes that hold a failure and carry no cause, thro
         ...Arr.map(pieces, ({ kind, form }, i): readonly [string, boolean] =>
           kind === "fires" ? [FIRING_LINES[form]!(s, i), true] : [PASSING_LINES[form]!(s, i), false],
         ),
+        // The class the config names fires everywhere but in the file it names it in.
+        ...(named
+          ? [
+              [
+                `${inner(s, pieces.length)} class GitHubError extends ${s.module}.TaggedError<GitHubError>()("GitHubError", { reason: In${pieces.length} }) {}`,
+                !where.allowed,
+              ] as const,
+            ]
+          : []),
       ];
 
       const errors = Arr.flatMap(lines, ([, fires], i) => (fires ? [{ line: i + 1, message: FIRES }] : []));
@@ -250,7 +310,7 @@ it("L1: reports exactly the classes that hold a failure and carry no cause, thro
       );
 
       tester.run("inner-cause", innerCause, {
-        valid: [{ code: valid, filename: CASE }],
+        valid: [{ code: valid, filename: where.filename, options: [...where.options] }],
         invalid:
           errors.length === 0
             ? []
@@ -261,7 +321,8 @@ it("L1: reports exactly the classes that hold a failure and carry no cause, thro
                     Arr.map(([line]) => line),
                     Arr.join("\n"),
                   ),
-                  filename: CASE,
+                  filename: where.filename,
+                  options: [...where.options],
                   errors,
                 },
               ],
@@ -297,6 +358,17 @@ const BODY = Arr.join(
   "\n",
 );
 
+/** The class the config names, and another class beside it. */
+const ALLOWED = Arr.join(
+  [
+    'import { Schema } from "effect";',
+    'class Inner extends Schema.TaggedError<Inner, { readonly brand: unique symbol }>()("Inner", {}) {}',
+    'export class GitHubError extends Schema.TaggedError<GitHubError, { readonly brand: unique symbol }>()("GitHubError", { reason: Inner }) {}',
+    'export class Bare extends Schema.TaggedError<Bare, { readonly brand: unique symbol }>()("Bare", { reason: Inner }) {}',
+  ],
+  "\n",
+);
+
 const HELD = [
   "kalfa/git/src/Case.ts",
   "kalfa/secrets/src/Case.ts",
@@ -328,6 +400,26 @@ it.live("L2: one real lint run per path kind, since only the real config holds w
     // Tests, test support, libfabrika's runtime and today's version: nothing fires.
     for (const path of LEFT_OUT) {
       expect([path, linted(CODE, path)]).toEqual([path, []]);
+    }
+  }),
+);
+
+it.live("L2b: the config's allowance reaches one class in one file and no other", () =>
+  Effect.gen(function* () {
+    // scenario: the real config is the subject, one fixed body at the file it names and at others.
+    const named = "kalfa/github/src/GitHub.ts";
+    const others = ["kalfa/git/src/GitHub.ts", "kalfa/github/src/Octokit.ts", "kalfa/github/src/internal/GitHub.ts"];
+
+    const linted = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([named, ...others], (path) => [path, ALLOWED]))),
+    );
+
+    // The class the config names passes in its file, and the class beside it still fires.
+    expect([named, linted(CODE, named)]).toEqual([named, [4]]);
+
+    // The same class in any other file fires, with the one beside it.
+    for (const path of others) {
+      expect([path, linted(CODE, path)]).toEqual([path, [3, 4]]);
     }
   }),
 );

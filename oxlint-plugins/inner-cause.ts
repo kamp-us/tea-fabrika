@@ -16,12 +16,15 @@
 // Otherwise the rule reports it once, at the class name.
 // What passes: `reason: Schema.Literals([...])`, `reason: Schema.String`, a union of `Schema.TaggedStruct`s, an imported schema under any key but `reason`,
 // and a class that is no error class (`Schema.Class`). What fires too: a `cause` of the wrong form (`= undefined`, `= this.other`, a getter).
-// Misses: a failure behind a helper call, fields imported from another file, an imported error under a key that is not `reason`, a constructor that
-// passes `cause` to `super` (SocketError's form), and anything outside kalfa's product files: `.oxlintrc.json` leaves kalfa's test files and test support
+// A union may name its members by a same-file `const` array (`Schema.Union(Members)`), and an error class may be a class expression held by a same-file
+// `const`. The config may allow one class by name in one file, `"fabrika/inner-cause": ["error", { "allow": { "<path>": ["<class>"] } }]`, as
+// `fabrika/reflect-disables` reads `allow` keyed by path: a class named there passes in that file only, and the config says why.
+// Misses: a failure behind a helper call, a union that spreads another (`Schema.Union([...Members])`), fields imported from another file, an imported error
+// under a key that is not `reason`, a constructor that passes `cause` to `super` (SocketError's form), and anything outside kalfa's product files: `.oxlintrc.json` leaves kalfa's test files and test support
 // out, since a test makes errors of any shape to probe them.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
 import { errorClass, written } from "./error-class.ts";
-import { imported } from "./match.ts";
+import { imported, pathIn } from "./match.ts";
 import type { Node } from "./match.ts";
 
 /** Combinators that hold what their argument holds. */
@@ -34,9 +37,36 @@ const message = (key: string): string =>
 const isOther = (from: string): boolean =>
   from !== "effect" && !from.startsWith("effect/") && !from.startsWith("@effect/");
 
+/** The class names the config allows, in the file being read: `{ "allow": { "<path>": ["<class>"] } }`. */
+const allowIn = (options: ReadonlyArray<unknown>, path: string): ReadonlyArray<string> => {
+  const [given] = options;
+
+  if (typeof given !== "object" || given === null || !("allow" in given)) {
+    return [];
+  }
+
+  const { allow } = given;
+
+  const names =
+    typeof allow === "object" && allow !== null ? Object.entries(allow).find(([file]) => file === path) : undefined;
+
+  return Array.isArray(names?.[1]) ? names[1].filter((name): name is string => typeof name === "string") : [];
+};
+
 export const innerCause: CreateRule = {
+  meta: {
+    type: "problem",
+    schema: [
+      {
+        type: "object",
+        properties: { allow: { type: "object", additionalProperties: { type: "array", items: { type: "string" } } } },
+        additionalProperties: false,
+      },
+    ],
+  },
   create(context) {
     const { resolve, schemaCall, classBase, followed, properties, fieldsOf } = errorClass(context);
+    const allowed = allowIn(context.options, pathIn(context));
 
     /** Whether a field's schema, at the key it is under, holds a failure. */
     const holds = (node: Node, key: string, seen = new Set<Node>()): boolean => {
@@ -50,6 +80,11 @@ export const innerCause: CreateRule = {
 
       if (found !== null) {
         return holds(found, key, seen);
+      }
+
+      // A class held by a same-file `const` (`const In = class extends Schema.TaggedError...`) is followed to the expression.
+      if (node.type === "ClassExpression") {
+        return fieldsOf(node.superClass) !== null;
       }
 
       if (node.type === "Identifier") {
@@ -83,7 +118,9 @@ export const innerCause: CreateRule = {
       }
 
       const union = schemaCall(node, ["Union"]);
-      const [members] = union === null ? [] : union.arguments;
+      const [given] = union === null ? [] : union.arguments;
+      // The members may be named by a same-file `const` array: `Schema.Union(Members)`.
+      const members = given === undefined || given.type === "SpreadElement" ? undefined : (followed(given) ?? given);
 
       return (
         members !== undefined &&
@@ -122,6 +159,11 @@ export const innerCause: CreateRule = {
       const [first] = failures;
 
       if (first === undefined || own.some(({ key }) => key === "cause")) {
+        return;
+      }
+
+      // A class the config names in this file is the one kalfa error that holds a failure and sets no cause, and the config says why.
+      if (node.id !== null && allowed.includes(node.id.name)) {
         return;
       }
 

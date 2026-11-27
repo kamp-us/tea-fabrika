@@ -1023,7 +1023,8 @@ Effect's own `SqlError` writes `override readonly cause = this.reason;` for this
 An error class is what `hidden-cause` calls one. Both rules read it through `error-class.ts`, which holds that code since this
 ticket moved it out of `hidden-cause.ts`, so the two cannot disagree on what an error class is.
 
-- **A field holds a failure** when its schema, followed through same-file `const`s and through `optional`, `optionalKey`, `NullOr`,
+- **A field holds a failure** when its schema, followed through same-file `const`s (a union may name its members by a `const` array,
+  and an error class may be a class expression held by a `const`) and through `optional`, `optionalKey`, `NullOr`,
   `UndefinedOr`, `NullishOr`, `Array`, `NonEmptyArray` and `Union`, reaches a same-file error class, or `Schema.Defect()` under a key
   that is not `cause`, or, under the key `reason` only, a name imported from a module that is not Effect's. The last one is the
   pattern's own shape (`.kalfa/patterns/effect-errors-keep-their-cause.md`: a `reason` that is no literal is a union of tagged
@@ -1034,11 +1035,17 @@ ticket moved it out of `hidden-cause.ts`, so the two cannot disagree on what an 
 - **Passes:** `reason: Schema.Literals([...])`, `reason: Schema.String`, a union of `Schema.TaggedStruct`s, an imported schema under any
   key but `reason`, and a class that is no error class (`Schema.Class`). A `cause` of the wrong form (`= undefined`, `= this.other`, a
   getter) fires.
-- **Misses:** a failure behind a helper call, fields imported from another file, an imported error under a key that is not `reason`,
+- **Misses:** a failure behind a helper call, a union that spreads another (`Schema.Union([...Members])`), fields imported from another file, an imported error under a key that is not `reason`,
   a constructor that passes `cause` to `super` (SocketError's form), and anything outside kalfa's product files.
 
 One override in `.oxlintrc.json`, beside `hidden-cause`'s, holds every file of `kalfa/` as an error and leaves out `*.test.ts`,
 `*.test.tsx` and `*.test-support.ts`: a test makes errors of any shape to probe them.
+
+The one error that holds a failure and sets no cause is `GitHubError`, and the config says so, as `reflect-disables` reads `allow` keyed by path:
+`"fabrika/inner-cause": ["error", { "allow": { "kalfa/github/src/GitHub.ts": ["GitHubError"] } }]`. The option's schema is in the rule's
+`meta`. A class named there passes in that file only: the same name in another file fires, and so does any other class of `GitHub.ts`. The reason
+is a comment in the config, next to the option, and not a disable comment in the package: a package that stands alone may not name this repo's
+plugin, as `kalfa/github/src/Package.test.ts` P2 holds.
 
 Tools looked at first, none used:
 
@@ -1053,12 +1060,12 @@ First-day count, 2026-11-27, on this branch before the build: one real `pnpm for
 the repo's config, each fire read by hand: **3 fires in 3 files, 3 real, 0 false alarms**. `kalfa/git/src/Repository.ts:295`
 (`GitUnavailable`) and `kalfa/secrets/src/Errors.ts:58` (`SecretsUnavailable`) are wrappers that lose their reason in a print and in a
 span, and the build gives each the line. `kalfa/github/src/GitHub.ts:293` (`GitHubError`) is right to fire and is kept on purpose: its
-approved law C9 holds that nothing under its reason reaches a span, so the build keeps it without a cause and writes a disable comment
-with that reason. After the build the rule has 0 fires.
+approved law C9 holds that nothing under its reason reaches a span, so the build keeps it without a cause and the config allows it by name.
+After the build the rule has 0 fires and the tree has no disable comment of it.
 
 `inner-cause.test.ts` holds the laws. L1 is a property through oxlint's `RuleTester`: an import spelling of `Schema` and one to six lines
-that fire or must pass (400 runs, seed 119120). L2 is one real oxlint run over one planted body per path kind, with the repo's config.
-L3 is the entry in `plants.test.ts`.
+that fire or must pass (400 runs, seed 119120), in each of four places that decide what the allowance reaches. L2 is two real oxlint runs with the repo's config: one
+planted body per path kind, and one body at the allowed file and at others. L3 is the entry in `plants.test.ts`.
 
 ## A test's kind follows what it uses, an earlier decision
 
