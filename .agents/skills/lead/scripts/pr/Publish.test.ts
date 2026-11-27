@@ -262,7 +262,7 @@ describe("publish.ts's words: a new draft takes the title and body it is given",
   );
 });
 
-describe("publish.ts with --title or --body-file on an open pull request (gh pr edit fails here, so helpers patched by hand twice)", () => {
+describe("publish.ts with --title or --body-file on an open pull request", () => {
   const Given = Schema.Struct({
     title: Schema.NullOr(Schema.Literals(["New title", "T9 fix: x"])),
     body: Schema.NullOr(Schema.Literals(["New body", "## Summary\n\nWhy"])),

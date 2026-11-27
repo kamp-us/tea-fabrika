@@ -635,7 +635,7 @@ export const push = Effect.fn("land.push")(function* ({ ready }: Quest) {
   return { target, tip: yield* gitIn(ready.tree)("push", "HEAD does not read", "rev-parse", "HEAD") };
 });
 
-/** Opens the PR, or updates the open one through the REST API (`gh pr edit` fails here, AGENTS.md). */
+/** Opens the PR, or updates the open one through the REST API. */
 export const openPr = Effect.fn("land.openPr")(function* (
   { ready, env }: Quest,
   draft: { readonly title: string; readonly file: string },
