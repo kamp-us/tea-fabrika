@@ -39,6 +39,7 @@ import {
   type FileSpec,
 } from "./History.test-support.ts";
 import { byBytes, bytes as objectBytes } from "./internal/object.ts";
+import { traced } from "./Laws.test-support.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Ref from "./Ref.ts";
 import { expectFailure } from "./Repository.test-support.ts";
@@ -168,6 +169,71 @@ it.effect.prop(
       );
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
+);
+
+// Plant (U3, ticket 2018): drop the line from `GitUnavailable`, so the exported stack names no reason; end the span before the failure is set (run the
+// call's failure through `Effect.orDie` inside the span), so the span holds a defect and no `NotStarted`.
+it.effect(
+  "U3 scenario: a call whose git cannot start ends its git.<call> span with a failure whose exported stack names NotStarted and the spawner's own message",
+  () =>
+    Effect.gen(function* () {
+      // scenario: the stand-in spawner's start failure, with its one fixed message, is the subject.
+      const known = [`a${"0".repeat(39)}`, `b${"0".repeat(39)}`];
+      const [first, second] = known.map(commitIdFrom);
+
+      const { answer, spans } = yield* traced(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { repo } = yield* open(
+              script(known, 200, (call) => (call.verb === "merge-base" ? "cannot start" : { code: 0 })),
+            );
+
+            return yield* Effect.exit(repo.isAncestor(first!, second!));
+          }),
+        ),
+      );
+
+      const [span, ...others] = spans.filter((each) => each.name === "git.isAncestor");
+
+      expect(others, "one span for the call").toEqual([]);
+      const status = span?.status;
+
+      expect(status?._tag, "the span ended").toBe("Ended");
+
+      const ended = Predicate.isTagged(status, "Ended") ? status.exit : undefined;
+
+      expect(ended !== undefined && Exit.isFailure(ended), "the span ended with a failure").toBe(true);
+
+      // What `OtlpTracer` exports for the failure: the printer reads the cause chain into the stack.
+      const stacks =
+        ended !== undefined && Exit.isFailure(ended)
+          ? Cause.prettyErrors(ended.cause, { includeCauseInStack: true }).map((error) => error.stack ?? "")
+          : [];
+
+      const reason = Exit.isFailure(answer) ? Cause.findErrorOption(answer.cause) : Option.none();
+
+      const native = Option.flatMap(reason, (error) =>
+        Predicate.isTagged(error, "GitUnavailable") && Predicate.isTagged(error.reason, "NotStarted")
+          ? Option.some(error.reason.cause)
+          : Option.none(),
+      );
+
+      expect(Option.isSome(native), "the call failed as GitUnavailable with NotStarted").toBe(true);
+
+      const message = Option.match(native, {
+        onNone: () => "",
+        onSome: (cause) => (Predicate.isError(cause) ? cause.message : ""),
+      });
+
+      expect(message, "the spawner's own failure has a message").not.toBe("");
+
+      for (const stack of stacks) {
+        expect(stack, "the exported stack names NotStarted").toContain("NotStarted");
+        expect(stack, "the exported stack holds the spawner's own message").toContain(message);
+      }
+
+      expect(stacks.length, "the span exported a stack").toBeGreaterThan(0);
+    }),
 );
 
 // Plant: drop the timeout from `Repository.make`; the law's own guard (the call has ended once the clock is

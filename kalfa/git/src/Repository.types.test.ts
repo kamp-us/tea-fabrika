@@ -378,6 +378,22 @@ it("type: each call has the answer and errors the plan gives, and each layer the
   expectTypeOf(refNotCommit).toBeFunction();
 });
 
+// Plant (U2, ticket 2018): type the line `override readonly cause: unknown = this.reason`; leave `GitTooOld` out of the reason's union; give `cause` another type
+// than the reason's, such as `Error`.
+const unavailableCause = (error: Repository.GitUnavailable) => {
+  expectTypeOf<Repository.GitUnavailable["cause"]>().toEqualTypeOf<
+    Repository.NotStarted | Repository.Exited | Repository.Unreadable | Repository.GitTooOld
+  >();
+
+  // The cause is read by its tag with no cast.
+  return error.cause._tag;
+};
+
+it("U2 type: the cause of GitUnavailable is exactly the union of its reasons, so its tag is read with no cast", () => {
+  // This compile-time law needs tsc, which the lead runs after build.
+  expectTypeOf(unavailableCause).toBeFunction();
+});
+
 it("T4 scenario: RefNotCommit names the ref as a RefName, so text that is no ref name does not decode", () => {
   const decode = Schema.decodeUnknownResult(Repository.RefNotCommit.fields.ref);
 

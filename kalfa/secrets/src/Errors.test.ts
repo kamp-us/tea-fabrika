@@ -2,7 +2,7 @@ import { inspect } from "node:util";
 // E2, the two failures a store side has: a store that cannot answer (`StoreFailed`) and a recorder that cannot write (`RecordFailed`). Each is a
 // tagged error that keeps its cause, hidden in a `Redacted` that gives it back on purpose, and is caught by its tag.
 import { expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Effect, Exit, Formatter, Option, Redacted, Schema } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Formatter, Option, Predicate, Redacted, Schema, type Tracer } from "effect";
 import * as Errors from "./Errors.ts";
 import * as Name from "./Name.ts";
 import {
@@ -18,6 +18,7 @@ import {
   reachable,
   SEED,
   showsAny,
+  watched,
   wordValue,
   needles,
   written,
@@ -214,4 +215,88 @@ it.effect.prop(
       }
     }),
   { arbitrary: { runs: 100, seed: SEED } },
+);
+
+/** What a hidden cause prints as: the placeholder, with its label after a colon when it has one. */
+const PLACEHOLDER = /<redacted(:[^>]*)?>/;
+
+/** Every text a failed span's exception shows, as `OtlpTracer` exports it: the failure read through `Cause.prettyErrors` with its cause in the stack. */
+const exported = (span: Tracer.Span): ReadonlyArray<string> => {
+  const { status } = span;
+
+  return Predicate.isTagged(status, "Ended") && Exit.isFailure(status.exit)
+    ? Cause.prettyErrors(status.exit.cause, { includeCauseInStack: true }).flatMap((error) => [
+        error.name,
+        error.message,
+        error.stack ?? "",
+      ])
+    : [];
+};
+
+// S5. [secrets] Plant: drop the line from `SecretsUnavailable`, so the cause is none and the tag check is red; write `cause = Redacted.value(this.reason.cause)`, so a print
+// shows the secret's word; make `cause` a schema field of `SecretsUnavailable`, so S1's keys are red.
+it.effect.prop(
+  "S5 errors: [secrets] SecretsUnavailable's cause is its reason, so a print and a failed span's exception name the failure and end at the placeholder, and show no form of a secret's word",
+  { names: nameTexture, drawn: drawnCauses },
+  ({ names, drawn }) =>
+    Effect.gen(function* () {
+      const found = needles(wordValue(drawn.word));
+      const classes = causeClasses(drawn);
+      expect(classes.map((each) => each.id).join(""), "the generator reaches every class").toBe("etrl");
+
+      const secret = Schema.decodeUnknownSync(Name.SecretName)(acceptedNames(names)[0]?.text);
+      const store = Schema.decodeUnknownSync(Name.StoreId)(acceptedStoreIds(names)[2]);
+
+      for (const each of classes) {
+        for (const reason of [
+          new Errors.StoreFailed({ cause: each.hidden }),
+          new Errors.RecordFailed({ cause: each.hidden }),
+        ]) {
+          const named = `${reason._tag} over a ${each.id}`;
+          const error = new Errors.SecretsUnavailable({ secret, store, reason });
+
+          expect(error.cause, `${named}: the cause is the reason`).toBe(reason);
+
+          const printed = Cause.pretty(Cause.fail(error));
+
+          expect(printed, `${named}: a print names the failure`).toContain(`[cause]: ${reason._tag}`);
+          expect(printed, `${named}: a print ends at the placeholder`).toMatch(PLACEHOLDER);
+
+          // The span: one that ends with the failure, read as the exporter reads it.
+          const { spans } = yield* watched(Effect.exit(Effect.fail(error).pipe(Effect.withSpan("unavailable"))));
+
+          expect(
+            spans.map((span) => span.name),
+            `${named}: one span`,
+          ).toEqual(["unavailable"]);
+
+          const texts = spans.flatMap(exported);
+
+          expect(texts.join("\n"), `${named}: the exception names the failure`).toContain(reason._tag);
+          expect(texts.join("\n"), `${named}: the exception ends at the placeholder`).toMatch(PLACEHOLDER);
+
+          // No form of the word shows in any rendering, the exception, the codecs or any property the error reaches.
+          expect(
+            showsAny(
+              [
+                ...texts,
+                printed,
+                error.message,
+                error.stack ?? "",
+                String(error),
+                JSON.stringify(error),
+                Formatter.format(error),
+                inspect(error, { depth: 10, showHidden: true }),
+                Cause.pretty(Cause.die(error)),
+                ...reachable(error),
+                ...written(Errors.SecretsUnavailable, error),
+              ],
+              found,
+            ),
+            `${named}: the word in what the error shows`,
+          ).toEqual([]);
+        }
+      }
+    }),
+  { arbitrary: { runs: 300, seed: SEED } },
 );
