@@ -35,7 +35,9 @@ import {
   textureArb,
   wordArb,
   type FileSpec,
+  type FlatSignature,
 } from "./History.test-support.ts";
+import { joined } from "./internal/bytes.ts";
 import { byBytes, bytes as objectBytes } from "./internal/object.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Ref from "./Ref.ts";
@@ -384,6 +386,7 @@ it.effect.prop(
 );
 
 const PINNED = {
+  GIT_ATTR_SOURCE: "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
@@ -400,7 +403,12 @@ const upper = Arbitrary.array(Arbitrary.schema(Schema.Literals([..."ABCDEFGHIJKL
 }).pipe(Arbitrary.map((letters) => letters.join("")));
 
 /** What git's merge reads from a repository's own config, written out at git's defaults, so no config steers a merge. */
-const MERGE_PINS = ["merge.renames=true", "merge.directoryRenames=conflict", "merge.renormalize=false"];
+const MERGE_PINS = [
+  "merge.renames=true",
+  "merge.directoryRenames=conflict",
+  "merge.renormalize=false",
+  "merge.renameLimit=7000",
+];
 
 /** The `-c` settings in the start of a command's arguments. */
 const startConfigs = (args: ReadonlyArray<string>): ReadonlyArray<string> =>
@@ -1977,6 +1985,210 @@ it.effect.prop(
       }
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
+);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Ticket 1936, slice 1: `rebase` on the stand-in (P24). The merge path asks git for the walk, and then, for each own commit, a
+// merge and a write.
+// ---------------------------------------------------------------------------------------------------------------------
+
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+const asSignature = (flat: FlatSignature): Commit.Signature =>
+  new Commit.Signature({ name: flat.name, email: flat.email, at: { seconds: flat.seconds, offset: flat.offset } });
+
+// Plant: drop the rename limit pin: red; set `GIT_ATTR_SOURCE` only on `merge-tree`, so another command lacks it: red; run
+// `merge-tree` on 2.39, (p) red; merge over the new tip's own parent and not the old commit's parent: red; hash the commit before its
+// tree is merged: red.
+it.effect.prop(
+  "P24 the merge path on the stand-in: after the walk's commands, cat-file --batch-check, merge-tree --merge-base=<parent> <tip> <commit>, cat-file --batch-check and hash-object for each own commit, oldest first, a conflict ends the call after its merge, every command carries the rename limit and the empty tree as the attributes' source, and git 2.39 fails GitTooOld before any merge-tree",
+  {
+    a: commitIdArb,
+    own: int(1, 4),
+    conflictAt: int(0, 5),
+    minor: int(40, 80),
+    older: int(38, 39),
+    person: flatSignatureArb,
+    author: flatSignatureArb,
+    word: wordArb,
+    seconds: int(0, 4_000_000_000),
+  },
+  ({ a, own, conflictAt, minor, older, person, author, word, seconds }) =>
+    Effect.gen(function* () {
+      // Ids by number: two hex digits, then the drawn rest.
+      const id = (k: number): string => `${k.toString(16).padStart(2, "0")}${a.slice(2)}`;
+      const [upstream, onto, base] = [id(1), id(2), id(3)].map(commitIdFrom);
+      const [commit, ...others] = Array.from({ length: own }, (_, i) => id(10 + i));
+      const line = [commit ?? "", ...others];
+      const parentFor = (i: number): string => (i === 0 ? id(3) : id(10 + i - 1));
+      const merged = (i: number): string => id(50 + i);
+      const written = (i: number): string => id(70 + i);
+      const tipBefore = (i: number): string => (i === 0 ? id(2) : written(i - 1));
+      const messages = messageVariants(word).filter(([label]) => label !== "a NUL");
+      const old = asSignature(author);
+      const oldCommitter = asSignature(person);
+      const bot = committerFrom(person);
+      const messageFor = (i: number): string => messages[i % messages.length]?.[1] ?? "";
+
+      if (upstream === undefined || onto === undefined || base === undefined) {
+        return;
+      }
+
+      const table: Table = {
+        commits: [id(1), id(2), id(3), ...line, ...line.map((_, i) => written(i))],
+        trees: [...line.map((_, i) => merged(i)), ...line.map((_, i) => id(30 + i))],
+        refs: [],
+      };
+
+      const objects = line.map((each, i) => {
+        const body = objectBytes({
+          tree: treeIdFrom(id(30 + i)),
+          parents: [commitIdFrom(parentFor(i))],
+          author: old,
+          committer: oldCommitter,
+          message: messageFor(i),
+        });
+
+        return joined([encoder.encode(`${each} commit ${body.length}\n`), body, encoder.encode("\n")]);
+      });
+
+      const ranRebase = (minorVersion: number, conflict: number) =>
+        Effect.gen(function* () {
+          let merges = 0;
+          let hashes = 0;
+
+          const { repo, stand } = yield* open(
+            (call) => {
+              if (call.verb === "version") {
+                return { code: 0, stdout: `git version 2.${minorVersion}.0\n` };
+              }
+
+              return gitTable(table, (rest) => {
+                switch (rest.verb) {
+                  case "rev-list":
+                    return { code: 0, stdout: line.map((each) => `${each}\n`).join("") };
+                  case "cat-file":
+                    return { code: 0, stdout: joined(objects) };
+                  case "merge-tree": {
+                    const k = merges++;
+
+                    return k === conflict
+                      ? { code: 1, stdout: mergeTreeOutput(merged(k), ["clash"]) }
+                      : { code: 0, stdout: mergeTreeOutput(merged(k)) };
+                  }
+
+                  case "hash-object":
+                    return { code: 0, stdout: `${written(hashes++)}\n` };
+                  default:
+                    return { code: 0 };
+                }
+              })(call);
+            },
+            {},
+            undefined,
+            settings({}, bot),
+          );
+
+          yield* TestClock.setTime(seconds * 1000 + 999);
+          const opened = (yield* stand.calls).length;
+          const answer = yield* Effect.result(repo.rebase({ upstream, commit: commitIdFrom(line.at(-1) ?? ""), onto }));
+
+          return { answer, seen: (yield* stand.calls).slice(opened), stand };
+        });
+
+      const CHECK = ["cat-file", "--batch-check"];
+      const SHALLOW = ["rev-parse", "--is-shallow-repository"];
+
+      const walking = [
+        CHECK,
+        SHALLOW,
+        ["rev-list", "--topo-order", "--reverse", "--max-count=1001", line.at(-1) ?? "", "--not", id(1), id(2)],
+        CHECK,
+        ["cat-file", "--batch"],
+      ];
+
+      const merging = (i: number) => [
+        CHECK,
+        [
+          "merge-tree",
+          "--write-tree",
+          "--no-messages",
+          "--name-only",
+          "-z",
+          `--merge-base=${parentFor(i)}`,
+          tipBefore(i),
+          line[i] ?? "",
+        ],
+      ];
+
+      const writing = [CHECK, ["hash-object", "-t", "commit", "-w", "--stdin"]];
+
+      // Every own commit is merged and written, oldest first, or the merges stop at the one that conflicts.
+      const { answer, seen, stand } = yield* ranRebase(minor, conflictAt);
+      const reached = Math.min(own, conflictAt + 1);
+      const conflicts = conflictAt < own;
+
+      const expected = [
+        ...walking,
+        ...Array.from({ length: reached }, (_, i) =>
+          i === conflictAt ? merging(i) : [...merging(i), ...writing],
+        ).flat(),
+      ];
+
+      expect(
+        seen.map((call) => call.args),
+        "the commands, in order",
+      ).toEqual(expected.map((rest) => [...START, ...rest]));
+
+      for (const call of [...(yield* stand.calls)]) {
+        expect(startConfigs(call.args), `${call.verb}: the rename limit`).toContain("merge.renameLimit=7000");
+        expect(call.env["GIT_ATTR_SOURCE"], `${call.verb}: no tree's attributes`).toBe(EMPTY_TREE);
+      }
+
+      if (conflicts) {
+        expectFailure(
+          answerFailure(answer, "a conflict"),
+          Repository.Conflict,
+          { paths: ["clash"] },
+          "a conflict ends the call",
+        );
+      } else {
+        const made = Result.isSuccess(answer) ? answer.success : [];
+        expect(
+          made.map((commit) => commit.id),
+          "the commits git wrote",
+        ).toEqual(line.map((_, i) => written(i)));
+
+        // Each commit is written from the bytes of the old one's author and message, the new tip, and the settings' committer at the clock's second.
+        const hashed = seen.filter((call) => call.verb === "hash-object").map((call) => call.input);
+
+        expect(hashed, "the bytes written").toEqual(
+          line.map((_, i) =>
+            objectBytes({
+              tree: treeIdFrom(merged(i)),
+              parents: [commitIdFrom(tipBefore(i))],
+              author: old,
+              committer: new Commit.Signature({ ...bot, at: { seconds, offset: "+0000" } }),
+              message: messageFor(i),
+            }),
+          ),
+        );
+      }
+
+      // Git older than 2.40 cannot merge: the call fails after the walk, with no merge-tree and no command after it.
+      const tooOld = yield* ranRebase(older, 99);
+      unavailable(
+        answerFailure(tooOld.answer, `git 2.${older}`),
+        Repository.GitTooOld,
+        { needs: "2.40" },
+        `git 2.${older} cannot merge`,
+      );
+      expect(
+        tooOld.seen.map((call) => call.args),
+        "only the walk ran",
+      ).toEqual(walking.map((rest) => [...START, ...rest]));
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
 );
 
 // ---------------------------------------------------------------------------------------------------------------------
