@@ -42,7 +42,7 @@ export const nodeText = (node: Node): string =>
   node.tokens.reduce((text, token, i) => (i === 0 ? token : `${text}${node.gaps[i - 1] ?? " "}${token}`), "");
 
 /** The position of an offset in `text`, lines and columns from 0. */
-const positionOf = (text: string, offset: number): Position => {
+const locate = (text: string, offset: number): Position => {
   const before = text.slice(0, offset);
   const line = before.split("\n").length - 1;
 
@@ -60,9 +60,9 @@ export const assemble = (
     if (typeof part === "string") {
       text += part;
     } else {
-      const start = positionOf(text, text.length);
+      const start = locate(text, text.length);
       text += nodeText(part);
-      placed.push({ node: part, start, end: positionOf(text, text.length) });
+      placed.push({ node: part, start, end: locate(text, text.length) });
     }
   }
 

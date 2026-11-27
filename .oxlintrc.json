@@ -486,6 +486,16 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               }
             ]
           }
@@ -741,19 +751,9 @@
     },
     {
       // The config engine moved to kalfa/config (our tooling is a few @kalfa packages grouped by domain) keeps the next/** rule block below, as its own
-      // override, so the next/** block stays exactly next/** (edge-config.test.ts reads it by that).
-      "files": [
-        "kalfa/cli/src/**",
-        "kalfa/config/src/**",
-        "kalfa/config/*.ts",
-        "kalfa/diagnostics/src/**",
-        "kalfa/git/src/**",
-        "kalfa/github/src/**",
-        "kalfa/ledger/src/**",
-        "kalfa/markdown/src/**",
-        "kalfa/permissions/src/**",
-        "kalfa/transport/src/**"
-      ],
+      // override, so the next/** block stays exactly next/** (edge-config.test.ts reads it by that). The glob names no package, so a new package cannot be
+      // left out of the kalfa rules: oxlint-plugins/config-blocks.test.ts (K1) holds that every kalfa package's product files are reached.
+      "files": ["kalfa/*/src/**", "kalfa/config/*.ts"],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
       "rules": {
         "fabrika/no-promises": "error",
@@ -807,7 +807,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -886,7 +886,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1306,7 +1306,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1392,7 +1392,7 @@
                 "message": "T766 L2: the typecheck's port imports no @demlik/tea, so its own program (scripts/tsconfig.json) needs no duplicate-package allowance. Use Effect."
               },
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -2053,6 +2053,21 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -2427,6 +2442,11 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -2494,9 +2514,7 @@
       // T753 L15: service contracts hold no Layer and no mutable readiness field.
       "files": [
         "next/packages/libfabrika/src/settings/Starts.ts",
-        "kalfa/config/src/Starts.ts",
-        "next/packages/libfabrika/src/settings/RecordedStart.ts",
-        "kalfa/config/src/RecordedStart.ts"
+        "next/packages/libfabrika/src/settings/RecordedStart.ts"
       ],
       "rules": {
         "eslint/no-restricted-imports": [
@@ -2592,6 +2610,11 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -2716,6 +2739,11 @@
                 "name": "effect",
                 "importNames": ["Layer"],
                 "message": "P21 L12: PersonCheck holds only its contract. Its Layer is a sibling file."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -2828,6 +2856,15 @@
                 "name": "effect",
                 "importNames": ["Schedule"],
                 "message": "A scheduled job wakes through its Process alarm."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -2863,6 +2900,10 @@
                   "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
               }
             ]
           }
@@ -3888,6 +3929,19 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -3902,6 +3956,29 @@
               {
                 "group": ["**/next/**", "**/packages/**", "**/.github/**"],
                 "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -3929,6 +4006,19 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -3947,6 +4037,29 @@
               {
                 "group": ["**/next/**", "**/packages/**", "**/.github/**"],
                 "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -3975,6 +4088,19 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -3993,6 +4119,29 @@
               {
                 "group": ["**/next/**", "**/packages/**", "**/.github/**"],
                 "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -4033,6 +4182,19 @@
               {
                 "name": "sqlite",
                 "message": "V4 (@kalfa/quality/vitest): importing the root loads no native database module. Only TestDatabase.ts imports node:sqlite, and it is read through @kalfa/quality/vitest/TestDatabase."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -4055,162 +4217,29 @@
               {
                 "group": ["./TestDatabase", "./TestDatabase.ts"],
                 "message": "V4 (@kalfa/quality/vitest): importing the root loads no native database module. TestDatabase is read through @kalfa/quality/vitest/TestDatabase, never from the root."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      // D13 and D14 (@kalfa/diagnostics says what a diagnostic is and nothing about printing one): its source imports no kalfa or repo package and no path out of the package, no Node module in either spelling,
-      // never prints (no Console, Stdio, Terminal, no console) and never picks an exit code (no process, no Runtime, no @effect/platform-node, whose runMain sets one). The global object is refused too, so
-      // `globalThis.process` is no way round. Its tests are left out. An override replaces a rule's options, so this repeats the base entries and adds its own.
-      "files": ["kalfa/diagnostics/src/**"],
-      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
-      "rules": {
-        "eslint/no-console": "error",
-        "eslint/no-restricted-globals": [
-          "error",
-          {
-            "name": "console",
-            "message": "D14 (@kalfa/diagnostics never prints): a diagnostic is data, and the command that prints it is CLI's."
-          },
-          {
-            "name": "process",
-            "message": "D14 (@kalfa/diagnostics never picks an exit code): it reads no process and sets no exit code; the command that prints diagnostics picks the code."
-          },
-          {
-            "name": "globalThis",
-            "message": "D14 (@kalfa/diagnostics never prints and never picks an exit code): `globalThis.console` and `globalThis.process` reach what `console` and `process` are refused for, so the global object itself is refused."
-          },
-          {
-            "name": "global",
-            "message": "D14 (@kalfa/diagnostics never prints and never picks an exit code): `global` is Node's global object, the same way round as `globalThis`."
-          },
-          {
-            "name": "self",
-            "message": "D14 (@kalfa/diagnostics never prints and never picks an exit code): `self` is the global object in a worker, the same way round as `globalThis`."
-          },
-          {
-            "name": "window",
-            "message": "D14 (@kalfa/diagnostics never prints and never picks an exit code): `window` is the global object in a browser, the same way round as `globalThis`."
-          },
-          "setTimeout",
-          "setInterval"
-        ],
-        "eslint/no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              {
-                "name": "@radix-ui/colors",
-                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
               {
-                "name": "playwright",
-                "importNames": ["_electron"],
-                "message": "Launch a test window through apps/fabrika/test-window.ts."
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
-                "name": "@playwright/test",
-                "importNames": ["_electron"],
-                "message": "Launch a test window through apps/fabrika/test-window.ts."
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
               },
               {
-                "name": "effect/Console",
-                "message": "D14 (@kalfa/diagnostics never prints): it reports through the Diagnostics service and the command that provides it prints."
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
               },
               {
-                "name": "effect/Stdio",
-                "message": "D14 (@kalfa/diagnostics never prints): it reports through the Diagnostics service and the command that provides it prints."
-              },
-              {
-                "name": "effect/Terminal",
-                "message": "D14 (@kalfa/diagnostics never prints): it reports through the Diagnostics service and the command that provides it prints."
-              },
-              {
-                "name": "effect/Runtime",
-                "message": "D14 (@kalfa/diagnostics never picks an exit code): Effect's Runtime picks the exit code of a program, and only the command that prints diagnostics runs one."
-              },
-              {
-                "name": "effect",
-                "importNames": ["Console", "Stdio", "Terminal"],
-                "message": "D14 (@kalfa/diagnostics never prints): it reports through the Diagnostics service and the command that provides it prints."
-              },
-              {
-                "name": "effect",
-                "importNames": ["Runtime"],
-                "message": "D14 (@kalfa/diagnostics never picks an exit code): Effect's Runtime picks the exit code of a program, and only the command that prints diagnostics runs one."
-              },
-              {
-                "name": "@effect/platform-node",
-                "message": "D14 (@kalfa/diagnostics never picks an exit code): the platform's runMain sets one, and only the command that prints diagnostics runs a program."
-              },
-              {
-                "name": "process",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "console",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "fs",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "fs/promises",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "tty",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "readline",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "readline/promises",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "child_process",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "worker_threads",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "cluster",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "name": "module",
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              }
-            ],
-            "patterns": [
-              {
-                "group": ["@radix-ui/colors/*"],
-                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
-              },
-              {
-                "group": ["node:*", "node:*/**"],
-                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
-              },
-              {
-                "group": ["@effect/platform-node/**"],
-                "message": "D14 (@kalfa/diagnostics never picks an exit code): the platform's runMain sets one, and only the command that prints diagnostics runs a program."
-              },
-              {
-                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**"],
-                "message": "D13 (@kalfa/diagnostics ranks below every other package): it imports no kalfa or repo package, so any of them can import it."
-              },
-              {
-                "group": ["../../**"],
-                "message": "D13 (@kalfa/diagnostics ranks below every other package): it imports no path out of its own folder."
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -4254,6 +4283,19 @@
               {
                 "name": "fast-check",
                 "message": "@kalfa/git: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -4337,6 +4379,29 @@
               {
                 "group": ["**/next/**", "../../**"],
                 "message": "@kalfa/git imports no path out of its own folder."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -4383,6 +4448,19 @@
               {
                 "name": "fast-check",
                 "message": "@kalfa/git: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -4463,6 +4541,29 @@
               {
                 "group": ["**/next/**", "../../**"],
                 "message": "@kalfa/git imports no path out of its own folder."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -4512,6 +4613,19 @@
               {
                 "name": "fast-sha256",
                 "message": "@kalfa/ledger: only EntryId.ts hashes (L2), so the one dependency is imported in one place."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -4606,6 +4720,29 @@
               {
                 "group": ["**/next/**", "../../**"],
                 "message": "@kalfa/ledger imports no path out of its own folder."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -4657,6 +4794,19 @@
               {
                 "name": "fast-check",
                 "message": "@kalfa/ledger: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -4750,6 +4900,29 @@
               {
                 "group": ["**/next/**", "../../**"],
                 "message": "@kalfa/ledger imports no path out of its own folder."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -5428,7 +5601,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -5513,7 +5686,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -5578,11 +5751,16 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -5652,6 +5830,19 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -5670,6 +5861,29 @@
               {
                 "group": ["node:*", "node:*/**", "@effect/platform-*", "@effect/platform-*/**"],
                 "message": "@kalfa/markdown takes text and does no IO: no Node module and no platform package."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -5714,6 +5928,19 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -5875,6 +6102,29 @@
                   "openapi-typescript/**"
                 ],
                 "message": "@kalfa/github reads GitHub's description through @octokit/openapi-types only, as types."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -5933,6 +6183,19 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -6100,6 +6363,29 @@
                   "openapi-typescript/**"
                 ],
                 "message": "@kalfa/github reads GitHub's description through @octokit/openapi-types only, as types."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -6186,6 +6472,19 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -6328,6 +6627,29 @@
                   "zlib/**"
                 ],
                 "message": "@kalfa/secrets takes values and does no IO: no Node module, written without its node: prefix either."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -6383,6 +6705,19 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -6518,6 +6853,29 @@
                   "zlib/**"
                 ],
                 "message": "@kalfa/secrets takes values and does no IO: no Node module, written without its node: prefix either."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -6586,6 +6944,19 @@
               {
                 "name": "fast-check",
                 "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -6723,6 +7094,29 @@
               {
                 "group": ["./cloudflare/**", "**/cloudflare/**"],
                 "message": "L2: the core of @kalfa/transport imports nothing from src/cloudflare/**: the Cloudflare entry points sit above the core."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -6780,6 +7174,19 @@
               {
                 "name": "fast-check",
                 "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -6936,6 +7343,29 @@
               {
                 "group": ["../**", "!../index.ts", "!../MemorySocket.ts"],
                 "message": "L2: src/cloudflare/** reads the core only through `../index.ts` and `../MemorySocket.ts`."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -6980,6 +7410,19 @@
               {
                 "name": "fast-check",
                 "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -7121,6 +7564,29 @@
               {
                 "group": ["./internal/jsonRpc*", "**/internal/jsonRpc*", "**/jsonRpc", "**/jsonRpc.ts"],
                 "message": "The stream functions and the hello call the format through `Format`, never the JSON-RPC frame's own writer: a test Layer replaces the format with no change to them."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -7160,6 +7626,19 @@
               {
                 "name": "fast-check",
                 "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -7314,6 +7793,29 @@
                   "**/Transport"
                 ],
                 "message": "MemorySocket.ts is a socket and knows no format: it imports neither the JSON-RPC frame, Format.ts nor Transport.ts."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -7343,6 +7845,19 @@
                 "name": "@playwright/test",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               }
             ],
             "patterns": [
@@ -7478,6 +7993,29 @@
                   "zlib/**"
                 ],
                 "message": "@kalfa/permissions takes values and does no IO: no Node module, written without its node: prefix either."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }

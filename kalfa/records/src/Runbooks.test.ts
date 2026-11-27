@@ -9,7 +9,7 @@ import { Command } from "effect/cli";
 import { TestConsole } from "effect/testing";
 import { records } from "./cli.ts";
 import { Finding } from "./Finding.ts";
-import { cliLayers, ROOT, slugOf, Words, world } from "./Records.test-support.ts";
+import { cliLayers, ROOT, slug, Words, world } from "./Records.test-support.ts";
 import * as Runbooks from "./Runbooks.ts";
 
 const check = { arbitrary: { seed: 119120, runs: runsFor({ fast: 50, full: 200 }) } };
@@ -70,7 +70,7 @@ it.effect.prop(
       const linked: Array<string> = [];
 
       sev.forEach(({ fault, heading, name }, i) => {
-        const path = `.kalfa/runbooks/sev-${i}-${slugOf(name)}.md`;
+        const path = `.kalfa/runbooks/sev-${i}-${slug(name)}.md`;
         const text = runbook(fault, HEADINGS, heading);
         files[path] = text;
 
@@ -90,7 +90,7 @@ it.effect.prop(
       });
 
       plain.forEach(({ fault, name }, i) => {
-        const path = `.kalfa/runbooks/${i}-${slugOf(name)}.md`;
+        const path = `.kalfa/runbooks/${i}-${slug(name)}.md`;
         // A runbook that is not a sev one needs no headings at all.
         files[path] = runbook(fault, [], "");
 
@@ -201,7 +201,7 @@ it.effect.prop(
   { name: Words },
   ({ name }) =>
     Effect.gen(function* () {
-      const path = `.kalfa/runbooks/${slugOf(name)}.md`;
+      const path = `.kalfa/runbooks/${slug(name)}.md`;
       const good = runbook("none", [], "");
 
       const dirty = yield* run(["check", "runbook"], { [path]: runbook("summary", [], "") });
