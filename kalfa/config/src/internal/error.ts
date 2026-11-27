@@ -1,3 +1,4 @@
+import * as Hidden from "@kalfa/diagnostics/Hidden";
 import { type ConfigProvider, type PlatformError, Predicate, Redacted, Schema } from "effect";
 
 /**
@@ -5,7 +6,7 @@ import { type ConfigProvider, type PlatformError, Predicate, Redacted, Schema } 
  *
  * **Details**
  *
- * `reason` says which problem: `version` (the repo needs a newer app), `syntax` (a file is not TOML), `unknown` (no such setting), `scope` (the setting exists, but not in this place: another file, or a flag or a variable for a file-only setting), `invalid` (a value its schema refuses), `missing` (a required setting no source gives), `read` (a file could not be read), `edit` (an edit cannot be made in this text as one key, or the edited text would change other data), `write` (a file could not be written, or another change holds its lock file) or `snapshot` (a snapshot does not fit the group it was given to). `file` is the file as a person reads it, such as `~/.demo/demo.toml`, and `line` counts from 1. A fault in the environment names the variable in its message and has no file. `cause` holds the failure underneath when there is one, hidden in a `Redacted` because it may quote a value or a path: read it on purpose with `Redacted.value`. A `read` message says why the read failed, from the failure's kind and its POSIX code, and an `invalid` message names the rule the value broke, from the schema's declared parts. A message never holds a value it refused, a secret or a home path.
+ * `reason` says which problem: `version` (the repo needs a newer app), `syntax` (a file is not TOML), `unknown` (no such setting), `scope` (the setting exists, but not in this place: another file, or a flag or a variable for a file-only setting), `invalid` (a value its schema refuses), `missing` (a required setting no source gives), `read` (a file could not be read), `edit` (an edit cannot be made in this text as one key, or the edited text would change other data), `write` (a file could not be written, or another change holds its lock file) or `snapshot` (a snapshot does not fit the group it was given to). `file` is the file as a person reads it, such as `~/.demo/demo.toml`, and `line` counts from 1. A fault in the environment names the variable in its message and has no file. `cause` holds the failure underneath when there is one, held as a `Hidden.Cause` (`@kalfa/diagnostics/Hidden`) because it may quote a value or a path: no rendering shows it, and every codec writes it as `<redacted>`. Read it on purpose with `Redacted.value`. A `read` message says why the read failed, from the failure's kind and its POSIX code, and an `invalid` message names the rule the value broke, from the schema's declared parts. A message never holds a value it refused, a secret or a home path.
  *
  * @category errors
  */
@@ -27,7 +28,7 @@ export class SettingsError extends Schema.TaggedError<SettingsError, { readonly 
     message: Schema.String,
     file: Schema.optional(Schema.String),
     line: Schema.optional(Schema.Int),
-    cause: Schema.optional(Schema.Redacted(Schema.Defect())),
+    cause: Schema.optional(Hidden.Cause),
   },
 ) {}
 

@@ -1545,6 +1545,15 @@
       "rules": { "fabrika/no-cause-squash": "off" }
     },
     {
+      // An error's hidden cause stays hidden when the error is written as JSON (ticket 1310). `Schema.Redacted` hides its value from every rendering but writes
+      // it in full through `Schema.toCodecJson`, so a kalfa error that crosses a socket would carry a cause that quotes a secret. The rule refuses it in a
+      // kalfa error class's fields, and any `cause` that is not `Schema.Defect()` or `Hidden.Cause` from `@kalfa/diagnostics/Hidden`, in every kalfa file.
+      // A test makes errors with any cause to probe them, so tests and test support are left out; a shared suite such as `StoreTest.ts` is held.
+      "files": ["kalfa/**"],
+      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx", "kalfa/**/*.test-support.ts"],
+      "rules": { "fabrika/hidden-cause": "error" }
+    },
+    {
       // A test that needs a real resource runs only in main's full run: a test file whose own code drives a real resource is named `*.integration.test.ts`, or
       // `*.visual.test.ts` for a browser or Electron, so Vitest keeps it off pull requests. Measured
       // on experiment 292's classified tree: 73 files fired, 72 drive a resource (oxlint-plugins/README.md).
@@ -5199,9 +5208,10 @@
                   "@tea-fabrika/**",
                   "@kalfa/*",
                   "@kalfa/**",
+                  "!@kalfa/diagnostics/Hidden",
                   "**/next/**"
                 ],
-                "message": "The config engine imports no workspace package at runtime; tests keep only their test toolbox."
+                "message": "The config engine imports no workspace package at runtime but `@kalfa/diagnostics/Hidden`, the hidden cause its errors hold (decision 0084 gave it Diagnostics); tests keep only their test toolbox."
               }
             ]
           }
@@ -5285,9 +5295,10 @@
                   "@tea-fabrika/**",
                   "@kalfa/*",
                   "@kalfa/**",
+                  "!@kalfa/diagnostics/Hidden",
                   "**/next/**"
                 ],
-                "message": "The config engine imports no workspace package at runtime; tests keep only their test toolbox."
+                "message": "The config engine imports no workspace package at runtime but `@kalfa/diagnostics/Hidden`, the hidden cause its errors hold (decision 0084 gave it Diagnostics); tests keep only their test toolbox."
               }
             ]
           }
@@ -5930,8 +5941,15 @@
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
               {
-                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "../../**", "!@kalfa/config"],
-                "message": "@kalfa/secrets imports `@kalfa/config`'s root and nothing else of ours: not its other entry points, not another kalfa package, not `@kampus/vitest`, and nothing of this repo (decision 0047)."
+                "group": [
+                  "@kalfa/**",
+                  "@kampus/**",
+                  "@tea-fabrika/**",
+                  "../../**",
+                  "!@kalfa/config",
+                  "!@kalfa/diagnostics/Hidden"
+                ],
+                "message": "@kalfa/secrets imports `@kalfa/config`'s root and `@kalfa/diagnostics/Hidden`, the hidden cause its errors hold, and nothing else of ours: not their other entry points, not another kalfa package, not `@kampus/vitest`, and nothing of this repo (decision 0047)."
               },
               {
                 "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],

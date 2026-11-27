@@ -21,6 +21,7 @@ import {
   Predicate,
   type Queue,
   References,
+  Result,
   Schema,
   SchemaGetter,
   SchemaIssue,
@@ -1224,6 +1225,32 @@ interface Refusal {
   readonly printed: string;
 }
 
+/**
+ * Every text the codecs give for a refusal: the JSON codec, the string-tree codec and the Go-style JSON codec, each alone, and the JSON codec over an `Exit` that
+ * fails with it and an `Exit` that dies of it. An encode that throws gives its message instead, so a refused encode is read too.
+ */
+const written = (error: unknown): string => {
+  const exit = Schema.toCodecJson(Schema.Exit(Schema.Void, SettingGroup.SettingsError, Schema.Defect()));
+
+  const attempts: ReadonlyArray<() => unknown> = [
+    () => Schema.encodeUnknownSync(Schema.toCodecJson(SettingGroup.SettingsError))(error),
+    () => Schema.encodeUnknownSync(Schema.toCodecStringTree(SettingGroup.SettingsError))(error),
+    () => Schema.encodeUnknownSync(Schema.toCodecGoJson(SettingGroup.SettingsError))(error),
+    () => Schema.encodeUnknownSync(exit)(Exit.fail(error)),
+    () => Schema.encodeUnknownSync(exit)(Exit.die(error)),
+  ];
+
+  return attempts
+    .map((attempt) =>
+      Result.match(Result.try(attempt), {
+        onSuccess: (value) => JSON.stringify(value) ?? "",
+        onFailure: (refused) =>
+          refused instanceof Error ? `${refused.message}\n${refused.stack ?? ""}` : String(refused),
+      }),
+    )
+    .join("\n");
+};
+
 /** The kinds of reason a failed read holds, as `Fail` and `Die`: a success holds none. */
 export const kinds = (exit: Exit.Exit<unknown, unknown>): ReadonlyArray<string> =>
   Exit.isFailure(exit) ? exit.cause.reasons.map((reason) => reason._tag) : [];
@@ -1249,7 +1276,13 @@ export const refusal = (exit: Exit.Exit<unknown, unknown>): Refusal => {
         file: error.file,
         line: error.line,
         message: error.message,
-        printed: [Cause.pretty(exit.cause), error.message, String(error.cause), JSON.stringify(error)].join("\n"),
+        printed: [
+          Cause.pretty(exit.cause),
+          error.message,
+          String(error.cause),
+          JSON.stringify(error),
+          written(error),
+        ].join("\n"),
       }
     : { reason: "not a SettingsError", file: undefined, line: undefined, message: "", printed: "" };
 };
