@@ -1081,6 +1081,8 @@ describe("R10: an admin merge past a missing review is written down first, and o
           if (writes) {
             expect(Result.isFailure(answer) && answer.failure._tag).toBe("NotMerged");
             expect(Result.isFailure(answer) ? String(answer.failure.reason) : "").toContain(reason ?? "");
+            // It also names the head the override sits on, since the red status is on that head and nowhere else.
+            expect(Result.isFailure(answer) ? String(answer.failure.reason) : "").toContain(oid);
           }
         }
 

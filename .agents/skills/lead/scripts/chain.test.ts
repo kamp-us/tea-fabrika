@@ -2039,52 +2039,66 @@ describe("R11: the chain records its review at the head it pushed, and a refused
       }),
     { arbitrary: { seed: 2346, runs: runsFor({ fast: 60, full: 200 }) } },
   );
+
+  // The world the ready step runs in: the branch has no pull request yet (the chain opens one), a draft, or one that is ready, and one part may be refused.
+  const readyWorld = (a: {
+    readonly pr: number;
+    readonly quest: string;
+    readonly ticket: number | null;
+    readonly already: "none" | "draft" | "ready";
+    readonly fault: "none" | "otherChange" | "readFails" | "pushLeak" | "editFails";
+  }) =>
+    Effect.gen(function* () {
+      const { store, head, other } = yield* made;
+      const branch = `fabrikalfa/${a.quest}`;
+      const draft = a.already !== "ready";
+
+      const github = PullRequestsTest.world(
+        a.already === "none"
+          ? []
+          : [{ number: a.pr, head: branch, oid: a.fault === "otherChange" ? other : head, state: "OPEN", draft }],
+      );
+
+      const reviews = ReviewsTest.world();
+
+      const layer = Layer.mergeAll(
+        PullRequestsTest.layer(github, a.fault === "editFails" ? { edit: "gh is down" } : {}),
+        BranchesTest.layer({ branches: [], ahead: {}, empty: [] }),
+        PushesTest.layer(
+          PushesTest.remote(),
+          a.fault === "pushLeak" ? { leakGrep: LeakGrepRefused.make({ reason: "leakgrep.sh exited 1" }) } : {},
+        ),
+        ReviewsTest.layer(reviews, a.fault === "readFails" ? { read: "gh is down" } : {}),
+        MemoryRepository.layer(store, SETTINGS).pipe(Layer.provide(Digest.layerWebCrypto)),
+      );
+
+      const done = yield* readyAndRecord({
+        dir: ".",
+        branch,
+        head,
+        text: { title: "T2338 a quest", body: "## Summary\n\nWords.\n" },
+        quest: a.quest,
+        ticket: a.ticket,
+      }).pipe(Effect.provide(layer));
+
+      return { done, github, reviews, head, draft };
+    });
+
   // Plants, each run once and restored: leave the `recordReady` call out of `readyAndRecord`; let a refused record go on (answer the pull request's number
-  // all the same); record before the push and the pull request's words are done, or even when they refused; mark the pull request ready after the record.
+  // all the same); record before the push and the pull request's words are done, or even when they refused; mark the pull request ready after the record;
+  // read a refused push as ready (answer the open pull request's number after it).
   effectIt.effect.prop(
     "property: the ready step pushes the head and readies the pull request, then records the review at that head, and answers no pull request (so the quest stops there, before CI and the queue) when the push, the words or the record is refused, with no record asked after a refusal before it",
     {
       pr: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 99_999 })),
       quest: Schema.Literals(["trace-x", "t2338", "a-quest"]),
       ticket: Schema.NullOr(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9999 }))),
-      // The branch has no pull request yet (the chain opens one), a draft, or one that is ready.
       already: Schema.Literals(["none", "draft", "ready"]),
       fault: Schema.Literals(["none", "none", "none", "otherChange", "readFails", "pushLeak", "editFails"]),
     },
     ({ pr, quest, ticket, already, fault }) =>
       Effect.gen(function* () {
-        const { store, head, other } = yield* made;
-        const branch = `fabrikalfa/${quest}`;
-
-        const draft = already !== "ready";
-
-        const github = PullRequestsTest.world(
-          already === "none"
-            ? []
-            : [{ number: pr, head: branch, oid: fault === "otherChange" ? other : head, state: "OPEN", draft }],
-        );
-
-        const reviews = ReviewsTest.world();
-
-        const layer = Layer.mergeAll(
-          PullRequestsTest.layer(github, fault === "editFails" ? { edit: "gh is down" } : {}),
-          BranchesTest.layer({ branches: [], ahead: {}, empty: [] }),
-          PushesTest.layer(
-            PushesTest.remote(),
-            fault === "pushLeak" ? { leakGrep: LeakGrepRefused.make({ reason: "leakgrep.sh exited 1" }) } : {},
-          ),
-          ReviewsTest.layer(reviews, fault === "readFails" ? { read: "gh is down" } : {}),
-          MemoryRepository.layer(store, SETTINGS).pipe(Layer.provide(Digest.layerWebCrypto)),
-        );
-
-        const done = yield* readyAndRecord({
-          dir: ".",
-          branch,
-          head,
-          text: { title: "T2338 a quest", body: "## Summary\n\nWords.\n" },
-          quest,
-          ticket,
-        }).pipe(Effect.provide(layer));
+        const { done, github, reviews, head, draft } = yield* readyWorld({ pr, quest, ticket, already, fault });
 
         // A pull request the chain opens itself is opened at the head it pushed, so no other change can stand on it.
         const stops = fault !== "none" && !(already === "none" && fault === "otherChange");
@@ -2112,6 +2126,34 @@ describe("R11: the chain records its review at the head it pushed, and a refused
       }),
     { arbitrary: { seed: 2347, runs: runsFor({ fast: 120, full: 300 }) } },
   );
+
+  // Scenario: a pull request is already open and the push is refused (the leak grep) or the words are. Whatever the generator draws, these four always
+  // run: the ready step answers no pull request (not the open one's number), asks for no record (not even a read of the statuses before the push), and
+  // marks nothing ready. Plants: record before the push when a pull request is open; read a refused push as ready (answer the open one's number).
+  for (const already of ["draft", "ready"] as const) {
+    for (const fault of ["pushLeak", "editFails"] as const) {
+      effectIt.effect(
+        `scenario: with a ${already} pull request open and ${fault}, the ready step answers no pull request and records nothing`,
+        () =>
+          Effect.gen(function* () {
+            const { done, github, reviews } = yield* readyWorld({
+              pr: 41,
+              quest: "t2338",
+              ticket: 2338,
+              already,
+              fault,
+            });
+
+            expect(done.pr).toBeNull();
+            expect(done.detail).toContain("not marked ready");
+            expect(reviews.calls).toEqual([]);
+            expect(reviews.reads).toEqual([]);
+            expect(github.calls.filter((call) => call._tag === "ready")).toEqual([]);
+          }),
+      );
+    }
+  }
+
   // Plants: read a ticket with a letter, a space or a sign in it as a number; read none (a digit string) as no ticket; read a leading zero as no ticket.
   effectIt.effect.prop(
     "property: a quest's ticket is its number when it is only digits, and no ticket otherwise",
