@@ -14,9 +14,10 @@ Today the root entry's `SettingsError` (`kalfa/config/src/internal/error.ts`) ho
 variable's or a flag's fault names its place only inside the message, and nothing says whether a file is the repo's or
 the user's. This plan replaces `file` and `line` with one `place`, a `Diagnostic.Place` of the right kind, built where
 each fault is found, where the kind is still known. The error gains a `diagnostic` getter that carries a declared
-`config/<reason>` code, its fault sentence, its place and a fixed hint. Every message stays byte for byte what it is
-today. One pull request, about 150 product lines, plus new laws and a move of the existing laws from `file` and `line`
-to `place`.
+`config/...` code, its fault sentence, its place and a fixed hint. Every message stays byte for byte what it is
+today. One pull request, about 140 product lines, plus new laws and a move of the existing laws from `file` and `line`
+to `place`. The exported list of codes, their full long texts and the law that every error carries one are
+https://github.com/kamp-us/tea-fabrika/issues/2099's, which waits on this one.
 
 ```ts
 // The whole idea, a sketch. Nothing here was type-checked.
@@ -35,20 +36,26 @@ error.diagnostic   // Diagnostic.carry(config/invalid, { message: fault, place, 
 
 ## Calls under 80%, read these first
 
-- **A fault with no place carries no diagnostic.** 75% sure. Three faults have no place of any kind: a snapshot that
-  does not fit (it comes over a stream, from no file), the running app's own version that is not a version (a bug in
-  the program), and a name typed into `config get` that is no setting (a bad command line). The getter answers
-  `undefined` for them, so `kalfa` will end such a run with exit code 2 and the message, as it ends any run that did
-  not finish (decision 0084). That narrows the ticket's `get diagnostic(): Diagnostic.Carried` to
-  `Diagnostic.Carried | undefined`. The doubt: the owner's sketch on issue 1751 has every error carry one. The other
-  ways are worse under settled rules: `.` would make "the whole repo" also mean "nowhere", which 0088 rejected for
-  "somewhere else", and a diagnostic with no place reopens Diagnostics' five fields. Open question 1.
-- **A missing required setting points at the first file it may be set in, with no line.** 75% sure. Nothing set it,
-  so it came from nowhere; the place is where the fix goes, which is also where the message already says to set it.
-  This keeps the most common person-fixable fault an exit 1 diagnostic. Open question 2.
-- **The codes are `config/<reason>`, nine of them.** 80% sure. One word for one fault: an agent that reads the
-  error's `reason` and the diagnostic's code sees the same word. `snapshot` gets no code, since it never has a place.
-  Open question 3.
+- **A missing required setting points at the first file it may be set in, with no line.** 70% sure. Nothing set it,
+  so it came from nowhere; the place is where the fix goes. The other way: place it at its variable,
+  `<APP>_<NAME>`, when a variable may set it, and at a file only for a file-only setting. I lean to the file because a
+  file is where a lasting fix goes and the message names the files first; a variable lasts one shell. Either way its
+  message keeps today's text, with no opening (see the shape). Open question 2.
+
+Settled by reading, so not a doubt any more:
+
+- **A fault with no place carries no diagnostic, and `kalfa` ends that run with exit code 2.** 85% sure. Decision
+  0084 says "a subcommand that fails with an error that carries a diagnostic ends with exit code 1 ... Any other
+  failure stays exit code 2", and `kalfa/cli/src/internal/run.ts` (`exitCode`, `failedWith`) prints
+  `kalfa: <message>` and answers 2 for any failure it reads no diagnostic from. So the faults with no place (listed by
+  file and line under "Where each place comes from") read as a run that did not finish, which is what they are: a
+  snapshot stream, a bad command line, a bug in the program. What is left for the owner is one yes or no on 2099's
+  third criterion, which today says every error carries one: open question 1. The other ways are worse under settled
+  rules: `.` would make "the whole repo" also mean "nowhere", which 0088 rejected for "somewhere else", and a
+  diagnostic with no place reopens Diagnostics' five fields.
+- **The codes start `config/`.** The Diagnostics README's example (`config/unknown-setting`) and the owner's answer
+  on 1751 ("declares its `config/...` codes") settle the root. Each code is its reason's word, except `unknown`, which
+  takes the Diagnostics README's own `config/unknown-setting`.
 
 ## How others do it
 
@@ -112,10 +119,14 @@ export const stop: (
 ) => SettingsError;
 ```
 
-- `message` stays the same text because its opening is made by the same rule as today: only a file has one. Today a
-  `Position` is only ever a file, and a variable's or a flag's fault already starts `fault` with its own name
-  (`--net.port: ...`, `DEMO_NET_PORT is not ...`). Making an opening for those kinds too would change their messages,
-  and laws RF2, RF4 and F5 pin them.
+- `message` stays the same text because its opening is made by the same rule as today: a fault found in a file opens
+  with the file and line. Today a `Position` is only ever a file, and a variable's or a flag's fault already starts
+  `fault` with its own name (`--net.port: ...`, `DEMO_NET_PORT is not ...`). Making an opening for those kinds too
+  would change their messages, and laws RF2, RF4 and F5 pin them.
+- **One exception, keyed by reason: a `missing` error never opens.** Its place says where to fix it, not where it was
+  found, and today's text (`<name> is required, and nothing sets it. Set it in <places>.`) has no opening. 80% sure.
+  The other way, a new text that opens with the file, would change a message no person asked to change, and would put
+  the file twice in one sentence. The law P10 holds every message to today's text, `missing` included.
 - `place` is `Schema.optionalKey`, as an ordinary optional field is (the cause pattern's note N8); `cause` keeps
   `Schema.optional`. `fabrika/inner-cause` still passes: the class keeps its `cause` field, and a place is no failure.
 - The constructor checks `place` against `Diagnostic.Place`, so a home place with an absolute path or a login, or an
@@ -123,18 +134,15 @@ export const stop: (
 
 ### The codes and hints
 
-Declared once at the top of `error.ts` with `Diagnostic.make`, and listed for `Subcommand.make`:
-
-```ts
-// kalfa/config/src/SettingGroup.ts, a sketch: the root entry exports the list beside SettingsError.
-export const diagnostics: ReadonlyArray<Diagnostic.Declared>;   // the nine below, in this order
-```
+Declared once at the top of `error.ts` with `Diagnostic.make`, each with a one-sentence long text, and not
+exported. Ticket 2099 owns the exported list for `Subcommand.make`, the full long texts and the law that every
+error carries a code; this plan gives it the nine declared codes to export.
 
 | Reason | Code | Hint (exact, one fixed sentence) |
 |---|---|---|
 | `version` | `config/version` | Install a newer release of the app, or lower the repo's minimum version. |
 | `syntax` | `config/syntax` | Fix the text at this place so the file can be read. |
-| `unknown` | `config/unknown` | Check the name against the app's settings reference, or remove the key. |
+| `unknown` | `config/unknown-setting` | Check the name against the app's settings reference, or remove the key. |
 | `scope` | `config/scope` | Set it in one of the places the message names. |
 | `invalid` | `config/invalid` | Give a value that keeps the rule the message names. |
 | `missing` | `config/missing` | Set it in one of the places the message names. |
@@ -142,8 +150,8 @@ export const diagnostics: ReadonlyArray<Diagnostic.Declared>;   // the nine belo
 | `edit` | `config/edit` | Make this change by hand in the file. |
 | `write` | `config/write` | Check that the folder is there and may be written, then run it again. |
 
-Each code's long text is a short Markdown paragraph that says what the reason means, in the words of
-`SettingsError`'s doc comment today; the builder writes it. A hint never names the app, a value, a path or a login:
+Each code's long text here is one sentence that says what the reason means, in the words of `SettingsError`'s doc
+comment today; the builder writes it, and 2099 may grow it. `snapshot` gets no code: it never has a place. A hint never names the app, a value, a path or a login:
 it is the same for every fault of its reason, so nothing private can reach it.
 
 ### Where each place comes from
@@ -157,8 +165,29 @@ The kind is known where each fault is found, so each place is built there and no
 | a value refused from a source: `read.ts` `resolve`, through `check.ts` `refused` | the source's own: the file and line, `environment` with the variable's name, or `flag` with `--<name>` |
 | a file-only setting given a flag or named by a variable: `read.ts` `resolve` | `flag` `--<name>`, or `environment` `<APP>_<NAME>` |
 | the environment does not answer: `place.ts` `lookup`, `read.ts` `holder` and `resolve` | `environment`: `HOME`, `<APP>_HOME`, or the setting's variable |
-| a required setting nothing sets: `read.ts` `resolve` | the first file the setting may be set in, no line |
-| a snapshot that does not fit, the running app's version that is not a version, a typed name that is no setting | none |
+| a required setting nothing sets: `read.ts` `resolve` | the first file the setting may be set in, no line (open question 2) |
+| an edit that cannot be made as one key, or would change other data: `change.ts:118-136` | the file's kind; the key's line for a conflict, else no line |
+| a value `config set` was given that the schema refuses: `Cli.ts:136`, through `check.ts` `unfit` | the kind of the file `--file` or the setting picked, no line |
+| an edit of a setting that is not the group's: `change.ts:76` | the file's kind, no line |
+
+Every site that builds an error with no place, on main:
+
+| Site | Fault | After this plan |
+|---|---|---|
+| `kalfa/config/src/Cli.ts:42` (`named`), called by `config get` at `Cli.ts:87` and by `config set` and `remove` at `Cli.ts:106` | a typed name that is no setting | no place, no diagnostic |
+| `kalfa/config/src/Cli.ts:137` | the value `config set` was given cannot be read as text (a `textSource` never fails, so no run reaches it) | no place, no diagnostic |
+| `kalfa/config/src/internal/snapshot.ts:85` (`refuse`), used at `:88`, `:92`, `:101`, `:106`, `:119`, `:145` and `:155` | a snapshot that does not fit | no place, no diagnostic |
+| `kalfa/config/src/internal/receive.ts:39` | the stream ended before its first snapshot | no place, no diagnostic |
+| `kalfa/config/src/internal/check.ts:234` (`refused`, its `default` branch) | a default its schema refuses (no run reaches it: `SettingGroup.make` checks every default) | no place, no diagnostic |
+| `kalfa/config/src/internal/read.ts:64` | the running app's own version is not a version | dies, no error (call below) |
+
+**The running app's own version that is not a version stops the program.** 80% sure. It is the program's own
+argument (`SettingGroup.layer(group, { version })`), so no person who edits a settings file can fix it.
+`read.ts:213` already dies for the other fault only a program's author makes (a schema that gives a value that is not
+plain data), and `SettingGroup.make` throws at load for a bad declaration. So `read.ts:64` becomes `Effect.die` with
+an `Error` that names the version's rule and not the text, as `read.ts:213` does. No law pins today's `invalid` for it
+(`rg -n "is not a version" kalfa/config/src` finds only the product line). The cost: a program that passes a bad
+version now crashes its start in place of failing typed, which is what a bug in the program should do.
 
 Three small changes carry the kind to where the place is built:
 
@@ -225,6 +254,12 @@ Faults with a file's place:
 - (d) a disk set whose file read is refused: `read`, `repo`, no line.
 - (w) a disk set whose lock is held: `write`, `repo` `.<app>/<app>.toml.lock`, no line.
 - (x) an edit of a text that sets a setting in a file it may not be set in: `scope`, that file's kind, no line.
+- (c) an edit of a text where the format answers that the setting is not one key (its `Conflict`,
+  `change.ts:126-133`): `edit`, that file's kind, the key's line.
+- (i) `config set` with a value the setting's schema refuses (`Cli.ts:136`), the file picked by `--file` or by the
+  setting's first file, by a drawn bit: `invalid`, that file's kind, no line.
+- (j) an edit, through `SettingGroup.edit(group, ...)`, of a setting cast in from another group (`change.ts:76`):
+  `unknown`, that file's kind, no line.
 
 Faults with a variable's or a flag's place:
 
@@ -240,8 +275,13 @@ Faults with a variable's or a flag's place:
 Faults with no place:
 
 - (k) a snapshot stream that ends before its first item: `snapshot`.
-- (t) `config get` with a typed name that is no setting: `unknown`.
-- (b) a start whose running version is not a version: `invalid`.
+- (t) `config get`, `config set` or `config remove`, by a drawn pick, with a typed name that is no setting
+  (`Cli.ts:42`): `unknown`.
+
+A fault that is no `SettingsError` any more (P11):
+
+- (b) a start whose repo file asks for a minimum version, run with a running version that is not a version
+  (`read.ts:64`).
 
 Places the constructor must refuse (P5), drawn from the login and the folders:
 
@@ -255,19 +295,21 @@ every fault runs on the in-memory disk and the stand-in environment the refusals
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
-| P1, each fault holds the place of its source: in each run, for each class (r), (h), (m), (s), (u), (v), (q), (d), (w), (x), (e), (f), (o), (g), (n) and (a), the call fails with exactly one `SettingsError` whose `reason` is the class's and whose `place` equals (`toEqual`) the place the class names, written in the support file from the Generators list and never from the code: its kind, its path or name, and its line where the class has one and no `line` key where it has none. 100 runs | test | Effect Arbitrary: PlaceDraw | (r) build a file's place as `repo` whatever the file: (h) red; (h) name the user file by its real path: the constructor throws, red; (m) place `$<APP>_HOME` as `~/.<app>/<app>.toml`: red; (s) drop the parser's line: red; (u) take the line of the table, not the key: red; (v) place the version fault with no line: red; (q) leave `missing` with no place: red; (d) give a read fault the key's line: red; (w) place a held lock at the file, not the lock: red; (x) place an edit's refusal at the other file: red; (e) give a refused variable no place: red; (f) place a refused flag as `environment`: red; (o) place a file-only variable at the repo file: red; (g) name the flag without `--`: the constructor throws, red; (n) place `HOME`'s failure at the setting's variable: red; (a) place the setting's variable as its setting name: the constructor throws, red | kalfa/config/src/Cli.places.test.ts |
-| P2, a fault with no place carries none: for (k), (t) and (b), the error has no `place` key and `Diagnostic.fromError(error)` is `None`; for every class of P1, it is `Some`. 100 runs | test | Effect Arbitrary: PlaceDraw | (k) give a snapshot fault the repo file's place: red; (t) give a typed name the place `.`: red; (b) carry a diagnostic with the place `.` when there is none: red; the getter answers `undefined` always: P1's classes red | kalfa/config/src/Cli.places.test.ts |
-| P3, what a fault carries is reported as is: for every class of P1, `Diagnostics.report(carried.declared, carried.fields)` under `TestDiagnostics.layer` succeeds (a bad place, a blank message or a blank hint makes it die), and `TestDiagnostics.reported` is exactly one item: `code` is `config/<reason>`, `severity` is `error`, `message` equals `error.fault`, `place` equals `error.place`, and `hint` is the hint the plan's table gives the reason, written in the support file from that table. 100 runs | test | Effect Arbitrary: PlaceDraw | carry `error.message` as the message: it opens with the place and ends with the closing, red; carry the hint of `invalid` for every reason: (s) red; carry the code of `read` for a `write`: (w) red; carry a place built from `origin` and not `place`: (h) red | kalfa/config/src/Cli.places.test.ts |
+| P1, each fault holds the place of its source: in each run, for each class (r), (h), (m), (s), (u), (v), (q), (d), (w), (x), (c), (i), (j), (e), (f), (o), (g), (n) and (a), the call fails with exactly one `SettingsError` whose `reason` is the class's and whose `place` equals (`toEqual`) the place the class names, written in the support file from the Generators list and never from the code: its kind, its path or name, and its line where the class has one and no `line` key where it has none. Classes (c), (i) and (j) are in the list too. 100 runs | test | Effect Arbitrary: PlaceDraw | (r) build a file's place as `repo` whatever the file: (h) red; (h) name the user file by its real path: the constructor throws, red; (m) place `$<APP>_HOME` as `~/.<app>/<app>.toml`: red; (s) drop the parser's line: red; (u) take the line of the table, not the key: red; (v) place the version fault with no line: red; (q) leave `missing` with no place: red; (d) give a read fault the key's line: red; (w) place a held lock at the file, not the lock: red; (x) place an edit's refusal at the other file: red; (c) drop the conflict's line: red; (i) place `config set`'s refusal at the setting's first file whatever `--file` says: red; (j) leave an edit's `unknown` with no place: red; (e) give a refused variable no place: red; (f) place a refused flag as `environment`: red; (o) place a file-only variable at the repo file: red; (g) name the flag without `--`: the constructor throws, red; (n) place `HOME`'s failure at the setting's variable: red; (a) place the setting's variable as its setting name: the constructor throws, red | kalfa/config/src/Cli.places.test.ts |
+| P2, a fault with no place carries none: for (k) and (t), the error has no `place` key and `Diagnostic.fromError(error)` is `None`; for every class of P1, it is `Some`. 100 runs | test | Effect Arbitrary: PlaceDraw | (k) give a snapshot fault the repo file's place: red; (t) give a typed name the place `.`: red; carry a diagnostic with the place `.` when there is none: (k) red; the getter answers `undefined` always: P1's classes red | kalfa/config/src/Cli.places.test.ts |
+| P3, what a fault carries is reported as is: for every class of P1, `Diagnostics.report(carried.declared, carried.fields)` under `TestDiagnostics.layer` succeeds (a bad place, a blank message or a blank hint makes it die), and `TestDiagnostics.reported` is exactly one item: `code` is the code the plan's table gives the reason (`config/unknown-setting` for `unknown`), `severity` is `error`, `message` equals `error.fault`, `place` equals `error.place`, and `hint` is the hint the plan's table gives the reason, written in the support file from that table. 100 runs | test | Effect Arbitrary: PlaceDraw | carry `error.message` as the message: it opens with the place and ends with the closing, red; carry the hint of `invalid` for every reason: (s) red; carry the code of `read` for a `write`: (w) red; carry `config/unknown` for `unknown`: (u) red; carry a place built from `origin` and not `place`: (h) red | kalfa/config/src/Cli.places.test.ts |
 | P4 [secrets], nothing private in a place or a diagnostic: for every class of P1 with the drawn secret as the refused value where the class refuses one, and the drawn login in the home folder, the repo folder and the moved folder, no needle (the secret, the login, each folder) appears raw, JSON-escaped or URL-encoded (`forms` in `Cli.refusals.test-support.ts`) in `JSON.stringify(error.place)`, `JSON.stringify(carried.fields)`, the reported item, or `Schema.encodeSync(Schema.toCodecJson(SettingsError))(error)`. 100 runs | test | Effect Arbitrary: PlaceDraw | write the refused value into `fault` for (e): red; name the user file by `~<login>` in place of `~`: the constructor throws in (h), red; write the real path into the hint for (d): red | kalfa/config/src/Cli.places.test.ts |
 | P5, the constructor refuses a bad place: for each place of class (p), `new SettingsError({ reason: "invalid", fault, closing, place })` throws; the same call with the class's good twin (`~/.<app>/<app>.toml`, `.<app>/<app>.toml`, an environment place with no line) does not, and keeps the place. 100 runs | test | Effect Arbitrary: PlaceDraw | (p) type `place` as a plain struct of strings in place of `Diagnostic.Place`: the absolute path is kept, red; construct with `disableValidation`: red | kalfa/config/src/Cli.places.test.ts |
-| P6 scenario, the codes are listed once: `SettingGroup.diagnostics` holds nine declared codes, in the plan's table order, whose codes are exactly `config/version` to `config/write` as the table gives them; no code is `config/snapshot`; each `explain` is not blank; and for every class of P1 the carried `declared` is the very item of the list whose code it is (`toBe`) | test | scenario: the list read once, and one error of each reason from P1's runs | declare a second `Diagnostic.make("config/invalid", ...)` inside the getter: the identity fails, red; add `config/snapshot`: red; leave `edit` out of the list: red | kalfa/config/src/Cli.places.test.ts |
 | P7, the messages stay as they were: RF1 to RF9 in `Cli.refusals.test.ts`, the edit, disk, file-only, flags, live, snapshot and start laws, and the command's laws in `Cli.test.ts` stay green with their texts unchanged; only their reads of `file` and `line` move to the place | test | pinned: their own generators and cases, texts unchanged | make an opening for every kind of place: RF4's and F5's messages gain `<NAME>: `, red; drop the `, line <n>` opening: RF1 red; drop the closing: every message law red | kalfa/config/src/Cli.refusals.test.ts |
-| P8 type, the error's new shape: `SettingGroup.SettingsError["place"]` is exactly `Diagnostic.Place \| undefined`; `["diagnostic"]` is exactly `Diagnostic.Carried \| undefined`; `"file"` and `"line"` are not keys of `SettingsError`; `fault` and `closing` are `string`; `SettingGroup.diagnostics` is `ReadonlyArray<Diagnostic.Declared>`; and `new SettingsError({ reason: "invalid", fault, closing, place: { _tag: "environment", name: "X", line: 1 } })` does not compile (`@ts-expect-error`) | type | type | keep `file: Schema.optional(Schema.String)` beside `place`: the key law fails; type the getter `Diagnostic.Carried`: the exact-type line fails; type `place` as `Schema.Unknown`: the `@ts-expect-error` is unused | kalfa/config/src/SettingGroup.types.test.ts |
+| P8 type, the error's new shape: `SettingGroup.SettingsError["place"]` is exactly `Diagnostic.Place \| undefined`; `["diagnostic"]` is exactly `Diagnostic.Carried \| undefined`; `"file"` and `"line"` are not keys of `SettingsError`; `fault` and `closing` are `string`; and `new SettingsError({ reason: "invalid", fault, closing, place: { _tag: "environment", name: "X", line: 1 } })` does not compile (`@ts-expect-error`) | type | type | keep `file: Schema.optional(Schema.String)` beside `place`: the key law fails; type the getter `Diagnostic.Carried`: the exact-type line fails; type `place` as `Schema.Unknown`: the `@ts-expect-error` is unused | kalfa/config/src/SettingGroup.types.test.ts |
+| P10, every message is today's text: in each run, for every class of P1 and P2, `error.message` equals (`toBe`) the text the support file writes for the class from today's wording (the opening `<file>, line <n>: ` for a fault found in a file, none for `missing`, a variable or a flag, then the fault sentence, a line break, two spaces and the closing), never read from the getter or from `fault`. 100 runs | test | Effect Arbitrary: PlaceDraw | (q) open `missing` with its file place: red; open a variable's fault with `<NAME>: `: (e) red; drop `, line <n>`: (r) red; drop the closing: every class red | kalfa/config/src/Cli.places.test.ts |
+| P11, the running app's own bad version stops the program: for (b), the start's `Exit` is a failure whose cause holds a defect, an `Error` whose message names the version's rule (`as 1.2.3`) and does not hold the drawn version text, and no `SettingsError`. 100 runs | test | Effect Arbitrary: PlaceDraw | (b) keep today's `stop(app, "invalid", ...)`: the failure is a `SettingsError`, red; put the version text in the `Error`'s message: red | kalfa/config/src/Cli.places.test.ts |
 | P9 lint, the class still keeps its cause: `pnpm lint` passes with `fabrika/inner-cause` and `fabrika/hidden-cause` on `internal/error.ts` | lint | lint | write `cause: Schema.optionalKey(Hidden.Cause)`: `fabrika/hidden-cause` red | kalfa/config/src/internal/error.ts |
 
 Each guarding check has a class that reaches it. The constructor's schema check on `place` is reached by (p), which
 passes every earlier step since it is built directly, and P5 plants its deletion. The getter's `place === undefined`
-check is reached by (k), (t) and (b), and P2 plants its deletion. `fromError`'s own mark check is Diagnostics' and
+check is reached by (k) and (t), and P2 plants its deletion. The `missing` exception in the opening is reached by
+(q), and P10 plants its deletion. `fromError`'s own mark check is Diagnostics' and
 its laws hold it.
 
 A type derived from a value: none. `place`'s type is `Diagnostic.Place`'s, declared, not read off a value, and
@@ -278,20 +320,20 @@ plain `string` in the type, so an absolute path compiles; the constructor refuse
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| kalfa/config/src/internal/error.ts | build | 75 | `fault`, `closing` and `place` in place of `message`, `file` and `line`; the `message` and `diagnostic` getters; the nine codes with their long texts and the hint per reason; `stop` and `unread` take a place; `Position` goes; the class's doc comment |
+| kalfa/config/src/internal/error.ts | build | 60 | `fault`, `closing` and `place` in place of `message`, `file` and `line`; the `message` getter with the `missing` exception, and the `diagnostic` getter; the nine codes, not exported, each with a one-sentence long text, and the hint per reason; `stop` and `unread` take a place; `Position` goes; the class's doc comment |
 | kalfa/config/src/internal/place.ts | build | 12 | `Place` gains `file`; `inFile`; `lookup` places its variable; `parse`, `contents` and `load` take the file's kind |
-| kalfa/config/src/internal/read.ts | build | 25 | each source of `resolve` keeps its place; `holder`, the file-only checks, `missing` and the decode's faults pass places; `readUser` passes `file: "user"` |
+| kalfa/config/src/internal/read.ts | build | 28 | each source of `resolve` keeps its place; `holder`, the file-only checks, `missing` and the decode's faults pass places; `readUser` passes `file: "user"`; `supported` dies for a running version that is not a version (line 64) |
 | kalfa/config/src/internal/check.ts | build | 15 | `version` and `explain` pass file places; `refused` takes a place; `unfit` takes the file's kind |
 | kalfa/config/src/internal/change.ts | build | 3 | `refuse` builds its place from `place.file` |
 | kalfa/config/src/internal/disk.ts | build | 6 | `Call` gains `file`; `fail` builds its place |
 | kalfa/config/src/internal/follow.ts | build | 2 | the warning's `kalfa.config.line` from the place's line |
 | kalfa/config/src/Cli.ts | build | 4 | `unfit` with the chosen file's kind; `named` passes no place |
-| kalfa/config/src/SettingGroup.ts | build | 8 | export `diagnostics`; the re-export's doc says place and diagnostic |
+| kalfa/config/src/SettingGroup.ts | build | 2 | the re-export's doc and `layer`'s doc say place and diagnostic; no new export (2099's) |
 | kalfa/config/src/internal/snapshot.ts | build | 0 | no change expected: it passes no place in the same slot |
 | kalfa/config/src/internal/receive.ts | build | 0 | no change expected: it passes no place |
-| kalfa/config/README.md | build | docs | "When a start is refused, and why": a paragraph on `place`, `diagnostic`, the nine codes and when none is carried; `SettingGroup.diagnostics` for `Subcommand.make` |
+| kalfa/config/README.md | build | docs | "When a start is refused, and why": a paragraph on `place`, `diagnostic`, the codes and when none is carried, and that a bad running version stops the program |
 | kalfa/config/src/Cli.places.test-support.ts | tests | tests | new: `PlaceDraw`, the classes, the expected place and hint of each, built on the refusals runners |
-| kalfa/config/src/Cli.places.test.ts | tests | tests | new: P1 to P6. It alone imports `@kalfa/diagnostics/Diagnostic`, `Diagnostics` and `TestDiagnostics` (a test file keeps only the rank rules, so `layer-rules.json` does not change) |
+| kalfa/config/src/Cli.places.test.ts | tests | tests | new: P1 to P5, P10 and P11. It alone imports `@kalfa/diagnostics/Diagnostic`, `Diagnostics` and `TestDiagnostics` (a test file keeps only the rank rules, so `layer-rules.json` does not change) |
 | kalfa/config/src/SettingGroup.types.test.ts | tests | tests | P8 |
 | kalfa/config/src/Cli.refusals.test-support.ts | tests | tests | P7: `refusal` reads the place; one helper gives the file a person reads and the line from a place, for every law that read `file` and `line` |
 | kalfa/config/src/Cli.refusals.test.ts | tests | tests | P7: RF1 to RF4 read the place; RF8 constructs with `fault` and `closing` |
@@ -309,21 +351,33 @@ plain `string` in the type, so an absolute path compiles; the constructor refuse
 | kalfa/config/src/SettingGroup.test.ts | tests | tests | P7: the same |
 | kalfa/config/src/SettingGroup.integration.test.ts | tests | tests | P7: one read of the file moves to the place; runs in CI |
 | kalfa/config/src/SettingGroup.hidden.types.test.ts | tests | tests | P7: its `new SettingsError` takes `fault` and `closing` |
+| kalfa/github/src/Settings.test.ts | tests | tests | P7: lines 172-173 read `error.file` and `error.line` of a `SettingsError`; they move to the place (a `repo` place `.demo/demo.toml` with the key's line) |
 | kalfa/config/src/SettingGroup.hidden.test.ts | tests | tests | P7: HC2's round trip reads back the message from `fault`, `closing` and `place`; no change expected beyond that |
 | kalfa/diagnostics/src/Diagnostic.test-support.ts | tests | none | not changed: read for its bad places, not imported (Existing tools) |
 | kalfa/config/GLOSSARY.md | build | docs | no change: no new domain word (see New names) |
 | layer-rules.json package.json pnpm-lock.yaml | tests | none | not changed: `@kalfa/config` already depends on `@kalfa/diagnostics`, and its product row already imports it |
 
-The tests step finds any other test that reads `file` or `line` of a `SettingsError` (`rg -n "\.(file|line)\b"
-kalfa/config/src`) and moves it the same way; `TomlParser.test.ts` reads the parser's own fault and stays.
+The search ran over all of `kalfa/` (`rg -n "\b(error|found|e|err|failure|refusal)\??\.(file|line)\b" kalfa`, and
+`rg -n "SettingsError" kalfa` outside `kalfa/config`). Outside `kalfa/config`, only `kalfa/github/src/Settings.test.ts`
+reads a `SettingsError`'s `file` and `line`; the `kalfa/quality` hits read their own reports. The tests step reruns
+the search and moves any other read the same way; `TomlParser.test.ts` reads the parser's own fault and stays.
 
 ## How this fits the open Config tickets
+
+- **https://github.com/kamp-us/tea-fabrika/issues/2099** (every settings error carries a declared `config/` code,
+  and the codes are exported) is blocked by this ticket and overlaps it most. Split: this plan declares the nine codes
+  in `error.ts` with one-sentence long texts, and carries them; 2099 owns the exported list for `Subcommand.make`, the
+  full long texts, and its law that every error carries a diagnostic. Order: this ticket first, as 2099 says. 2099's
+  third criterion reads "a law fails when an error the new API can fail with carries no diagnostic"; under this plan
+  the faults listed with no place carry none, so that criterion needs narrowing to errors that have a place (open
+  question 1). 2099's second criterion names "a mistyped key (reported by `kalfa config`)": that is this plan's
+  `config/unknown-setting`.
 
 - **https://github.com/kamp-us/tea-fabrika/issues/2057** (a start ignores keys other packages own) changes
   `internal/check.ts` and the start's `unknown` path, the same files whose `stop` calls this plan changes. Order:
   this ticket first, 70% sure. It changes the signature every refusal goes through, so 2057's new refusals are then
   written with a place from the start; the other way round, this plan would have to place 2057's new sites too. Either
-  order works with one rebase. 2057's `unknown` from the joined check gets `config/unknown` and a file place for free.
+  order works with one rebase. 2057's `unknown` from the joined check gets `config/unknown-setting` and a file place for free.
 - **https://github.com/kamp-us/tea-fabrika/issues/2055** (the root entry runs `effect/cli` at load) touches
   `SettingGroup.ts`'s import of `internal/flags.ts`; this plan adds an export to the same file. No order. One thing
   for 2055's plan: this plan adds nine `Diagnostic.make` calls at the top of `error.ts`, which the root entry imports.
@@ -351,8 +405,6 @@ kalfa/config/src`) and moves it the same way; `TomlParser.test.ts` reads the par
 - The `place` beside each source in kalfa/config/src/internal/read.ts: searched `Sources.ts` for a source that knows
   its kind. `Source.origin` gives an `Origin`, which names a file by text; changing `Origin` would change a public
   schema and the snapshot format, so `read.ts` keeps the place beside the source, inside the module.
-- `SettingGroup.diagnostics` in kalfa/config/src/SettingGroup.ts: searched for where a package lists its codes
-  (`rg -n "diagnostics:" kalfa`); `Subcommand.make` takes `diagnostics`, so the export is named for that option.
 - Test support: searched `kalfa/diagnostics/src/Diagnostic.test-support.ts` for bad places (`brokenPlaces`). The file
   is not exported from the package and sits in another package, so class (p) draws its own four places. The runners,
   scenes, `forms`, `Reach` and the needles are the refusals laws', imported.
@@ -368,9 +420,10 @@ kalfa/config/src`) and moves it the same way; `TomlParser.test.ts` reads the par
   words.
 - **One fixed hint per reason.** 80% sure. A hint built from the fault would repeat the message's "Did you mean" and
   "Set it in" parts, which already say what to do. A fixed sentence cannot carry a value or a path.
-- **The codes live beside the error, listed from the root entry.** 85% sure. The owner's answer on 1751 says
-  "its own codes, beside its errors", and `kalfa config` and any package's subcommand need the list for
-  `Subcommand.make`.
+- **The codes live beside the error, and their export is 2099's.** 85% sure. The owner's answer on 1751 says
+  "its own codes, beside its errors"; 2099's sixth criterion is the exported list.
+- **`missing` never opens its message.** 80% sure; see the shape.
+- **A running version that is not a version dies.** 80% sure; see "Where each place comes from".
 - **No new error class and no new cause.** 95% sure. The class already keeps its failure in `cause`
   (`.kalfa/patterns/effect-errors-keep-their-cause.md`); a place is data, not a failure.
 - **The older `SettingsError` in `kalfa/config/src/Files.ts` is not changed.** 85% sure. The ticket names the root
@@ -381,7 +434,7 @@ kalfa/config/src`) and moves it the same way; `TomlParser.test.ts` reads the par
 ## Validation
 
 - Tests step: `nice -n 15 pnpm exec vitest run kalfa/config/src/Cli.places.test.ts kalfa/config/src/Cli.refusals.test.ts
-  kalfa/config/src/SettingGroup.test.ts kalfa/config/src/SettingGroup.types.test.ts` shows P1 to P6 and P8 red on the
+  kalfa/config/src/SettingGroup.test.ts kalfa/config/src/SettingGroup.types.test.ts` shows P1 to P5, P8, P10 and P11 red on the
   branch head (no `place` yet), and the moved laws red only where they read `place`. It records the plants it ran.
 - Build step: the test files of the files table green, run by path in groups of three or four; each plant run once
   and undone; `pnpm lint` for P9.
@@ -389,13 +442,13 @@ kalfa/config/src`) and moves it the same way; `TomlParser.test.ts` reads the par
 
 ## Size
 
-1. One pull request: about 150 product lines (`error.ts` 75, `read.ts` 25, `check.ts` 15, `place.ts` 12,
-   `SettingGroup.ts` 8, `disk.ts` 6, `Cli.ts` 4, `change.ts` 3, `follow.ts` 2), a README paragraph, two new test
-   files and moved reads in about 18 test files. It lands whole: a place with no diagnostic leaves the ticket's second
+1. One pull request: 132 lines (`error.ts` 60, `read.ts` 28, `check.ts` 15, `place.ts` 12, `disk.ts` 6, `Cli.ts` 4,
+   `change.ts` 3, `follow.ts` 2, `SettingGroup.ts` 2), a README paragraph, two new test files and moved reads in
+   about 19 test files. It lands whole: a place with no diagnostic leaves the ticket's second
    criterion undone, and the diagnostic cannot be built without the place.
 
 About 3 agent hours across tests, build and review, 75% sure. The doubt is the move of the existing laws: about 50
-reads across 18 files, which may take a send-back. Basis: the cleanup plan priced its Opus steps at about $8; this one
+reads across 19 files, which may take a send-back. Basis: the cleanup plan priced its Opus steps at about $8; this one
 has more test files to touch, so about $12 for tests, $10 for build, $8 for review, and one likely send-back of tests
 and build at $10 each.
 
@@ -408,18 +461,20 @@ Estimate: 5 steps, $50
   glossary line. `fault` is the word the class's doc comment already uses.
 - `place`, a field of `SettingsError`: Diagnostics' **Place**, as its glossary defines it.
 - `diagnostic`, a getter: the name Diagnostics' `fromError` reads.
-- `diagnostics`, an export of `SettingGroup`: named for `Subcommand.make`'s option.
-- `config/version`, `config/syntax`, `config/unknown`, `config/scope`, `config/invalid`, `config/missing`,
-  `config/read`, `config/edit`, `config/write`: public codes, each the reason's own word.
+- `config/version`, `config/syntax`, `config/unknown-setting`, `config/scope`, `config/invalid`, `config/missing`,
+  `config/read`, `config/edit`, `config/write`: codes, each the reason's own word except `unknown`, which takes the
+  Diagnostics README's own example. They become public when 2099 exports them.
 - `inFile`, in `internal/place.ts`; `Placed`, in `internal/read.ts`: internal.
 - `PlaceDraw` and `Cli.places.test.ts` with its support file: test names.
 
 ## Records
 
 - `kalfa/config/README.md`, in the files table.
-- No decision record if the owner takes the three leans: they follow 0084, 0088 and the answer on 1751. If he answers
-  open question 1 another way (every error carries one, or Diagnostics' place becomes optional), that answer is a
-  decision, recorded with the `adr` skill before the build.
+- A comment on https://github.com/kamp-us/tea-fabrika/issues/2099, by the lead, once open question 1 is answered:
+  its third criterion narrowed, or kept with the choice the owner makes.
+- No decision record if the owner takes the two leans: they follow 0084, 0088 and the answer on 1751. If he answers
+  open question 1 no (every error carries one, so a place must be found for each, or Diagnostics' place becomes
+  optional), that answer is a decision, recorded with the `adr` skill before the build.
 
 ## What fact is lost if it is not recorded now
 
@@ -439,9 +494,8 @@ code could also put `file` back beside `place` for convenience; the class's doc 
 
 ## Open questions
 
-1. Fault with no place (snapshot, app's own bad version, typed name in `config get`): carry no diagnostic, kalfa exits 2? Lean yes, 75%. Else `.`, or Diagnostics' place optional.
-2. Missing required setting: place = first file it may be set in, no line? Lean yes, 75%.
-3. Codes `config/<reason>`, nine, none for `snapshot`? Lean yes, 80%.
+1. Narrow 2099's third criterion to "every error that has a place carries a diagnostic", so the faults with no place (snapshot, typed name in `config`) exit 2 as decision 0084 and `run.ts` already do? Lean yes, 85%.
+2. Missing required setting: place = first file it may be set in, no line (not its `<APP>_<NAME>` variable)? Lean yes, 70%.
 
 ## Findings
 
