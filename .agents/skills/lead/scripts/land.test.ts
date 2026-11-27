@@ -97,6 +97,8 @@ type World = {
   readonly pending?: boolean;
   /** The quest's body file as `ready` reads it, first line the title; a full template body when left out. */
   readonly readyBody?: string;
+  /** The body file changes to this text after `ready` took it and before the command runs. */
+  readonly laterBody?: string;
   /** `ready` refuses the body file: the run stops there, before anything is pushed. */
   readonly readyRefused?: boolean;
   /** The pull request's description, with `\n` for a new line; a full template body when left out. */
@@ -256,6 +258,11 @@ const land = (world: World) => {
     }
 
     expect(said.status, said.stderr).toBe(0);
+
+    if (world.laterBody !== undefined) {
+      writeFileSync(join(dir, "body.md"), world.laterBody);
+    }
+
     const record = join(dir, "boxes/state/t652f.land.json");
     // SAFETY: land.ts writes this file with ReadyJson, a JSON object, so it parses to a record.
     const { quest: named, ...rest } = JSON.parse(readFileSync(record, "utf8")) as Record<string, unknown>;
@@ -626,6 +633,18 @@ describe("land.ts, today's tooling", () => {
       );
       expect(got.recorded).toBe(false);
     }
+  }, 120_000);
+
+  // Plant: leave the sections check out of `draftPr`, so a body file edited after `ready` is pushed and opened as a draft.
+  it("scenario: `land.ts run` refuses a body file that turned to the draft placeholder after `ready` took it, and changes and pushes nothing", () => {
+    const got = land({ ...fine, laterBody: `T652 fixture: one quest\n\n${Sections.DRAFT_BODY}\n` });
+
+    expect(got.code, got.err).toBe(1);
+    expect(got.err).toContain("the PR body: its description is still the draft placeholder sentence");
+    expect(got.err).toContain(".agents/skills/pr/SKILL.md");
+    expect(got.calls.filter((c) => /^gh pr create|^gh api -X (PATCH|POST)/.test(c))).toEqual([]);
+    expect(got.after).toEqual(got.before);
+    expect(got.parents).toBe(1);
   }, 120_000);
 
   // Plants: pass a close line whose number is a GitHub issue (pull requests 2009 and 2004 did, and `merged` closed nothing), or check it in `queue` only.

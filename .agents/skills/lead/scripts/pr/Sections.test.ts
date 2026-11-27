@@ -92,6 +92,33 @@ describe("Sections: a description is the pr skill's template, not the draft plac
     expect(Sections.refusal(`\`\`\`text\n## Summary\n## Evidence\n## Merge Danger\n\`\`\`\n`)).toContain("## Summary");
   });
 
+  // Plants: strip comments before reading code, so a lone `<!--` in inline code or a fence swallows the rest of the body; keep a real comment from hiding its headings.
+  it.prop(
+    "property: a lone `<!--` in inline code or a fenced block hides nothing, and a comment that closes hides exactly what it holds",
+    { place: Schema.Literals(["inline", "fence", "tilde"]), left: Section },
+    ({ place, left }) => {
+      const lone =
+        place === "inline"
+          ? "Open one with `<!--` in a page."
+          : `${place === "fence" ? "```" : "~~~"}html\n<!--\n${place === "fence" ? "```" : "~~~"}`;
+
+      expect(Sections.refusal(`${lone}\n${body(all)}`)).toBeNull();
+      expect(Sections.refusal(`${body(all)}\n${lone}\n`)).toBeNull();
+
+      const kept = all.filter((name) => name !== left);
+      const said = Sections.refusal(`${lone}\n${body(kept)}\n<!--\n## ${left}\n-->\n`);
+
+      expect(said).toContain(`## ${left}`);
+      expect(Sections.refusal(`<!-- one -->\n${body(all)}\n<!--\n## ${left}\n-->`)).toBeNull();
+    },
+  );
+
+  // Plant: let an unclosed `<!--` hide the lines after its own.
+  it("scenario: a comment that never closes ends at its own line", () => {
+    expect(Sections.refusal(`<!-- a note with no end\n${body(all)}`)).toBeNull();
+    expect(Sections.refusal(`${body(["Summary", "Evidence"])}\n<!-- never closed\n## Merge Danger\n`)).toBeNull();
+  });
+
   it("scenario: the body that merged as pull request 2320, the placeholder and a New names section, is refused for both", () => {
     const said = Sections.refusal(`${Sections.DRAFT_BODY}\n\n## New names\n\n- \`X\`: the industry's word.\n`);
 

@@ -19,29 +19,44 @@ const squash = (text: string): string => pipe(text, Str.replaceAll("\r", ""), St
 /** Whether `text` holds the draft placeholder, however its lines are wrapped. */
 const placeholder = (text: string): boolean => squash(text).includes(squash(DRAFT_BODY));
 
+/** Stands for code in the text a comment is looked for in: a line of a fenced block, or the span of inline code. */
+const CODE = "\u0000";
+
 /**
- * The lines of `body` that are markdown, not a fenced code block and not inside an HTML comment: a
- * heading in either is no section. A fence opens on a line of three or more backticks or tildes and
- * closes on one of the same mark; a comment left open hides the rest.
+ * The lines of `body` that are markdown: not a fenced code block, not inline code, and not inside an HTML
+ * comment, so a heading in a fence or a comment is no section. Code is read first, so a lone `<!--` in
+ * a fence or in inline code opens no comment. A fence opens on a line of three or more backticks or
+ * tildes and closes on one of the same mark. A comment that closes hides what it holds, across lines; one
+ * that never closes ends at its own line.
  */
 const prose = (body: string): ReadonlyArray<string> => {
-  const lines = pipe(body, Str.replaceAll("\r", ""), Str.replace(/<!--[\s\S]*?(?:-->|$)/g, ""), Str.split("\n"));
-
   let fence: string | undefined;
 
-  return Arr.filter(lines, (line) => {
+  const masked = Arr.map(pipe(body, Str.replaceAll("\r", ""), Str.split("\n")), (line) => {
     const mark = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1]?.[0];
 
-    if (fence === undefined) {
-      fence = mark;
+    if (fence !== undefined) {
+      fence = mark === fence ? undefined : fence;
 
-      return mark === undefined;
+      return CODE;
     }
 
-    fence = mark === fence ? undefined : fence;
+    if (mark !== undefined) {
+      fence = mark;
 
-    return false;
+      return CODE;
+    }
+
+    return Str.replace(/`[^`\n]*`/g, CODE)(line);
   });
+
+  return pipe(
+    Arr.join(masked, "\n"),
+    Str.replace(/<!--[\s\S]*?-->/g, ""),
+    Str.replace(/<!--[^\n]*/g, ""),
+    Str.split("\n"),
+    Arr.filter((line) => !line.includes(CODE)),
+  );
 };
 
 /** Whether `body` has a heading of level two or three that reads `name`, in any case (a quest brief writes `### Summary`). */
