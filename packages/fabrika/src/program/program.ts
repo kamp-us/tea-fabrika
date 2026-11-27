@@ -521,9 +521,11 @@ const views = new WeakMap<object, AnyView>();
 export const viewOf = (program: AnyProgram): AnyView | undefined => views.get(program);
 
 /** A view of one of the machines `Ks`, typed by that machine's state, its data `V`. */
-export type ViewOf<Ks extends Kinds, V> = {
-  readonly [K in keyof Ks & string]: Omit<View<StateOfKind<Ks[K]>, V>, "machine"> & {
+export type ViewOf<Ks extends Kinds, V, I extends Inputs = Inputs> = {
+  readonly [K in keyof Ks & string]: Omit<View<StateOfKind<Ks[K]>, V>, "machine" | "answers"> & {
     readonly machine: K;
+    /** `View.answers`, keyed by the program's own inputs: a key that is none is a type error. */
+    readonly answers?: { readonly [Name in keyof I & string]?: (view: V) => unknown };
   };
 }[keyof Ks & string];
 
@@ -570,7 +572,8 @@ export function defineProgram<
   R = never,
   V = never,
 >(
-  definition: Definition<F, I, O, Ks, E, R> & NoInfer<Parented<F, O, Ks>> & { readonly view?: ViewOf<NoInfer<Ks>, V> },
+  definition: Definition<F, I, O, Ks, E, R> &
+    NoInfer<Parented<F, O, Ks>> & { readonly view?: ViewOf<NoInfer<Ks>, V, NoInfer<I>> },
 ): Program<F, I, O, Ks, E, R> & Viewed<V> {
   if (definition.name.trim() === "") {
     throw new Error("a program needs a name");
@@ -615,7 +618,8 @@ export function defineProgram<
   made.add(program);
 
   if (view !== undefined) {
-    views.set(program, view);
+    // Typed by this program's inputs here; a host holds it as any program's, keyed by plain names.
+    views.set(program, view as AnyView);
   }
 
   // The view's data type is in the returned type alone: what its window is typed by.

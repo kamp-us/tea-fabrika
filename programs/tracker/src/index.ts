@@ -263,7 +263,10 @@ export const tracker = defineProgram({
       'Read tickets: {ticket: 43} opens one; {status: "open" | "closed" | "all", find?: "text"} lists them by status and title. Writes nothing.',
       { writes: false },
     ),
-    quit: input(Schema.Null, "Stop, once every write told before it is on the ledger."),
+    quit: input(
+      Schema.Null,
+      "Stop, once every write told before it is on the ledger. The answer has `failed`, `null` when every write landed.",
+    ),
   },
   outputs: {
     ticket: output(
@@ -278,7 +281,7 @@ export const tracker = defineProgram({
     of: shownOf,
     settled: settledOf,
     // A write answers with its own outcome, a query with the page it asked for.
-    answers: { file: filedOf, comment: wroteOf, close: wroteOf, reopen: wroteOf },
+    answers: { file: filedOf, comment: wroteOf, close: wroteOf, reopen: wroteOf, quit: wroteOf },
   },
   main: ({ serve, send, watch }) =>
     Effect.gen(function* () {

@@ -93,6 +93,7 @@ describe("a program's view", () => {
           machine: "count",
           data: Schema.Struct({ n: Schema.Int }),
           of: (s) => ({ n: s.n }),
+          // @ts-expect-error: `lift` is not one of its inputs.
           answers: { press: () => ({}), lift: () => ({}) },
         },
         main: () => Effect.void,

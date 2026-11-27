@@ -151,7 +151,7 @@ describe("an agent's write on the tracker answers with what it produced, not the
     expect(answerOf(answer)).toEqual({ filed: 61, failed: null });
   });
 
-  it("answers a comment, a close and a reopen in under 2 KB, with no page and nothing failed", async () => {
+  it("answers a comment, a close, a reopen and a quit in under 2 KB, with no page and nothing failed", async () => {
     const answers = await go(
       Effect.gen(function* () {
         const drive = yield* doorOn(yield* crowded);
@@ -159,6 +159,7 @@ describe("an agent's write on the tracker answers with what it produced, not the
           yield* drive.call("tracker_comment", { value: { ticket: 1, body: "Looks right." } }),
           yield* drive.call("tracker_close", { value: { ticket: 1 } }),
           yield* drive.call("tracker_reopen", { value: { ticket: 1 } }),
+          yield* drive.call("tracker_quit", { value: null }),
         ];
       }),
     );
