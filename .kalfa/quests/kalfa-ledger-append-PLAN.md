@@ -75,8 +75,8 @@ A new private workspace package, `@kalfa/ledger`, in two pull requests. The firs
 Ledger types against: `EntryId` with `EntryName` and `EntryId.child`, `Revision`, `Position`, `NewEntry`, `Entry`,
 `Placed`, the eight errors with the `Refusal` and `Failure` unions, the `Settings` schema with its default, and the
 `Ledger` service with `append` and `read`. The second gives the memory ledger (`@kalfa/ledger/memory`), the laws every
-provider passes (`@kalfa/ledger/test`), the spans, and the `expectedRevision` option at work. The core imports no
-kalfa package and ranks lowest. Out of scope, each its own ticket: a transaction (2083), stamps (2084), admissions
+provider passes (`@kalfa/ledger/test`), the spans, and the `expectedRevision` option at work. The core imports one kalfa package,
+`@kalfa/diagnostics/Hidden`, for the hidden cause its failures hold, and ranks at layer 1, just above Diagnostics. Out of scope, each its own ticket: a transaction (2083), stamps (2084), admissions
 (2085), `wait`, `streams` and `RemoteLedger` (2086), SQLite (2087), Cloudflare (2088, 2089), the remote ledger (2090),
 and moving `next/` onto this package (1866).
 
@@ -302,7 +302,7 @@ export type Settings = typeof Settings.Type
 export const defaults: Settings = { limits: { bytes: 2_000_000 } }  // Cloudflare's row limit, today's ROW_BYTES
 ```
 
-The core imports no kalfa package, so it cannot declare a `@kalfa/config` setting. It exports the schema and the
+The core may not import `@kalfa/config`, since L1 refuses every kalfa package but `@kalfa/diagnostics/Hidden`, so it cannot declare a `@kalfa/config` setting. It exports the schema and the
 default; the app that puts the Ledger together reads the value through its own settings and hands it to the layer.
 `MemoryLedger.layer(settings?)` checks the value with `Schema.is(Settings)` when the layer is built, and a value the
 types let through but the schema refuses (`0`, `-1`, `1.5`, `NaN`, `Infinity`, text through a cast) kills the build with
@@ -488,7 +488,7 @@ calls.
 |---|---|---|---|---|
 | P1, the manifest: private; two dependencies, `fast-sha256` pinned exact and `@kalfa/diagnostics` as `workspace:*` (the lead's call at signing: "The Ledger imports `@kalfa/diagnostics` for `Hidden.Cause` and moves to layer 1", `.kalfa/quests/kalfa-hidden-cause-PLAN.md`, "Lead's calls at signing" (a)); the one peer `effect`; exports `.` and `./package.json`, each a file; no other package of this repo and no `@demlik/` package named anywhere in it | test | scenario: the package's own manifest at head; no generated input says what a manifest holds | add `@kalfa/config` to the dependencies: red; make `fast-sha256` a range: red; make `@kalfa/diagnostics` a range or move it to the dev dependencies: red; drop `@kalfa/diagnostics`: red; make the package public: red | kalfa/ledger/src/Package.test.ts |
 | E1, the root entry point gives `Ledger`, `EntryId`, `EntryName`, `Revision`, `Position`, `NewEntry`, `Entry`, `Placed`, `Settings`, the eight errors and the two unions, the very ones their files make; `Refusal`'s members are exactly the five refusals and `Failure`'s exactly the three failures; no export is named `<Something>Unavailable` | test | scenario: the root module object at head | leave `RevisionConflict` out of `Refusal`: red; export a copy of `EntryId`: red | kalfa/ledger/src/Package.test.ts |
-| L1, imports: in the package's product files every `@kalfa/` package other than `@kalfa/diagnostics`, every `@kampus/`, `@tea-fabrika/` and `@demlik/` package, Telemetry (`@opentelemetry/**`, `@effect/opentelemetry`), a platform package, `fast-check`, a Node module under either spelling and a path out of the package are refused; `@effect/vitest` and `vitest` only in `LedgerTest.ts`, which may import nothing else of those; tests and test support left out. Source: "importing `* as Hidden from "@kalfa/diagnostics/Hidden"`", `.kalfa/quests/kalfa-hidden-cause-PLAN.md`, "Branches in flight" | lint | lint | in turn: import `@kalfa/config` in `Entry.ts`, `node:crypto` in `EntryId.ts`, `@effect/opentelemetry` in `Ledger.ts`, `vitest` in `Errors.ts`, `@opentelemetry/api` in `LedgerTest.ts`: lint red each time, then undone; `@kalfa/diagnostics/Hidden` in `Errors.ts`: lint green | .oxlintrc.json |
+| L1, imports: in the package's product files every `@kalfa/` package other than `@kalfa/diagnostics/Hidden` (its root and its other entry points stay refused), every `@kampus/`, `@tea-fabrika/` and `@demlik/` package, Telemetry (`@opentelemetry/**`, `@effect/opentelemetry`), a platform package, `fast-check`, a Node module under either spelling and a path out of the package are refused; `@effect/vitest` and `vitest` only in `LedgerTest.ts`, which may import nothing else of those; tests and test support left out. Source: "importing `* as Hidden from "@kalfa/diagnostics/Hidden"`", `.kalfa/quests/kalfa-hidden-cause-PLAN.md`, "Branches in flight" | lint | lint | in turn: import `@kalfa/config` in `Entry.ts`, `node:crypto` in `EntryId.ts`, `@effect/opentelemetry` in `Ledger.ts`, `vitest` in `Errors.ts`, `@opentelemetry/api` in `LedgerTest.ts`: lint red each time, then undone; `@kalfa/diagnostics` and `@kalfa/diagnostics/Diagnostic` in `Errors.ts`: lint red; `@kalfa/diagnostics/Hidden` in `Errors.ts`: lint green | .oxlintrc.json |
 | L2, the hash stays in one place: only `EntryId.ts` imports `fast-sha256` | lint | lint | import `fast-sha256` in `Entry.ts`: lint red | .oxlintrc.json |
 | L3, the rank: `kalfa-ledger` is a layer-rules row at layer 1 that imports `kalfa-diagnostics` only, a boundary row that imports `kalfa-diagnostics` only, and `kalfa/ledger/src` is a root in both; the layers test pins it at 1 with its reason ("moves `kalfa-ledger` to layer 1 importing `kalfa-diagnostics` in `layer-rules.json`, with the same edge in `boundary-rules.json` and the pin `"kalfa-ledger": 1` in `oxlint-plugins/layers.test.ts`", `.kalfa/quests/kalfa-hidden-cause-PLAN.md`, "Branches in flight") | test | pinned: the two rule files at head | write layer 0: the pin is red; drop the boundary row: the boundary-and-layer law is red; drop the `kalfa-diagnostics` edge from the boundary row alone: the boundary-and-layer law is red | oxlint-plugins/layers.test.ts |
 | D1, the calls' types: `append` takes `(string, EntryId, NewEntry, AppendOptions?)` and gives `Effect<Placed, Refusal \| Failure>`; `read` takes `(string, Revision, ReadOptions?)` and gives `Stream<Entry, Failure>`; a call with no id, or with a plain string for the id, does not compile; the service has exactly `append` and `read` | type | type | add an overload with no id: the no-id line compiles, red; type the id as `string`: red; widen `read`'s error to `Refusal \| Failure`: red | kalfa/ledger/src/Ledger.types.test.ts |
@@ -555,7 +555,7 @@ The laws in `LedgerTest.ts` are run by `MemoryLedger.test.ts` through `suite` an
 | another package wraps the failures as `<Package>Unavailable` with `reason` and `cause`, and a refusal as `<Package>Refused`; the unions need no list of their own; only the Ledger says `Unreachable` | D6, X3, E1 |
 | spans `ledger.append` and `ledger.read` with `Effect.fn`, messaging names first, `kalfa.ledger.expected_revision`, names, ids and numbers only, no Telemetry import, read from a tracer in memory | S1, S2, X1, L1 |
 | with the tracer off, no span | S3 |
-| the core, `/memory` and `/test` import no kalfa package | L1, P1, P2 |
+| the core, `/memory` and `/test` import no kalfa package but `@kalfa/diagnostics/Hidden` | L1, P1, P2 |
 
 No law here needs the real machine. Every law runs on the memory ledger on every pull request; the providers that need
 a real resource (2087's files, 2088's local runtime) bring their own `.integration.` files and run this suite there.
@@ -570,9 +570,9 @@ file, since a test-support file is linted as product for Node imports.
 
 ## Where the rank is written
 
-`@kalfa/ledger` imports no kalfa package, so it ranks at layer 0, beside Source control and Markdown. `kalfa/AGENTS.md`
-already says the ledger sits below Program; the build adds that Ledger (`@kalfa/ledger`) imports no kalfa package and
-ranks lowest.
+`@kalfa/ledger` imports `@kalfa/diagnostics/Hidden` (layer 0) for the hidden cause its failures hold, so it ranks at layer 1,
+just above Diagnostics. `kalfa/AGENTS.md` already says the ledger sits below Program, and its rank sentence now says that Ledger
+(`@kalfa/ledger`) imports Diagnostics for `Hidden.Cause` and no other kalfa package, so it ranks just above Diagnostics.
 
 ## Is this a setting?
 
@@ -616,9 +616,9 @@ ranks lowest.
 | package.json | tests | 1 | tests | `"@kalfa/ledger": "workspace:*"` beside the other kalfa packages |
 | pnpm-lock.yaml | tests | 1 | tests | the new importer with `fast-sha256` 1.3.0, written by one `pnpm install --offline` |
 | .oxlintrc.json | tests | 1 | tests | L1 and L2: the kalfa Effect block's files and the package's override |
-| layer-rules.json | tests | 1 | tests | L3: `kalfa-ledger` at layer 0, importing nothing; the root `kalfa/ledger/src` |
-| boundary-rules.json | tests | 1 | tests | L3: `kalfa-ledger` imports nothing; `kalfa/ledger` is `kalfa-ledger` |
-| oxlint-plugins/layers.test.ts | tests | 1 | tests | L3: `"kalfa-ledger": 0`, with its reason comment |
+| layer-rules.json | tests | 1 | tests | L3: `kalfa-ledger` at layer 1, importing `kalfa-diagnostics`; the root `kalfa/ledger/src` |
+| boundary-rules.json | tests | 1 | tests | L3: `kalfa-ledger` imports `kalfa-diagnostics`; `kalfa/ledger` is `kalfa-ledger` |
+| oxlint-plugins/layers.test.ts | tests | 1 | tests | L3: `"kalfa-ledger": 1`, with its reason comment |
 | oxlint-plugins/law-ids.ts | tests | 1 | tests | no change: ran clean while planning; the tests step runs it again |
 | vitest.config.ts | tests | 1 | tests | no change: its kalfa globs already run the new files |
 | kalfa/ledger/src/Ledger.test-support.ts | tests | 1 and 2 | tests | the generators of `## Generators`, a tracer and a logger held in memory, the secret's forms, the demo wrapper |
