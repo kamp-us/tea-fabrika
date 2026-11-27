@@ -8,9 +8,15 @@
 // pragma line (`delete` and `2` are read) and drop the release (`isOpen` after the scope); D2, `WAL`
 // in place of `MEMORY` (a `-wal` file is listed) and a release that does not close (a replaced or
 // released connection is still open); D3, `open` runs `make`'s pragma line (the file reads `memory`)
-// and `Effect.sync` in place of `Effect.try` (a defect in place of the typed error).
+// and `Effect.sync` in place of `Effect.try` (a defect in place of the typed error). D3 also holds the
+// lines of `TestDatabase.ts` that the laws above leave to it, each with its own plant: `readOnly: options.readOnly
+// ?? false` made `?? true` (the open with no options refuses its write), `readOnly` dropped from the options
+// (the readOnly open accepts its write), `timeout` left at 0 or made `options.wait` read as a count of seconds
+// (`PRAGMA busy_timeout` is not the drawn wait), and `close` made `db.close()` with no `isOpen` check (the
+// connection the law closed throws when the scope releases it, a defect).
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -125,9 +131,15 @@ it.effect.prop(
 );
 
 it.effect.prop(
-  "D3: open sets no pragma on a WAL file, a readOnly open refuses a write, and a missing file under readOnly fails with TestDatabaseError naming it",
-  { name: Name, readOnly: Schema.Boolean, row: Row },
-  ({ name, readOnly, row }) =>
+  "D3: open sets no pragma on a WAL file, hands its wait to SQLite and none by default, a readOnly open refuses a write and an open with no options accepts one, a connection the law closed is released without a defect, and a missing file under readOnly fails with TestDatabaseError naming it",
+  {
+    name: Name,
+    readOnly: Schema.Boolean,
+    row: Row,
+    other: Row,
+    wait: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 500 })),
+  },
+  ({ name, readOnly, row, other, wait }) =>
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const { dir, file } = yield* inFolder(name);
@@ -143,14 +155,18 @@ it.effect.prop(
 
       const opened = yield* Effect.scoped(
         Effect.gen(function* () {
-          const db = yield* TestDatabase.open(file, { readOnly });
+          const db = yield* TestDatabase.open(file, { readOnly, wait: Duration.millis(wait) });
           expect(db.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
+          // The wait is how long SQLite waits on a lock another process holds.
+          expect(db.prepare("PRAGMA busy_timeout").get()).toEqual({ timeout: wait });
 
           const write = yield* Effect.exit(
             Effect.try(() => db.prepare("INSERT INTO t (n, text) VALUES (?, ?)").run(row.n, row.text)),
           );
 
           expect(Exit.isFailure(write)).toBe(readOnly);
+          // The law closes the connection itself, so the scope's release finds it closed and must leave it be.
+          db.close();
 
           return db;
         }),
@@ -158,12 +174,17 @@ it.effect.prop(
 
       expect(opened.isOpen).toBe(false);
 
-      // A fresh connection after the close: the file is still WAL, and holds the row only if written.
+      // A fresh connection after the close, with no options: the file is still WAL, nothing waits on a lock, the
+      // connection takes a write, and the file holds the first row only if it was written.
       yield* Effect.scoped(
         Effect.gen(function* () {
           const fresh = yield* TestDatabase.open(file);
           expect(fresh.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
-          expect(fresh.prepare("SELECT n, text FROM t").all()).toEqual(readOnly ? [] : [row]);
+          expect(fresh.prepare("PRAGMA busy_timeout").get()).toEqual({ timeout: 0 });
+          fresh.prepare("INSERT INTO t (n, text) VALUES (?, ?)").run(other.n, other.text);
+          expect(fresh.prepare("SELECT n, text FROM t ORDER BY rowid").all()).toEqual(
+            readOnly ? [other] : [row, other],
+          );
         }),
       );
 

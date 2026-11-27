@@ -13,6 +13,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
+import * as Order from "effect/Order";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
@@ -148,22 +149,33 @@ const failsFor = (failing: ReadonlyArray<Failing>): Recorder.Fails<Service> => (
 });
 
 describe("Recorder.layer records each run of a watched member", () => {
-  // Plants: record only a method's first call; drop a call's last arg.
+  // Each case runs the drawn moves twice, each time on a fresh layer: one after another, where the record is exactly the
+  // moves in order, and at once through `Effect.forEach` at the drawn concurrency, where it is the same moves in any order.
+  // Plants: record only a method's first call; drop a call's last arg; write the record as a read, a pause and a write
+  // in place of `Ref.update`, so two calls that overlap lose one (red only in the run at once).
   it.effect.prop(
-    "R5 property: every run of every watched member is recorded, in run order, with exactly its args, and an Effect member records []",
-    { moves: Moves },
-    ({ moves }) =>
+    "R5 property: every run of every watched member is recorded with exactly its args, in run order when one after another and as the same calls when at once, and an Effect member records []",
+    { moves: Moves, concurrency: Schema.Literals([2, 4, "unbounded"]) },
+    ({ moves, concurrency }) =>
       Effect.gen(function* () {
         const list = ordered(moves);
         covered(list);
-        const s = yield* Shelf;
 
-        for (const m of list) {
-          yield* run(s, m);
-        }
+        const kept = (runAll: (s: Service) => Effect.Effect<unknown>) =>
+          Effect.gen(function* () {
+            yield* runAll(yield* Shelf);
 
-        expect(yield* Recorder.calls(Shelf)).toEqual(list.map(recorded));
-      }).pipe(Effect.provide(Recorder.layer(Shelf, shelf([])))),
+            return yield* Recorder.calls(Shelf);
+          }).pipe(Effect.provide(Recorder.layer(Shelf, shelf([]))));
+
+        const inOrder = yield* kept((s) => Effect.forEach(list, (m) => run(s, m), { concurrency: 1 }));
+        expect(inOrder).toEqual(list.map(recorded));
+
+        const atOnce = yield* kept((s) => Effect.forEach(list, (m) => run(s, m), { concurrency }));
+
+        const byText = Order.mapInput(Order.String, (call: Recorder.Call<Service>) => JSON.stringify(call));
+        expect(atOnce.toSorted(byText)).toEqual(list.map(recorded).toSorted(byText));
+      }),
   );
 
   // Plants: run the implementation before failing; map the implementation's answer.

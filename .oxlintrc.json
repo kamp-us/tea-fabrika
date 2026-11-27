@@ -3942,9 +3942,9 @@
       }
     },
     {
-      // V3 (@kalfa/quality/vitest): what the folder ships imports no kalfa package, so a repo's tests stay light. Its laws may import the package by its own name, so they are left out. An override replaces a rule's options, so this repeats Q8's entries and adds its own.
+      // V3 (@kalfa/quality/vitest): what the folder ships imports no kalfa package, so a repo's tests stay light. Its laws may import the package by its own name, so its `*.test.ts` and `*.test-support.ts` files are left out; a `*Test.ts` file is a shipped suite and is held to the rule. An override replaces a rule's options, so this repeats Q8's entries and adds its own.
       "files": ["kalfa/quality/src/vitest/**"],
-      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx", "kalfa/**/*Test.ts", "kalfa/**/*.test-support.ts"],
+      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx", "kalfa/**/*.test-support.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
