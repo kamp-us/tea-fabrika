@@ -67,7 +67,7 @@ const NAMES: Readonly<Record<string, ReadonlyArray<string>>> = {
 };
 
 /** The entry a block writes for `rule`, under whichever of its names it uses, or none. A block that names it twice throws: which entry oxlint keeps is not for a law to rely on. */
-const entryOf = (named: Readonly<Record<string, unknown>>, rule: string): ReadonlyArray<unknown> => {
+const ruleEntry = (named: Readonly<Record<string, unknown>>, rule: string): ReadonlyArray<unknown> => {
   const used = Arr.filter(NAMES[rule] ?? [rule], (name) => Rec.has(named, name));
 
   if (used.length > 1) {
@@ -92,9 +92,9 @@ export const ruleBlocks = (
   const { rules = {}, overrides = [] } = decode(withoutComments(text));
 
   return {
-    rules: Arr.match(entryOf(rules, rule), { onEmpty: () => ({}), onNonEmpty: ([entry]) => ({ [rule]: entry }) }),
+    rules: Arr.match(ruleEntry(rules, rule), { onEmpty: () => ({}), onNonEmpty: ([entry]) => ({ [rule]: entry }) }),
     overrides: Arr.flatMap(overrides, ({ files, excludeFiles, rules: named }) =>
-      Arr.map(entryOf(named, rule), (entry) => ({
+      Arr.map(ruleEntry(named, rule), (entry) => ({
         files,
         ...(excludeFiles === undefined ? {} : { excludeFiles }),
         rules: { [rule]: entry },

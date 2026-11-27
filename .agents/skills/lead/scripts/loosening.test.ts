@@ -67,9 +67,11 @@ const compare = (before: Record<string, File>, after: Record<string, File>, mapp
     const rows = [
       { glob: "checks/**/*.test.ts" },
       { glob: "checks/**/*.test.tsx" },
-      ...["skillscheck.sh", "exam-paths.json", "vitest.config.ts", ".github/workflows/check.yml"].map((glob) => ({
-        glob,
-      })),
+      ...["skillscheck.sh", "exam-paths.json", "vitest.config.ts", ".github/workflows/check.yml", ".oxlintrc.json"].map(
+        (glob) => ({
+          glob,
+        }),
+      ),
     ];
 
     writeFileSync(join(dir, "exam-paths.json"), JSON.stringify(rows));
@@ -129,6 +131,30 @@ const flagged = (v: Input, before: string, after: string, kind: string, mapping?
 };
 
 describe("loosening, today's tooling", () => {
+  // Plant: leave the lint config out of the override comparison, so a deleted block gives no hit.
+  it("scenario: a lint config's override that is gone between the refs is named by its files", () => {
+    fc.assert(
+      fc.property(word, word, (kept, gone) => {
+        fc.pre(kept !== gone);
+
+        const config = (blocks: ReadonlyArray<string>) =>
+          `// the lint settings, comments allowed\n{ "rules": {}, "overrides": [${blocks.join(", ")}] }\n`;
+
+        const keep = `{ "files": ["${kept}/src/**"], "rules": {} }`;
+        const drop = `{ "files": ["${gone}/src/**"], "excludeFiles": ["${gone}/src/**/*.test.ts"], "rules": { "a": "error" } }`;
+
+        const removed = compare({ ".oxlintrc.json": config([keep, drop]) }, { ".oxlintrc.json": config([keep]) });
+
+        expect(removed.code, removed.text).toBe(1);
+        expect(removed.text).toContain(
+          `.oxlintrc.json: removed override: ["${gone}/src/**"] except ["${gone}/src/**/*.test.ts"]`,
+        );
+        expect(removed.text).not.toContain(`["${kept}/src/**"]`);
+      }),
+      { seed: 119120, numRuns: 20 },
+    );
+  });
+
   // Plant: classify from head alone, letting a deleted row hide its deleted exam.
   it("T318 either ref's exam list protects deleted or newly classified laws", () => {
     fc.assert(

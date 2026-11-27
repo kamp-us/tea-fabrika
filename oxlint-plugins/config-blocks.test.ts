@@ -99,7 +99,7 @@ interface Group {
 // -- reading the config ---------------------------------------------------------------------------------------------------------------------
 
 /** Every block of the config that sets the rule, in the config's order: the root entry, then each override. */
-const blocksOf = (text: string): ReadonlyArray<Block> => {
+const readBlocks = (text: string): ReadonlyArray<Block> => {
   const { rules, overrides } = ruleBlocks(text, RULE);
 
   return [
@@ -118,7 +118,8 @@ const reaches = (block: Block, file: string): boolean =>
 /** A glob the check reads as oxlint does: it has a `/` (or is `**`) and does not start with `./`. */
 const readable = (glob: string): boolean => (glob === "**" || glob.includes("/")) && !glob.startsWith("./");
 
-const nameOf = (block: Block): string => (block.files[0] === "**" ? "the root rules" : (block.files[0] ?? "no files"));
+const blockName = (block: Block): string =>
+  block.files[0] === "**" ? "the root rules" : (block.files[0] ?? "no files");
 
 const same = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean =>
   a.length === b.length && a.every((glob, at) => glob === b[at]);
@@ -191,7 +192,7 @@ const readEntry = Schema.decodeUnknownExit(Entry, { onExcessProperty: "error" })
  * `allowTypeImports`. Any other key (`regex`, `importNamePattern`, `allowImportNames`, `caseSensitive`, ...) throws, naming `where`, so a ban the check
  * cannot read is never skipped.
  */
-const bansOf = (entry: unknown, where = "an entry"): ReadonlyArray<Ban> => {
+const readBans = (entry: unknown, where = "an entry"): ReadonlyArray<Ban> => {
   const read = readEntry(entry);
 
   if (Exit.isFailure(read)) {
@@ -261,7 +262,7 @@ const banned = (blocks: ReadonlyArray<Block>): ReadonlyArray<Ban> => {
   const all = new Map<string, Ban>();
 
   for (const block of blocks) {
-    for (const ban of bansOf(block.entry, nameOf(block))) {
+    for (const ban of readBans(block.entry, blockName(block))) {
       const before = all.get(ban.key);
       all.set(ban.key, before === undefined ? ban : { ...before, types: before.types || ban.types });
     }
@@ -311,7 +312,7 @@ interface HalfBan {
 /** The half-bans a block sets: each key's value half, and its type-only half when the entry does not allow type imports. */
 const halves = (block: Block): ReadonlyMap<string, HalfBan> =>
   new Map(
-    Arr.flatMap(bansOf(block.entry, nameOf(block)), (ban): ReadonlyArray<readonly [string, HalfBan]> => {
+    Arr.flatMap(readBans(block.entry, blockName(block)), (ban): ReadonlyArray<readonly [string, HalfBan]> => {
       const value = { ban: ban.key, imports: "value" as const };
 
       return ban.types
@@ -327,7 +328,7 @@ const halves = (block: Block): ReadonlyMap<string, HalfBan> =>
  * The dropped bans: each half-ban some block above the last one that reaches the file sets, whose planted line did not fire and no exemption covers. What the
  * last block sets is not here: `unrefused` reads it. Also the exemptions that covered no drop, to be deleted.
  */
-const dropsOf = (
+const findDrops = (
   groups: ReadonlyArray<Group>,
   fired: Fired,
   exemptions: ReadonlyArray<Exemption>,
@@ -363,7 +364,14 @@ const dropsOf = (
         }
 
         if (covering.length === 0) {
-          drops.push({ file: group.file, same: group.same, ban, imports, setBy: nameOf(block), last: nameOf(last) });
+          drops.push({
+            file: group.file,
+            same: group.same,
+            ban,
+            imports,
+            setBy: blockName(block),
+            last: blockName(last),
+          });
         }
       }
     }
@@ -383,7 +391,7 @@ const unrefused = (groups: ReadonlyArray<Group>, fired: Fired): ReadonlyArray<st
           fired(group.file, ban, imports)
             ? []
             : [
-                `${group.file}: the planted import for ${ban} (${imports}) is not refused even by the block that sets it, ${nameOf(last)}`,
+                `${group.file}: the planted import for ${ban} (${imports}) is not refused even by the block that sets it, ${blockName(last)}`,
               ],
         );
   });
@@ -455,7 +463,7 @@ const EXEMPTIONS: ReadonlyArray<Exemption> = [
     reason: "the settings module, its Node loader and kalfa/config/src take the TOML adapter",
   },
   {
-    block: ["next/packages/libfabrika/src/settings/TomlParser.ts", "kalfa/config/src/internal/toml.ts"],
+    block: ["kalfa/config/src/internal/toml.ts"],
     imports: "all",
     bans: ["@decimalturn/toml-patch", "toml-eslint-parser", "@decimalturn/toml-patch/**", "toml-eslint-parser/**"],
     reason: "the TOML format file is the one file of kalfa/config that imports the parser and the serializer",
@@ -507,15 +515,6 @@ const EXEMPTIONS: ReadonlyArray<Exemption> = [
 /** A glob of a block that reaches no tracked file today, and why it stays. */
 const UNREACHED: ReadonlyArray<Unreached> = [
   {
-    glob: "next/packages/libfabrika/src/settings/TomlParser.ts",
-    reason:
-      "the adapter moved to kalfa/config; oxlint-plugins/plants.test.ts (T877 L10) still plants it at this path, so the glob goes with that law, when the owner says",
-  },
-  {
-    glob: "next/programs/inbox/src/**/tile.ts",
-    reason: "oxlint-plugins/plants.test.ts (S1) pins the inbox's tile.ts rules for a file the program is still to get",
-  },
-  {
     glob: "kalfa/ledger/src/LedgerTest.ts",
     reason:
       "slice 2 of https://github.com/kamp-us/tea-fabrika/issues/2082 (open) adds the file, and it must meet the same rules",
@@ -534,7 +533,7 @@ const tracked = (): ReadonlyArray<string> =>
 const source = (files: ReadonlyArray<string>): ReadonlyArray<string> =>
   files.filter((file) => /\.(?:[cm]?[jt]s|[jt]sx)$/.test(file));
 
-const config = blocksOf(readFileSync(join(ROOT, ".oxlintrc.json"), "utf8"));
+const config = readBlocks(readFileSync(join(ROOT, ".oxlintrc.json"), "utf8"));
 
 /** One oxlint run over the whole config, shared by the laws that read it. */
 const run = (() => {
@@ -566,15 +565,15 @@ describe("every import ban a block sets still holds for the files it reaches", (
   // Plant, run once each: deleted the new `kalfa/quality` test block; deleted the `react` entry from the `kalfa/git/src/**` block; wrote the
   // `kalfa/markdown/src/**` block's entry as plain "error"; renamed that block's rule key to `typescript/no-restricted-imports`, then to the bare name,
   // with an entry that leaves out `react`; added `allowTypeImports: true` to the `react` entry of the `kalfa/git/src/**` block.
-  it("B1: oxlint refuses each planted import of each ban a block sets, as a value import and a type-only one, unless an exemption names it", async () => {
+  it("scenario: B1, oxlint refuses each planted import of each ban a block sets, as a value import and a type-only one, unless an exemption names it", async () => {
     const { groups, fired } = await run();
-    const { drops } = dropsOf(groups, fired, EXEMPTIONS, config);
+    const { drops } = findDrops(groups, fired, EXEMPTIONS, config);
 
     expect(drops.map(say)).toEqual([]);
   }, 60_000);
 
   // Plant, run once each: kept `[A-Z]` as written in `specifier`; read `[!o]` as its first character; kept `!` globs as bans.
-  it("B2: each planted import is refused by the block that sets it, when that block is the last to reach the file", async () => {
+  it("scenario: B2, each planted import is refused by the block that sets it, when that block is the last to reach the file", async () => {
     const { groups, fired } = await run();
 
     expect(unrefused(groups, fired)).toEqual([]);
@@ -582,9 +581,9 @@ describe("every import ban a block sets still holds for the files it reaches", (
 
   // Plant, run once each: added an exemption for the `kalfa/records/src/**` files and `react#useState`; deleted the `next/apps` start files' TOML block
   // and kept its exemption.
-  it("B3: each exemption covers at least one drop the check would report without it", async () => {
+  it("scenario: B3, each exemption covers at least one drop the check would report without it", async () => {
     const { groups, fired } = await run();
-    const { unused } = dropsOf(groups, fired, EXEMPTIONS, config);
+    const { unused } = findDrops(groups, fired, EXEMPTIONS, config);
 
     expect(unused.map((e) => `${e.block.join(" ")}: ${e.reason}`)).toEqual([]);
   }, 60_000);
@@ -592,7 +591,7 @@ describe("every import ban a block sets still holds for the files it reaches", (
 
 describe("every glob of a block that sets the rule is one the check and oxlint read the same way, and reaches a file", () => {
   // Plant, run once each: put back `next/programs/inbox/src/**/tile.ts` in the inbox block; added an `UNREACHED` row for `kalfa/git/src/**`.
-  it("G1: each `files` and `excludeFiles` glob reaches a tracked file or stands in UNREACHED with its reason, and no UNREACHED row reaches one", () => {
+  it("scenario: G1, each `files` and `excludeFiles` glob reaches a tracked file or stands in UNREACHED with its reason, and no UNREACHED row reaches one", () => {
     const all = tracked();
     const reached = (glob: string): number => all.filter((file) => matchesGlob(file, glob)).length;
 
@@ -616,10 +615,10 @@ describe("every glob of a block that sets the rule is one the check and oxlint r
 
   // pinned: the two forms a review found oxlint reads wider than `matchesGlob` does (`*.test.ts` at any depth, `./` as the config's folder).
   // Plant, run once each: let `readable` pass a glob with no `/`; let it pass a `./` glob.
-  it("G2: each glob holds a `/` or is `**`, and does not start with `./`", () => {
+  it("pinned: G2, each glob holds a `/` or is `**`, and does not start with `./`", () => {
     expect(unreadable(config)).toEqual([]);
 
-    const fixed = blocksOf(
+    const fixed = readBlocks(
       JSON.stringify({
         rules: { [RULE]: ["error", {}] },
         overrides: [
@@ -639,7 +638,7 @@ const unreadable = (blocks: ReadonlyArray<Block>): ReadonlyArray<string> =>
 
 describe("the kalfa product block reaches every kalfa package", () => {
   // Plant, run once each: added `kalfa/records/src/**` to the block's `excludeFiles`; put back the explicit list of packages without `kalfa/ci/src/**`.
-  it("K1: every tracked file under `kalfa/<package>/src/` that is not a test is reached by the block whose `files` holds `kalfa/*/src/**`", () => {
+  it("scenario: K1, every tracked file under `kalfa/<package>/src/` that is not a test is reached by the block whose `files` holds `kalfa/*/src/**`", () => {
     expect(unreached(config, source(tracked()))).toEqual([]);
   });
 });
@@ -687,15 +686,17 @@ const configWith = (names: ReadonlyArray<string>): string =>
 describe("the readers", () => {
   // pinned: oxlint 1.90 reads three names as one rule (the review's tryout). Plant, run once each: read only the asked name in `ruleBlocks`; take the first
   // name of a block that writes two.
-  it("B5: ruleBlocks reads the rule under each of its three names, and throws on a block that writes two", () => {
-    const read = blocksOf(configWith([TYPESCRIPT, BARE, RULE, TYPESCRIPT]));
+  it("pinned: B5, ruleBlocks reads the rule under each of its three names, and throws on a block that writes two", () => {
+    const read = readBlocks(configWith([TYPESCRIPT, BARE, RULE, TYPESCRIPT]));
 
-    expect(read.map((block) => [block.files, block.excludeFiles, bansOf(block.entry).map((ban) => ban.key)])).toEqual([
-      [["**"], [], ["root"]],
-      [["a/0/**"], ["a/0/x.ts"], ["b0"]],
-      [["a/1/**"], ["a/1/x.ts"], ["b1"]],
-      [["a/2/**"], ["a/2/x.ts"], ["b2"]],
-    ]);
+    expect(read.map((block) => [block.files, block.excludeFiles, readBans(block.entry).map((ban) => ban.key)])).toEqual(
+      [
+        [["**"], [], ["root"]],
+        [["a/0/**"], ["a/0/x.ts"], ["b0"]],
+        [["a/1/**"], ["a/1/x.ts"], ["b1"]],
+        [["a/2/**"], ["a/2/x.ts"], ["b2"]],
+      ],
+    );
 
     for (const [a, b] of [
       [RULE, TYPESCRIPT],
@@ -704,13 +705,13 @@ describe("the readers", () => {
     ]) {
       const both = `{ "overrides": [{ "files": ["a/**"], "rules": { "${a}": "error", "${b}": "error" } }] }`;
 
-      expect(() => blocksOf(both)).toThrow(/twice/);
-      expect(() => blocksOf(`{ "rules": { "${a}": "error", "${b}": "error" } }`)).toThrow(/twice/);
+      expect(() => readBlocks(both)).toThrow(/twice/);
+      expect(() => readBlocks(`{ "rules": { "${a}": "error", "${b}": "error" } }`)).toThrow(/twice/);
     }
   });
 
-  // Plant, run once each: skipped unknown keys in `bansOf`; let a `patterns` item's unknown key through.
-  it("B5: bansOf reads each known key, and throws on any other", () => {
+  // Plant, run once each: skipped unknown keys in `readBans`; let a `patterns` item's unknown key through.
+  it("pinned: B5, readBans reads each known key, and throws on any other", () => {
     const entry = [
       "error",
       {
@@ -727,7 +728,7 @@ describe("the readers", () => {
       },
     ];
 
-    expect(bansOf(entry).map((ban) => [ban.key, ban.specifier, ban.name, ban.types])).toEqual([
+    expect(readBans(entry).map((ban) => [ban.key, ban.specifier, ban.name, ban.types])).toEqual([
       ["plain", "plain", null, true],
       ["named#a", "named", "a", true],
       ["named#b", "named", "b", true],
@@ -738,8 +739,8 @@ describe("the readers", () => {
       ["r/[^o]#z", "r/x", "z", false],
       ["s/[a-c]#z", "s/a", "z", false],
     ]);
-    expect(bansOf("error")).toEqual([]);
-    expect(bansOf(["error"])).toEqual([]);
+    expect(readBans("error")).toEqual([]);
+    expect(readBans(["error"])).toEqual([]);
 
     for (const bad of [
       ["error", { paths: [{ name: "a", regex: "b" }] }],
@@ -747,12 +748,12 @@ describe("the readers", () => {
       ["error", { patterns: [{ group: ["a"], caseSensitive: true }] }],
       ["error", { paths: [], other: [] }],
     ]) {
-      expect(() => bansOf(bad, "a block")).toThrow(/cannot read this entry/);
+      expect(() => readBans(bad, "a block")).toThrow(/cannot read this entry/);
     }
   });
 });
 
-// -- dropsOf, over made-up configs -----------------------------------------------------------------------------------------------------------
+// -- findDrops, over made-up configs -----------------------------------------------------------------------------------------------------------
 
 const SEED = 119120;
 
@@ -818,8 +819,8 @@ const made: fc.Arbitrary<Made> = fc.record({
   }),
 });
 
-/** The config of a made-up draw, as `blocksOf` would read it: an entry with no ban is a severity alone. */
-const configOf = (m: Made): ReadonlyArray<Block> =>
+/** The config of a made-up draw, as `readBlocks` would read it: an entry with no ban is a severity alone. */
+const buildConfig = (m: Made): ReadonlyArray<Block> =>
   m.blocks.map((block) => ({
     ...block,
     entry:
@@ -831,7 +832,7 @@ const configOf = (m: Made): ReadonlyArray<Block> =>
           ],
   }));
 
-const exemptionsOf = (m: Made): ReadonlyArray<Exemption> =>
+const buildExemptions = (m: Made): ReadonlyArray<Exemption> =>
   m.exemptions.map((e) => ({
     block: m.blocks[1 + (e.block % (m.blocks.length - 1))]?.files ?? [],
     imports: e.imports,
@@ -839,7 +840,7 @@ const exemptionsOf = (m: Made): ReadonlyArray<Exemption> =>
     reason: "made up",
   }));
 
-/** The ways a wrong `dropsOf` would differ, one for each class of the plan's generators; the answer of a made-up draw is read with each in turn. */
+/** The ways a wrong `findDrops` would differ, one for each class of the plan's generators; the answer of a made-up draw is read with each in turn. */
 const FLAWS = {
   a: "excludeFiles is not read",
   b: "exemptions are dropped",
@@ -853,12 +854,12 @@ const FLAWS = {
 
 type Flaw = keyof typeof FLAWS;
 
-/** The answer of a draw, worked out from its folders alone: the drops as `file|ban|half`, and the exemptions that cover no drop. With a flaw, the answer a wrong `dropsOf` would give. */
+/** The answer of a draw, worked out from its folders alone: the drops as `file|ban|half`, and the exemptions that cover no drop. With a flaw, the answer a wrong `findDrops` would give. */
 const answer = (
   m: Made,
   flaw?: Flaw,
 ): { readonly drops: ReadonlyArray<string>; readonly unused: ReadonlyArray<number> } => {
-  const exemptions = flaw === "b" ? [] : exemptionsOf(m);
+  const exemptions = flaw === "b" ? [] : buildExemptions(m);
 
   const reach = (at: number, file: string): boolean => {
     const block = m.blocks[at];
@@ -923,8 +924,8 @@ const answer = (
   };
 };
 
-describe("dropsOf", () => {
-  // Plants, run once each, one for each class of the draw (a to h, in FLAWS): `reaches` reads `files` and skips `excludeFiles`; `dropsOf` skips the
+describe("findDrops", () => {
+  // Plants, run once each, one for each class of the draw (a to h, in FLAWS): `reaches` reads `files` and skips `excludeFiles`; `findDrops` skips the
   // exemptions; matches an exemption by its ban alone; by its block alone; never reports an unused exemption; `reaches` says false for the root entry;
   // `halves` ignores `types`; `exempts` reads every exemption as `all`.
   it("B4: reports exactly the drops and unused exemptions the draw's own answer holds", () => {
@@ -932,11 +933,11 @@ describe("dropsOf", () => {
 
     fc.assert(
       fc.property(made, (m) => {
-        const config = configOf(m);
+        const config = buildConfig(m);
         const groups = groupFiles(config, m.files);
-        const exemptions = exemptionsOf(m);
+        const exemptions = buildExemptions(m);
 
-        const { drops, unused } = dropsOf(
+        const { drops, unused } = findDrops(
           groups,
           (file, key, half) =>
             m.bits[(WORLD.indexOf(file) * KEYS.length + KEYS.indexOf(key)) * 2 + (half === "type" ? 1 : 0)] ?? false,

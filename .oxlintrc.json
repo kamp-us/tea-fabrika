@@ -1981,7 +1981,7 @@
     },
     {
       // T664, L15: the adapter itself is the one file that imports the parser; in kalfa/config the file is the TOML format, `internal/toml.ts`, and the adapter `TomlParser.ts` only wraps it (ticket 1843 slice 1, L2).
-      "files": ["next/packages/libfabrika/src/settings/TomlParser.ts", "kalfa/config/src/internal/toml.ts"],
+      "files": ["kalfa/config/src/internal/toml.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -2411,7 +2411,7 @@
     },
     {
       // S1: after next/**, since an override replaces options. Keep its import bans too.
-      "files": ["next/programs/inbox/src/**/program.ts", "next/programs/inbox/src/**/tile.ts"],
+      "files": ["next/programs/inbox/src/**/program.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -4217,6 +4217,198 @@
               {
                 "group": ["./TestDatabase", "./TestDatabase.ts"],
                 "message": "V4 (@kalfa/quality/vitest): importing the root loads no native database module. TestDatabase is read through @kalfa/quality/vitest/TestDatabase, never from the root."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // D13 and D14 (@kalfa/diagnostics says what a diagnostic is and nothing about printing one): its source imports no kalfa or repo package and no path out of the package, no Node module in either spelling,
+      // never prints (no Console, Stdio, Terminal, no console) and never picks an exit code (no process, no Runtime, no @effect/platform-node, whose runMain sets one). The global object is refused too, so
+      // `globalThis.process` is no way round. Its tests are left out. An override replaces a rule's options, so this repeats the base entries and adds its own.
+      "files": ["kalfa/diagnostics/src/**"],
+      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
+      "rules": {
+        "eslint/no-console": "error",
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "console",
+            "message": "D14 (@kalfa/diagnostics never prints): a diagnostic is data, and the command that prints it is CLI's."
+          },
+          {
+            "name": "process",
+            "message": "D14 (@kalfa/diagnostics never picks an exit code): it reads no process and sets no exit code; the command that prints diagnostics picks the code."
+          },
+          {
+            "name": "globalThis",
+            "message": "D14 (@kalfa/diagnostics never prints and never picks an exit code): `globalThis.console` and `globalThis.process` reach what `console` and `process` are refused for, so the global object itself is refused."
+          },
+          {
+            "name": "global",
+            "message": "D14 (@kalfa/diagnostics never prints and never picks an exit code): `global` is Node's global object, the same way round as `globalThis`."
+          },
+          {
+            "name": "self",
+            "message": "D14 (@kalfa/diagnostics never prints and never picks an exit code): `self` is the global object in a worker, the same way round as `globalThis`."
+          },
+          {
+            "name": "window",
+            "message": "D14 (@kalfa/diagnostics never prints and never picks an exit code): `window` is the global object in a browser, the same way round as `globalThis`."
+          },
+          "setTimeout",
+          "setInterval"
+        ],
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "effect/Console",
+                "message": "D14 (@kalfa/diagnostics never prints): it reports through the Diagnostics service and the command that provides it prints."
+              },
+              {
+                "name": "effect/Stdio",
+                "message": "D14 (@kalfa/diagnostics never prints): it reports through the Diagnostics service and the command that provides it prints."
+              },
+              {
+                "name": "effect/Terminal",
+                "message": "D14 (@kalfa/diagnostics never prints): it reports through the Diagnostics service and the command that provides it prints."
+              },
+              {
+                "name": "effect/Runtime",
+                "message": "D14 (@kalfa/diagnostics never picks an exit code): Effect's Runtime picks the exit code of a program, and only the command that prints diagnostics runs one."
+              },
+              {
+                "name": "effect",
+                "importNames": ["Console", "Stdio", "Terminal"],
+                "message": "D14 (@kalfa/diagnostics never prints): it reports through the Diagnostics service and the command that provides it prints."
+              },
+              {
+                "name": "effect",
+                "importNames": ["Runtime"],
+                "message": "D14 (@kalfa/diagnostics never picks an exit code): Effect's Runtime picks the exit code of a program, and only the command that prints diagnostics runs one."
+              },
+              {
+                "name": "@effect/platform-node",
+                "message": "D14 (@kalfa/diagnostics never picks an exit code): the platform's runMain sets one, and only the command that prints diagnostics runs a program."
+              },
+              {
+                "name": "process",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "console",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "fs",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "fs/promises",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "tty",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "readline",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "readline/promises",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "child_process",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "worker_threads",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "cluster",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "module",
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["node:*", "node:*/**"],
+                "message": "D14 (@kalfa/diagnostics needs no Node module): it never prints, never picks an exit code and never touches the machine; a diagnostic is data."
+              },
+              {
+                "group": ["@effect/platform-node/**"],
+                "message": "D14 (@kalfa/diagnostics never picks an exit code): the platform's runMain sets one, and only the command that prints diagnostics runs a program."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**"],
+                "message": "D13 (@kalfa/diagnostics ranks below every other package): it imports no kalfa or repo package, so any of them can import it."
+              },
+              {
+                "group": ["../../**"],
+                "message": "D13 (@kalfa/diagnostics ranks below every other package): it imports no path out of its own folder."
               },
               {
                 "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
