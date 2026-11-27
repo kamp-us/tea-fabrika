@@ -5,8 +5,8 @@
  *
  * This file holds the contract and the one wrap every adapter gets, and nothing that runs git. A call never reads HEAD and never changes the files of a working copy. `writeCommit` adds one commit and `moveRef` moves one ref, and `fetch` adds the objects of a remote's refs; no other call writes. Each adapter is its own entry point, `memory` and `process`, and `test` holds the laws they all pass.
  */
-import { Clock, Context, Effect, Option, Predicate, Schema } from "effect";
-import type { NonEmptyReadonlyArray } from "effect/Array";
+import { Clock, Context, Effect, Option, Order, Predicate, Schema } from "effect";
+import { isReadonlyArrayNonEmpty, sort, type NonEmptyReadonlyArray } from "effect/Array";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
 import * as Credentials from "./Credentials.ts";
@@ -239,6 +239,20 @@ export class Conflict extends Schema.TaggedError<Conflict, { readonly brand: uni
 }) {}
 
 /**
+ * The own commits of a rebase cannot be rebased: `commits` are the merge commits among them, or, when there is no merge commit, the commits with no parent.
+ *
+ * **Details**
+ *
+ * `reason` says which. A merge commit has no one line to move, and a commit with no parent means the branch shares no history with the upstream or the new base. `commits` names every such commit, sorted by id, so both adapters name the same ones.
+ *
+ * @category errors
+ */
+export class CannotRebase extends Schema.TaggedError<CannotRebase, { readonly brand: unique symbol }>()(
+  "CannotRebase",
+  { reason: Schema.Literals(["merge", "root"]), commits: Schema.NonEmptyArray(CommitId) },
+) {}
+
+/**
  * A call took longer than `limits.time`.
  *
  * @category errors
@@ -365,6 +379,7 @@ type NewCommit = {
  *
  * - `editTree` answers the id of the tree of `base`'s files with each change of the edit applied, which the repository then holds. Every other path keeps its entry, byte for byte. A replaced file keeps its mode, a new file is `100644`, a folder left with no files goes, and an edit that changes nothing gives back `base`'s own tree. `"absent"` on a path that holds nothing is no change. It reads no history, so it answers in a shallow repository, and it moves no ref. It fails with `FileTooLarge` when a new content holds more than `limits.blob` bytes, naming the first such path by UTF-8 bytes, before anything else, then `NoSuchCommit`, then `NotAFile` for a path `readFile` refuses (removal included, so a link is never replaced or removed), then `PathInTheWay`. Nothing is written when it fails.
  * - `writeCommit` writes one commit and answers it. Its committer is the settings' one, at the clock's second and offset `+0000`. It fails when the message holds a NUL byte, when the object would pass `limits.bytes`, and when the tree is no tree or a parent is no commit. It moves no ref.
+ * - `rebase` makes a new commit for each of the own commits of a branch, on `onto`, and answers them oldest first. The own commits are those `commit` reaches that neither `upstream` nor `onto` reaches. Each new commit keeps the old one's author and message and has the settings' committer at one whole second for all. It fails `CannotRebase` naming every merge commit among the own commits, else every root, `Conflict` naming the paths of the first commit whose files cannot be combined, and `NulInMessage` or `TooLargeToWrite` before any commit is written. The old commits stay as they were and no ref moves. It is one call of the service, with one span and one time limit.
  * - `mergeTrees` merges the trees of `ours` and `theirs` over the tree of `mergeBase`, file by file, and answers the id of the merged tree, which the repository then holds. It fails `Conflict` naming each path that cannot be combined. It reads no history, so a shallow repository answers, and it moves no ref. Merging needs git 2.40 in the git adapter.
  * - `moveRef` points `ref` at `to`, making it or moving it, only if the ref is at `from` now: `Option.none()` means it must not exist. It fails `RefMoved` when it is elsewhere and `RefInTheWay` when another ref is in the way, and then leaves every ref as it was. A call that ends in `TimedOut` may have moved the ref, so read it again.
  * - `fetch` reads the refs of a remote at `under` and below `under/`, by the remote's name or by its URL, and answers them sorted by their UTF-8 bytes. The repository then holds each answered commit and its history. No ref of this repository moves, and its config, refs and `shallow` file are as they were. `[]` means git proved the remote holds none. It asks the `Credentials` slot once, with the URL git will use (the configured one for a named remote), so its requirement is the slot. It fails with `NoSuchRemote`, `BadRemoteUrl`, `NoCredential`, `FetchFailed`, `HistoryTooShort` (this repository is shallow, or the remote's history is cut below an answered ref), `TooMany` and `RefNotCommit`, and never answers `[]` for a failure.
@@ -450,15 +465,32 @@ export class Repository extends Context.Service<
       | Fails,
       Credentials.Credentials
     >;
+    readonly rebase: (rebase: {
+      readonly upstream: CommitId;
+      readonly commit: CommitId;
+      readonly onto: CommitId;
+    }) => Effect.Effect<
+      ReadonlyArray<Commit.Commit>,
+      | CannotRebase
+      | Conflict
+      | NulInMessage
+      | TooLargeToWrite
+      | NoSuchCommit
+      | TooMany
+      | TooLarge
+      | UnreadableCommit
+      | HistoryTooShort
+      | Fails
+    >;
   }
 >()("@kalfa/git/Repository") {}
 
 /**
- * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets, `rangePatchId`, which `make` writes once from `mergeBases` and `patchId`, and `readText`, which `make` writes once from `readFile`. `fetch` is two calls, since `make` asks the slot between them: `remoteUrl` finds the URL git would use, and `fetch` reads from it with the credential the slot gave. Neither holds the slot.
+ * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets, `rangePatchId`, which `make` writes once from `mergeBases` and `patchId`, `readText`, which `make` writes once from `readFile`, and `rebase`, which `make` writes once from `walk`, `mergeTrees` and `writeCommit`. `fetch` is two calls, since `make` asks the slot between them: `remoteUrl` finds the URL git would use, and `fetch` reads from it with the credential the slot gave. Neither holds the slot.
  *
  * @category models
  */
-export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "readText" | "fetch"> & {
+export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "readText" | "rebase" | "fetch"> & {
   readonly writeCommit: (
     commit: NewCommit & { readonly committer: Commit.Signature },
   ) => ReturnType<Repository["Service"]["writeCommit"]>;
@@ -473,8 +505,29 @@ export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "
   }) => Effect.Effect<ReadonlyArray<Ref.Ref>, Remote.FetchFailed | HistoryTooShort | TooMany | RefNotCommit | Fails>;
 };
 
+// What a commit to write must pass before any command, so every commit written can be read back: no NUL byte in its message, and
+// no more than `limits.bytes` bytes. `writeCommit` and `rebase` both ask it.
+const refusal = (
+  commit: NewCommit & { readonly committer: Commit.Signature },
+  most: number,
+): NulInMessage | TooLargeToWrite | undefined => {
+  if (commit.message.includes("\0")) {
+    return new NulInMessage();
+  }
+
+  return bytes(commit).length > most ? new TooLargeToWrite({ most }) : undefined;
+};
+
+// The settings' committer at the clock's whole second, offset `+0000`.
+const committerAt = (settings: Settings.Settings): Effect.Effect<Commit.Signature> =>
+  Effect.map(
+    Clock.currentTimeMillis,
+    (millis) =>
+      new Commit.Signature({ ...settings.committer, at: { seconds: Math.floor(millis / 1000), offset: "+0000" } }),
+  );
+
 /**
- * Wraps an adapter's calls with a span each and the time limit, writes `rangePatchId` from two of them, `readText` from one and `fetch` from two, asks the `Credentials` slot once on each fetch, checks the size of an edit's contents, and gives each commit written its committer.
+ * Wraps an adapter's calls with a span each and the time limit, writes `rangePatchId` from two of them, `readText` from one, `rebase` from three and `fetch` from two, asks the `Credentials` slot once on each fetch, checks the size of an edit's contents, and gives each commit written its committer.
  *
  * **When to use**
  *
@@ -482,7 +535,7 @@ export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "
  *
  * **Details**
  *
- * A span is named `git.<call>`. Its attributes follow OpenTelemetry's version control names where they exist and `kalfa.git.*` where they do not. No message, name, email or path is ever an attribute. A call that runs past the time limit is interrupted and fails with `TimedOut`. `writeCommit` fails before the adapter runs when the message holds a NUL byte or the object would pass `limits.bytes`, so every commit written can be read back, and it hands the adapter the settings' committer at the clock's whole second and offset `+0000`.
+ * A span is named `git.<call>`. Its attributes follow OpenTelemetry's version control names where they exist and `kalfa.git.*` where they do not. No message, name, email or path is ever an attribute. A call that runs past the time limit is interrupted and fails with `TimedOut`. `writeCommit` fails before the adapter runs when the message holds a NUL byte or the object would pass `limits.bytes`, so every commit written can be read back, and it hands the adapter the settings' committer at the clock's whole second and offset `+0000`. `rebase` does the same checks for every new commit before it writes any, with the committer's time read once.
  *
  * @category constructors
  */
@@ -619,20 +672,11 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
     }),
     writeCommit: Effect.fn("git.writeCommit")(function* (commit: NewCommit) {
       yield* Effect.annotateCurrentSpan({ "kalfa.git.tree": commit.tree, "kalfa.git.parents": commit.parents });
+      const signed = { ...commit, committer: yield* committerAt(settings) };
+      const refused = refusal(signed, settings.limits.bytes);
 
-      if (commit.message.includes("\0")) {
-        return yield* new NulInMessage();
-      }
-
-      const seconds = Math.floor((yield* Clock.currentTimeMillis) / 1000);
-
-      const signed = {
-        ...commit,
-        committer: new Commit.Signature({ ...settings.committer, at: { seconds, offset: "+0000" } }),
-      };
-
-      if (bytes(signed).length > settings.limits.bytes) {
-        return yield* new TooLargeToWrite({ most: settings.limits.bytes });
+      if (refused !== undefined) {
+        return yield* refused;
       }
 
       const made = yield* limited(raw.writeCommit(signed));
@@ -697,6 +741,94 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
       yield* Effect.annotateCurrentSpan({ "kalfa.git.refs": refs.length });
 
       return refs;
+    }),
+    rebase: Effect.fn("git.rebase")(function* (rebase: {
+      readonly upstream: CommitId;
+      readonly commit: CommitId;
+      readonly onto: CommitId;
+    }) {
+      yield* Effect.annotateCurrentSpan({
+        "vcs.ref.base.revision": rebase.upstream,
+        "vcs.ref.head.revision": rebase.commit,
+        "kalfa.git.onto": rebase.onto,
+      });
+
+      // One time limit around every raw call, and one span, so the raw calls are not wrapped again.
+      const made = yield* limited(
+        Effect.gen(function* () {
+          const own = yield* raw.walk({ include: [rebase.commit], exclude: [rebase.upstream, rebase.onto] });
+
+          // Each own commit is a line of one parent, or it is a merge commit or a root, which the call refuses.
+          const line: Array<{ readonly commit: Commit.Commit; readonly parent: CommitId }> = [];
+          const merges: Array<CommitId> = [];
+          const roots: Array<CommitId> = [];
+
+          for (const commit of own) {
+            const [parent, ...others] = commit.parents;
+
+            if (others.length > 0) {
+              merges.push(commit.id);
+            } else if (parent === undefined) {
+              roots.push(commit.id);
+            } else {
+              line.push({ commit, parent });
+            }
+          }
+
+          if (isReadonlyArrayNonEmpty(merges)) {
+            return yield* new CannotRebase({ reason: "merge", commits: sort(Order.String)(merges) });
+          }
+
+          if (isReadonlyArrayNonEmpty(roots)) {
+            return yield* new CannotRebase({ reason: "root", commits: sort(Order.String)(roots) });
+          }
+
+          // Every new commit is checked before any is written. A tree id and a parent id are 40 characters, so the old ones weigh what the new ones will.
+          const committer = yield* committerAt(settings);
+
+          for (const { commit } of line) {
+            const refused = refusal({ ...commit, parents: [commit.id], committer }, settings.limits.bytes);
+
+            if (refused !== undefined) {
+              return yield* refused;
+            }
+          }
+
+          let tip = rebase.onto;
+          const made: Array<Commit.Commit> = [];
+
+          for (const { commit, parent } of line) {
+            const tree = yield* raw
+              .mergeTrees({ mergeBase: parent, ours: tip, theirs: commit.id })
+              .pipe(
+                Effect.tapError((error) =>
+                  isConflict(error)
+                    ? Effect.annotateCurrentSpan({ "kalfa.git.conflicts": error.paths.length })
+                    : Effect.void,
+                ),
+              );
+
+            // The tree was just made, so a tree the repository lacks is a defect of the adapter and no failure of the call.
+            const written = yield* raw
+              .writeCommit({ tree, parents: [tip], author: commit.author, message: commit.message, committer })
+              .pipe(Effect.catchTag("NoSuchTree", Effect.die));
+
+            made.push(written);
+            tip = written.id;
+          }
+
+          return made;
+        }),
+      );
+
+      yield* Effect.annotateCurrentSpan({ "kalfa.git.commits": made.length });
+      const last = made.at(-1);
+
+      if (last !== undefined) {
+        yield* Effect.annotateCurrentSpan({ "kalfa.git.commit": last.id });
+      }
+
+      return made;
     }),
   };
 };

@@ -97,6 +97,10 @@ _Avoid_: fork point, common ancestor, base (a branch's own)
 The commits a branch's own changes are measured against, such as main, in git's own word.
 _Avoid_: target, base (a branch's own), parent branch
 
+**Own commits**:
+The commits a branch holds that its upstream and its new base do not reach. A rebase makes one new commit for each.
+_Avoid_: range, branch commits, the branch
+
 **Diff**:
 The files two commits differ in, each with the lines added and removed.
 _Avoid_: patch, change set, delta, changes

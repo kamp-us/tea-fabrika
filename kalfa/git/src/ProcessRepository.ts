@@ -22,8 +22,14 @@ import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
 import * as Tree from "./Tree.ts";
 
-// What git's merge reads from a repository's own config, written out at git's defaults, so no config steers a merge.
-const MERGE_PINS = ["merge.renames=true", "merge.directoryRenames=conflict", "merge.renormalize=false"];
+// What git's merge reads from a repository's own config, written out at git's defaults, so no config steers a merge. The rename limit
+// is git's default 7000 (merge-ort reads a value of 0 or less as 7000): `merge.renameLimit` beats `diff.renameLimit`.
+const MERGE_PINS = [
+  "merge.renames=true",
+  "merge.directoryRenames=conflict",
+  "merge.renormalize=false",
+  "merge.renameLimit=7000",
+];
 
 // What every command starts with: no replacement objects, the path as the git directory (git never looks for a repository
 // around it), no hook, no automatic gc or maintenance, and the merge settings at git's defaults.
@@ -39,8 +45,14 @@ const start = (path: string): ReadonlyArray<string> => [
   ...MERGE_PINS.flatMap((pin) => ["-c", pin]),
 ];
 
-// Beside PATH, the only variables a command sees: no user or system config, no prompt, no lock taken to refresh, one language.
+// The empty tree, which every merge reads its attributes from: no tree's `.gitattributes` and no `attr.tree` steers a merge. git
+// before 2.43 ignores the variable and reads no tree's attributes in a bare repository.
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+// Beside PATH, the only variables a command sees: no user or system config, no prompt, no lock taken to refresh, one language, and
+// no attributes from any tree.
 const PINNED = {
+  GIT_ATTR_SOURCE: EMPTY_TREE,
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",

@@ -119,9 +119,10 @@ import {
   treeAt,
   type Fields,
 } from "./Laws.test-support.ts";
-import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
+import * as Rebase from "./Rebase.test-support.ts";
+import { expectFailure, settings } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
-import * as Settings from "./Settings.ts";
+import type * as Settings from "./Settings.ts";
 import * as Tree from "./Tree.ts";
 
 /** A seeded store: the service to ask, the id each history commit got, and what the laws may look at. */
@@ -148,34 +149,7 @@ export interface SuiteOptions {
   readonly timeout: number;
 }
 
-/** Settings with generous limits, the ones a law wants to push set, and the committer every written commit names. */
-export const settings = (
-  limits: {
-    readonly commits?: number;
-    readonly refs?: number;
-    readonly bytes?: number;
-    readonly files?: number;
-    readonly diff?: number;
-    readonly blob?: number;
-    readonly time?: string;
-    readonly kill?: string;
-  } = {},
-  committer: Committer = COMMITTER,
-): Settings.Settings =>
-  Schema.decodeUnknownSync(Settings.Settings)({
-    limits: {
-      commits: 1000,
-      refs: 1000,
-      bytes: 1_000_000,
-      files: 1000,
-      diff: 10_000_000,
-      blob: 10_000_000,
-      time: "10 seconds",
-      kill: "5 seconds",
-      ...limits,
-    },
-    committer,
-  });
+export { settings };
 
 const nodeAt = (history: History, i: number): History["nodes"][number] => {
   const node = history.nodes[i];
@@ -1544,11 +1518,12 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
 
     // Plant: add a `head` key to the service; let `readRefs` pack refs, so the object count changes; let `writeCommit`
     // point `refs/heads/main` at the commit it wrote; leave `diff` or `rangePatchId` out of the service, or let `rangePatchId` be a
-    // call an adapter writes, so it is in `Raw` too. Ticket 1935, slice 1: leave `readFile` out of the service, or
+    // call an adapter writes, so it is in `Raw` too. Ticket 1936, slice 1: leave `rebase` out of the service: red; let `rebase` point
+    // `refs/heads/main` at its tip: red. Ticket 1935, slice 1: leave `readFile` out of the service, or
     // let `readText` be a call an adapter writes, so it is in `Raw` too; let a read write an object, so the fingerprint moves: red.
     // Ticket 1938, slice 1: leave `fetch` out of the service: red on the keys. `fetch` is in the keys but in neither list of calls, since it adds objects.
     it.effect.prop(
-      "S10 no working copy: the service has the ten read calls and the four write calls, no list of reads changes the store, and no list of writes, edits or merges moves a ref",
+      "S10 no working copy: the service has the ten read calls and the five write calls, no list of reads changes the store, and no list of writes, edits, merges or rebases moves a ref",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), DEFAULT, (seeded, shape) =>
@@ -1567,6 +1542,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
               "readFile",
               "readRefs",
               "readText",
+              "rebase",
               "walk",
               "writeCommit",
             ]);
@@ -1637,6 +1613,14 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             }
 
             yield* readRefsBack(seeded, shape.history, `${shape.label}: after merges`);
+
+            // Rebases, most of them of commits that share no history or hold merge commits: a rebase writes objects and moves no ref.
+            for (let k = 0; k < 6; k++) {
+              const [x, y, z] = [pick(k + 5), pick(k + 17), pick(k + 29)];
+              yield* Effect.exit(seeded.repository.rebase({ upstream: x, commit: y, onto: z }));
+            }
+
+            yield* readRefsBack(seeded, shape.history, `${shape.label}: after rebases`);
           }),
         ),
       run,
@@ -3406,5 +3390,8 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
         }),
       run,
     );
+
+    // Ticket 1936, slice 1: the laws of `rebase` (S37 to S41) are in their own file, as the call is written once over the raw calls.
+    Rebase.laws(subject, run);
   });
 };

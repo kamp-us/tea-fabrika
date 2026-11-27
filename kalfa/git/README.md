@@ -1,10 +1,10 @@
 # @kalfa/git
 
-Read commits, refs and changes from a git repository that has no working copy, write a commit, move a ref, merge trees and fetch from a remote.
-One service, `Repository`, with ten read calls, four write calls and `fetch`, helpers that write a merge commit and the commit of an edit, two adapters
-that answer the calls, and the laws both adapters pass.
+Read commits, refs and changes from a git repository that has no working copy, write a commit, move a ref, merge trees,
+rebase a branch's own commits onto a new base and fetch from a remote. One service, `Repository`, with ten read calls, five write calls
+and `fetch`, helpers that write a merge commit and the commit of an edit, two adapters that answer the calls, and the laws both adapters pass.
 
-It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef`, `mergeTrees`, `editTree` and `fetch` change the
+It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef`, `mergeTrees`, `editTree`, `rebase` and `fetch` change the
 repository, and `fetch` adds objects and nothing else: no ref moves, and its config, refs and `shallow` file are as they were. Nothing changes a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
 so anything can import it.
 
@@ -156,7 +156,8 @@ const candidate = Effect.gen(function* () {
 The git adapter merges with `git merge-tree --write-tree --merge-base`, which needs git 2.40. On older git `mergeTrees`
 fails with `GitUnavailable` whose reason is `GitTooOld { found, needs: "2.40" }` and runs no command; every other call
 still works on 2.38 and newer. Each command starts with `-c merge.renames=true -c merge.directoryRenames=conflict -c
-merge.renormalize=false`, git's defaults written out, so a repository's own config never steers a merge.
+merge.renormalize=false -c merge.renameLimit=7000`, git's defaults written out, so a repository's own config never steers a
+merge, and runs with `GIT_ATTR_SOURCE` set to the empty tree, so no tree's `.gitattributes` does either.
 
 **The memory adapter merges by whole file.** For each path it compares the entries (mode and blob) of the merge base,
 ours and theirs: if ours and theirs are the same, that is the answer; if theirs is the merge base's, ours is; if ours is
@@ -172,6 +173,62 @@ differ, a caller's law that needs git's answer runs on the git adapter:
    conflicts on both paths and writes no tree.
 5. A `.gitattributes` file with a merge driver or text rules: a newer git may read it from the trees. Memory holds no
    submodules either.
+
+## Rebase
+
+```ts
+const program = Effect.gen(function* () {
+  const repo = yield* Repository.Repository;
+  // The branch's own commits go onto `main` as new commits, oldest first. [] when the branch has no own commits.
+  const made = yield* repo.rebase({ upstream: main, commit: branchTip, onto: main });
+  const tip = made.at(-1)?.id ?? main;
+  // Nothing has moved yet: the caller points a ref at the new tip, only if it is where it read it.
+  yield* repo.moveRef({ ref: candidate, from: Option.none(), to: tip });
+});
+```
+
+`rebase({ upstream, commit, onto })` makes one new commit for each **own commit** of `commit`: the commits `commit` reaches that
+neither `upstream` nor `onto` reaches. Leaving out what `onto` already reaches means a commit the new base holds is not made
+again. Each new commit has the old one's author and message byte for byte, the settings' committer at one whole second read once
+for all of them, and the files of a merge of that one commit over the commit before it. It is written once over the raw calls,
+so both adapters answer it alike, and it writes no ref and no change to an old commit.
+
+- **The order of the checks.** `NoSuchCommit` names the first of `commit`, `upstream` and `onto` the repository lacks, then
+  `HistoryTooShort` in a shallow repository, then `TooMany` past `limits.commits` own commits. A merge commit among the own
+  commits fails `CannotRebase` with `reason: "merge"` naming every one, sorted by id, since a merge commit has no one line to move.
+  With no merge commit, a commit with no parent fails it with `reason: "root"`, since the branch shares no history with the
+  upstream or the new base. A merge commit that `upstream` reaches is no own commit, and the rebase goes on from it.
+- **Before any commit is written,** each new commit passes `writeCommit`'s two checks, oldest first: a NUL byte in the message
+  fails `NulInMessage` and a commit past `limits.bytes` with its new committer fails `TooLargeToWrite`. So a refusal here writes
+  nothing, and a commit that could not be read back is never written.
+- **Then, one merge for each own commit,** oldest first: `mergeTrees` with the commit's own parent as merge base, the new tip as
+  ours and the commit as theirs, then `writeCommit`. The first merge that cannot combine its files ends the call with `Conflict`
+  naming that merge's paths. The commits written before it stay in the repository, unreachable, as a refused merge commit's do.
+- **A commit that starts empty, and one that becomes empty** because `onto` already holds its change, each make a new commit with
+  the tree of the commit before it. The call never drops one.
+
+One span, `git.rebase`, with `vcs.ref.base.revision` (the upstream), `vcs.ref.head.revision` (the commit), `kalfa.git.onto`,
+`kalfa.git.commits` (how many new commits), `kalfa.git.commit` (the last one, when there is one) and, on a conflict,
+`kalfa.git.conflicts` (how many paths). The raw calls inside end no span of their own.
+
+**Where it differs from `git rebase`.** Run by hand on git 2.40.1 over this repository's own history, in 105 ranges (the second
+parent line of each of 75 merge commits, 20 windows of five squash commits moved down past two others, and 10 old pull requests
+moved onto a much later main), the call and `git rebase` gave the same commit ids wherever both rebased, with the committer and
+its date pinned; 31 ranges held a merge commit and failed `CannotRebase`, and the 13 conflicts named the same paths. Every
+difference is one of these:
+
+1. `git rebase` keeps the commits when the branch already sits on its base; the call always makes new ones, which is what a
+   landing by rebase needs.
+2. `git rebase` drops a commit that becomes empty, and one whose patch the upstream holds; the call keeps both, as `git replay`
+   does. Its flags `--empty=keep --reapply-cherry-picks` keep them too, and a law on real git holds the call to the same commits as those flags give.
+3. `git rebase` reads `.gitattributes` from the working copy, so a `merge=union` line there merges files the call conflicts on.
+   The call has no working copy and reads no tree's attributes.
+4. `git rebase` strips the lines at the start of a message that are empty or hold only spaces and tabs. The first line with text keeps its own spaces. The call keeps a message byte for byte, as every call here does.
+   (Found by hand on git 2.40.1; a law on real git holds the call to exactly this difference.)
+
+**The two adapters differ** where `/memory` merges by whole file: every case the README lists for `mergeTrees` holds for each commit
+of a rebase. And `$GIT_DIR/info/attributes` with a merge driver steers git in a bare repository, and nothing pins it: the memory
+adapter reads none, and the app owns its bare repository.
 
 ## Two adapters
 
@@ -399,4 +456,4 @@ optional peers, needed only by `/test`.
 
 It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and a fetch's objects. It reads a
 remote and changes nothing on it: only a push will change one. It imports no Node module and no package of its repo. It puts no message, name, email, path, line or file
-content in a span: the diff's span says how many files and lines, the range's span names its merge base, and a read's span says whether there is a file and how big it is, and an edit's span says how many changes. Rebase, squash and push come in later tickets of this package.
+content in a span: the diff's span says how many files and lines, the range's span names its merge base, and a read's span says whether there is a file and how big it is, and an edit's span says how many changes. Squash and push come in later tickets of this package.
