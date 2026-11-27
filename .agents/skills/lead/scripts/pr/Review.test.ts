@@ -729,6 +729,7 @@ const SETTINGS = Schema.decodeSync(Settings.Settings)({
     diff: 10_000_000,
     blob: 10_000_000,
     time: "10 seconds",
+    kill: "5 seconds",
   },
   committer: { name: "Fixture", email: "fixture@example.test" },
 });

@@ -16,6 +16,7 @@ const SETTINGS = Schema.decodeSync(Settings.Settings)({
     diff: 100_000_000,
     blob: 10_000_000,
     time: "60 seconds",
+    kill: "5 seconds",
   },
   // The record writes no commit, so this name is never used; the adapter needs one.
   committer: { name: "review record", email: "review@example.invalid" },
