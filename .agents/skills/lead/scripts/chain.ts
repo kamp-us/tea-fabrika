@@ -1213,6 +1213,48 @@ export const recordReady = (a: {
     }),
   });
 
+/** A quest's ticket as a tracker number: only digits make one; anything else is no ticket, and the record then names none. */
+export const ticketNumber = (ticket: string): number | null => (/^[0-9]+$/.test(ticket) ? Number(ticket) : null);
+
+/**
+ * The chain's ready step, which the quest's steps ended at: pushes the head the review read, gives the pull request the brief's words and marks it ready
+ * (`Publish.ready`), then records the review at that head (`recordReady`). It answers the pull request's number once all of it went through, and no pull
+ * request, with why, as soon as a part is refused: the quest then stops, so nothing is checked in CI or queued with no record. A record is never asked
+ * after a push or words that were refused.
+ */
+export const readyAndRecord = Effect.fn("chain.readyAndRecord")(function* (a: {
+  readonly dir: string;
+  readonly branch: string;
+  readonly head: string;
+  readonly text: { readonly title: string; readonly body: string };
+  readonly quest: string;
+  readonly ticket: number | null;
+}) {
+  const readied = yield* Publish.ready({
+    dir: a.dir,
+    branch: a.branch,
+    source: Publish.Source.cases.commit.make({ sha: a.head }),
+    text: a.text,
+  }).pipe(
+    Effect.map((p) => ({ pr: p.pr, detail: p.opened ? "opened" : "existing" })),
+    Effect.catch((e) => Effect.succeed({ pr: null, detail: `${a.branch} not marked ready: ${e.reason}` })),
+  );
+
+  if (readied.pr === null) {
+    return readied;
+  }
+
+  return yield* recordReady({ dir: a.dir, pr: readied.pr, head: a.head, quest: a.quest, ticket: a.ticket }).pipe(
+    Effect.as(readied),
+    Effect.catch((e) =>
+      Effect.succeed({
+        pr: null,
+        detail: `PR ${readied.pr} is ready, but its review record was refused: ${e.reason}`,
+      }),
+    ),
+  );
+});
+
 /** The last `n` lines of a file, or a line saying it is not there. */
 const lastLines = (path: string | null, n: number): string =>
   path !== null && existsSync(path)
@@ -1636,39 +1678,17 @@ const handlers = (s: Setup) => {
           `review said merge-ready at ${pipe(cmd.head, Str.slice(0, 8))}; pushing ${s.branch} and marking its PR ready`,
         );
 
-        const readied = yield* Publish.ready({
+        const readied = yield* readyAndRecord({
           dir: env.MAIN,
           branch: s.branch,
-          source: Publish.Source.cases.commit.make({ sha: cmd.head }),
+          head: cmd.head,
           text: { title, body },
-        }).pipe(
-          Effect.map((p) => ({ pr: p.pr, detail: p.opened ? "opened" : "existing" })),
-          Effect.catch((e) => Effect.succeed({ pr: null, detail: `${s.branch} not marked ready: ${e.reason}` })),
-        );
+          quest: s.quest,
+          ticket: ticketNumber(s.ticket),
+        });
 
         if (readied.pr === null) {
           return readied;
-        }
-
-        // The review ran at the head just pushed; record it before anything is queued, and stop here when the record is refused.
-        const recorded = yield* recordReady({
-          dir: env.MAIN,
-          pr: readied.pr,
-          head: cmd.head,
-          quest: s.quest,
-          ticket: /^\d+$/.test(s.ticket) ? Number(s.ticket) : null,
-        }).pipe(
-          Effect.as(readied),
-          Effect.catch((e) =>
-            Effect.succeed({
-              pr: null,
-              detail: `PR ${readied.pr} is ready, but its review record was refused: ${e.reason}`,
-            }),
-          ),
-        );
-
-        if (recorded.pr === null) {
-          return recorded;
         }
 
         note(`ready: https://github.com/${env.GH_REPO}/pull/${readied.pr}`);

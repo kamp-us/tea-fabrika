@@ -65,7 +65,7 @@ export type Ask = {
 
 /** One refusal: what it says of this pull request when it passes, and how it asks. It gives why the pull request may not merge, or `null`. */
 type Check = {
-  readonly passes: (found: Pick<Detail, "state">) => string;
+  readonly passes: (found: Pick<Detail, "state">, overridden: boolean) => string;
   readonly ask: (ask: Ask) => Effect.Effect<string | null, Unread, Needs>;
 };
 
@@ -279,16 +279,22 @@ const CHECKS: ReadonlyArray<Check> = [
         : `${unsigned.length} commit(s) since main are not signed or made by stepcommit.sh: ${Arr.join(unsigned, "; ")}. Make it with \`stepcommit.sh --commit-only lead <ticket> "<subject>" <files>\` (\`--empty\` for no files), not a plain git commit.`;
     }),
   },
-  { passes: () => "a review on the head, or no path that needs one", ask: review },
+  {
+    passes: (_, overridden) =>
+      overridden
+        ? "no review is recorded on the head: gone past on a written reason (--override-review)"
+        : "a review on the head, or no path that needs one",
+    ask: review,
+  },
 ];
 
 /**
  * What a passing gate says it checked, one line: the same words from `land.ts check` and from each path that merges, so the
  * lead reads one list. `found` is the pull request as it stood when the gate read it, so a merged one says so.
  */
-export const line = (found: Pick<Detail, "number" | "state">): string =>
+export const line = (found: Pick<Detail, "number" | "state">, overridden = false): string =>
   `pr ${found.number}: the merge gate passes (${Arr.join(
-    Arr.map(CHECKS, (check) => check.passes(found)),
+    Arr.map(CHECKS, (check) => check.passes(found, overridden)),
     "; ",
   )})`;
 

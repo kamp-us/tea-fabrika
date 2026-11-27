@@ -313,7 +313,19 @@ const admin = Effect.fn("Merge.admin")(function* (
       ? yield* postOverride(dir, found, reason)
       : null;
 
-  yield* prs.admin(found.number, found.oid);
+  // A squash that fails after the override was written leaves the override on the head (it is written as the step before the squash, so it cannot
+  // wait for one that succeeds). The refusal names it, so a red status on the head is never read as a merge that happened.
+  yield* prs
+    .admin(found.number, found.oid)
+    .pipe(
+      Effect.catchTag("PullRequestsError", (e) =>
+        wrote === null
+          ? Effect.fail(e)
+          : refuse(
+              `${e.reason}; the review override "${wrote}" was already written on ${found.oid}, so its status names a merge that did not happen`,
+            ),
+      ),
+    );
 
   return Done.cases.admin.make({
     pr: found.number,

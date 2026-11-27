@@ -48,8 +48,8 @@ export const REVIEWED: Reviewed = {
 
 const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
-/** One line, never blank, with no space at either end. */
-const Line = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isPattern(/^[^\r\n]+$/));
+/** One line, never blank, with no space at either end. U+2028 and U+2029 break a line too, and the pattern that reads a description back stops at them. */
+const Line = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isPattern(/^[^\r\n\u2028\u2029]+$/));
 
 /** Who judged: tool, model and session, as the lead gives it. */
 const Who = Line.check(Schema.isMaxLength(300));

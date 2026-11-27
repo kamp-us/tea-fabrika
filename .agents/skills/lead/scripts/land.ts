@@ -82,13 +82,13 @@
 //     (a merge of main carries, a rebase never does).
 //
 //   land.ts arm <pr>
-//     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips; pr/Arm.ts): runs the merge gate
+//     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; a pull request that changes no path needing a review has merge when ready on, and main's full run catches what slips, while one that does is queued with `land.ts queue`, never armed; pr/Arm.ts): runs the merge gate
 //     first, as `queue` does (so a `can/` branch, a `Plan:` title, a leak or a grep that could not run, a body the pr skill's checks
 //     refuse, an unsigned commit or a conflict with main refuses it; so does a pull request that changes a path that needs a review, record or
 //     not: merge when ready merges whatever the head is later, so it is queued with `land.ts queue <pr> --wait-ci` instead); reads the proof run (scheduled.yaml) on its branch at its head, the
 //     full set or, since the proof-run rule, the changed set, and refuses one that is red or not ended, printing
 //     each job that is not green, its failed steps and its failing test lines. With no run at the
-//     head it arms, as the arm-every-reviewed-pull-request rule allows, and says so in one line, unless the branch's newest run at an
+//     head it arms, as the rule that a pull request needing no review is armed with no full run first allows, and says so in one line, unless the branch's newest run at an
 //     older head is not green or is a changed-set run, which proves only that head's change. Then
 //     marks a draft ready and turns on merge when ready, a squash pinned to the head that was read.
 //
@@ -799,8 +799,8 @@ const queueServices = (env: Env) =>
  * The line every merge path prints before its own, the one `check` prints: the merge gate passed it (./pr/Gate.ts). None for a
  * pull request found merged already, which no gate read. A path that got past the gate held an open pull request.
  */
-const gateLines = (pr: number, merged: boolean): ReadonlyArray<string> =>
-  merged ? [] : [Gate.line({ number: pr, state: "OPEN" })];
+const gateLines = (pr: number, merged: boolean, overridden = false): ReadonlyArray<string> =>
+  merged ? [] : [Gate.line({ number: pr, state: "OPEN" }, overridden)];
 
 /**
  * Adds pull request `pr` to GitHub's merge queue (pr/Queue.ts): the leak checks, `ci-required`
@@ -1212,7 +1212,10 @@ const mergeBy = Effect.fn("land.mergeBy")(function* (
     Effect.mapError(refusedAt("merge")),
   );
 
-  yield* Console.log(Arr.join([...gateLines(pr, done._tag === "merged"), Merge.line(done)], "\n"));
+  // An admin merge that went past a missing record on a reason says so, and not that a review is on the head.
+  const overridden = done._tag === "admin" && done.override !== null;
+
+  yield* Console.log(Arr.join([...gateLines(pr, done._tag === "merged", overridden), Merge.line(done)], "\n"));
 });
 
 const mergeCommand = Command.make(
@@ -1221,6 +1224,16 @@ const mergeCommand = Command.make(
   Effect.fn("land.mergeCommand")(
     function* ({ pr, admin, overrideReview }) {
       const env = yield* loadEnv;
+
+      // A reason goes only with an admin merge: through the queue it would be dropped without a word.
+      if (!admin && Option.isSome(overrideReview)) {
+        return yield* new Refused({
+          check: "merge",
+          reason:
+            "--override-review is for an admin merge; give --admin too, or leave it out to merge through the queue",
+          output: "",
+        });
+      }
 
       yield* mergeBy(
         env,
