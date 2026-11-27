@@ -1104,7 +1104,9 @@ type Ended = "list" | "get" | "set" | "remove";
 // The user configuration is found from the environment, and a fault there ends with the run's own closing sentence: a read
 // says `<app> would not start with these settings.`, a write `The <file> configuration was not changed.`
 // Plants: delete the `closing` of the user file's place in `load` (internal/start.ts): a read ends `<app> did not start.`,
-// red; delete it in the disk call's place: a write ends with the same, red.
+// red; delete it in the disk call's place: a write ends with the same, red. Ticket 1995 (RF4): `lookup` says why, so the
+// message opens `<APP>_HOME could not be read, because the environment did not answer.`; keep today's text at `lookup`:
+// red.
 it.effect.prop(
   "C12 a fault in the environment ends as the run says: when the environment cannot be read, `list` and `get` fail `read` naming `<APP>_HOME` and ending `<app> would not start with these settings.`, and `set` and `remove` end `The <file> configuration was not changed.`, with nothing printed or changed",
   { draw: CliDraw },
@@ -1132,7 +1134,7 @@ it.effect.prop(
 
         expect(out.reason, `${args.join(" ")}: the reason`).toBe("read");
         expect(
-          out.message.startsWith(`${home} could not be read.`),
+          out.message.startsWith(`${home} could not be read, because the environment did not answer.`),
           `${args.join(" ")}: names ${home}: ${out.message}`,
         ).toBe(true);
         expect(out.message.endsWith(closing), `${args.join(" ")}: ends ${closing}: ${out.message}`).toBe(true);

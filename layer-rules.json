@@ -429,7 +429,7 @@
       "name": "kalfa-secrets",
       "layer": 2,
       "paths": ["kalfa/secrets/src"],
-      "imports": ["kalfa-config"]
+      "imports": ["kalfa-config", "kalfa-diagnostics"]
     },
     {
       "name": "next-telemetry",
@@ -447,7 +447,13 @@
       "name": "kalfa-config",
       "layer": 1,
       "paths": ["kalfa/config/src"],
-      "imports": ["next-vitest"]
+      "imports": ["kalfa-diagnostics", "next-vitest"]
+    },
+    {
+      "name": "kalfa-ledger",
+      "layer": 1,
+      "paths": ["kalfa/ledger/src"],
+      "imports": ["kalfa-diagnostics"]
     },
     {
       "name": "next-id-test-support",
@@ -494,6 +500,12 @@
       "name": "kalfa-markdown",
       "layer": 0,
       "paths": ["kalfa/markdown/src"],
+      "imports": []
+    },
+    {
+      "name": "kalfa-permissions",
+      "layer": 0,
+      "paths": ["kalfa/permissions/src"],
       "imports": []
     },
     {
@@ -556,7 +568,9 @@
     "kalfa/diagnostics/src",
     "kalfa/git/src",
     "kalfa/github/src",
+    "kalfa/ledger/src",
     "kalfa/markdown/src",
+    "kalfa/permissions/src",
     "kalfa/secrets/src",
     "kalfa/transport/src"
   ],

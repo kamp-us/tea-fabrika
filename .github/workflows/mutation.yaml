@@ -1,40 +1,113 @@
 name: mutation
 
 # The hourly mutation run on what merged to main (mutation testing runs on a schedule against main, not in a pull request), here on a CI runner instead of the laptop.
-# Only a person or a scheduler session starts it, by hand, each hour:
+# It starts itself, so no person or session has to remember it (a session that dispatched it each
+# hour stopped on 2026-11-13, and nothing ran for 13 days):
 #
-#   gh workflow run mutation.yaml -f base=<the commit the last run ended at>
+#   - on a push to main, and on an hourly cron as the catch-up. No gap paces it: the `concurrency` group
+#     below keeps one run going and only the newest waiting one, so a burst of merges costs one more
+#     run up to the newest head, and a merge waits only for the run in progress and its own. Replayed
+#     on the real history that is about 44 runs a day, no merge waiting more than 16 minutes at the
+#     90th percentile, and no false alarm; a 60-minute gap gave 0.65 false alarms a day. The `gate` job
+#     (mutation-gate.mjs, the same shape as scheduled.yaml's gate) only skips a head a passing run
+#     already covered, and backs off a run that keeps failing: after `MUTATION_FAIL_STREAK` failed
+#     runs in a row, a push starts the work only when none started within
+#     `MUTATION_FAIL_GAP_MINUTES`, so a broken image cannot burn a slot all day, and a pass resets it.
+#     GitHub's cron fires only about 3 times a day on this repo (34 starts in 11.7 days, measured on
+#     scheduled.yaml), so the push is the real clock and the cron the backup;
+#   - by hand, which the gate always lets through, to re-run or to skip a range:
 #
-# No push, pull request or cron starts it, and a merge never waits on it. It runs the same command
+#       gh workflow run mutation.yaml -f base=<the commit to mutate from>
+#
+# The base is the commit the last passing run ended at, read from GitHub's own run list by the
+# gate (a run counts as passing when its `mutation` job passed, so a run the gate skipped never
+# counts), and a failed range is tried again by the next run. The `range` step cuts the range to
+# `MUTATION_MAX_RELATED` related test files (default 12), moving the base forward along main until it
+# fits, because mutbox stops the container at 900 s: a range of hundreds of test files could never
+# pass and would only grow. The summary says how many commits that left unmutated. A merge never
+# waits on this run. It runs the same command
 # the laptop runs (mutbox.ts, a step that needs ports or its own processes and network isolation runs in a container): Stryker in a container with `--network none`, the
 # fixed seed 119120 and a sample of at most 150, both set in run.sh. Survivors are its answer, not a
 # failure: the job fails only when the run itself broke (mutbox's `stuck`). It reads, runs the
-# container and uploads its result; it changes nothing in the repo. A one-week trial, like the scheduled-mutation rule.
+# container and uploads its result; it changes nothing in the repo, and it files no ticket: a CI job
+# cannot reach the local tracker, so a survivor is read from the artifact and the job summary for now.
+#
+# `mutation-heartbeat.yaml` watches the outcome, not the starter: it goes red and opens one issue when a
+# merge on main has waited past its limit for a passing run, whichever way the runs stopped.
 on:
+  push:
+    branches: [main]
+  schedule:
+    # Not at the top of the hour, when GitHub's load is highest.
+    - cron: "31 * * * *"
   workflow_dispatch:
     inputs:
       base:
-        description: The commit the last run ended at; this run mutates the changed lines of base..head
-        required: true
+        description: The commit to mutate from; empty means the commit the last passing run on main ended at
+        required: false
+        default: ""
         type: string
       head:
-        description: The commit to mutate up to; empty means main's head when the run starts
+        description: The commit to mutate up to; empty means the commit that started the run (main's head on a push or the cron)
         required: false
         default: ""
         type: string
 
 permissions:
   contents: read
+  # The `range` step reads the last passing run from the run list.
+  actions: read
 
-# One run at a time, and a running one is never cut short: a second dispatch waits its turn.
+# One run at a time, and a running one is never cut short. A run that starts while one is running waits,
+# and only the newest waiting run is kept (GitHub replaces an older one with it), so a burst of merges
+# costs one more run that mutates up to the newest head, not one per merge.
 concurrency:
   group: mutation
   cancel-in-progress: false
 
+# The settings, read by mutation-gate.mjs and range.ts: how many failed runs in a row start the backoff, the gap
+# between two starts while it lasts (in minutes), and the most related test files one run takes (mutbox's 900 s
+# container limit is what bounds it).
+env:
+  MUTATION_FAIL_STREAK: "3"
+  MUTATION_FAIL_GAP_MINUTES: "60"
+  MUTATION_MAX_RELATED: "12"
+
 jobs:
-  mutation:
-    # Main's copy of the workflow and of mutbox.ts, never a branch's.
+  # Whether this run does the work (mutation-gate.mjs). A run whose gate said `false` ends `success` in seconds with
+  # `mutation` skipped, and the heartbeat does not count it as a pass. It runs while its own run holds the
+  # concurrency group, so every run ahead of it has ended. No install: Node alone runs mutation-gate.mjs.
+  gate:
+    # Main's copy of the workflow and of mutation-gate.mjs, never a branch's.
     if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      start: ${{ steps.gate.outputs.start }}
+      base: ${{ steps.gate.outputs.base }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD: ${{ inputs.head || github.sha }}
+        run: node .github/ci/mutation-gate.mjs --workflow mutation.yaml --job mutation --head "$HEAD"
+
+  mutation:
+    needs: [gate]
+    # Main's copy of the workflow and of mutbox.ts, never a branch's.
+    if: github.ref == 'refs/heads/main' && needs.gate.outputs.start == 'true'
     # mutbox.ts measured only linux/arm64 (its PLATFORM), and this is the free arm64 runner for a
     # public repository: 4 CPUs, 16 GB, Docker installed.
     runs-on: ubuntu-24.04-arm
@@ -60,29 +133,21 @@ jobs:
       # linting and formatting live in @kalfa/quality, slice 2), and each changed test file. Of the lead tooling,
       # only quest code is in (the hourly mutation run also tests the lead tooling's quest code). scope.ts holds that rule and sample.ts's PRODUCT list, so this
       # pick and the sample's diff are one rule. A path mutbox.ts's --related would refuse is left
-      # out.
+      # out. range.ts runs that pick and cuts the range to `MUTATION_MAX_RELATED` of them.
+      #
+      # The base is the commit the last passing run on main ended at (the gate read it), unless a hand
+      # dispatch gives one. A run that failed is no passing run, so its range is read again by the next
+      # one. With no passing run at all, the range is the head's own commit.
       - id: range
         env:
-          BASE: ${{ inputs.base }}
+          BASE: ${{ inputs.base || needs.gate.outputs.base }}
           HEAD: ${{ inputs.head || github.sha }}
         run: |
-          base=$(git rev-parse --verify "$BASE^{commit}")
           head=$(git rev-parse --verify "$HEAD^{commit}")
-          plain='^[A-Za-z0-9_@.][A-Za-z0-9_@.+/ -]*\.test\.tsx?$'
-          # Each in its own line, so a broken diff or scope.ts fails the job and is never read as
-          # "no tests".
-          git diff --name-only --diff-filter=d "$base" "$head" > "$RUNNER_TEMP/changed.txt"
-          # The head's file list, so scope.ts can pick each changed file's `name.<kind>.test.ts` siblings
-          # (`name.laws.test.ts`, `name.integration.test.ts`) that exist at head, not only `name.test.ts`.
-          git ls-tree -r --name-only "$head" > "$RUNNER_TEMP/tracked.txt"
-          node .agents/skills/mutation/scripts/scope.ts --tracked "$RUNNER_TEMP/tracked.txt" < "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/tests.txt"
-          grep -E "$plain" "$RUNNER_TEMP/tests.txt" | grep -v '/\.\./' |
-            while IFS= read -r t; do
-              if git cat-file -e "$head:$t" 2> /dev/null; then printf '%s\n' "$t"; fi
-            done > "$RUNNER_TEMP/related.txt" || :
-          related=$(paste -sd, "$RUNNER_TEMP/related.txt")
-          printf 'base=%s\nhead=%s\nrelated=%s\n' "$base" "$head" "$related" >> "$GITHUB_OUTPUT"
-          echo "range $base..$head, $(wc -l < "$RUNNER_TEMP/related.txt") related test files"
+          base=$(git rev-parse --verify "${BASE:-$head^}^{commit}")
+          node .agents/skills/mutation/scripts/range.ts --base "$base" --head "$head" > "$RUNNER_TEMP/range.txt"
+          cat "$RUNNER_TEMP/range.txt"
+          { cat "$RUNNER_TEMP/range.txt"; echo "head=$head"; echo "first=$base"; } >> "$GITHUB_OUTPUT"
 
       # mutbox exits 0 for done (survivors included) and 40 for skip; both pass. 30 is stuck, the
       # run broke, and fails the job. Its JSON line is in $OUT/mutbox.json either way.
@@ -106,6 +171,9 @@ jobs:
           BASE: ${{ steps.range.outputs.base }}
           HEAD: ${{ steps.range.outputs.head }}
           RELATED: ${{ steps.range.outputs.related }}
+          FIRST: ${{ steps.range.outputs.first }}
+          LEFT: ${{ steps.range.outputs.left }}
+          WANTED: ${{ steps.range.outputs.wanted }}
           JSON: ${{ runner.temp }}/mutbox/mutbox.json
         run: |
           {
@@ -113,6 +181,10 @@ jobs:
             echo
             echo "range \`$BASE..$HEAD\`"
             echo
+            if [ "${LEFT:-0}" != "0" ]; then
+              echo "cut: $LEFT commits after \`$FIRST\` were left unmutated: the whole range holds $WANTED related test files and the cap is $MUTATION_MAX_RELATED"
+              echo
+            fi
             if [ -z "$BASE" ]; then
               echo "no run: base or head is not a commit on main's history"
             elif [ -z "$RELATED" ]; then

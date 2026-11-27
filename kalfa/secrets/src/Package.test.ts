@@ -1,6 +1,6 @@
 // P1 and E1: what the package's own files say. P1 reads the manifest at head, E1 the root entry point. They run in memory on every pull request.
-// The package stands alone (decision on small libraries usable alone): it names one other package of this repository, the settings engine, and no
-// other. The words P1 looks for are written in pieces, so this file does not hold them whole.
+// The package stands alone (decision on small libraries usable alone): it names two other packages of this repository, the settings engine and the
+// diagnostics package that holds the hidden cause, and no other. The words P1 looks for are written in pieces, so this file does not hold them whole.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
@@ -29,8 +29,8 @@ const manifest = () =>
 const part = (...pieces: ReadonlyArray<string>): string => pieces.join("");
 
 // P1. Plant: add `@kalfa/github` to the dependencies; drop `./test` from the exports; make `vitest` a required peer; point `./memory` at another
-// file; move `@kalfa/config` to the dev dependencies; make the package public.
-it("P1 scenario: the manifest is a private package with one dependency, the settings engine, three peers of which the test tools are optional, and the root, memory, test and manifest exports, each to a file that exists", () => {
+// file; move `@kalfa/config` to the dev dependencies; make the package public; drop `@kalfa/diagnostics` from the dependencies.
+it("P1 scenario: the manifest is a private package with two dependencies, the settings engine and the diagnostics package, three peers of which the test tools are optional, and the root, memory, test and manifest exports, each to a file that exists", () => {
   // scenario: the package's own manifest at head; no generated input says what a manifest holds.
   const found = manifest();
 
@@ -47,16 +47,18 @@ it("P1 scenario: the manifest is a private package with one dependency, the sett
     named.filter(
       (name) =>
         name !== part("@kal", "fa/config") &&
+        name !== part("@kal", "fa/diagnostics") &&
         [part("@kal", "fa/"), part("@kam", "pus/")].some((scope) => name.startsWith(scope)),
     ),
     "no other package of this repository",
   ).toEqual([]);
-  expect(found.dependencies, "the settings engine is the one dependency").toEqual({
+  expect(found.dependencies, "the settings engine and the diagnostics package are the dependencies").toEqual({
     [part("@kal", "fa/config")]: "workspace:*",
+    [part("@kal", "fa/diagnostics")]: "workspace:*",
   });
   expect(
     [found.devDependencies, found.peerDependencies, found.optionalDependencies ?? {}].flatMap((each) =>
-      Object.keys(each).filter((name) => name === part("@kal", "fa/config")),
+      Object.keys(each).filter((name) => name === part("@kal", "fa/config") || name === part("@kal", "fa/diagnostics")),
     ),
     "and only a dependency",
   ).toEqual([]);

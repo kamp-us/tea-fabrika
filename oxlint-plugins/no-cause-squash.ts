@@ -21,32 +21,10 @@
 // leaves tests, shared suites and test support out: a test reads a failed `Exit` to assert on it.
 import type { CreateRule, Scope, Variable } from "@oxlint/plugins";
 import { Predicate } from "effect";
-import type { Node } from "./match.ts";
+import { imported, type Node } from "./match.ts";
 
 const MESSAGE =
   "`Cause.squash` turns a typed failure into one unknown value. Read the typed failure with `Cause.findErrorOption` or `Exit.findErrorOption` and match on its tag, and a thrown value with `Cause.findDefect`. An edge that must name whatever failed takes `// oxlint-disable-next-line fabrika/no-cause-squash -- edge: <why>` (oxlint-plugins/no-cause-squash.ts).";
-
-/** The import an identifier is bound to: its source and the name it imports (`*` for a namespace). */
-const imported = (variable: Variable | undefined): { readonly from: string; readonly name: string } | null => {
-  const def = variable?.defs[0];
-
-  if (def === undefined || def.type !== "ImportBinding" || def.parent?.type !== "ImportDeclaration") {
-    return null;
-  }
-
-  const from = def.parent.source.value;
-  const spec = def.node;
-
-  if (spec.type === "ImportNamespaceSpecifier") {
-    return { from, name: "*" };
-  }
-
-  if (spec.type === "ImportSpecifier") {
-    return { from, name: spec.imported.type === "Identifier" ? spec.imported.name : String(spec.imported.value) };
-  }
-
-  return null;
-};
 
 /** A member's or a key's name, written plainly or as a string literal. */
 const written = (key: Node, computed: boolean): string | null => {

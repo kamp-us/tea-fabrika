@@ -1,11 +1,12 @@
 // PullRequestsGh.layer: the PullRequests service on `gh`, the one way the lead tooling reaches
-// GitHub. `gh pr edit` fails here with a classic Projects error (AGENTS.md), so an edit goes
-// through `gh api -X PATCH`. Every call names the repo, so the checkout it runs in does not pick it.
+// GitHub. An edit goes through `gh api -X PATCH`. Every call names the repo, so the checkout it
+// runs in does not pick it.
 import { Effect, Layer, Option, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { type Given, lastLine, run } from "./command.ts";
 import {
   type Detail,
+  type Merged,
   Patch,
   type PullRequest,
   PullRequests,
@@ -30,6 +31,17 @@ const Listed = Schema.fromJsonString(
 );
 
 const FIELDS = "number,headRefName,headRefOid,state,isDraft";
+
+const MergedListed = Schema.fromJsonString(
+  Schema.Array(
+    Schema.Struct({
+      number: Schema.Finite,
+      body: Schema.String,
+      mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
+      mergedAt: Schema.NullOr(Schema.String),
+    }),
+  ),
+);
 
 const Viewed = Schema.fromJsonString(
   Schema.Struct({
@@ -170,6 +182,37 @@ export const make = (
         ? Effect.fail(PullRequestsError.make({ reason: `${LIMIT} or more pull requests: one read cannot hold all` }))
         : Effect.succeed(prs),
     );
+
+    // One search call, most recently updated first: the `scan` the caller asks for, in GitHub's update order. A
+    // row with no merge commit or no merge time is left out: GitHub gives both to every merged pull request.
+    const merged = Effect.fn("PullRequestsGh.merged")(function* (scan: number) {
+      const out = yield* gh([
+        "pr",
+        "list",
+        "-R",
+        repo,
+        "--state",
+        "merged",
+        "--base",
+        "main",
+        "--search",
+        "sort:updated-desc",
+        "--limit",
+        String(scan),
+        "--json",
+        "number,body,mergeCommit,mergedAt",
+      ]);
+
+      const rows = yield* Schema.decodeEffect(MergedListed)(out.trim() || "[]").pipe(
+        Effect.mapError(() => PullRequestsError.make({ reason: "gh pr list answered a shape we do not read" })),
+      );
+
+      return rows.flatMap((row): ReadonlyArray<Merged> =>
+        row.mergeCommit === null || row.mergedAt === null
+          ? []
+          : [{ number: row.number, body: row.body, mergeCommit: row.mergeCommit.oid, mergedAt: row.mergedAt }],
+      );
+    });
 
     const draft = Effect.fn("PullRequestsGh.draft")(
       function* (branch: string, text: Text, head: string) {
@@ -335,6 +378,7 @@ export const make = (
     return PullRequests.of({
       openOn,
       all,
+      merged,
       draft,
       edit,
       ready,

@@ -14,11 +14,7 @@ import { Effect, Schema } from "effect";
 import { words as squashWords } from "./Leaks.ts";
 import { PullRequests, type Text } from "./PullRequests.ts";
 import { Pushes } from "./Pushes.ts";
-
-/** What a draft says when a commit opens it; the quest's ready step gives it the brief's words. */
-export const DRAFT_BODY =
-  "Opened as a draft at this branch's first commit, so no code stays only on a branch (every commit " +
-  "is pushed when it is made). It is marked ready when its steps have passed.";
+import { DRAFT_BODY } from "./Sections.ts";
 
 /** What `publish.ts` was asked: the branch, and the words a new draft takes instead of the placeholder. */
 export type Words = {

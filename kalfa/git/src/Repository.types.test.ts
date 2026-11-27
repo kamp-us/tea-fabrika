@@ -6,6 +6,7 @@ import type { NonEmptyReadonlyArray } from "effect/Array";
 import type * as Digest from "effect/crypto/Digest";
 import type { ChildProcessSpawner } from "effect/process";
 import type { Commit, Signature } from "./Commit.ts";
+import type * as CommitEdit from "./CommitEdit.ts";
 import type { CommitId } from "./CommitId.ts";
 import type { Diff, PatchId } from "./Diff.ts";
 import type * as MemoryRepository from "./MemoryRepository.ts";
@@ -310,11 +311,64 @@ const reads = (raw: Repository.Raw, commit: CommitId, path: Path, text: string) 
   return [written, loose, path];
 };
 
+// Plant (T7, ticket 1935 slice 2): add `NotUtf8` to `editTree`'s errors; leave `PathInTheWay` out of them; give `editTree` a requirement;
+// type `other` of `PathInTheWay` as a string; make `Edit` hold `Uint8Array` only, so no path is removed; let `commitEdit` not need `Repository`.
+const edits = (raw: Repository.Raw, commit: CommitId, path: Path, text: string) => {
+  expectTypeOf<Repository.Edit>().toEqualTypeOf<ReadonlyMap<Path, Uint8Array | "absent">>();
+  expectTypeOf<Repository.Repository["Service"]["editTree"]>().toEqualTypeOf<
+    (
+      base: CommitId,
+      changes: Repository.Edit,
+    ) => Effect.Effect<
+      TreeId,
+      Repository.FileTooLarge | Repository.NoSuchCommit | Repository.NotAFile | Repository.PathInTheWay | Fails,
+      never
+    >
+  >();
+  expectTypeOf<Repository.Raw["editTree"]>().toEqualTypeOf<Repository.Repository["Service"]["editTree"]>();
+  expectTypeOf<ConstructorParameters<typeof Repository.PathInTheWay>[0]["path"]>().toEqualTypeOf<Path>();
+  expectTypeOf<ConstructorParameters<typeof Repository.PathInTheWay>[0]["other"]>().toEqualTypeOf<Path>();
+  // @ts-expect-error The paths of an edit are `Path`s, never plain text.
+  const loose = (repo: Repository.Repository["Service"]) => repo.editTree(commit, new Map([[text, "absent" as const]]));
+  // @ts-expect-error A change is new bytes or "absent", never plain text.
+  const wrong = (repo: Repository.Repository["Service"]) => repo.editTree(commit, new Map([[path, text]]));
+
+  return [loose, wrong, raw];
+};
+
+const commitEdits = () => {
+  expectTypeOf<Parameters<typeof CommitEdit.commitEdit>[0]>().toEqualTypeOf<{
+    readonly parent: CommitId;
+    readonly changes: Repository.Edit;
+    readonly message: string;
+    readonly author: Signature;
+  }>();
+  expectTypeOf<ReturnType<typeof CommitEdit.commitEdit>>().toEqualTypeOf<
+    Effect.Effect<
+      Commit,
+      | CommitEdit.NoChange
+      | Repository.NoSuchCommit
+      | Repository.TooLarge
+      | Repository.UnreadableCommit
+      | Repository.FileTooLarge
+      | Repository.NotAFile
+      | Repository.PathInTheWay
+      | Repository.NulInMessage
+      | Repository.TooLargeToWrite
+      | Repository.NoSuchTree
+      | Fails,
+      Repository.Repository
+    >
+  >();
+};
+
 it("type: each call has the answer and errors the plan gives, and each layer the plan's types", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(calls).toBeFunction();
   expectTypeOf(rangesAndDiffs).toBeFunction();
   expectTypeOf(reads).toBeFunction();
+  expectTypeOf(edits).toBeFunction();
+  expectTypeOf(commitEdits).toBeFunction();
   expectTypeOf(layers).toBeFunction();
   expectTypeOf(layersWithDigest).toBeFunction();
   expectTypeOf(writes).toBeFunction();

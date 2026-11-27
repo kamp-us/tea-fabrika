@@ -49,6 +49,7 @@ The cause is written in one of two forms, as the Effect library writes it:
 |---|---|
 | yes | `cause: Schema.Defect()` |
 | no, some call has none | `cause: Schema.optional(Schema.Defect())` |
+| in `kalfa/`, the cause may quote a value | `cause: Hidden.Cause` from `@kalfa/diagnostics/Hidden`, or `Schema.optional(Hidden.Cause)`; never `Schema.Redacted`, whose JSON form writes the value (`fabrika/hidden-cause` holds it) |
 
 Never `Schema.optionalKey` on a cause. In the installed `effect` 4.1.2, `node_modules/effect/src`
 writes the optional form 16 times (`workers/WorkerError.ts:46`, `socket/Socket.ts:451`), the

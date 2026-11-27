@@ -5,17 +5,19 @@
  *
  * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a call. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`, and a ref that could not be moved is read again with `for-each-ref`. It writes with `hash-object` and `update-ref` and runs no command that reaches a remote.
  */
-import { Array as Arr, Config, Duration, Effect, Fiber, Layer, Option, Stream } from "effect";
+import { Array as Arr, Config, Duration, Effect, Fiber, Layer, Option, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Commit from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
 import { joined } from "./internal/bytes.ts";
+import * as Folder from "./internal/folder.ts";
 import * as Lookup from "./internal/lookup.ts";
-import { bytes } from "./internal/object.ts";
+import { byBytes, bytes, OBJECT_ID } from "./internal/object.ts";
 import * as Parse from "./internal/parse.ts";
 import type * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
+import * as Tree from "./Tree.ts";
 
 // What git's merge reads from a repository's own config, written out at git's defaults, so no config steers a merge.
 const MERGE_PINS = ["merge.renames=true", "merge.directoryRenames=conflict", "merge.renormalize=false"];
@@ -52,6 +54,8 @@ const PINNED = {
 const KILL_AFTER = Duration.seconds(5);
 
 const encoder = new TextEncoder();
+
+const NUL = Uint8Array.of(0);
 
 const unavailable = (reason: Repository.GitUnavailable["reason"]): Repository.GitUnavailable =>
   new Repository.GitUnavailable({ reason });
@@ -324,6 +328,21 @@ const entryKind = (entry: Parse.Listed): Lookup.Kind => {
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
   a.length === b.length && a.every((octet, at) => octet === b[at]);
 
+const kindIn =
+  (seen: ReadonlyMap<string, Parse.Listed>): Lookup.At =>
+  (path) => {
+    const entry = seen.get(path);
+
+    return entry === undefined ? undefined : entryKind(entry);
+  };
+
+// The id a command printed alone on a line, as one object's id.
+const printedId = (output: Output): Effect.Effect<string, Repository.GitUnavailable> => {
+  const id = new TextDecoder().decode(output.stdout).trim();
+
+  return OBJECT_ID.test(id) ? Effect.succeed(id) : Effect.fail(unreadable(new Error("git printed no object id")));
+};
+
 const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Parse.Version): Repository.Raw => {
   const { limits } = settings;
 
@@ -390,6 +409,47 @@ const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Par
       ]),
       succeeded,
     );
+
+  // The folders on the way to each path, top down and each listed once with `ls-tree -z`, and what each part of each path is in
+  // them. No path ever reaches git, so no pathspec, quoting or path config acts. A walk ends at the first part that is missing or is
+  // not a folder, and a part is matched to a listed name by its bytes.
+  const descend = Effect.fnUntraced(function* (top: string, paths: ReadonlyArray<string>) {
+    const folders = new Map<string, ReadonlyArray<Parse.Listed>>();
+    const seen = new Map<string, Parse.Listed>();
+
+    for (const path of paths) {
+      let folder = "";
+      let tree = top;
+
+      for (const part of path.split("/")) {
+        const listed =
+          folders.get(folder) ??
+          (yield* Effect.flatMap(run(["ls-tree", "-z", tree]), succeeded).pipe(
+            Effect.flatMap((printed) => Effect.fromResult(Parse.listing(printed.stdout))),
+            Effect.tap((entries) => Effect.sync(() => folders.set(folder, entries))),
+          ));
+
+        const wanted = encoder.encode(part);
+        const entry = listed.find((each) => sameBytes(each.name, wanted));
+        const so = folder === "" ? part : `${folder}/${part}`;
+
+        if (entry === undefined) {
+          break;
+        }
+
+        seen.set(so, entry);
+
+        if (entryKind(entry) !== "folder") {
+          break;
+        }
+
+        folder = so;
+        tree = entry.id;
+      }
+    }
+
+    return { folders, seen };
+  });
 
   return {
     readCommit: Effect.fnUntraced(function* (id) {
@@ -485,40 +545,9 @@ const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Par
     readFile: Effect.fnUntraced(function* (commit, path) {
       yield* known(run, [commit]);
 
-      // One folder at a time, top down, from its own listing: no path ever reaches git, so no pathspec, quoting or path config acts.
-      // The walk ends at the first part that is missing or is not a folder. A part is matched to a listed name by its bytes.
-      const parts = path.split("/");
-      const seen = new Map<string, Parse.Listed>();
-      let folder: string = commit;
+      const { seen } = yield* descend(commit, [path]);
 
-      for (const [at, part] of parts.entries()) {
-        const printed = yield* Effect.flatMap(run(["ls-tree", "-z", folder]), succeeded);
-        const wanted = encoder.encode(part);
-
-        const entry = (yield* Effect.fromResult(Parse.listing(printed.stdout))).find((each) =>
-          sameBytes(each.name, wanted),
-        );
-
-        if (entry === undefined) {
-          break;
-        }
-
-        seen.set(parts.slice(0, at + 1).join("/"), entry);
-
-        if (entryKind(entry) !== "folder") {
-          break;
-        }
-
-        folder = entry.id;
-      }
-
-      yield* Effect.fromResult(
-        Lookup.find(path, (so) => {
-          const entry = seen.get(so);
-
-          return entry === undefined ? undefined : entryKind(entry);
-        }),
-      );
+      yield* Effect.fromResult(Lookup.find(path, kindIn(seen)));
 
       const file = seen.get(path);
 
@@ -560,6 +589,91 @@ const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Par
       const contents = yield* Effect.fromResult(Parse.patch(changed, (yield* patchBytes(from, to)).stdout));
 
       return yield* Effect.fromResult(Parse.files(Arr.zip(changed, contents)));
+    }),
+    editTree: Effect.fnUntraced(function* (base, changes) {
+      // The commit and its tree are asked in one command: no `rev-parse`, and no reading of a commit to find its tree.
+      const checked = yield* held(run, [base, `${base}^{tree}`]);
+
+      if (checked.get(base)?.type !== "commit") {
+        return yield* new Repository.NoSuchCommit({ id: base });
+      }
+
+      const root = [...checked].find(([, each]) => each.type === "tree")?.[0] ?? "";
+
+      const rootTree = yield* Effect.fromResult(
+        Result.mapError(Schema.decodeUnknownResult(Tree.TreeId)(root), () =>
+          unreadable(new Error("git named no tree for a commit")),
+        ),
+      );
+
+      if (changes.size === 0) {
+        return rootTree;
+      }
+
+      const paths = [...changes.keys()].toSorted(byBytes);
+      const { folders, seen } = yield* descend(base, paths);
+      yield* Effect.fromResult(Lookup.check(changes, kindIn(seen)));
+
+      // Each new content is written as the bytes it is, in path order, with no filter and no path: only now, since a refused edit writes nothing.
+      const after = new Map<string, string>();
+
+      for (const path of paths) {
+        const change = changes.get(path);
+
+        if (change === "absent") {
+          after.set(path, change);
+        } else if (change !== undefined) {
+          const printed = yield* Effect.flatMap(
+            run(["hash-object", "-t", "blob", "-w", "--no-filters", "--stdin"], change),
+            succeeded,
+          );
+
+          after.set(path, yield* printedId(printed));
+        }
+      }
+
+      // Every folder above a changed path is made again, the deepest first, from its own listing: a folder whose entries come out the same keeps its id.
+      const above = new Set(["", ...paths.flatMap((path) => Folder.above(path))]);
+
+      const depth = (folder: string): number => (folder === "" ? 0 : folder.split("/").length);
+      const made = new Map<string, string | undefined>();
+
+      for (const folder of [...above].toSorted((a, b) => depth(b) - depth(a) || byBytes(a, b))) {
+        const listed = folders.get(folder);
+        const lines = Folder.lines(folder, listed, after, made);
+
+        if (
+          listed !== undefined &&
+          Folder.same(
+            lines,
+            listed.map((each) => each.line),
+          )
+        ) {
+          continue;
+        }
+
+        if (lines.length === 0 && folder !== "") {
+          made.set(folder, undefined);
+          continue;
+        }
+
+        const printed = yield* Effect.flatMap(
+          run(["mktree", "-z"], joined(lines.flatMap((line) => [line, NUL]))),
+          succeeded,
+        );
+
+        made.set(folder, yield* printedId(printed));
+      }
+
+      const top = made.get("");
+
+      return top === undefined
+        ? rootTree
+        : yield* Effect.fromResult(
+            Result.mapError(Schema.decodeUnknownResult(Tree.TreeId)(top), () =>
+              unreadable(new Error("git printed no tree id")),
+            ),
+          );
     }),
     writeCommit: Effect.fnUntraced(function* (commit) {
       const checked = yield* held(run, [commit.tree, ...commit.parents]);

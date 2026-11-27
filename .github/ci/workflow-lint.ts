@@ -17,6 +17,7 @@ import { lintIssues } from "./workflow-lint/issues.ts";
 import { jobLaws } from "./workflow-lint/jobs.ts";
 import { lintL11 } from "./workflow-lint/l11.ts";
 import { lintNoTooling, mergeLine } from "./workflow-lint/merge-line.ts";
+import { lintMutation } from "./workflow-lint/mutation.ts";
 import { nextLaws } from "./workflow-lint/next-job.ts";
 import { lintPlant } from "./workflow-lint/plant.ts";
 import { record } from "./workflow-lint/record.ts";
@@ -97,6 +98,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       ...lintHost(read(".github/workflows/host.yaml")),
       ...lintPlant(read(".github/workflows/plant.yaml")),
       ...lintL11(read(".github/workflows/l11-exercise.yaml")),
+      ...lintMutation(read(".github/workflows/mutation.yaml"), read(".github/workflows/mutation-heartbeat.yaml")),
     ];
 
     const manifest: unknown = JSON.parse(read("package.json"));

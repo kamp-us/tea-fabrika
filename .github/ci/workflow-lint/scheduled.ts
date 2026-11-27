@@ -155,7 +155,7 @@ const REPORT = "node .github/ci/scheduled.mjs";
 
 // The gate (main's full run starts on a push to main and an hourly catch-up): the first job, which says whether this run starts the tests. A push to main or
 // the hourly catch-up starts them only when no full run on main started within the gap, and the
-// catch-up only on a head that has had none; a hand start always does.
+// catch-up only on a head that is not tested; a hand start always does.
 const GATE_JOB = "gate";
 
 const GATE = "node .github/ci/gate.mjs";

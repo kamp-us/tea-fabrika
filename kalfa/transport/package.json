@@ -10,15 +10,30 @@
   "exports": {
     ".": "./src/index.ts",
     "./memory": "./src/MemorySocket.ts",
+    "./cloudflare": "./src/cloudflare/index.ts",
+    "./cloudflare/memory": "./src/cloudflare/MemoryGateway.ts",
     "./package.json": "./package.json"
   },
   "peerDependencies": {
+    "@alchemy.run/cloudflare": "catalog:",
+    "alchemy": "catalog:",
     "effect": "catalog:"
   },
+  "peerDependenciesMeta": {
+    "@alchemy.run/cloudflare": {
+      "optional": true
+    },
+    "alchemy": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "catalog:",
+    "@cloudflare/workers-types": "5.20261027.1",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
+    "alchemy": "catalog:",
     "effect": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
