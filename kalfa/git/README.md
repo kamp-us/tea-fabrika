@@ -174,7 +174,7 @@ difference is one of these:
    does. Its flags `--empty=keep --reapply-cherry-picks` keep them too, and a law on real git holds the call to the same commits as those flags give.
 3. `git rebase` reads `.gitattributes` from the working copy, so a `merge=union` line there merges files the call conflicts on.
    The call has no working copy and reads no tree's attributes.
-4. `git rebase` strips the blank lines at the start of a message. The call keeps a message byte for byte, as every call here does.
+4. `git rebase` strips the lines at the start of a message that are empty or hold only spaces and tabs. The first line with text keeps its own spaces. The call keeps a message byte for byte, as every call here does.
    (Found by hand on git 2.40.1; a law on real git holds the call to exactly this difference.)
 
 **The two adapters differ** where `/memory` merges by whole file: every case the README lists for `mergeTrees` holds for each commit
