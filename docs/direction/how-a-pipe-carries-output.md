@@ -1,0 +1,694 @@
+---
+state: "proposed 2026-11-15; three parts ruled by the owner on 2026-11-15 (0549, 0550, 0551, with 0548 before them), the plumbing the lead's design, and one screen question still open with the owner"
+summary: "`next/`. How `a | b` carries one program's output to the next one's input, on the saved mail 0109 decided and the chunk messages and `full` that ticket 1041 built. Ruled 2026-11-15: the reader gets the writer's whole current value and the newest wins, so the right side of a pipe is a projection of the left (0549); a pipe fits when the writer's output has at least the fields the reader's input needs, and one that does not fit is refused when the line is run, before any process starts (0550); the brain checks that the member may connect the two programs and records the pipe, for one project where both people are members (0551); Ctrl-C in any tile stops the whole line (0548). The lead's plumbing: the reader folds chunks into a pending value and swaps it in only at the last chunk, so no tile shows a partial value; the reader monitors the writer the Erlang way, one `DOWN` after the last data, carrying the reason; a watch binds one life, and the pipe points at a registered name, so after a restart it watches the new process; a reader that ends makes fabsh stop only the writers its line started; built-in Cmds first. A program with a window never ends cleanly by itself, so a process in a job ends only by Ctrl-C or a crash, and no new screen rule is needed for an ended source. Open with the owner: how a small program with no window shows on screen in a line between programs with tiles."
+---
+
+# How a pipe carries one program's output to the next one's input
+
+**Proposed 2026-11-15, partly ruled the same day.** Written before step 4 of
+[Tier 1's build order](../plan/tier-1.md#the-build-order) ("Pipes, for built-ins first"). Every
+claim here is about `next/`. The owner ruled four parts on 2026-11-15, each in its own decision
+file ([the rulings](#what-the-owner-ruled-on-2026-11-15)). The owner handed the plumbing to the
+lead, whose calls are written here as the design, each with the model it follows
+([the plumbing](#the-plumbing-the-leads-calls-of-2026-11-15)). One screen question is still
+[open with the owner](#open-with-the-owner). The rest is the lead's lean.
+
+```ts
+// A sketch, next/: the whole idea in one block. `tracker` and `outline` are made up (see the list at the end).
+// fabsh$ tracker --all | outline
+pipe({                                                                          // first: the brain checks member and fit, records it
+	from: { name: "tracker:1", program: "fabrika/tracker", output: "rows" },
+	to: { name: "outline:1", program: "fabrika/outline", input: "rows" },
+});
+startChild({ program: "fabrika/outline", name: "outline:1" });                  // then the reader
+startChild({ program: "fabrika/tracker", name: "tracker:1", input: { all: true } });
+
+// tracker's runner: it owes one chunked send of its whole current value; the newest value wins.
+sendChunks({ to: "outline:1", as: "rows", items: rows });                       // built in ticket 1041
+
+// outline's inbox, in order: the chunks, held aside until `last`, then swapped in whole.
+{ type: "rows", items: [/* 340 rows */], part: { id: "tracker:1/7/0", seq: 0, last: false } }
+{ type: "rows", items: [/* 310 rows */], part: { id: "tracker:1/7/0", seq: 1, last: true } }
+// When that life of the writer ends (Ctrl-C or a crash), exactly one DOWN for it:
+{ type: "DOWN", ref: "pipe_01h...", process: "process_01h...", reason: { _tag: "crashed" } }
+```
+
+## What the owner ruled on 2026-11-15
+
+Each ruling is in its own decision file, written no wider than the ruling. Until they merge, 0549,
+0550 and 0551 are in https://github.com/kamp-us/tea-fabrika/pull/1336,
+https://github.com/kamp-us/tea-fabrika/pull/1337 and https://github.com/kamp-us/tea-fabrika/pull/1338.
+
+### The reader gets the writer's whole current value, and the newest wins
+
+[0549](../../.decisions/0549-a-pipe-carries-the-whole-value.md). The right side of a pipe is a
+projection of the left side: what the reader holds is always made from the writer's value now, never
+from a history of past values.
+
+```ts
+// A sketch, next/: tracker's `rows` changes three times while outline is busy.
+// values:  v1 (sent) -> v2 (owed) -> v3 (replaces v2 before it starts)
+// outline receives v1 whole, then v3 whole. It never receives v2, and never half of one mixed with another.
+```
+
+### A pipe fits when the writer has at least the fields the reader needs
+
+[0550](../../.decisions/0550-a-pipe-fits-on-needed-fields.md). Extra fields are fine. This is what
+lets two programs from two different packs be piped. The pipe stays typed: a pipe that does not fit
+is refused when the line is run, before any process starts. Today's version fits only on an exact
+match (`packages/fabrika/src/program/shape.ts`, `Fit`) and keeps that until it goes.
+
+```ts
+// A sketch, next/: two packs, two schemas. `fits` is the made-up check; the schemas are real Effect Schema.
+import { Schema } from "effect";
+
+// Pack A's tracker writes this item.
+const TrackerRow = Schema.Struct({ id: Schema.String, title: Schema.String, state: Schema.String });
+
+// Pack B's outline reads this item: it needs only two of tracker's fields.
+const OutlineRow = Schema.Struct({ id: Schema.String, title: Schema.String });
+fits(TrackerRow, OutlineRow); // "fits": `state` is extra, and extra is fine
+
+// Pack C's board needs a field tracker does not have.
+const BoardRow = Schema.Struct({ id: Schema.String, column: Schema.String });
+fits(TrackerRow, BoardRow);   // "does_not_fit": `column` is missing, so the line is refused before any start
+
+// A value of the writer's type is a value of the reader's: Effect Schema's Struct ignores extra fields.
+Schema.is(OutlineRow)({ id: "t1", title: "Fix the door", state: "open" }); // true
+```
+
+### The brain checks the member and records the pipe
+
+[0551](../../.decisions/0551-the-brain-checks-and-records-pipes.md). The brain checks that the
+member behind the line may connect the two programs, and records the pipe. The case decided is one
+project where both people are members. Two brains talking to each other is not decided and not in
+scope.
+
+```ts
+// A sketch, next/: the check and the record, in one brain turn. `mayPipe` is made up.
+const member = yield* senders.sender(from.parent);          // the member behind the line, as 0170 reads it
+if (!mayPipe(member, writer.program, reader.program)) return refuse("forbidden");
+yield* ledger.append(piped({ pipe, from, output, to, input, cause: from.parent, by: member }));
+```
+
+### Ctrl-C in any tile stops the whole line
+
+Already [0548](../../.decisions/0548-ctrl-c-stops-the-whole-line.md), not written again here.
+
+## The plumbing: the lead's calls of 2026-11-15
+
+The owner handed the plumbing to the lead. These are the design, each with the model it follows.
+They have no decision file of their own.
+
+| The call | The model it follows |
+|---|---|
+| The reader folds what it receives chunk by chunk into a pending value, held aside: seq 0 starts it, and at the `last` chunk the pending value replaces the current one | Chunks as they come, as PowerShell and Nushell work on items as they come; the swap is atomic, as a database commit or a write to a temp file renamed into place |
+| A reader swaps in a new value only once it has arrived whole. If the writer crashes mid-send, the reader keeps its previous whole value and drops the partial one. No tile shows a partial value, so no "may be short" wording exists | A database transaction that never commits leaves the old rows; `rename(2)` replaces a file whole or not at all |
+| The reader watches the writer with a monitor, and gets exactly one `DOWN` per life of the writer, after the writer's last data, carrying the reason | Erlang/OTP's monitor: one `{'DOWN', Ref, process, Pid, Reason}`, ordered after the messages that process sent |
+| A watch binds one life of a process. The pipe points at a registered name, not a process ID, so after a restart the pipe watches the new process | OTP: a monitor is on a pid, a name is looked up again; a supervisor's restart is a new pid under the same name |
+| If the reader ends by itself, fabsh stops only the writers its own line started | A Unix shell's job, and OTP's "only the starter stops a child" |
+| Built-in Cmds first: fabsh makes and watches a pipe only through Cmds the runtime gives every program (`pipe`, `monitor`, `start_child`, `stop_child`, `send_chunks`), never a new kind of effect | Elm: a program's only effects are the Cmds its runtime gives; Erlang: `spawn` and `monitor` are built-in functions |
+
+The details of each are in [the lean](#the-lean) below, which now agrees with all six.
+
+## How a process in a job ends, and why no new screen rule is needed
+
+This is reasoning from what is settled, not an owner ruling.
+
+- A program with a window is live: it never ends cleanly by itself. So a process with a tile in a
+  job ends only in one of two ways: the person's Ctrl-C, which stops the whole job
+  ([0548](../../.decisions/0548-ctrl-c-stops-the-whole-line.md)), or a crash.
+- A crashed tile stays and says its word in its state slot
+  ([0502](../../.decisions/0502-a-tiles-state-is-a-word.md) and the
+  [tile guidelines](./tile-guidelines.md), written for today's version, which `next/` follows
+  here), and supervision restarts it.
+- The reader keeps showing the last whole value it got, as the swap above says.
+- So the three screen questions this note first left open (what an ended tile does, how the next
+  tile says its source is gone, what tiles further down say) are dropped: they rested on a tile
+  whose program ends cleanly by itself, which cannot happen. No new screen rule is needed for them.
+
+## Open with the owner
+
+One item, with no lean presented as decided.
+
+- **How a small program with no window shows on screen when it sits in a line between programs
+  that have tiles,** for example `tracker | double | outline`. The owner wants to see it and what
+  passes through it. Research on how other tools show a tiny step in a chain is under way. The
+  small programs are today's `seq`, `double` and the others in
+  `packages/fabrika/src/shell/small.ts`. Such a program can be short-lived (`seq` sends and exits)
+  or live as long as the job (`double` between two live programs). A clean end without the person
+  happens only with the short-lived kind.
+
+## What is already settled
+
+Searched on 2026-11-15 in `.decisions/`, `docs/direction/`, `.glossary/TERMS.md`, `experiments/`,
+the plan, and the open fabsh pull requests. None of these is reopened here.
+
+- **A pipe is shell syntax over saved program mail,** one message per chunk, never one message per
+  line and never an unsaved lane. A program can be piped with no shell present. An inbox has a cap,
+  and a send to a full inbox answers `full` while the writer waits
+  ([0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md)).
+- **Mail and pipes are two syntaxes over one transport.** The host binds the sender, saves the
+  message before it schedules the reader, and no program reads another's state or mailbox
+  ([0103](../../.decisions/0103-a-program-may-mail-another-by-name.md)).
+- **Programs meet on typed pipes, never by calling each other.** A pipe joins one chain and cannot
+  fan in; the fit check refuses a pipe whose types do not match (G6 in the
+  [program guidelines](./program-guidelines.md#g6-programs-meet-on-typed-pipes-never-by-calling-each-other)).
+  0550 now says what "match" means in `next/`: the writer has at least the fields the reader needs.
+- **An output is a value picked from the model and sent when it changes,** never a Cmd, and `null`
+  means nothing to send ([0260](../../.decisions/0260-an-output-is-a-model-value.md),
+  [a program's shape](./program-shape.md)).
+- **Pipes come in the order the four primitives set:** after `fabsh` is on screen, for its built-ins
+  first ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md), which lists this very
+  question as not decided).
+- **The shell is a regular program,** and a submitted line is a message in its log
+  ([0275](../../.decisions/0275-the-shell-is-a-regular-program.md)). It is `fabsh`, rethought from
+  `tsh` and never copied ([0432](../../.decisions/0432-next-has-fabsh-rethought-from-tsh.md)).
+- **A start is checked against the member whose line caused it,** and carries that member down
+  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md),
+  [0531](../../.decisions/0531-a-start-carries-its-member-down.md)). Every permission is one ReBAC
+  system with relation rows on the ledger
+  ([0526](../../.decisions/0526-one-rebac-permission-system.md)).
+- **Settings:** a choice that fits as a `fabrika.toml` value is one
+  ([0069](../../.decisions/0069-choices-are-settings.md)).
+- **Built in ticket 1041, merged in
+  [PR 1310](https://github.com/kamp-us/tea-fabrika/pull/1310):** an inbox holds at most
+  `mail.unread` unread messages (default 256) and a `send` past it answers `full` with nothing saved;
+  the reader's runner acks how far it read after each checkpoint save; `send_chunks` cuts a list
+  into messages of at most `mail.chunk` bytes (default 64 KiB), in order, waits while the inbox is
+  full, and mail to one registered name keeps its Cmd order
+  (`next/packages/libfabrika/src/runtime/Send.ts`, `runtime/Chunk.ts`, `runtime/Runner.ts`,
+  `processes/ProgramMailLedger.ts`). The defaults come from
+  [experiment 295](../../experiments/295-inbox-cap-and-chunk-size.md).
+- **Monitors are built, links are not.** A watch gets one `DOWN` when its process ends, or at once
+  with `noproc` (`processes/ProcessManager.ts`; the
+  [OTP table](./follows/otp.md) marks links and trap exit as Tier 4).
+- **The pipe's look is decided:** a title wash and a mark letter (A, B, C, of the alphabet), one of six hues per pipe
+  ([0477](../../.decisions/0477-a-pipe-is-marked-by-a-wash.md),
+  [0478](../../.decisions/0478-a-pipe-color-says-which-pipe.md)).
+- **fabsh's guidelines, still proposed** in
+  [PR 1254](https://github.com/kamp-us/tea-fabrika/pull/1254): answers are typed (F5), and a pipe
+  is saved mail whose receipt names the pipe's mark letter (F6).
+
+What today's version taught, read as lessons and not copied
+([tea-program](./tea-program.md), [an input can take anything](./an-input-can-take-anything.md)):
+a pipe ends only its own writer, and only the starter stops a run; a pipe into an input that acks
+loses nothing to a kill; a value that must not be done twice carries its own id, kept by the
+reader; and "outputs are events" made a reader wired late miss the first values, which is why
+`next/` made outputs state.
+
+### What the code does today
+
+- A program's `outputs` are only schemas, `Record<string, Schema>`
+  (`next/packages/libfabrika/src/runtime/Program.ts`), and nothing reads them. 0260's selector is
+  not built yet.
+- A child and its starter may mail each other with no grant; any other pair needs the host's closed
+  list (`processes/ProgramMailLedger.ts`, `related`). Two programs on one line are siblings, so
+  today they cannot mail each other.
+- A chunk message is `{type, items, part: {id, seq, last}}`, and `Chunk.join` gives a list back only
+  for one whole send.
+- An `exit` does not wait behind a `send_chunks` that is still waiting on a full inbox
+  (`runtime/Runner.ts`, `behind` holds back only mail). So a writer that exits mid-send can leave
+  its last value cut.
+- A program has no `monitor` Cmd; only the brain, a window and the stop path write watches.
+- fabsh on [PR 1232](https://github.com/kamp-us/tea-fabrika/pull/1232) reads `program [as name]`
+  and four built-ins, `help`, `clear`, `history` and `programs`
+  (`next/programs/fabsh/src/read.ts`). It has no `|` yet, and its built-ins answer inside its own
+  process.
+
+## The known ways
+
+The Elm answer first, then OTP's, then the shells. Sources were read on 2026-11-15 unless marked
+as a guess.
+
+- **Elm: ports.** Two Elm programs share nothing; a value leaves through an outgoing port, a `Cmd`,
+  and enters through an incoming port, a `Sub`, and the guide suggests sending `Json.Encode.Value`
+  for richer data ([Elm guide, ports](https://guide.elm-lang.org/interop/ports.html)). The guide
+  does not talk about back pressure or end of stream. Elm has no pipeline language at all; the
+  shell's line is the named exception in [Elm first](./elm-first.md). What we take: a whole typed
+  value goes out, and the reader's `update` takes it as a Msg.
+- **OTP: messages and monitors.** Messages between one pair of processes keep their order; a
+  monitor sends `{'DOWN', Ref, process, Pid, Reason}` when the process ends, at once with `noproc`
+  if it is already gone; a link sends an exit signal both ways
+  ([Erlang processes reference](https://www.erlang.org/doc/system/ref_man_processes.html)). A
+  mailbox has no bound and a send does not wait, as our [OTP table](./follows/otp.md) records with
+  its source. What we take: order per pair, and the `DOWN` as the end.
+- **GenStage: demand.** A consumer asks for at most `max_demand` events and asks again at
+  `min_demand`, so a producer never sends more than was asked. A producer buffers up to 10,000
+  events by default. On the producer's exit, `cancel: :permanent` ends the consumer, `:transient`
+  ends it only on an abnormal reason, and `:temporary` never
+  ([GenStage docs](https://gen-stage.hexdocs.pm/GenStage.html)). What we take: the cap and the ack
+  are already a demand window, and the three cancel modes name the choices for the end.
+- **Unix pipes: bytes, a full buffer, end of file.** A write to a full pipe blocks until the reader
+  reads; once every write end is closed, a read sees end of file; once every read end is closed, a
+  write raises `SIGPIPE`, or fails with `EPIPE`; Linux holds 16 pages by default
+  ([pipe(7)](https://man7.org/linux/man-pages/man7/pipe.7.html)). What we take: back pressure and
+  the two ends. What we leave: bytes, which lose the types G6 needs.
+- **PowerShell: objects, one at a time.** A pipeline sends objects, enumerates a list and sends its
+  items "one at a time", and binds each to a parameter of the next command by value or by property
+  name; a command fails when nothing binds
+  ([about_Pipelines](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pipelines)).
+  What we take: the reader may work on the first items before the last arrive. One message per
+  item is what 0109 refused.
+- **Nushell: typed values and tables.** Commands talk in Nu's data types, a table being the usual
+  one; each command declares what it takes and returns; bytes from an outside command become text
+  ([Nushell pipelines](https://www.nushell.sh/book/pipelines.html)). What we take: a typed list
+  between programs, and a declared input type the fit check reads.
+
+The plain reading: OTP gives the transport, the order and the end; Unix gives the back pressure;
+Nushell and PowerShell give the typed list, worked on as it comes. Nothing here is a custom
+design that an industry answer already covers.
+
+## The lean
+
+### What one program's output is
+
+**A piped output is a list, picked from the writer's model, sent whole each time it changes, and
+only the newest value is owed.** The whole value and "newest wins" are ruled
+([0549](../../.decisions/0549-a-pipe-carries-the-whole-value.md)); that the value is a list is the
+lead's lean.
+
+```ts
+// A sketch, next/: 0260's output, with its selector, which Program.ts does not have yet.
+export const tracker = Program.make({
+	name: "fabrika/tracker",
+	// ...
+	outputs: { rows: Output.make(Schema.Array(Row), (m) => (m.loaded ? m.rows : null)) },
+});
+```
+
+- The value is 0260's: a selector of the model, checked by tsc against the output's schema, with
+  `null` for nothing yet. A pipe adds no new kind of output.
+- A piped output's schema is a list (`Schema.Array`). A program with one value to give makes it a
+  list of one. So every reader takes one shape, a chunk of items, and the cutting built in ticket
+  1041 is the only cutting.
+- When the value changes, the writer's runner owes one `send_chunks` of the whole value. If a newer
+  value comes while one is still owed and not started, the newer one replaces it. A send already
+  started finishes first, so the reader never sees two values mixed. This is the rule for state,
+  not for events: the reader wants "what is true now", as a window does.
+- The runner, not the program, sends it. The program never writes a Cmd for its output (0260), and
+  it does not know who reads it.
+
+### How the next program receives it
+
+**In its own inbox, as messages of its input's type, in the order they were sent, folded one chunk
+at a time into a pending value, which replaces the current one only at the last chunk.** Both are
+the lead's plumbing calls: the swap is atomic, as a database commit or a write renamed into place.
+
+```ts
+// A sketch, next/: a reader's input for a pipe is a chunk input (runtime/Chunk.ts, built).
+const inputs = { rows: { schema: Chunk.input("rows", Row), description: "Rows to outline, from a pipe" } };
+
+// The model keeps the last whole value apart from the one still arriving.
+const Model = Schema.Struct({
+	rows: Schema.Array(Row), // the last whole value: the only one the view draws
+	pending: Schema.NullOr(Schema.Struct({ id: Schema.String, items: Schema.Array(Row) })),
+});
+
+update: {
+	rows: (m, msg) => {
+		// seq 0 starts a new pending value; a later chunk adds to the pending value of its own id.
+		const held = msg.part.seq === 0 || m.pending?.id !== msg.part.id ? [] : m.pending.items;
+		const items = [...held, ...msg.items];
+		// At `last` the pending value replaces the current one in one step; before it, the view is unchanged.
+		return msg.part.last
+			? [{ rows: items, pending: null }, []]
+			: [{ ...m, pending: { id: msg.part.id, items } }, []];
+	},
+	// The writer's life ended: a value still pending is dropped, and the last whole one stays.
+	DOWN: (m, _msg) => [{ ...m, pending: null }, []],
+},
+```
+
+- ~~The reader folds each chunk straight into its value, so the view can draw the first rows
+  while the rest come.~~ **Superseded 2026-11-15** by the lead's plumbing call: a partial value
+  never reaches the view, so no tile ever shows a short list or needs "may be short" wording. What
+  is lost is drawing the first rows early; nothing else is.
+
+- **Which mailbox:** the reader's own, `<registered name>/inbox`, the one every message to it uses.
+  No second inbox and no second lane.
+- **Which fields:** the message carries the writer's whole value, extra fields included (0549,
+  0550). The reader's input schema decodes the fields it names, and Effect Schema's `Struct` drops
+  the rest by default (tried on the installed effect 4.1.2). That a reader needs no code of its own
+  for extra fields is the lead's lean.
+- **Which tag:** the reader's input name, carried as `type` (`as` in `send_chunks`, since tea's Cmd
+  input may not hold a `type`). The pipe names the input, so a reader with two list inputs is fed
+  the one the line asks for.
+- **Which order:** the order the writer's runner made its Cmds, which 1041 already keeps per pair,
+  as OTP does.
+- **Why chunk by chunk, not joined by the runner:** a reader that waits for `last` before it acks
+  would hold the writer back on a list bigger than its cap times the chunk (256 messages of 64 KiB,
+  16 MiB), and both would wait forever. A reader that folds each chunk into its pending value saves
+  it in its model and acks each one, so any size goes through, and the view still draws only whole
+  values.
+- **A cut send** (a final refusal after some messages were saved) shows as a seq 0 of a new `id`
+  before any `last`. The reader drops the old pending value and starts the new one; its current
+  whole value is untouched.
+- **A writer that crashes mid-send:** its `DOWN` comes before any `last`, so the reader drops the
+  pending value and keeps showing its previous whole value. After a restart, the new life's seq 0
+  starts a new pending value.
+
+### How the pipe is made
+
+**fabsh returns one new built-in Cmd, `pipe`, before it starts anything. The brain checks the
+member and the fit, records the pipe and gives the mail right
+([0551](../../.decisions/0551-the-brain-checks-and-records-pipes.md)). fabsh never carries the
+messages itself.**
+
+```ts
+// A sketch, next/: the operands are the line's own words; the runner binds who asks.
+// Each side names the registered name fabsh will start it under and its program,
+// since nothing is running yet when the brain checks.
+export const Pipe = Schema.Struct({
+	from: Schema.Struct({ name: RegisteredName, program: ProgramName, output: Schema.NonEmptyString }),
+	to: Schema.Struct({ name: RegisteredName, program: ProgramName, input: Schema.NonEmptyString }),
+});
+
+export const PipeRefusal = Schema.Literals([
+	"no_program",   // a program is not in the loaded builds
+	"name_taken",   // a registered name already belongs to another program
+	"no_output",    // the writer declares no such output
+	"no_input",     // the reader declares no such chunk input
+	"does_not_fit", // the output lacks a field the input needs (0550)
+	"cannot_tell",  // the fit check cannot decide; refused, so the pipe stays typed
+	"taken",        // that input already has a pipe: a pipe cannot fan in (G6 R2)
+	"forbidden",    // the member behind the line may not pipe these two
+	"stale_sender",
+]);
+
+export const pipe = Cmd.make("pipe", {
+	input: Pipe,
+	ok: Schema.TaggedStruct("piped", { id: PipeId }),
+	err: PipeRefusal.literals,
+});
+```
+
+What the brain writes, in one ledger turn, when it says yes:
+
+```ts
+// A sketch, next/: the pipe's own events, on the reader's and the writer's streams.
+export const PipeEvent = Schema.TaggedUnion({
+	piped: {
+		pipe: PipeId,
+		from: Pipe.fields.from, // registered name, program, output
+		to: Pipe.fields.to,     // registered name, program, input
+		cause: InputId,         // the fabsh message that held the line
+		by: MemberId,           // the member that line was checked against (0170, 0551)
+	},
+	unpiped: {
+		pipe: PipeId,
+		reason: Schema.Literals(["writer_ended", "reader_ended", "stopped"]),
+	},
+});
+
+// The mail right, as 0526 shapes every permission (a sketch of its row):
+{ _tag: "related", subject: "name:tracker:1", relation: "pipes_to", object: "name:outline:1" }
+```
+
+- **The order fabsh uses:** `pipe` first, then start the reader, then the writer, each after the
+  one before answered. A pipe that does not fit is refused when the line is run, before any process
+  starts (0550), so the check cannot wait for the starts. The pipe points at the two registered
+  names, so it can be recorded before either has a process. Since an output is state, the writer's
+  runner sends its current value as soon as it starts and reads its `piped` row, so a writer that
+  is quick loses nothing. The race today's version had with "outputs are events" is gone. If a
+  start fails after `piped`, fabsh writes `unpiped stopped` and stops what the line started.
+- ~~**The order fabsh uses:** start the reader, then the writer, then `pipe`.~~ **Superseded
+  2026-11-15:** the owner ruled that a pipe that does not fit is refused before any process starts
+  (0550), which this order could not do.
+- **The fit check** reads the two declarations from the loaded builds: the writer's output item
+  schema against the reader's input item schema. It fits when the writer's item has at least the
+  fields the reader's item needs; extra fields are fine (0550). The rest is the lead's lean: each
+  needed field must carry a type the reader's field takes, and what the check cannot decide (a
+  union, an optional field, a refinement it cannot read) is `cannot_tell`, and refused.
+- ~~**The fit check** in v0: the two must be the same schema by its JSON Schema form, and a looser
+  fit (a subset, a named field as PowerShell's "by property name") waits for a real pair that
+  needs it.~~ **Superseded 2026-11-15:** the owner ruled the looser fit (0550), since it is what
+  lets two programs from two different packs be piped.
+- **The right** comes from the line's member, never from fabsh's own program, as 0170 does for a
+  start. It lives as long as the pipe, and `unpiped` takes it away. 0551 decides this for one
+  project where both people are members; two brains talking to each other is not decided.
+- **One pipe per reader input.** G6 says a pipe joins one chain and cannot fan in, and a second
+  writer's seq 0 would wipe the first one's value.
+
+### How the end of output is said
+
+**The OTP answer: the writer's `DOWN`, through a monitor the pipe sets for the reader, under the
+pipe's id as its `ref`.** This is one of the lead's plumbing calls: exactly one `DOWN` per life of
+the writer, after its last data, carrying the reason.
+
+```ts
+// A sketch, next/: one pipe, two lives of the writer. The pipe holds registered names; a watch holds one process ID.
+{ _tag: "piped", pipe: "pipe_01h...", from: { name: "tracker:1", ... }, to: { name: "outline:1", ... } }
+{ _tag: "started", name: "tracker:1", process: "process_01hA..." }   // the brain watches process_01hA for outline:1
+{ type: "DOWN", ref: "pipe_01h...", process: "process_01hA...", reason: { _tag: "crashed" } } // its one DOWN
+{ _tag: "restarted", name: "tracker:1", process: "process_01hB...", after: "process_01hA..." } // a new watch, on 01hB
+```
+
+- **A watch binds one life.** Each time a process starts or restarts under the piped writer's
+  registered name, the brain writes a watch for the reader on that process, with `ref` = the pipe
+  id. When that life ends, the brain writes the `DOWN` into the reader's inbox in the same turn as
+  `exited`, so it lands after that life's last saved message, and it is the only `DOWN` that life
+  gives.
+- ~~`pipe` also writes a watch: the reader watches the writer's live process.~~ **Superseded
+  2026-11-15:** `pipe` now comes before any start, so there is no live process to watch yet; the
+  watch is written per life, as above.
+- The reason tells the two ends apart, as Unix's end of file and a broken upstream do: `normal` is
+  "that is everything", and `crashed`, `kill` or `shutdown` is "it stopped early". The reader keeps
+  its last whole value and drops any pending one; it does not end, as `:temporary` in GenStage. A
+  reader that wants to end with its writer sends itself `exit` on `DOWN`, as `:transient` does. A
+  writer with a window never ends `normal` by itself
+  ([how a process in a job ends](#how-a-process-in-a-job-ends-and-why-no-new-screen-rule-is-needed));
+  only a short-lived program with no window does.
+- **Owed before the end:** an `exit` must wait behind an owed send to a piped registered name, as
+  a Unix `close` flushes. Today it does not (see above), so this is a small fix in `Runner.ts` that
+  comes with the pipe.
+- **A restart:** a pipe follows the registered name, like mail, never a process ID. If the writer
+  crashes and its supervisor starts a new life, the reader gets one `DOWN` with `crashed` for the
+  old life, then the pipe watches the new process, and the reader gets a seq 0 from it. The pipe
+  ends (`unpiped writer_ended`) only when the registered name has no live process and none is
+  coming.
+
+### When the reader is slow or its inbox is full
+
+**The writer waits, and only its newest value waits with it.**
+
+- `send_chunks` already waits on `full` and tries again at its backoff (1041). The writer keeps
+  working; its newer values replace the one owed, so a slow reader costs at most one value in flight
+  and one waiting, never a growing queue.
+- The reader's runner acks after each checkpoint save (1041), so every chunk it folds makes room.
+- Nothing new is a setting here: `mail.unread` and `mail.chunk` already are, and "newest wins" is
+  what an output is, not a knob a person turns.
+
+### When either side ends or crashes
+
+| What ends | What happens | The known way it follows |
+|---|---|---|
+| The writer, `normal` | The reader gets `DOWN normal` after the last chunk and keeps its value; only a short-lived program with no window ends this way | Unix end of file; GenStage `:temporary` |
+| The writer, crashed | The reader gets `DOWN crashed`; a restart under the registered name is watched again and sends again from seq 0 | OTP monitor; the supervisor's restart |
+| The reader, by itself | fabsh gets its `DOWN`, writes `unpiped reader_ended`, and stops with `stop_child` only the writers this line started; a writer it did not start keeps running, and its runner sends nothing more down that pipe | Unix `SIGPIPE` through the shell's job; OTP's "only the starter stops" |
+| The person presses Ctrl-C in any tile of the line | fabsh stops every process the line started, reader first ([0548](../../.decisions/0548-ctrl-c-stops-the-whole-line.md)) | a shell's Ctrl-C to the foreground job |
+| fabsh itself | Its children keep running, as 0276 keeps a tile's process to its `keep`; the pipe stays, and a new fabsh reads it from the ledger | an OTP child that outlives a dead parent with no link (links are Tier 4) |
+
+fabsh watches each process its line starts, so it needs a `monitor` built-in Cmd, which programs
+do not have yet. That is the plumbing call "built-in Cmds first": fabsh gets `pipe` and `monitor`
+from the runtime, as it gets `start_child`, and no program needs a new kind of effect. Links stay in Tier 4: two monitors cover a line, and no case above needs an exit
+signal to kill the other side.
+
+### What is recorded, so nothing is lost forever
+
+- **Each message** is a ledger entry like any message: the sender bound by the host from the running
+  process, never a field (0103), `sentAt` on the writer's clock and `arrivedAt` on the ledger's,
+  its `pos` in the reader's inbox, and its trace.
+- **What the writer saw:** a chunk's `part.id` is the writer's dispatched Cmd id,
+  `<process>/<pos>/<index>`, so it names the exact step, and so the exact model, the value was
+  picked from. Nothing new is needed for it.
+- **What the reader saw:** its ack, and its checkpoint's `after`, say how far it had read.
+- **Who made the pipe and why:** `piped` keeps the member and the fabsh message that held the line.
+  `unpiped` keeps why it ended. These are facts that exist only at that moment, so they go in now,
+  even with nothing reading them yet.
+- **What can wait, because it rebuilds from the log:** a pipe's throughput, how long the writer
+  waited on `full`, how many values "newest wins" skipped. A span attribute for each is cheap and
+  should be added with the build, but no field is lost without it.
+
+### A browser is always a client
+
+Every piece above is messages and Cmds on the brain: JSON of at most 64 KiB, ordered positions, and
+the gateway's calls. No Node, no socket of its own, no file and no WebSocket frame. A fabsh tile in
+a browser tab sends the same `submitted` line as one in the Electron app, and draws the same
+receipts and pipe washes. A window never carries pipe messages; it sees each program's view.
+
+### Built-ins first
+
+0159 asks for pipes "for `fabsh`'s built-ins" first. A built-in runs inside the fabsh process, so
+the lean is:
+
+- **A built-in as the writer** (`programs | outline`, later `ps | outline`): fabsh itself is the
+  writer. It starts the reader, which is its child, so the two may already mail each other, and
+  sends the built-in's typed answer (F5) with `send_chunks`. It still writes `piped`, so the
+  receipt and the record look the same as between two programs.
+- **A built-in as the reader** (`tracker | history`) has no use yet and waits.
+- So the first real pair needs one reader program. None is in `next/programs` today (`chaos`,
+  `checklist`, `counter`, `inbox`, `pipeline`, `tezgah`).
+- This is a different thing from the plumbing call "built-in Cmds first", which says which Cmds
+  fabsh uses to make any pipe. This section is about which pair is piped first, and stays a lean.
+
+## The line, traced message by message
+
+`fabsh$ tracker --all | outline`, with 1,200 tickets of about 180 bytes each, so about 216 KB.
+
+1. The person presses Enter. fabsh's inbox saves `{type: "submitted", line: "tracker --all | outline"}`
+   at its next pos, say 41, stamped with the member.
+2. fabsh reads the line again (0275): `tracker` a verb, `--all` a flag, `|` a pipe, `outline` a
+   verb. Its line moves to `checking`, and it returns `pipe` with `from: {name: "tracker:1",
+   program: "fabrika/tracker", output: "rows"}` and `to: {name: "outline:1", program:
+   "fabrika/outline", input: "rows"}`.
+3. The brain checks the member behind message 41 (0551), both programs, both registered names, the
+   fit (tracker's `Row` has at least the fields outline's `Row` needs, 0550) and that `outline:1`'s
+   `rows` has no pipe. In one turn it writes `piped {pipe, from, to, cause: 41, by}` and the
+   `pipes_to` row. It answers `piped`. Had the fit failed, it would have answered `does_not_fit`,
+   and nothing would have started.
+4. fabsh's line moves to `starting`. It returns `start_child` for `outline:1`, and on
+   `start_child_ok`, `start_child` for `tracker:1` with `{all: true}`, then a `monitor` for each.
+   When `tracker:1` starts, the brain writes the pipe's watch on that process for `outline:1`.
+5. tracker's runner starts and reads its `piped` row. Its `rows` output is loaded, so it owes one
+   `send_chunks({to: "outline:1", as: "rows", items})`, dispatched as Cmd `tracker:1/7/0`, with the
+   whole value.
+6. The cut gives four messages under 64 KiB: seq 0, 1 and 2 with `last: false`, and seq 3 with
+   `last: true`. Each is saved in `outline:1/inbox` at pos 1 to 4, with the sender bound,
+   `sentAt` and `arrivedAt`.
+7. outline folds seq 0, 1 and 2 into its pending value, saving and acking each; its view still
+   draws the rows it had before. At seq 3, `last`, the pending value replaces its rows in one step,
+   and the view draws all 1,200 tickets.
+8. tracker has a window, so it stays live. When a ticket changes, its `rows` output changes, and its
+   runner owes one more whole send, newest wins (0549). fabsh's receipt for line 41 names both
+   processes and the pipe's mark letter, A.
+9. The person presses Ctrl-C in either tile. fabsh stops both processes, reader first (0548). The
+   brain writes `exited` for each, and the `DOWN`s at their watchers.
+
+Had outline been slow, step 6 would have met `full` at 256 unread messages, and tracker's runner
+would have waited at its backoff while outline caught up. Had tracker crashed between seq 1 and
+seq 3, outline would have got tracker's one `DOWN crashed` for that life, dropped its pending value
+and kept its previous rows; tracker's tile would have said its word and been restarted, and the new
+life's seq 0 would have started a new pending value. Had outline crashed past its restarts, fabsh
+would have got its `DOWN`, written `unpiped reader_ended`, and stopped `tracker:1`, which its line
+started.
+
+```mermaid
+sequenceDiagram
+  participant P as person
+  participant F as fabsh:1
+  participant B as brain
+  participant T as tracker:1
+  participant O as outline:1
+  P->>F: submitted "tracker --all | outline"
+  F->>B: pipe tracker:1.rows -> outline:1.rows
+  B->>B: check member and fit, write piped, pipes_to
+  B-->>F: piped
+  F->>B: start_child outline:1
+  B-->>F: started
+  F->>B: start_child tracker:1 {all}, monitor x2
+  B->>B: watch this life of tracker:1 for outline:1
+  B-->>F: started
+  T->>B: send_chunks rows (4 messages)
+  B->>O: rows seq 0..3, last on 3
+  O->>B: ack after each save
+  O->>O: at seq 3, swap the pending value in
+  F->>P: receipt: both running, pipe A
+  P->>F: Ctrl-C in either tile
+  F->>B: stop_child outline:1, then tracker:1
+  B->>F: DOWN for each
+```
+
+## The other branches, and what each would lose
+
+| Branch | What it would lose |
+|---|---|
+| A byte stream, as Unix | The types G6 and F5 rest on, and the fit check; every reader would parse text again |
+| An exact match for the fit, as today's version has | Two programs from two different packs would almost never fit, since each pack writes its own schema; the owner ruled it out for `next/` (0550) |
+| One message per item, as PowerShell's one at a time | What 0109 refused: experiment 258 measured it slowing with each line |
+| Every value as an event, no "newest wins" | 0260's "an output is state"; a slow reader would make the writer queue every past value, and a late reader would need the old ones replayed, the harm tea-program found |
+| A JSON Patch of each change, as a view patch | Simple readers: each would keep a base and apply patches, and one lost base breaks it. Worth it only for a big list that changes often; no such pair exists to measure |
+| The runner joins chunks and hands one whole Msg | Any list over 16 MiB (cap times chunk) would stop both sides for good, since the reader could not ack a part |
+| The reader pulls the writer's query port, as GenStage's demand | The saved messages 0109 asks for, since a query is not saved, and 0103's "no program reads another's state" |
+| fabsh relays every message itself | Twice the writes, fabsh in the path of every pipe, and 0109's "a program can be piped with no shell present" |
+| A link in place of two monitors | Nothing needs an exit signal to kill the other side; links are Tier 4. A link would also kill a reader that wants to keep a crashed writer's last value |
+| fabsh's host grant list for the mail right | 0526: the list is one of the four 0526 replaces with relation rows |
+
+## The owner's calls, and where each landed
+
+The note first put six yes-or-no calls to the owner, each with a lean. On 2026-11-15 the owner
+ruled some and handed the plumbing to the lead. Where each landed:
+
+| Call | Where it landed |
+|---|---|
+| 1. A list, sent whole on each change, newest wins | Whole value and newest wins: ruled ([0549](../../.decisions/0549-a-pipe-carries-the-whole-value.md)). That it is a list: still the lead's lean |
+| 2. The reader folds chunk by chunk | The lead's plumbing calls: chunks fold into a pending value, swapped in whole at the last chunk; the "draw early" part is superseded |
+| 3. One built-in `pipe` Cmd, the brain checks member and fit and records it | The check and the record: ruled ([0551](../../.decisions/0551-the-brain-checks-and-records-pipes.md)), for one project where both people are members. The fit rule: ruled ([0550](../../.decisions/0550-a-pipe-fits-on-needed-fields.md)). The `pipes_to` row's shape: still a sketch, settled by the 0526 build |
+| 4. End of output is the writer's `DOWN`, and a pipe follows the registered name across a restart | The lead's plumbing calls: one `DOWN` per life, and a watch per life |
+| 5. When the reader ends, fabsh stops only the writers its line started | The lead's plumbing call |
+| 6. "Built-ins first" means a built-in as the writer | Still the lead's lean |
+
+The six calls as first written, kept as the record of the lean:
+
+1. **A piped output is a list, sent whole on each change, newest wins?** Lean yes, 75%. Why: it is
+   0260's output as written, it keeps a slow reader's cost to one value, and it lets a late reader
+   start from now. Cost: a big list that changes often is sent whole each time. The doubt: a log
+   that only grows would resend everything; a measure on the first real pair, or a patch branch,
+   settles it.
+2. **The reader folds chunk by chunk, seq 0 starts a value and `last` closes it?** Lean yes, 85%.
+   Why: it is the only shape that cannot stop on a list over 16 MiB, and the reader can draw early.
+   Cost: each reader writes three lines of fold, which a libfabrika helper can give.
+3. **fabsh asks with one built-in `pipe` Cmd, and the brain checks the member and the fit and
+   writes `piped` and a `pipes_to` row as the mail right?** Lean yes, 70%. Why: it keeps the right
+   with the member (0170, 0526) and the pipe on the record. Cost: a new Cmd, a new event and a
+   relation the 0526 model must name. The doubt: 0526's model and API are a sketch, so the row's
+   shape may move; the 0526 build settles it.
+4. **End of output is the writer's `DOWN`, through a watch the pipe sets under its own id, and a
+   pipe follows the registered name across a restart?** Lean yes, 70%. Why: it is OTP's monitor, already built
+   and ordered after the last message. Cost: an `exit` must wait behind owed sends, a small fix in
+   `Runner.ts`. The doubt: a reader sees a crash and a restart as `DOWN` then seq 0, which may be
+   too quiet for a person; the first crash in a real line settles it.
+5. **When the reader ends, fabsh stops the writers its line started, and nothing else?** Lean yes,
+   80%. Why: it is what a shell does to its job, and OTP's "only the starter stops". Cost: fabsh
+   needs a `monitor` Cmd. The doubt: a writer someone else started keeps running with no reader,
+   which is correct but may surprise.
+6. **"Built-ins first" means a built-in as the writer, with fabsh itself sending, and the first pair
+   needs one small reader program?** Lean yes, 80%. Why: a built-in runs in fabsh's process, so
+   fabsh is the writer, and it already may mail its own child. Cost: one reader program that does
+   not exist yet. The doubt: 0159 may have meant fabsh's shipped programs, not its in-process words;
+   the answer changes only which pair is built first.
+
+No new setting is proposed. Each new choice above was asked "is this a setting?": the fit rule,
+"newest wins", one pipe per input and the end rule are what a pipe is, not values a person sets;
+`mail.unread` and `mail.chunk` already are settings.
+
+## What this note cannot tell us
+
+- How the fit check compares two schemas from two packs field by field: whether a field's type
+  is read from the JSON Schema form or from Effect's own schema tree, and how often a union, an
+  optional field or a refinement ends as `cannot_tell`. 0550 sets the rule; no two real packs have
+  been checked against it yet.
+- What "newest wins" skips in a real line, and whether anyone misses it. Nothing has run.
+- How a small program with no window shows in a line between tiles, and what passes through it.
+  That is [open with the owner](#open-with-the-owner), and research is under way.
+- What a big value costs a reader that holds it twice, current and pending, while it arrives.
+  Nothing has measured it.
+- Whether one watch per life holds up when a writer restarts fast, many times in a row. Nothing has
+  run a restart under a pipe.
+- A pipe between two brains. 0551 decides one project where both people are members; two brains
+  talking to each other is not decided and not in scope here.
+- Whether the ack after each checkpoint keeps up with a writer at 64 KiB messages on a Durable
+  Object. Experiment 295 measured SQLite on the laptop only, and 0109's cloud cost was a guess.
+- Whether a reader on another instance works the same. Delivery between instances is P41's later
+  slice.
+- How the receipt and the pipe's wash read with a screen reader. That needs a real run.
+- Whether `exit` waiting behind owed sends has a case where a writer must end at once; `kill` would
+  still end it, cutting the send, which the reader sees as a `DOWN` before any `last`, so it keeps
+  its previous whole value.
+
+Made up, for the examples: the programs `tracker` and `outline` in `next/`, the pack `board`, their
+`rows` output and input, `Row`, `TrackerRow`, `OutlineRow`, `BoardRow`, `fits`, `mayPipe`,
+`Output.make`, `PipeId`, `MemberId`, `RegisteredName`, `ProgramName`, `pipe`, `PipeEvent`, the
+`no_program` and `name_taken` refusals, the `checking` state and the `pipes_to` relation.
+Real: `send_chunks`, `Chunk.input`, `Part`, `full`, `mail.unread`, `mail.chunk`, `start_child`,
+`stop_child`, `exit`, `DOWN` and the watch, all in `next/packages/libfabrika/src/`.
