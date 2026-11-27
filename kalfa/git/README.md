@@ -83,9 +83,10 @@ a failure. A push that deletes a ref can trust it.
   from remotes that need none picks it. In this version the git adapter does not hand a credential to git, so a remote that
   needs one fails `FetchFailed`.
 - **The remote.** `Remote.named(name)` or `Remote.url(url)`. A URL is `https://host[:port]/path`, `file:///abs/path` or an
-  absolute path. It holds no user, password, query or fragment, no space, backslash or control character, and its host is exactly
-  what the URL parser reads (lowercase, no default port written out, an international name as `xn--`), so no character the parser
-  drops, maps or decodes can hide a host. `http://`, `ssh://`,
+  absolute path. It holds no user, password, query or fragment, no space, backslash or control character, and its host is what the
+  URL parser reads from the text, compared with the text's capital letters A to Z lowered (a capital letter is accepted; no default
+  port written out, an international name as `xn--`), so no character the parser drops, maps or decodes can hide a host. A file URL's
+  path does not start with two slashes. `http://`, `ssh://`,
   `git@host:path`, `ext::`, `fd::` and relative paths are refused. A named remote's URL is the configured text exactly: no
   `insteadOf` applies.
 - **Failures.** `NoSuchRemote` for a name this repository has no remote for, `BadRemoteUrl` for a named remote whose config

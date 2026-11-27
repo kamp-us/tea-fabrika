@@ -3,7 +3,7 @@
  *
  * **Details**
  *
- * A remote is named in this repository's config, such as `origin`, or it is a URL. A URL is one this package takes: it holds no user name or password, so no credential can ride in it, and its host is written as the parser reads it, so no character the parser drops, maps or decodes can hide a host.
+ * A remote is named in this repository's config, such as `origin`, or it is a URL. A URL is one this package takes: it holds no user name or password, so no credential can ride in it, and its host is the one the parser reads from its text, so no character the parser drops, maps or decodes can hide a host.
  */
 import { Schema } from "effect";
 import * as Ref from "./Ref.ts";
@@ -40,16 +40,18 @@ const isWebOrFile = (text: string): boolean => {
     return false;
   }
 
-  // The host the parser read is the text of the authority, exactly. A user name or a password in the authority, a dropped, mapped or decoded
-  // character, a capital letter or a written-out default port would each make the text read another way than a caller reads it.
-  const authority = text.slice(scheme.length).split("/")[0] ?? "";
+  // The host the parser read is the text of the authority, but for a capital letter. A user name or a password in the authority, a dropped,
+  // mapped or decoded character or a written-out default port would each make the text read another way than a caller reads it. Only the
+  // letters A to Z are lowered: `toLowerCase` also lowers the Kelvin sign to `k`, which would let a host hide behind it.
+  const rest = text.slice(scheme.length);
+  const authority = rest.split("/")[0] ?? "";
 
-  if (new URL(text).host !== authority) {
+  if (new URL(text).host !== authority.replace(/[A-Z]/g, (letter) => letter.toLowerCase())) {
     return false;
   }
 
-  // A file URL names no host: `file:///abs/path`.
-  return scheme === "https://" || authority === "";
+  // A file URL names no host and no path that starts with two slashes: `file:///abs/path`.
+  return scheme === "https://" || (authority === "" && !rest.startsWith("//"));
 };
 
 // An absolute path, as git takes a local repository. A path that starts with two slashes names a host on some systems.
@@ -62,7 +64,7 @@ const isUrl = (text: string): boolean => !HIDDEN.test(text) && (isPath(text) || 
  *
  * **Details**
  *
- * It holds no user, password, query or fragment and no space or control character, and its host is exactly the text the URL parser reads: lowercase, with no default port written out, and an international name written as the parser writes it (`xn--`). `http://`, `ssh://`, `git@host:path`, `ext::`, `fd::` and relative paths are refused.
+ * It holds no user, password, query or fragment and no space or control character, and its host is the text the URL parser reads, but for capital letters, which it lowers: a capital letter is accepted, a default port is not written out, and an international name is written as the parser writes it (`xn--`). A file URL's path does not start with two slashes. `http://`, `ssh://`, `git@host:path`, `ext::`, `fd::` and relative paths are refused.
  *
  * @category models
  */
