@@ -13,30 +13,45 @@
 //                 draft placeholder (Sections.ts), each new exported name is named under `## New names` (Names.ts), and each
 //                 `fabrika close ticket <N>` line names an open tracker ticket
 //   signatures    every commit since main is signed or made by `stepcommit.sh` (./Signatures.ts)
+//   review        a path the head changes that needs a review (./Review.ts `REVIEWED`) has an approval recorded on that head, except that an
+//                 admin merge may go past a missing one with a written reason, and `arm` never goes past it (see `Way`)
 //
 // A merged pull request is no refusal here: each path answers one as "already merged" before it asks the gate, and `land.ts
 // check` reads merged ones too (replay.ts runs it on them).
 //
 // The review check (ticket 2338, decision 0093: .kalfa/decisions/0093-a-review-verdict-is-a-record-on-the-reviewed-head-and-ci-required-reads-it-on-the-queue.md)
-// plugs in at `CHECKS` below as a `Check` of its own, last: its error joins `Unread` and its services join `Needs`. It is more than
-// one more entry, though. The decision has an admin merge go past a missing verdict only with a written override reason, and only
-// changes under `next/` and `kalfa/` need a review, so `Ask` grows the route (queue, arm or admin, with the reason on admin) and the
-// pull request's files, and each path passes its own. Read through its module: `Gate.before(...)`.
-import { String as Str, pipe, Array as Arr, Effect } from "effect";
+// is the last entry of `CHECKS`. It asks git for the paths the head changes (./Changes.ts) and, only when one needs a review, GitHub for
+// the statuses on that head (./Reviews.ts). The question carries the way the path merges (queue, arm or admin, with the reason an admin
+// merge gives), since the three go past a missing record differently. Read through its module: `Gate.before(...)`.
+import { String as Str, pipe, Array as Arr, Effect, Schema } from "effect";
 
+import { Changes, type ChangesError } from "./Changes.ts";
 import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
 import { type Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
 import type { LeakGrepRefused, Pushes } from "./Pushes.ts";
+import * as Review from "./Review.ts";
+import { Reviews, type ReviewsError } from "./Reviews.ts";
 import * as Sections from "./Sections.ts";
 import { Signatures, type SignaturesError } from "./Signatures.ts";
 import { Tickets } from "./Tickets.ts";
 
 /** What a check cannot read, so it cannot tell: a leak grep that refused or could not run, GitHub, git. The next check adds its own here. */
-export type Unread = LeakGrepRefused | PullRequestsError | SignaturesError;
+export type Unread = LeakGrepRefused | PullRequestsError | SignaturesError | ChangesError | ReviewsError;
 
 /** What the checks read from. The next check adds its own service here. */
-export type Needs = PullRequests | Pushes | Tickets | Signatures;
+export type Needs = PullRequests | Pushes | Tickets | Signatures | Changes | Reviews;
+
+/**
+ * How a path merges, which decides what it may do about a missing review: the merge queue (`queue`, `merge`, `run`, `check`, the landing
+ * flow) needs a record; `arm` turns on merge when ready, which merges whatever the head is later, so it is refused for a pull request that
+ * needs a review, record or not; an admin merge (`merge --admin`, `admin`) goes past a missing record only with a written reason.
+ */
+export const Way = Schema.TaggedUnion({
+  queue: {},
+  arm: {},
+  admin: { override: Schema.NullOr(Review.Reason) },
+});
 
 /** The pull request, and where the checks read its change from. */
 export type Ask = {
@@ -45,11 +60,12 @@ export type Ask = {
   readonly found: Detail;
   /** Whether the path marks a draft ready itself, as `queue`, `arm` and `check` do and `admin` does with a wait; a draft then passes. */
   readonly marksReady: boolean;
+  readonly way: typeof Way.Type;
 };
 
 /** One refusal: what it says of this pull request when it passes, and how it asks. It gives why the pull request may not merge, or `null`. */
 type Check = {
-  readonly passes: (found: Pick<Detail, "state">) => string;
+  readonly passes: (found: Pick<Detail, "state">, overridden: boolean) => string;
   readonly ask: (ask: Ask) => Effect.Effect<string | null, Unread, Needs>;
 };
 
@@ -175,7 +191,68 @@ export const body = Effect.fn("Gate.body")(function* (
   return (yield* description(found)) ?? (yield* unopenTickets(found.body));
 });
 
-/** The refusals, in the order they are asked. The review check (ticket 2338) is the next entry, last. */
+/** The approval a pull request's head holds for the paths it changes: `exempt` when none needs a review, else what its statuses say. */
+const decided = Effect.fn("Gate.decided")(function* (
+  found: Pick<Detail, "oid">,
+  paths: ReadonlyArray<string>,
+): Effect.fn.Return<Review.Approval, ReviewsError, Reviews> {
+  const exempt = Review.approval({ reviewed: Review.REVIEWED, paths, seen: [] });
+
+  return exempt._tag === "exempt"
+    ? exempt
+    : Review.approval({ reviewed: Review.REVIEWED, paths, seen: yield* (yield* Reviews).read(found.oid) });
+});
+
+/**
+ * What the head's review stands at, for a path that acts on it (the admin merge writes its override only when this says `missing`). Reads the
+ * paths git says the head changes and, when one needs a review, the statuses on the head.
+ */
+export const approval = Effect.fn("Gate.approval")(function* (
+  dir: string,
+  found: Pick<Detail, "oid">,
+): Effect.fn.Return<Review.Approval, ChangesError | ReviewsError, Changes | Reviews> {
+  return yield* decided(found, yield* (yield* Changes).paths(dir, found.oid));
+});
+
+const carryLine = (found: Detail): string =>
+  `it changes a path that needs a review (next/, kalfa/ or a root config file) and no approval is recorded on its head ${found.oid}; if an earlier head was approved, carry it with \`land.ts review ${found.number}\`, else record the review with \`land.ts review ${found.number} --reviewed <sha> --reviewer <who>\``;
+
+const adminLine = (found: Detail): string =>
+  `it changes a path that needs a review and no approval is recorded on its head ${found.oid}; record one (\`land.ts review ${found.number}\`), or go past it on purpose with \`--override-review <reason>\``;
+
+const armLine = (found: Detail): string =>
+  `it changes a path that needs a review, so merge when ready is not turned on for it (a later push would merge with no review); queue it with \`land.ts queue ${found.number} --wait-ci\``;
+
+/**
+ * Why a pull request that changes a path needing a review may not merge by this way, or `null`. A merged pull request is not refused. Reads
+ * the head's changed paths once, and its statuses only when a path needs a review and the way would take a record.
+ */
+const review = Effect.fn("Gate.review")(function* ({
+  dir,
+  found,
+  way,
+}: Ask): Effect.fn.Return<string | null, ChangesError | ReviewsError, Changes | Reviews> {
+  if (found.state === "MERGED") {
+    return null;
+  }
+
+  const paths = yield* (yield* Changes).paths(dir, found.oid);
+
+  if (Review.approval({ reviewed: Review.REVIEWED, paths, seen: [] })._tag === "exempt") {
+    return null;
+  }
+
+  const unapproved = (line: string) =>
+    Effect.map(decided(found, paths), (read) => (read._tag === "approved" ? null : line));
+
+  return yield* Way.match(way, {
+    queue: () => unapproved(carryLine(found)),
+    arm: () => Effect.succeed(armLine(found)),
+    admin: ({ override }) => (override === null ? unapproved(adminLine(found)) : Effect.succeed(null)),
+  });
+});
+
+/** The refusals, in the order they are asked. */
 const CHECKS: ReadonlyArray<Check> = [
   { passes: () => "not a can/ branch", ask: ({ found }) => Effect.succeed(canBranch(found)) },
   {
@@ -202,15 +279,22 @@ const CHECKS: ReadonlyArray<Check> = [
         : `${unsigned.length} commit(s) since main are not signed or made by stepcommit.sh: ${Arr.join(unsigned, "; ")}. Make it with \`stepcommit.sh --commit-only lead <ticket> "<subject>" <files>\` (\`--empty\` for no files), not a plain git commit.`;
     }),
   },
+  {
+    passes: (_, overridden) =>
+      overridden
+        ? "no review is recorded on the head: gone past on a written reason (--override-review)"
+        : "a review on the head, or no path that needs one",
+    ask: review,
+  },
 ];
 
 /**
  * What a passing gate says it checked, one line: the same words from `land.ts check` and from each path that merges, so the
  * lead reads one list. `found` is the pull request as it stood when the gate read it, so a merged one says so.
  */
-export const line = (found: Pick<Detail, "number" | "state">): string =>
+export const line = (found: Pick<Detail, "number" | "state">, overridden = false): string =>
   `pr ${found.number}: the merge gate passes (${Arr.join(
-    Arr.map(CHECKS, (check) => check.passes(found)),
+    Arr.map(CHECKS, (check) => check.passes(found, overridden)),
     "; ",
   )})`;
 

@@ -1,4 +1,4 @@
-// Arm: how the lead turns on GitHub's merge when ready for one pull request (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips), the one
+// Arm: how the lead turns on GitHub's merge when ready for one pull request (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; a pull request that needs no review has merge when ready on, and main's full run catches what slips), the one
 // way it is turned on. Today's lead tooling, run on our own laptop; it is not product.
 //
 //   arm   the merge gate passes (./Gate.ts, which `land.ts check` and every other merge path run too: open, into main, no conflict, no `can/` branch,
@@ -12,7 +12,7 @@
 // legs, a changed-set run has `changed (<leg>)` legs or, for a set of zero files, no leg. Either one
 // green at the head arms. A changed set is the set of one diff, so a changed-set run at an older head
 // proves nothing about this head's change and refuses; a full run at an older head still arms with
-// The arm-every-reviewed-pull-request rule's note.
+// The note for a pull request that needs no review, which is armed with no full run first (one that needs a review is never armed: the gate refuses it).
 //
 // A run that ended `cancelled` was once not a run someone stopped: a red leg's old last step,
 // `stop the run`, canceled its own run, so every leg read `cancelled` and only the steps showed which
@@ -20,7 +20,7 @@
 // command judges each job, never the run's top line, and on a refusal prints each job that is not
 // green, its failed steps and the failing test lines of its log.
 //
-// No run at the head arms, as the arm-every-reviewed-pull-request rule lets a reviewed pull request be armed with no full run first, and
+// No run at the head arms, as the rule lets a pull request that needs no review be armed with no full run first, and
 // says so in one line. A run at the head that is red or has not ended refuses.
 // With no scheduled proof at the head, the newest exact-head automatic check can prove the related
 // set. It must be a successful ready PR run from this repository, with select, related and the real
@@ -351,9 +351,9 @@ const redReport = Effect.fn("Arm.redReport")(function* (
 
 const proofNote = "automatic ready and queue CI provide the required checks";
 
-/** The line a head with no full run of its own is armed with (every pull request whose review passed has merge when ready on, and main's full run catches what slips). */
+/** The line a head with no full run of its own is armed with (a pull request that needs no review has merge when ready on, and main's full run catches what slips). */
 const unrunNote = (seen: string, oid: string, docs: boolean): string =>
-  `no full run at ${oid.slice(0, 12)}${seen}; arming as the arm-every-reviewed-pull-request rule allows (${
+  `no full run at ${oid.slice(0, 12)}${seen}; arming as a pull request that needs no review allows (${
     docs ? "a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run" : proofNote
   })`;
 
@@ -386,7 +386,7 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   }
 
   // Merge when ready merges later with no one watching, so the gate runs before it is turned on. A draft is marked ready below.
-  const refused = yield* Gate.before({ dir: a.dir, found, marksReady: true });
+  const refused = yield* Gate.before({ dir: a.dir, found, marksReady: true, way: Gate.Way.cases.arm.make({}) });
 
   if (refused !== null) {
     return yield* refuse(refused);

@@ -25,11 +25,12 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { Recorder, runsFor } from "@kampus/vitest";
-import { Effect, Fiber, Layer, Option, Schema, Match } from "effect";
+import { Effect, Fiber, Layer, Match, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { Checks } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import * as BranchesTest from "./BranchesTest.ts";
+import * as ChangesTest from "./ChangesTest.ts";
 import * as Merge from "./Merge.ts";
 import { PullRequests } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
@@ -38,6 +39,8 @@ import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
 import type * as Queue from "./Queue.ts";
+import { Reviews } from "./Reviews.ts";
+import * as ReviewsTest from "./ReviewsTest.ts";
 import * as Sections from "./Sections.ts";
 import * as SignaturesTest from "./SignaturesTest.ts";
 import * as TicketsTest from "./TicketsTest.ts";
@@ -113,6 +116,8 @@ const memory = (w: World = {}) => {
     ChecksTest.layer([Option.some(job)], ""),
     BranchesTest.layer({ branches: [], ahead: {}, empty: [], behind: { [oid]: w.behind ?? 0 } }),
     SignaturesTest.layer(),
+    ChangesTest.layer(ChangesTest.world()),
+    ReviewsTest.layer(ReviewsTest.world()),
     TicketsTest.layer(TicketsTest.world()),
   );
 
@@ -793,5 +798,339 @@ describe("merge: an admin merge waits for the merge queue to empty (2026-11-22: 
       const answer = yield* queued(m, [[entry(1922, "LOCKED")]], "other", undefined);
       expect(answer._tag === "Failure" ? String(answer.failure.reason) : "").toContain("--wait");
     }),
+  );
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// R10: the admin override (slice 2 of .kalfa/quests/review-record-PLAN.md)
+// ---------------------------------------------------------------------------------------------------------
+
+/** A word the leak grep refuses in these laws, so a reason holding it is refused by the grep on the override's words and by nothing else. */
+const PLANTED_WORD = "plantedleakword2338";
+
+const ReasonKey = Schema.Literals([
+  "none",
+  "good",
+  "short",
+  "edge",
+  "leaky",
+  "blank",
+  "spaces",
+  "tab",
+  "lineBreak",
+  "twoLines",
+  "lineSeparator",
+  "paragraphSeparator",
+  "padded",
+  "long",
+]);
+
+type ReasonKey = typeof ReasonKey.Type;
+
+/** The reasons an admin merge is given: none, and each shape of a good or a bad one. */
+const REASONS: Record<ReasonKey, string | null> = {
+  none: null,
+  good: "sev1 fix for the red main",
+  short: "x",
+  edge: "z".repeat(128),
+  leaky: `words ${PLANTED_WORD} here`,
+  blank: "",
+  spaces: "   ",
+  tab: "\t",
+  lineBreak: "\n",
+  twoLines: "a\nb",
+  lineSeparator: "a\u2028b",
+  paragraphSeparator: "a\u2029b",
+  padded: " padded ",
+  long: "y".repeat(129),
+};
+
+/** A reason is one trimmed line of 1 to 128 characters. */
+const goodReason = (text: string | null): text is string =>
+  text !== null && text.length > 0 && text.length <= 128 && text === text.trim() && !/[\r\n\u2028\u2029]/.test(text);
+
+const CHANGED = {
+  docs: ["docs/plan/README.md"],
+  code: ["kalfa/git/a.ts", "docs/b.md"],
+  // The move: the old path is inside a reviewed folder and the new one is outside it, so only the old half names the tree.
+  move: ["next/old.ts", "docs/new.md"],
+} as const;
+
+const OverrideCase = Schema.Struct({
+  paths: Schema.Literals(["docs", "code", "move"]),
+  approved: Schema.Boolean,
+  reason: ReasonKey,
+  /** What refuses the merge after the gate passed, if anything: a red check, a busy queue, a fix behind main. */
+  after: Schema.Literals(["none", "none", "none", "red", "queueBusy", "behindFix"]),
+  /** Whether the head moves, and from which read of the pull request on. */
+  moves: Schema.Boolean,
+  moveAt: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 8 })),
+  failing: Schema.Literals(["none", "none", "none", "comment", "status", "squash"]),
+});
+
+type OverrideCase = typeof OverrideCase.Type;
+
+const OTHER_HEAD = "f".repeat(40);
+
+/**
+ * One admin merge on pull request 1415 with a reason (or none), over a head that changes these paths and may hold an approval. An order log
+ * keeps every read of the pull request, the override's write and the pinned squash, in the order they happened across the two services.
+ */
+const overriding = (c: OverrideCase) => {
+  const github = PullRequestsTest.world([{ number: 1415, head: branch, oid, state: "OPEN", draft: false }]);
+  github.more.set(1415, { title, body });
+
+  if (c.after === "queueBusy") {
+    github.queue.push([{ number: 99, state: "QUEUED" }]);
+  }
+
+  const changes = ChangesTest.world({ [oid]: CHANGED[c.paths] });
+  const reviews = ReviewsTest.world();
+
+  if (c.approved) {
+    ReviewsTest.seed(reviews, oid, {
+      id: 1,
+      creator: "lead",
+      state: "success",
+      description: `pass v1 reviewed=${oid} patch=${oid}`,
+      url: null,
+    });
+  }
+
+  const order: Array<string> = [];
+
+  const pulls = Layer.effect(
+    PullRequests,
+    Effect.gen(function* () {
+      const inner = yield* PullRequests;
+      let views = 0;
+
+      return PullRequests.of({
+        ...inner,
+        view: (n) =>
+          Effect.map(inner.view(n), (found) => {
+            views += 1;
+            const seen = c.moves && views >= c.moveAt ? OTHER_HEAD : found.oid;
+            order.push(`view:${seen}`);
+
+            return { ...found, oid: seen };
+          }),
+        admin: (n, at) => Effect.tap(inner.admin(n, at), () => Effect.sync(() => order.push(`admin:${at}`))),
+      });
+    }),
+  ).pipe(
+    Layer.provide(PullRequestsTest.layer(github, c.failing === "squash" ? { admin: "the squash was refused" } : {})),
+  );
+
+  const overrides = Layer.effect(
+    Reviews,
+    Effect.gen(function* () {
+      const inner = yield* Reviews;
+
+      return Reviews.of({
+        ...inner,
+        write: (pr, record, url) =>
+          Effect.andThen(
+            Effect.sync(() => order.push("override")),
+            inner.write(pr, record, url),
+          ),
+      });
+    }),
+  ).pipe(
+    Layer.provide(
+      ReviewsTest.layer(
+        reviews,
+        c.failing === "comment" ? { comment: "gh is down" } : c.failing === "status" ? { status: "no right" } : {},
+      ),
+    ),
+  );
+
+  const pushes = Recorder.layer(Pushes, {
+    leakGrep: () => Effect.void,
+    leakChange: () => Effect.void,
+    leakText: (_dir, text) => (text.includes(PLANTED_WORD) ? Effect.fail(hit) : Effect.void),
+    push: () => Effect.void,
+  });
+
+  const layer = Layer.mergeAll(
+    pulls,
+    overrides,
+    ChangesTest.layer(changes),
+    pushes,
+    ChecksTest.layer(
+      [Option.some({ id: 1, status: "completed", conclusion: c.after === "red" ? "failure" : "success" })],
+      "",
+    ),
+    BranchesTest.layer({ branches: [], ahead: {}, empty: [], behind: { [oid]: c.after === "behindFix" ? 3 : 0 } }),
+    SignaturesTest.layer(),
+    TicketsTest.layer(TicketsTest.world()),
+  );
+
+  return { github, reviews, order, layer };
+};
+
+describe("R10: an admin merge past a missing review is written down first, and only as the last step before the squash", () => {
+  // Plants, each run once and restored: write the override right after the gate (before the reads that follow it); write it after the merge;
+  // trim nothing, so spaces pass; drop the 128 cap; write an override for a pull request that holds an approval; swallow a failed write;
+  // skip the leak grep on the reason; write one for a pull request that needs no review; let a bad reason through the gate.
+  it.effect.prop(
+    "property: an admin merge of a pull request that needs a review and holds none needs a good reason, writes exactly one override (the comment, then a `failure` status holding the reason) as the step just before the pinned squash, and writes nothing when anything refuses before that; one with an approval or no reviewed path writes none",
+    OverrideCase.fields,
+    (c) =>
+      Effect.gen(function* () {
+        const reason = REASONS[c.reason];
+        const needs = c.paths !== "docs";
+        const writes = needs && !c.approved;
+
+        // Only a pull request that writes one has any use for a reason; a bad or a leaky one beside an approval is no case of this law.
+        if (!writes && reason !== null && (!goodReason(reason) || c.reason === "leaky")) {
+          return;
+        }
+
+        const m = overriding(c);
+
+        const answer = yield* Effect.result(
+          Merge.merge({
+            dir: ".",
+            pr: 1415,
+            route:
+              c.after === "behindFix"
+                ? Merge.Route.cases.admin.make({ sev0: [], sev0Fixes: [], sev1: branch })
+                : Merge.Route.cases.admin.make({ sev0: [], sev0Fixes: [], sev1: null }),
+            ...(reason === null ? {} : { override: reason }),
+          }).pipe(Effect.provide(m.layer)),
+        );
+
+        const wrote = m.reviews.calls.map((call) => call._tag);
+        const merged = m.github.calls.length > 0;
+        const at = m.order.indexOf("override");
+
+        // Whatever happened: an override is the step before the squash, so no read of the pull request follows it, and every read before it saw the head the gate read.
+        if (at >= 0) {
+          expect(
+            m.order.slice(at + 1).every((entry) => entry.startsWith("admin:")),
+            m.order.join(" "),
+          ).toBe(true);
+          expect(
+            m.order.slice(0, at).every((entry) => entry === `view:${oid}`),
+            m.order.join(" "),
+          ).toBe(true);
+        }
+
+        // A merge at a head that is not the one the gate read, or with no override where one was due, never happens.
+        expect(m.github.calls.every((call) => call.oid === oid)).toBe(true);
+        expect(m.order.filter((entry) => entry === "override").length).toBeLessThanOrEqual(1);
+
+        if (writes && !goodReason(reason)) {
+          expect(Result.isFailure(answer) && answer.failure._tag).toBe("NotMerged");
+          expect(wrote).toEqual([]);
+          expect(merged).toBe(false);
+
+          return;
+        }
+
+        if (merged) {
+          expect(wrote).toEqual(writes ? ["comment", "status"] : []);
+        }
+
+        if (writes && merged) {
+          const [commented, statused] = m.reviews.calls;
+          expect(commented).toMatchObject({ _tag: "comment", pr: 1415 });
+          expect(commented?._tag === "comment" && commented.body).toContain(reason);
+          expect(statused).toMatchObject({
+            _tag: "status",
+            head: oid,
+            state: "failure",
+            description: `override v1 ${reason}`,
+          });
+          expect(m.order.slice(-2)).toEqual(["override", `admin:${oid}`]);
+        }
+
+        // With nothing broken, the merge happens: the path, the reason and the approval alone decide. A head that moves may stop it at a read
+        // this law cannot count, so then only a merge is checked: it came with nothing broken.
+        const leaks = writes && c.reason === "leaky";
+        const brokenWrite = writes && (c.failing === "comment" || c.failing === "status");
+        const squashFails = c.failing === "squash";
+        // Nothing before the squash refuses: it is asked, and so the override, if one is due, is written first.
+        const reachesSquash = c.after === "none" && !leaks && !brokenWrite;
+        const fine = reachesSquash && !squashFails;
+
+        if (c.moves) {
+          expect(!Result.isSuccess(answer) || fine).toBe(true);
+        } else {
+          expect(
+            Result.isSuccess(answer),
+            `${JSON.stringify(c)}: ${Result.isFailure(answer) ? JSON.stringify(answer.failure) : ""}`,
+          ).toBe(fine);
+        }
+
+        if (Result.isSuccess(answer) && answer.success._tag === "admin") {
+          expect(answer.success.override).toBe(writes ? reason : null);
+
+          if (writes) {
+            expect(Merge.line(answer.success)).toContain(reason ?? "");
+          }
+        }
+
+        // A squash that fails after the override was written: the override stays (written once, as the step before it), nothing merged, and
+        // the refusal names the override, so no one reads the red status on the head as a merge that happened.
+        if (!c.moves && reachesSquash && squashFails) {
+          expect(merged).toBe(false);
+          expect(wrote).toEqual(writes ? ["comment", "status"] : []);
+
+          if (writes) {
+            expect(Result.isFailure(answer) && answer.failure._tag).toBe("NotMerged");
+            expect(Result.isFailure(answer) ? String(answer.failure.reason) : "").toContain(reason ?? "");
+            // It also names the head the override sits on, since the red status is on that head and nowhere else.
+            expect(Result.isFailure(answer) ? String(answer.failure.reason) : "").toContain(oid);
+          }
+        }
+
+        // A refusal before the squash leaves nothing written and nothing merged; a leak in the reason is the grep's own refusal.
+        if (!reachesSquash && !brokenWrite) {
+          expect(merged).toBe(false);
+          expect(wrote).toEqual([]);
+        }
+
+        if (leaks && c.after === "none" && !c.moves) {
+          expect(Result.isFailure(answer) && answer.failure._tag).toBe("LeakGrepRefused");
+        }
+
+        if (brokenWrite && !leaks && c.after === "none" && !c.moves) {
+          expect(merged).toBe(false);
+          expect(wrote).toEqual(c.failing === "status" ? ["comment"] : []);
+        }
+      }),
+    { arbitrary: { seed: 2338, runs: runsFor({ fast: 200, full: 400 }) } },
+  );
+
+  // Plant: always send the override, so an admin merge of a docs-only pull request is given a `failure` status it never needed.
+  it.effect(
+    "scenario: an admin merge of a docs-only pull request needs no reason and writes no override, with or without one",
+    () =>
+      Effect.gen(function* () {
+        for (const reason of [undefined, "sev1 fix for the red main"]) {
+          const m = overriding({
+            paths: "docs",
+            approved: false,
+            reason: "none",
+            after: "none",
+            moves: false,
+            moveAt: 2,
+            failing: "none",
+          });
+
+          const done = yield* Merge.merge({
+            dir: ".",
+            pr: 1415,
+            route: admin(),
+            ...(reason === undefined ? {} : { override: reason }),
+          }).pipe(Effect.provide(m.layer));
+
+          expect(done).toMatchObject({ _tag: "admin", override: null });
+          expect(m.reviews.calls).toEqual([]);
+          expect(m.github.calls).toEqual([{ _tag: "admin", number: 1415, oid }]);
+        }
+      }),
   );
 });

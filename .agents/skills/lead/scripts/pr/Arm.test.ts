@@ -13,9 +13,11 @@ import { type Job, type Run, Runs } from "../ci/Runs.ts";
 import * as RunsGh from "../ci/RunsGh.ts";
 import * as RunsTest from "../ci/RunsTest.ts";
 import * as Arm from "./Arm.ts";
+import * as ChangesTest from "./ChangesTest.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
+import * as ReviewsTest from "./ReviewsTest.ts";
 import * as Sections from "./Sections.ts";
 import * as SignaturesTest from "./SignaturesTest.ts";
 import * as TicketsTest from "./TicketsTest.ts";
@@ -163,6 +165,8 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
     ).pipe(Layer.provide(RunsTest.layer(actions))),
     ChecksTest.layer([], red.log),
     SignaturesTest.layer(),
+    ChangesTest.layer(ChangesTest.world()),
+    ReviewsTest.layer(ReviewsTest.world()),
     TicketsTest.layer(TicketsTest.world()),
   );
 
@@ -199,7 +203,7 @@ const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
 
 const armedAt = [{ _tag: "arm", number: 1092, oid }];
 
-describe("arm: merge when ready goes on over a green full run, or none at the head as the arm-every-reviewed-pull-request rule allows", () => {
+describe("arm: merge when ready goes on over a green full run, or none at the head as the no-review rule allows", () => {
   // scenario: the run that was read as "the queue canceled it" twice on 2026-11-15.
   it.effect(
     "scenario: run 43776563690, one leg's vitest step failed and the other nine canceled, refuses; it names the red leg's failed step and failing tests, and arms nothing",
@@ -252,9 +256,9 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       }),
   );
 
-  // vector: the arm-every-reviewed-pull-request rule's path, word for word: fallback guidance describes automatic CI without starting local work.
+  // vector: the no-review path, word for word: fallback guidance describes automatic CI without starting local work.
   it.effect(
-    "vector: no full run arms with the arm-every-reviewed-pull-request rule line and automatic CI guidance; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
+    "vector: no full run arms with the no-review line and automatic CI guidance; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -262,15 +266,15 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const tail = `merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`;
         const none = memory({ stands: "none" }, red);
         expect(Arm.line(yield* arm(none))).toBe(
-          `pr 1092: no full run at ${head}; arming as the arm-every-reviewed-pull-request rule allows (automatic ready and queue CI provide the required checks); ${tail}`,
+          `pr 1092: no full run at ${head}; arming as a pull request that needs no review allows (automatic ready and queue CI provide the required checks); ${tail}`,
         );
         const stale = memory({ stands: "older" }, red);
         expect(Arm.line(yield* arm(stale))).toBe(
-          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as the arm-every-reviewed-pull-request rule allows (automatic ready and queue CI provide the required checks); ${tail}`,
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as a pull request that needs no review allows (automatic ready and queue CI provide the required checks); ${tail}`,
         );
         const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".kalfa/glossary/GLOSSARY-MAP.md"] }, red);
         expect(Arm.line(yield* arm(docs))).toBe(
-          `pr 1092: no full run at ${head}; arming as the arm-every-reviewed-pull-request rule allows (a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run); ${tail}`,
+          `pr 1092: no full run at ${head}; arming as a pull request that needs no review allows (a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run); ${tail}`,
         );
         expect([...none.github.calls, ...stale.github.calls, ...docs.github.calls]).toEqual([
           ...armedAt,
@@ -388,7 +392,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
   // arms); a changed-set run at an older head arms with the note as a full one does (red: the same);
   // the report skips by design, as before pull request 1404 (red: the runs with a skipped report arm).
   it.effect(
-    "scenario: a changed-set run green at the head arms, and one at an older head refuses, a zero-file set included; a full run of today's shape at an older head still arms with the arm-every-reviewed-pull-request rule's note",
+    "scenario: a changed-set run green at the head arms, and one at an older head refuses, a zero-file set included; a full run of today's shape at an older head still arms with the no-review line's note",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -412,7 +416,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
 
         const full = memory({ stands: "older", jobs: shaped("full") }, red);
         expect(Arm.line(yield* arm(full))).toBe(
-          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as the arm-every-reviewed-pull-request rule allows (automatic ready and queue CI provide the required checks); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as a pull request that needs no review allows (automatic ready and queue CI provide the required checks); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
         );
         const fullAt = memory({ stands: "green", jobs: shaped("full") }, red);
         expect(Arm.line(yield* arm(fullAt))).toContain(`full run ${RED} green on every job at ${head}`);
@@ -867,7 +871,7 @@ describe("automatic ready CI, with its related tooling legs, as the current-head
           const answer = yield* Effect.result(arm(m));
           const line = answer._tag === "Success" ? Arm.line(answer.success) : "";
 
-          // A refusing verdict refuses the arm; no verdict arms on the arm-every-reviewed-pull-request rule line, which never says docs only.
+          // A refusing verdict refuses the arm; no verdict arms on the no-review line, which never says docs only.
           expect(answer._tag === "Failure", found.name).toBe(found.stands === "red");
           expect(line.includes("docs only (@kalfa/ci/DocsOnly)"), found.name).toBe(false);
           expect(m.github.calls, found.name).toEqual(found.stands === "red" ? [] : armedAt);

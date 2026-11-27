@@ -9,7 +9,8 @@
 //           completed and green at the head, for every admin merge; a draft is marked ready first, and
 //           with `wait` the check is given that long to appear and end (`land.ts admin`) -> the head has
 //           not moved since it was read -> for a sev fix, also origin/main's head in its history -> one
-//           pinned squash with --admin, past the queue. "Admin" skips the queue, never a green
+//           pinned squash with --admin, past the queue (a pull request that changes a path needing a review and holds no approval also needs `override`, a
+//           written reason: it is posted as a review override on the head right before the squash, after the last re-read, so a merge that refused earlier leaves none). "Admin" skips the queue, never a green
 //           ci-required. A pull request that is no sev fix and no sev0 ready one also waits for the merge queue to
 //           empty (`queueWait`; refused, naming the entry, without one): an admin merge moves main, which restarts the
 //           build of every entry in the queue (2026-11-22, three restarts in six minutes). A draft is marked ready only once a CI run
@@ -25,7 +26,10 @@ import { Array as Arr, Duration, Effect, Option, Schedule, Schema } from "effect
 import { Branches } from "./Branches.ts";
 import * as Gate from "./Gate.ts";
 import { PullRequests, PullRequestsError, type QueueEntry } from "./PullRequests.ts";
+import { Pushes } from "./Pushes.ts";
 import * as Queue from "./Queue.ts";
+import * as Review from "./Review.ts";
+import { Reviews } from "./Reviews.ts";
 
 /** The pull request was not merged, and nothing was asked of GitHub's merge. */
 export class NotMerged extends Schema.TaggedError<NotMerged>()("NotMerged", { reason: Schema.String }) {}
@@ -59,6 +63,11 @@ export type Ask = {
    * wait for the merge queue to empty, and the seconds between two reads. Left out, a queue with an entry refuses it.
    */
   readonly queueWait?: Queue.Wait;
+  /**
+   * For an admin merge (`--override-review`): why it may go past a missing review. Needed when the pull request changes a path that needs a
+   * review and holds no approval, and posted as an override on its head just before the squash; any other pull request ignores it.
+   */
+  readonly override?: string;
 };
 
 /** What `merge` did: queued, admin-merged, or found it merged already. */
@@ -71,6 +80,8 @@ export const Done = Schema.TaggedUnion({
     for: Schema.Literals(["fix", "ready", "other"]),
     /** The level a fix or a ready pull request landed in; `null` for any other. */
     level: Schema.NullOr(Schema.Literals(["sev0", "sev1"])),
+    /** The reason of the review override this merge wrote on the head, or `null` when it wrote none (an approval, or no path that needs one). */
+    override: Schema.NullOr(Review.Reason),
   },
   merged: { pr: Schema.Number, commit: Schema.String },
 });
@@ -149,12 +160,27 @@ const queued = Effect.fn("Merge.queued")(function* (pr: number, wait: Queue.Wait
   return last ?? (yield* Effect.fail(failed ?? PullRequestsError.make({ reason: "the merge queue was not read" })));
 });
 
+/** Posts the override on the head: the leak grep on its words first, then the comment and the `failure` status. Gives the reason it wrote. */
+const postOverride = Effect.fn("Merge.postOverride")(function* (
+  dir: string,
+  found: { readonly number: number; readonly oid: string },
+  reason: string,
+) {
+  const record = Review.Record.cases.override.make({ v: 1, head: found.oid, reason });
+
+  yield* (yield* Pushes).leakText(dir, Review.comment(record));
+  yield* (yield* Reviews).write(found.number, record, Option.none());
+
+  return reason;
+});
+
 const admin = Effect.fn("Merge.admin")(function* (
   dir: string,
   pr: number,
   route: AdminRoute,
   wait?: Queue.Wait,
   queueWait?: Queue.Wait,
+  override?: string,
 ) {
   const prs = yield* PullRequests;
   let found = yield* prs.view(pr);
@@ -164,9 +190,23 @@ const admin = Effect.fn("Merge.admin")(function* (
     return Done.cases.merged.make({ pr: found.number, commit: found.mergeCommit ?? found.oid });
   }
 
+  // A reason that is not one trimmed line of 1 to 128 characters is refused here, before anything is asked of anyone.
+  const reason =
+    override === undefined
+      ? null
+      : yield* Schema.decodeUnknownEffect(Review.Reason)(override).pipe(
+          Effect.mapError(() => refuse("--override-review takes one trimmed line of 1 to 128 characters; not merged")),
+        );
+
   // With a wait, a draft is not refused for being a draft: it is marked ready below, after the gate.
   const marking = wait !== undefined && found.state === "OPEN" && found.draft;
-  const refused = yield* Gate.before({ dir, found, marksReady: wait !== undefined });
+
+  const refused = yield* Gate.before({
+    dir,
+    found,
+    marksReady: wait !== undefined,
+    way: Gate.Way.cases.admin.make({ override: reason }),
+  });
 
   if (refused !== null) {
     return yield* refuse(refused);
@@ -266,14 +306,39 @@ const admin = Effect.fn("Merge.admin")(function* (
     }
   }
 
-  yield* prs.admin(found.number, found.oid);
+  // The override is the step before the squash, after every read that could refuse: a merge that stopped earlier leaves no override on the head.
+  // It is written only for a pull request that holds no approval; one that holds an approval, or needs none, goes with no override.
+  const wrote =
+    reason !== null && (yield* Gate.approval(dir, found))._tag === "missing"
+      ? yield* postOverride(dir, found, reason)
+      : null;
 
-  return Done.cases.admin.make({ pr: found.number, oid: found.oid, for: allowed.for, level: allowed.level });
+  // A squash that fails after the override was written leaves the override on the head (it is written as the step before the squash, so it cannot
+  // wait for one that succeeds). The refusal names it, so a red status on the head is never read as a merge that happened.
+  yield* prs
+    .admin(found.number, found.oid)
+    .pipe(
+      Effect.catchTag("PullRequestsError", (e) =>
+        wrote === null
+          ? Effect.fail(e)
+          : refuse(
+              `${e.reason}; the review override "${wrote}" was already written on ${found.oid}, so its status names a merge that did not happen`,
+            ),
+      ),
+    );
+
+  return Done.cases.admin.make({
+    pr: found.number,
+    oid: found.oid,
+    for: allowed.for,
+    level: allowed.level,
+    override: wrote,
+  });
 });
 
 export const merge = Effect.fn("Merge.merge")(function* (a: Ask) {
   if (a.route._tag === "admin") {
-    return yield* admin(a.dir, a.pr, a.route, a.wait, a.queueWait);
+    return yield* admin(a.dir, a.pr, a.route, a.wait, a.queueWait, a.override);
   }
 
   const added = yield* Queue.add({ dir: a.dir, pr: a.pr });
@@ -289,6 +354,10 @@ export const line = (done: Done): string =>
     queued: (d) => Queue.line(Queue.Added.cases.queued.make({ pr: d.pr, oid: d.oid })),
     admin: (d) =>
       `pr ${d.pr}: admin-merged at ${d.oid}${
+        d.override === null
+          ? ""
+          : `, past a missing review on the reason "${d.override}" (an override is written on the head)`
+      }${
         d.for === "other"
           ? ""
           : d.for === "fix"

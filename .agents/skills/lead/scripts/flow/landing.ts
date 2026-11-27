@@ -21,11 +21,14 @@ import type { ChildProcessSpawner } from "effect/process";
 
 import { Checks } from "../ci/Checks.ts";
 import * as ChecksGh from "../ci/ChecksGh.ts";
+import * as ChangesGit from "../pr/ChangesGit.ts";
 import { PullRequests } from "../pr/PullRequests.ts";
 import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
 import { LeakGrepRefused, Pushes } from "../pr/Pushes.ts";
 import * as PushesProcess from "../pr/PushesProcess.ts";
 import * as Queue from "../pr/Queue.ts";
+import { Reviews } from "../pr/Reviews.ts";
+import * as ReviewsGh from "../pr/ReviewsGh.ts";
 import * as SignaturesGit from "../pr/SignaturesGit.ts";
 import * as TicketsCli from "../pr/TicketsCli.ts";
 import * as Outcome from "./Outcome.ts";
@@ -220,6 +223,9 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
         Effect.provideServiceEffect(PullRequests, PullRequestsGh.make(repo, dir)),
         Effect.provideServiceEffect(Pushes, PushesProcess.make(scripts)),
         Effect.provideServiceEffect(Checks, ChecksGh.make(repo)),
+        // The gate's review check reads the paths the head changes from git and the statuses on it from GitHub.
+        Effect.provideServiceEffect(Reviews, ReviewsGh.make(repo, dir)),
+        Effect.provide(ChangesGit.layer),
         // The body check reads the tracker's open tickets (a `fabrika close ticket` line must name one); the worktree holds the app that asks it, and the home is env.sh's.
         Effect.provide(TicketsCli.layer(dir, TicketsCli.defaultHome())),
         // The gate also reads each commit's signature, from the worktree.

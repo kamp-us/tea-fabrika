@@ -13,6 +13,7 @@ import { Recorder, runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Layer, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as BranchesTest from "./BranchesTest.ts";
+import type * as Gate from "./Gate.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as Review from "./Review.ts";
@@ -411,7 +412,19 @@ const drawnRecord = (c: typeof RecordCase.Type): Review.Record => {
   }
 };
 
-const BAD_WORDS = ["", "  ", "\t", "\n", "a\nb", "a\r", " lead", "trail ", "a".repeat(129)] as const;
+const BAD_WORDS = [
+  "",
+  "  ",
+  "\t",
+  "\n",
+  "a\nb",
+  "a\r",
+  "a\u2028b",
+  "a\u2029b",
+  " lead",
+  "trail ",
+  "a".repeat(129),
+] as const;
 
 describe("R2: the record on the wire (slice 1)", () => {
   // Plants, each run once and restored: give an override `success`; give an override `error`; let a reason of 129 characters through; write
@@ -442,7 +455,7 @@ describe("R2: the record on the wire (slice 1)", () => {
   );
 
   it.prop(
-    "R2 property: a blank reason, a reason with a line break or space at either end, a reason over 128 characters, and a blank or over-long reviewer are no record, and read back from a status as nothing",
+    "R2 property: a blank reason, a reason with a line break (U+2028 and U+2029 too) or space at either end, a reason over 128 characters, and a blank or over-long reviewer are no record, and read back from a status as nothing",
     { n: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 })), bad: Schema.Literals(BAD_WORDS) },
     ({ n, bad }) => {
       const head = hex(n);
@@ -457,6 +470,46 @@ describe("R2: the record on the wire (slice 1)", () => {
       expect(Schema.is(Review.Record)({ _tag: "override", v: 1, head, reason: "a".repeat(128) })).toBe(true);
     },
     { arbitrary: { seed: 1003, runs: runsFor({ fast: 30, full: 100 }) } },
+  );
+
+  // Plants: let U+2028 or U+2029 into a reason (`Line`), as the pattern `[^\r\n]` did, so the status's description holds a line separator that the read-back
+  // pattern's `.` does not match; read the description with a pattern that stops at a separator.
+  it.prop(
+    "R2 property: every reason the record accepts reads back, from the status it is posted as, as the same reason",
+    {
+      lead: Schema.Literals(["", "", "a", " "]),
+      middle: Schema.Array(
+        Schema.Literals([
+          "a",
+          "é",
+          "日本",
+          "x y",
+          "\u2028",
+          "\u2029",
+          "\u0085",
+          "\u000b",
+          "\u000c",
+          "\t",
+          "\r",
+          "\n",
+          "\u00a0",
+        ]),
+      ).check(Schema.isMaxLength(12)),
+      trail: Schema.Literals(["", "", "b", " "]),
+      n: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 })),
+    },
+    ({ lead, middle, trail, n }) => {
+      const reason = `${lead}${middle.join("")}${trail}`;
+      const record = { _tag: "override", v: 1, head: hex(n), reason };
+
+      // A reason the record refuses is never posted, so it has nothing to read back.
+      const said = Schema.is(Review.Record)(record)
+        ? Review.core(Review.status(record).state, Review.status(record).description)
+        : Result.succeed({ _tag: "override", reason });
+
+      expect(said).toEqual(Result.succeed({ _tag: "override", reason }));
+    },
+    { arbitrary: { seed: 1004, runs: runsFor({ fast: 200, full: 400 }) } },
   );
 
   // Plant: read a `v2` record as a pass.
@@ -484,6 +537,22 @@ describe("T1: the record's types (slice 1; the compiler checks these, `pnpm type
     expectTypeOf<Review.Core["_tag"]>().toEqualTypeOf<"pass" | "override">();
     expectTypeOf<Review.Approval["_tag"]>().toEqualTypeOf<"exempt" | "approved" | "missing">();
     expectTypeOf<Review.Recorded["_tag"]>().toEqualTypeOf<"fresh" | "kept" | "already">();
+  });
+});
+
+describe("T1: the gate's types (slice 2; the compiler checks these, `pnpm typecheck` where it reaches this file)", () => {
+  type Way = typeof Gate.Way.Type;
+
+  // Plants: make `way` optional; add a way and leave it out of the union; type the admin reason as a number; give the queue or arm way a reason.
+  // A reason blank or over the cap is no type error (a refinement is no type); it is refused at run time, and Gate.test.ts holds that law.
+  it("type: the gate's question needs a way, the ways are the three the code matches with no default branch, and only the admin way holds a reason", () => {
+    expectTypeOf<Parameters<typeof Gate.before>[0]>().toEqualTypeOf<Gate.Ask>();
+    expectTypeOf<Gate.Ask["way"]>().toEqualTypeOf<Way>();
+    expectTypeOf<Omit<Gate.Ask, "way">>().not.toExtend<Gate.Ask>();
+    expectTypeOf<Way["_tag"]>().toEqualTypeOf<"queue" | "arm" | "admin">();
+    expectTypeOf<Extract<Way, { _tag: "admin" }>["override"]>().toEqualTypeOf<string | null>();
+    expectTypeOf<Extract<Way, { _tag: "queue" }>>().not.toHaveProperty("override");
+    expectTypeOf<Extract<Way, { _tag: "arm" }>>().not.toHaveProperty("override");
   });
 });
 

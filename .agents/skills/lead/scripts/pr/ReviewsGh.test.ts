@@ -8,6 +8,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Review from "./Review.ts";
 import { Reviews } from "./Reviews.ts";
 import * as ReviewsGh from "./ReviewsGh.ts";
+import * as Statuses from "./ReviewStatus.fixture.ts";
 
 const hex = (n: number): string => `${n.toString(16).padStart(2, "0")}ab`.repeat(20).slice(0, 40);
 
@@ -212,6 +213,52 @@ describe("R5: the reader (slice 1)", () => {
 
         expect(rows[5]?.seen.url).toBe("https://ci.jenkins.io/job/Core/job/jenkins/job/PR-27900/display/redirect");
         expect(rows.every((r) => Result.isFailure(r.seen.core))).toBe(true);
+      }),
+  );
+});
+
+// Recorded 2026-11-27 from this repository's own pull request, in the lead's live proof of slice 1 (./ReviewStatus.fixture.ts says how, and what was
+// replaced): a fresh record's status and a carry's.
+describe("R5: the reader on this repository's own recorded statuses (slice 2)", () => {
+  // Plants, each run once and restored: read the creator from the wrong key; read the description from `title`; match the context by prefix; let
+  // a carry read as something other than the pass it carries.
+  it.effect(
+    "vector: a real fresh record and a real carry, as GitHub lists them, read as one and the same approval: the same reviewed head, patch id and comment, on two different heads",
+    () =>
+      Effect.gen(function* () {
+        const reads = [];
+
+        for (const text of [Statuses.PASS, Statuses.CARRY]) {
+          const [row] = yield* ReviewsGh.decode(text);
+          const head = /statuses\/([0-9a-f]{40})$/.exec(JSON.parse(text)[0][0].url)?.[1] ?? "";
+
+          // The reader asks for the head's statuses and is given the recorded answer.
+          const [seen] = yield* Effect.flatMap(Reviews, (reviews) => reviews.read(head)).pipe(
+            Effect.provide(layers(() => ({ code: 0, out: text }))),
+          );
+
+          expect(row?.context).toBe("review");
+          expect(seen).toEqual(row?.seen);
+          expect(seen?.state).toBe("success");
+          expect(seen?.creator).toBe("the-lead-login");
+          expect(seen?.url).toMatch(/^https:\/\/github\.com\/kamp-us\/tea-fabrika\/pull\/2357#issuecomment-[0-9]+$/);
+          reads.push({ head, seen });
+        }
+
+        const [fresh, kept] = reads;
+        expect(fresh?.head).not.toBe(kept?.head);
+        expect(fresh?.seen?.id).toBeLessThan(kept?.seen?.id ?? 0);
+        expect(fresh?.seen?.core).toEqual(kept?.seen?.core);
+        expect(fresh?.seen?.url).toBe(kept?.seen?.url);
+        expect(Result.isSuccess(fresh?.seen?.core ?? Result.fail("none"))).toBe(true);
+
+        // What the gate does with them: either one approves a pull request that changes a reviewed path.
+        for (const { seen } of reads) {
+          expect(
+            Review.approval({ reviewed: Review.REVIEWED, paths: ["next/a.ts"], seen: seen === undefined ? [] : [seen] })
+              ._tag,
+          ).toBe("approved");
+        }
       }),
   );
 });
