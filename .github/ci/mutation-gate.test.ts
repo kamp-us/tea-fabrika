@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { decide, FAIL_GAP_MINUTES, FAIL_STREAK, GAP_MINUTES, gate } from "./mutation-gate.mjs";
@@ -267,5 +271,52 @@ describe("the gate, today's tooling", () => {
     expect(() => gate({ GITHUB_EVENT_NAME: "push" }, gh, 0, "mutation.yaml", "mutation", "h", false)).toThrow(
       "HTTP 502",
     );
+  });
+});
+
+describe("the gate's command line, today's tooling", () => {
+  /** Runs the CLI against a fake `gh` whose one heartbeat run started ten minutes ago, and reads the step's outputs. */
+  const cli = (...flags: string[]) => {
+    const dir = mkdtempSync(join(tmpdir(), "mutation-gate-"));
+    const out = join(dir, "output.txt");
+    writeFileSync(out, "");
+
+    // The fake answers the run list with one run that passed, and the job list with its `heartbeat` job.
+    writeFileSync(
+      join(dir, "gh"),
+      [
+        "#!/usr/bin/env node",
+        "const started = new Date(Date.now() - 10 * 60_000).toISOString();",
+        "const path = process.argv[3];",
+        "const body = path.includes('/jobs')",
+        "  ? { jobs: [{ name: 'heartbeat', conclusion: 'success', started_at: started }] }",
+        "  : { workflow_runs: [{ id: 5, created_at: started, head_sha: 'x' }] };",
+        "console.log(JSON.stringify(body));",
+      ].join("\n"),
+    );
+    chmodSync(join(dir, "gh"), 0o755);
+
+    const done = spawnSync(
+      process.execPath,
+      [".github/ci/mutation-gate.mjs", "--workflow", "mutation-heartbeat.yaml", "--job", "heartbeat", ...flags],
+      {
+        encoding: "utf8",
+        env: { ...process.env, PATH: `${dir}:${process.env["PATH"]}`, GITHUB_EVENT_NAME: "push", GITHUB_OUTPUT: out },
+      },
+    );
+
+    return { status: done.status, outputs: readFileSync(out, "utf8"), line: done.stdout };
+  };
+
+  it("scenario: --paced holds a push ten minutes after the last start, and without it the same push starts", () => {
+    const paced = cli("--paced");
+    expect(paced.status).toBe(0);
+    expect(paced.outputs).toContain("start=false\nreason=too_soon\n");
+    expect(paced.line).toContain("gap 60 min");
+
+    const free = cli();
+    expect(free.status).toBe(0);
+    expect(free.outputs).toContain("start=true\nreason=due\n");
+    expect(free.line).toContain("no gap");
   });
 });

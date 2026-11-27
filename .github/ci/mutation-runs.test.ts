@@ -96,6 +96,39 @@ describe("mutation-runs.mjs, today's tooling", () => {
     expect(calls.map((c) => c[1])).toEqual([RECENT, jobsOf(4), jobsOf(3), jobsOf(2), jobsOf(1)]);
   });
 
+  it("scenario: a skipped job that carries a start time is no start, so a gate-skipped run never refreshes the last start", () => {
+    const { gh } = fake({
+      [RECENT]: { workflow_runs: [run(3, "2026-11-26T12:00:00Z", "c3"), run(2, "2026-11-26T11:00:00Z", "c2")] },
+      [jobsOf(3)]: { jobs: [job("mutation", "skipped", "2026-11-26T12:00:09Z")] },
+      [jobsOf(2)]: { jobs: [job("mutation", "failure", "2026-11-26T11:00:30Z")] },
+    });
+
+    expect(recent(gh, "mutation.yaml", "mutation", null, 9)).toEqual({
+      last: Date.parse("2026-11-26T11:00:30Z"),
+      streak: 1,
+    });
+  });
+
+  it("scenario: a job canceled after it started is a start, and ends neither a streak nor starts one", () => {
+    const { gh } = fake({
+      [RECENT]: {
+        workflow_runs: [
+          run(3, "2026-11-26T12:00:00Z", "c3"),
+          run(2, "2026-11-26T11:00:00Z", "c2"),
+          run(1, "2026-11-26T10:00:00Z", "c1"),
+        ],
+      },
+      [jobsOf(3)]: { jobs: [job("mutation", "cancelled", "2026-11-26T12:00:20Z")] },
+      [jobsOf(2)]: { jobs: [job("mutation", "failure", "2026-11-26T11:00:30Z")] },
+      [jobsOf(1)]: { jobs: [job("mutation", "success", "2026-11-26T10:00:30Z")] },
+    });
+
+    expect(recent(gh, "mutation.yaml", "mutation", null, 9)).toEqual({
+      last: Date.parse("2026-11-26T12:00:20Z"),
+      streak: 1,
+    });
+  });
+
   it("scenario: a pass ends the streak, so a pass newer than the failures reads none", () => {
     const { gh } = fake({
       [RECENT]: { workflow_runs: [run(2, "2026-11-26T11:00:00Z", "c2"), run(1, "2026-11-26T10:00:00Z", "c1")] },
