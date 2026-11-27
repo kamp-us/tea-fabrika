@@ -1554,6 +1554,18 @@
       "rules": { "fabrika/hidden-cause": "error" }
     },
     {
+      // An error that holds an inner failure sets it as its `cause` (ticket 2018). Effect's printer follows `error.cause` and nothing else, so a wrapper that holds
+      // its inner failure in `reason` and has no `cause` prints as its tag alone, and so does the exception a failed span records. The rule refuses a kalfa error
+      // class that holds a failure in a field and has no `cause`, as hidden-cause's override above reads the same files. A test makes errors of any shape to
+      // probe them, so tests and test support are left out; a shared suite such as `StoreTest.ts` is held.
+      // `allow` names one class in one file (reflect-disables's `allow` is keyed by path too): `GitHubError` holds an inner failure and sets no cause, on purpose.
+      // Its reason holds GitHub's text and the caller's input, and a failed span renders only message and cause, so a cause would put them in a trace (law C9
+      // of kalfa/github/src/GitHub.test.ts; kalfa/github/README.md). An allowance is one class by name in one file, so another class there still fires.
+      "files": ["kalfa/**"],
+      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx", "kalfa/**/*.test-support.ts"],
+      "rules": { "fabrika/inner-cause": ["error", { "allow": { "kalfa/github/src/GitHub.ts": ["GitHubError"] } }] }
+    },
+    {
       // A test that needs a real resource runs only in main's full run: a test file whose own code drives a real resource is named `*.integration.test.ts`, or
       // `*.visual.test.ts` for a browser or Electron, so Vitest keeps it off pull requests. Measured
       // on experiment 292's classified tree: 73 files fired, 72 drive a resource (oxlint-plugins/README.md).
