@@ -17,6 +17,7 @@ import {
   normal,
   notAnswers,
   oldestFirst,
+  refusalNote,
   refusedIn,
   parentEntries,
   pick,
@@ -763,6 +764,46 @@ describe("survivors, which mutants a Survivor: line answers", () => {
           const target = { file, line: at === "*" ? null : Number(at) };
           expect(refusedIn(`${bad}\n${withdraw(target, note)}`)).toEqual([]);
           expect(refusedIn(`${bad}\n${row({ ...target, reason: note, evidence: a.evidence })}`)).toEqual([]);
+        }
+      }),
+      options,
+    );
+  });
+
+  // A bare `Survivor: <file>:<line>` row (no reason, nothing after the place) still names its place, so the newest row of that place wins.
+  // Plants: give a bare row no place (a later proven row then leaves its refusal standing for good); let an older proof outlive a newer bare row.
+  it("a bare Survivor: row names its place: a later proven row clears its refusal, and a later bare row takes a proof away", () => {
+    fc.assert(
+      fc.property(answer, (a) => {
+        const bare = `Survivor: ${place(a)}`;
+
+        expect(refusedIn(bare)).toEqual([bare]);
+        expect(refusedIn(`${bare}\n${row(a)}`)).toEqual([]);
+        expect(answersIn(`${bare}\n${row(a)}`)).toEqual([{ file: a.file, line: a.line }]);
+
+        expect(answersIn(`${row(a)}\n${bare}`)).toEqual([]);
+        expect(refusedIn(`${row(a)}\n${bare}`)).toEqual([bare]);
+      }),
+      options,
+    );
+  });
+
+  // The words a refused row prints name what that row lacks. Plants: print the proof words for a withdrawal; print the withdrawal words for a
+  // Survivor: row; drop the way out (a withdrawal) from either.
+  it("a refused row says what it lacks: a Survivor: row a proof, a withdrawal a place and a reason", () => {
+    fc.assert(
+      fc.property(answer, fc.boolean(), (a, withdrawal) => {
+        const text = refusalNote(
+          withdrawal ? `Survivor-withdrawn: ${place(a)}` : `Survivor: ${place(a)} r -- unreachable`,
+        );
+
+        expect(text).toContain("Survivor-withdrawn: <file>:<line> <reason>");
+
+        if (withdrawal) {
+          expect(text).toContain("needs a <file>:<line> and a reason");
+          expect(text).not.toContain("plant:");
+        } else {
+          expect(text).toContain("names no plant:, rg: or law:");
         }
       }),
       options,
