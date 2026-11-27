@@ -213,7 +213,7 @@ It keeps the platform's rules, and the same laws run on it and on real workerd:
   `WebSocketAttachmentError` of `write`, and the value before stays.
 - A socket is a new object for each event: nothing may key on its identity.
 - After a server `close`, `send` throws a `TypeError` and the attachment can still be read. The platform's close event
-  comes later, in an event of its own, once the calls running on that socket have ended, with the server's own code, no
+  comes in an event of its own, at any point after the close, with the server's own code, no
   reason and the attachment kept. A second `close` changes nothing. After a client `close`, one event comes, with the
   client's code and reason, and a `close()` that answers it gives no second event.
 - A null or undefined attachment reads back as `missing`, as Alchemy reads it, and a value read is a clone too: what the
