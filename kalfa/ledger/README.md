@@ -63,8 +63,8 @@ A refusal says the Ledger will not keep this entry, and a failure says it could 
   make it with `Redacted.make(cause)`, read it on purpose with `Redacted.value(error.cause)`. In JSON a failure is its tag and its cause written as the
   text `<redacted>`, and it reads back with an empty hidden cause: a wire carries that a cause was held and never what it was.
 
-No error carries a body or metadata. A package above wraps the unions as its own errors, `class ChatUnavailable { reason: Failure }` with
-`override readonly cause = this.reason`, and `class ChatRefused { reason: Refusal }`, so it needs no list of its own. Only the Ledger says `Unreachable`.
+No error carries a body or metadata. A package above wraps the unions as its own errors, `class ChatUnavailable { reason: Failure }` and `class ChatRefused { reason: Refusal }`, each with
+`override readonly cause = this.reason`, so a printed error and a failed span's exception name the failure or the refusal, and it needs no list of its own. Only the Ledger says `Unreachable`.
 
 ## Settings
 

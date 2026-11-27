@@ -290,6 +290,7 @@ export class Unavailable extends Schema.TaggedError<Unavailable, { readonly bran
  *
  * @category errors
  */
+// oxlint-disable-next-line fabrika/inner-cause -- a failed span renders only message and cause, so nothing under reason (GitHub's text, the input) reaches a trace; law C9
 export class GitHubError extends Schema.TaggedError<GitHubError, { readonly brand: unique symbol }>()("GitHubError", {
   operation: Schema.String,
   reason: Schema.Union([ClientError, ServerError, Unavailable, Undecodable]),

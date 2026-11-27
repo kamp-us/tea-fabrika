@@ -102,8 +102,9 @@ the `GitHub` service gives.
   (`side` is `answer`: the SchemaError is its `cause`, and a status this client does not read has none). Its `message` says
   the path and what was expected, and holds no value; the `cause` does, so read it as private.
 
-`GitHubError` has no `message` and no `cause` field, on purpose: a failed span renders only those, so nothing under `reason`
-reaches a trace.
+`GitHubError` has no `message` and no `cause`, on purpose: a failed span renders only those, so nothing under `reason`
+reaches a trace. It is the one kalfa error that holds an inner failure and does not set it as its cause, so the lint rule that asks a
+wrapper for a cause is switched off on its class line, with this reason (law C9).
 
 ## The span
 
