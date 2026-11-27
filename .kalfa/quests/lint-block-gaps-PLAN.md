@@ -1,4 +1,4 @@
-Approved by the lead agent, tickets 2369 and 2380; body 6d6a097bfb3b
+Approved by the lead agent, builds tickets 2369 and 2380; body 6d6a097bfb3b
 Plancheck-Version: 3
 
 # Plan: lint blocks that drop import bans, and kalfa packages the Effect rules miss (tickets 2369 and 2380)
