@@ -13,6 +13,7 @@ import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
 import * as Queue from "./Queue.ts";
+import * as Sections from "./Sections.ts";
 import * as SweepsTest from "./SweepsTest.ts";
 import * as TicketsCli from "./TicketsCli.ts";
 import * as TicketsTest from "./TicketsTest.ts";
@@ -30,6 +31,9 @@ const Required = Schema.Literals(["none", "queued", "in_progress", "success", "f
 
 /** Which leak check refuses, by its method's name, or none. */
 const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
+
+/** A description as the pr skill's template writes it. */
+const full = "## Summary\n\nWhat it does.\n\n## Evidence\n\nA test.\n\n## Merge Danger\n\n**Door:** two-way\n";
 
 const refused = new LeakGrepRefused({ reason: "private_word" });
 
@@ -67,7 +71,7 @@ type World = {
 const memory = (w: World = {}) => {
   const pr: PullRequest = { number: 900, head: "fabrikalfa/x", oid, state: w.state ?? "OPEN", draft: w.draft ?? false };
   const github = PullRequestsTest.world([pr]);
-  github.more.set(900, { title: "T1: a title", body: "What it does.", ...w.more });
+  github.more.set(900, { title: "T1: a title", body: full, ...w.more });
   const remote = PushesTest.remote();
   const tracker = TicketsTest.world(w.open ?? []);
   const sweeps = SweepsTest.count();
@@ -135,7 +139,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
           expect(leaks).toEqual([
             { method: "leakChange", args: [".", oid] },
             { method: "leakGrep", args: [".", oid] },
-            { method: "leakText", args: [".", "T1: a title\n\nWhat it does.\n"] },
+            { method: "leakText", args: [".", `T1: a title\n\n${full}`] },
           ]);
         }
 
@@ -385,7 +389,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
     ({ named, name }) =>
       Effect.gen(function* () {
         const lines = named ? `\n\n## New names\n\n- \`${name}\`: the industry's word, with its source.` : "";
-        const m = memory({ more: { body: `What it does.${lines}` } });
+        const m = memory({ more: { body: `${full}${lines}` } });
         m.github.patches.set(900, [{ path: "src/a.ts", patch: `@@ -0,0 +1 @@\n+export const ${name} = 1;` }]);
         const answer = yield* Effect.result(add(m));
         expect(m.github.calls).toEqual(named ? [{ _tag: "enqueue", number: 900, oid }] : []);
@@ -399,12 +403,53 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
   );
 });
 
+describe("body: the description is the pr skill's template, never the draft placeholder (pull request 2320 merged with the placeholder and a ## New names section)", () => {
+  const answer = (text: string) =>
+    Queue.body(".", { number: 900, title: "T1: a title", body: text }).pipe(
+      Effect.provide(memory({ more: { body: text } }).layer),
+    );
+
+  // Plants: leave the sections check out of `body`, so `land.ts check` and `queue` both pass the placeholder; name no section; point at no skill.
+  it.effect.prop(
+    "property: a description with the draft placeholder, or without a required section, is refused with what is missing and the pr skill; a full one passes",
+    { placeholder: Schema.Boolean, left: Schema.Literals(["none", "Summary", "Evidence", "Merge Danger"]) },
+    ({ placeholder, left }) =>
+      Effect.gen(function* () {
+        const kept = ["Summary", "Evidence", "Merge Danger"].filter((name) => name !== left);
+        const text = `${placeholder ? `${Sections.DRAFT_BODY}\n\n` : ""}${kept.map((name) => `## ${name}\n\nWords.\n`).join("\n")}`;
+        const said = yield* answer(text);
+
+        if (!placeholder && left === "none") {
+          expect(said).toBeNull();
+
+          return;
+        }
+
+        expect(said).toContain(".agents/skills/pr/SKILL.md");
+        expect(said?.includes("still the draft placeholder sentence")).toBe(placeholder);
+        expect(said?.includes(`## ${left}`)).toBe(left !== "none");
+      }),
+  );
+
+  // Plant: check the sections in `body` only, so a queue add on the placeholder asks the merge.
+  it.effect("scenario: add refuses a draft's placeholder body with the same words, and asks no merge", () =>
+    Effect.gen(function* () {
+      const m = memory({ more: { body: Sections.DRAFT_BODY } });
+      const refused = yield* Effect.flip(add(m));
+
+      expect(refused._tag === "NotQueued" ? refused.reason : "").toContain("still the draft placeholder sentence");
+      expect(m.github.calls).toEqual([]);
+    }),
+  );
+});
+
 describe("body: a `fabrika close ticket <N>` line must name an open tracker ticket, so the merge closes it (a merge closes only the tickets its pull request names with our own phrase)", () => {
   /** What `body` answers for a description, with these open tracker tickets and open GitHub issues. */
   const checked = (
-    text: string,
+    lines: string,
     w: { open?: ReadonlyArray<number>; issues?: ReadonlyArray<number>; failing?: World["failing"] } = {},
   ) => {
+    const text = `${full}\n${lines}`;
     const m = memory({ open: w.open ?? [], more: { body: text }, ...(w.failing ? { failing: w.failing } : {}) });
 
     for (const n of w.issues ?? []) {
@@ -426,7 +471,7 @@ describe("body: a `fabrika close ticket <N>` line must name an open tracker tick
     },
     ({ tracker, issue }) =>
       Effect.gen(function* () {
-        const got = yield* checked("What it does.\n\nfabrika close ticket 1843\n", {
+        const got = yield* checked("fabrika close ticket 1843\n", {
           open: tracker ? [1843] : [5],
           issues: issue ? [1843] : [],
         });
@@ -455,7 +500,7 @@ describe("body: a `fabrika close ticket <N>` line must name an open tracker tick
         const plain = yield* Queue.body(".", {
           number: 900,
           title: "t",
-          body: "Closes #1843\nfabrika close ticket 5x",
+          body: `${full}\nCloses #1843\nfabrika close ticket 5x`,
         }).pipe(Effect.provide(m.layer));
 
         expect(plain).toBeNull();
@@ -487,7 +532,7 @@ describe("body: a `fabrika close ticket <N>` line must name an open tracker tick
   // Plant: check the body in `add` only, so `land.ts check` passes a body that `queue` refuses.
   it.effect("scenario: add refuses such a body with the same words, and asks no merge", () =>
     Effect.gen(function* () {
-      const m = memory({ more: { body: "What it does.\n\nfabrika close ticket 1843\n" } });
+      const m = memory({ more: { body: `${full}\nfabrika close ticket 1843\n` } });
       m.github.issues.add(1843);
       const refused = yield* Effect.flip(add(m));
       expect(refused).toMatchObject({ _tag: "NotQueued" });

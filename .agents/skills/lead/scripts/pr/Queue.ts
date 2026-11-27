@@ -5,7 +5,7 @@
 //
 //   add      the pull request is open, into main and not in conflict with main -> leak grep on its net change and on each
 //            of its commits, each failing closed -> the body checks (`body`, which `land.ts check` runs alone): the leak grep on its
-//            title and description, and each new exported name named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word), and each `fabrika close ticket <N>` line naming an open tracker ticket (an open GitHub issue is closed by `Closes #<N>`) -> a draft whose head has a CI run
+//            title and description, that the description is the pr skill's template (its `## Summary`, `## Evidence` and `## Merge Danger`) and not the draft placeholder (Sections.ts), and each new exported name named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word), and each `fabrika close ticket <N>` line naming an open tracker ticket (an open GitHub issue is closed by `Closes #<N>`) -> a draft whose head has a CI run
 //            (never in the seconds after a push; with a wait, one is given time to appear, and a wait ends at once with a refusal
 //            when the pull request turns to conflict with main, since GitHub starts no check on one) is marked ready
 //            (as `land.ts admin` does), which starts its real `ci-required` -> `ci-required`
@@ -24,6 +24,7 @@ import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
 import { Detail, PullRequests, PullRequestsError } from "./PullRequests.ts";
 import type { LeakGrepRefused, Pushes } from "./Pushes.ts";
+import * as Sections from "./Sections.ts";
 import { Sweeps } from "./Sweeps.ts";
 import { Tickets } from "./Tickets.ts";
 
@@ -252,6 +253,7 @@ export const refusal = (found: Detail): string | null =>
 /**
  * The checks on a pull request's own words, which `add` runs and `land.ts check` runs alone, so a
  * body is known good before the queue is asked: the leak grep on its title and description, then
+ * that it is the pr skill's template and not the draft placeholder (Sections.ts), then
  * each new exported name named under `## New names`, then each `fabrika close ticket <N>` line naming an open tracker ticket. Gives why it may not enter the queue, or
  * `null`; a leak grep that refuses or cannot run fails it. Reads the pull request's patches and
  * changes nothing.
@@ -261,6 +263,12 @@ export const body = Effect.fn("Queue.body")(function* (
   found: Pick<Detail, "number" | "title" | "body">,
 ): Effect.fn.Return<string | null, LeakGrepRefused | PullRequestsError, PullRequests | Pushes | Tickets> {
   yield* Leaks.text(dir, found);
+
+  const unwritten = Sections.refusal(found.body);
+
+  if (unwritten !== null) {
+    return unwritten;
+  }
 
   const names = Names.refusal(found.body, yield* (yield* PullRequests).patches(found.number));
 

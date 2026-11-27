@@ -52,7 +52,7 @@
 //
 //   land.ts check <pr>
 //     the lead session, after it writes a pull request's body and before `queue`: runs exactly the body checks `queue`
-//     runs (Queue.body: the leak grep on the title and description, each new exported name named under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket),
+//     runs (Queue.body: the leak grep on the title and description, the pr skill's sections and no draft placeholder, each new exported name named under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket),
 //     one function shared with `queue`. It also checks that every commit on the branch since main is signed (a note on
 //     refs/notes/fabrika, or a person's own signature) or made by `stepcommit.sh` (a `--commit-only` commit, signed at
 //     `land.ts run`, and a fix round's, which signs nothing), and names each one that is neither. Changes nothing but the refs it
@@ -847,7 +847,7 @@ export const unsignedCommits = Effect.fn("land.unsignedCommits")(function* (tree
   return unsigned;
 });
 
-// The body checks `queue` runs, alone: the leak grep on the title and description, each new exported name named
+// The body checks `queue` runs, alone: the leak grep on the title and description, the pr skill's sections and no draft placeholder, each new exported name named
 // under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket. A lead runs it after writing a body and before `queue`; it asks GitHub for reads only and changes nothing.
 const checkCommand = Command.make(
   "check",
@@ -887,7 +887,7 @@ const checkCommand = Command.make(
     }
 
     yield* Console.log(
-      `pr ${pr}: the body checks pass (leak grep on the title and description, ## New names, fabrika close ticket lines, every commit since main signed)`,
+      `pr ${pr}: the body checks pass (leak grep on the title and description, the pr skill's sections, ## New names, fabrika close ticket lines, every commit since main signed)`,
     );
   }),
 );
