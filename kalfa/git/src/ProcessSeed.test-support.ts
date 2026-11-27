@@ -299,3 +299,78 @@ export const setConfigTable = (dir: string): Effect.Effect<void, never, Needs> =
       yield* git(dir, ["config", key, value]);
     }
   }).pipe(Effect.orDie);
+
+/** What `git` printed on stdout and the code it ended with, for a command that may fail. */
+interface Ran {
+  readonly code: number;
+  readonly stdout: string;
+}
+
+/**
+ * git in a working copy, with a pinned environment and the given variables beside it: no user or system config, no prompt, no editor.
+ * It does not die on a code that is not 0, since `git rebase` ends 1 on a conflict.
+ */
+export const gitIn = (
+  dir: string,
+  args: ReadonlyArray<string>,
+  env: Readonly<Record<string, string>> = {},
+): Effect.Effect<Ran, never, ChildProcessSpawner.ChildProcessSpawner> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const path = yield* Config.String("PATH");
+
+      const handle = yield* spawner.spawn(
+        ChildProcess.make("git", args, {
+          cwd: dir,
+          extendEnv: false,
+          env: {
+            PATH: path,
+            GIT_CONFIG_NOSYSTEM: "1",
+            GIT_CONFIG_GLOBAL: "/dev/null",
+            GIT_CONFIG_SYSTEM: "/dev/null",
+            GIT_TERMINAL_PROMPT: "0",
+            GIT_EDITOR: "true",
+            LC_ALL: "C",
+            ...env,
+          },
+          stdin: "ignore",
+        }),
+      );
+
+      const [stdout, , code] = yield* Effect.all(
+        [
+          Stream.mkString(Stream.decodeText(handle.stdout)),
+          Stream.mkString(Stream.decodeText(handle.stderr)),
+          handle.exitCode,
+        ],
+        { concurrency: 3 },
+      );
+
+      return { code, stdout };
+    }),
+  ).pipe(Effect.orDie);
+
+/**
+ * The history in a temporary clone with a working copy, which goes away with the scope: every commit imported with the ids a bare
+ * repository gives them, and nothing checked out. `git rebase` needs a working copy, and no call of the package ever has one.
+ */
+export const workingCopy: (
+  history: History,
+) => Effect.Effect<
+  { readonly root: string; readonly ids: ReadonlyArray<CommitId.CommitId> },
+  never,
+  Needs | Scope.Scope
+> = (history) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fs.makeTempDirectoryScoped();
+    yield* gitIn(root, ["init", "--quiet", "-b", "scratch"]);
+
+    const ids = (yield* fastImport(path.join(root, ".git"), importStream(history))).map((id) =>
+      Schema.decodeUnknownSync(CommitId.CommitId)(id),
+    );
+
+    return { root, ids };
+  }).pipe(Effect.orDie);
