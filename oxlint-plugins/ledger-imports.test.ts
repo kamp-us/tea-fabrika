@@ -2,7 +2,7 @@
 // plants one import line of each kind in each kind of file under `kalfa/ledger/src` and asks the config which lines it refuses. It runs oxlint's built-in
 // `no-restricted-imports` rule alone, as the config's blocks hold it.
 //
-// What the plan says (L1): a product file refuses every other package of this repository, but `@kalfa/diagnostics/Hidden`, every Telemetry package, a platform package,
+// What the plan says (L1): a product file refuses every other package of this repository, but `@kalfa/diagnostics/Hidden` alone (not its root or another entry point), every Telemetry package, a platform package,
 // `fast-check`, a Node module under both spellings and a path out of the package; the test tools (`vitest`, `@effect/vitest`) load in `LedgerTest.ts` only, and
 // `LedgerTest.ts` takes nothing else of what the rest refuse; `fast-sha256` loads in `EntryId.ts` only.
 import { expect, it } from "@effect/vitest";
@@ -17,6 +17,8 @@ const DIR = "kalfa/ledger/src";
 const REFUSED: ReadonlyArray<readonly [string, string]> = [
   ["@kalfa/config", "another kalfa package"],
   ["@kalfa/secrets", "another kalfa package, its root"],
+  ["@kalfa/diagnostics", "Diagnostics' root: only its Hidden entry point is let in"],
+  ["@kalfa/diagnostics/Diagnostic", "another entry point of Diagnostics"],
   ["@kampus/vitest", "a repository package"],
   ["@tea-fabrika/anything", "a repository package"],
   ["@demlik/tea", "a demlik package"],
@@ -75,9 +77,9 @@ const written = (modules: ReadonlyArray<readonly [string, string]>): string =>
 
 // L1. Plant: leave `**/*Test.ts` out of the block's `excludeFiles` and give `LedgerTest.ts` no block of its own (an `@opentelemetry/api`, `@effect/opentelemetry`,
 // `@kalfa/config` or `@effect/platform-node` import in `LedgerTest.ts` is not refused); drop one pattern group from the block; refuse `@kalfa/diagnostics/Hidden`
-// with the rest of the `@kalfa/` group (the allowed line is refused); let `vitest` through in `Errors.ts`.
-it("vector: L1 each file of the package refuses exactly the imports it should, and LedgerTest.ts loads the test tools and nothing else the rest refuse", async () => {
-  // vector: the config at head and one planted line of each kind of import in each kind of file; no generated input says which package a config block refuses.
+// with the rest of the `@kalfa/` group (the allowed line is refused); widen the exception to `!@kalfa/diagnostics/**` (the root and `/Diagnostic` lines pass); let `vitest` through in `Errors.ts`.
+it("scenario: L1 each file of the package refuses exactly the imports it should, and LedgerTest.ts loads the test tools and nothing else the rest refuse", async () => {
+  // scenario: the config at head and one planted line of each kind of import in each kind of file; no generated input says which package a config block refuses.
   const files = Object.fromEntries(
     Arr.map(FILES, ({ file, refused, allowed }) => [`${DIR}/${file}`, written([...refused, ...allowed])]),
   );

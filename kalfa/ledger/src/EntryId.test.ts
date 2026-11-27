@@ -161,7 +161,8 @@ it.effect.prop(
 // I3. Plant: delete the check of the name in `child` (a name with a bad character, a dot or a colon comes back as an id: `child("a.b", "p")` is `a.b:p`, and
 // `child("x.h", <the hash in x's hashed id>)` is the very id `child("x", <that parent>)` gives); delete the check of the parent (a bad character in a parent comes back
 // as an id, joined short or hashed); check only the name; check only the parent; make `child` repair a bad character by dropping it (the result is valid, and the
-// classes are not refused); check the name only when the joined text is short, or the parent only when it is.
+// classes are not refused); check the name only when the joined text is short, or the parent only when it is; check the parent on the hashed path alone (an empty
+// parent joins to `a:`, which reads as an id); let an empty name through.
 it.effect.prop(
   "I3 child: a name that is no EntryName or a parent that is no EntryId, sent by a caller that no type holds, is refused, joined short or long, and never comes back as an id",
   { texture: misfitTexture },

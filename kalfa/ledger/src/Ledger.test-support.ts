@@ -369,6 +369,8 @@ export const MISFIT_CLASSES = [
   "a dot or a colon in a name, joined long",
   "a name ending in .h, given the hash another name's hashed id holds",
   "a dot or a colon at the end of a name, joined short",
+  "an empty parent",
+  "an empty name",
 ] as const;
 
 /** The text with `bad` put in at `place`, or at the end when `place` is past it. */
@@ -398,6 +400,9 @@ export const misfits = (texture: MisfitTexture): ReadonlyArray<Misfit> => {
     { id: MISFIT_CLASSES[6], name: `${name}${dotted}${name}`, parent: long },
     { id: MISFIT_CLASSES[7], name: `${name}.h`, parent: hash },
     { id: MISFIT_CLASSES[8], name: `${name}${dotted}`, parent },
+    // Empty texts are no name and no id; the joined text `a:` or `:p` would still read as an id, so only the check on each argument refuses them.
+    { id: MISFIT_CLASSES[9], name, parent: "" },
+    { id: MISFIT_CLASSES[10], name: "", parent },
   ];
 };
 
