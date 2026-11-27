@@ -515,6 +515,11 @@ const EXEMPTIONS: ReadonlyArray<Exemption> = [
 /** A glob of a block that reaches no tracked file today, and why it stays. */
 const UNREACHED: ReadonlyArray<Unreached> = [
   {
+    glob: "next/programs/inbox/src/**/tile.ts",
+    reason:
+      "programs get a tile.ts (next/programs/checklist/src/tile.ts), and S1 in oxlint-plugins/plants.test.ts pins one for inbox ahead of time",
+  },
+  {
     glob: "kalfa/ledger/src/LedgerTest.ts",
     reason:
       "slice 2 of https://github.com/kamp-us/tea-fabrika/issues/2082 (open) adds the file, and it must meet the same rules",

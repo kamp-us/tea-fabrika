@@ -2411,7 +2411,7 @@
     },
     {
       // S1: after next/**, since an override replaces options. Keep its import bans too.
-      "files": ["next/programs/inbox/src/**/program.ts"],
+      "files": ["next/programs/inbox/src/**/program.ts", "next/programs/inbox/src/**/tile.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",

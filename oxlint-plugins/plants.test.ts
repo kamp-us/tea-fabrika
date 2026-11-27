@@ -1725,7 +1725,7 @@ describe("rules that apply by path", () => {
   });
 
   // pinned: S1 checks the rule's own diagnostic, so an unresolved import cannot prove the ban.
-  describe.each(["program.ts"])("S1 inbox %s imports", (name) => {
+  describe.each(["program.ts", "tile.ts"])("S1 inbox %s imports", (name) => {
     it.each([
       ['import { x } from "@kampus/tuval";', [1]],
       ['import { x } from "@kampus/tuval/window";', [1]],
