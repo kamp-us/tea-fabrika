@@ -150,6 +150,8 @@ const Row = Schema.Struct({
   command: Schema.optional(Schema.String),
   argv: Schema.optional(Schema.Array(Schema.String)),
   check: Schema.optional(Schema.String),
+  reason: Schema.optional(Schema.String),
+  said: Schema.optional(Schema.Array(Schema.String)),
 });
 
 type Row = typeof Row.Type;
