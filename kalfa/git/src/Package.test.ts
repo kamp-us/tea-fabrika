@@ -129,15 +129,17 @@ const DURATION_TEXT = new RegExp(`["'\`]\\s*(?:\\d[\\d_.]*\\s*)?(?:${UNITS})\\s*
 // A number written out, or a sum or product of numbers: `5000`, `10_000`, `5 * 1000`.
 const NUMBER = String.raw`\d[\d_.]*(?:\s*[-+*/%]\s*\(?\s*\d[\d_.]*\s*\)?)*`;
 
-// A constant of any case, annotated or not, that is only a number: `const KILL_AFTER: Duration.Input = 5000;`.
+// A top-level constant of any case, annotated or not, that is only a number: `const KILL_AFTER: Duration.Input = 5000;`.
+// It starts at the line's first column, so an indented `const first = 0;` inside a function is not a limit and is not read.
 const COUNT_CONSTANT = new RegExp(
-  String.raw`^[ \t]*(?:export )?const (\w+)\s*(?::[^=\n]+)?=\s*\(?\s*${NUMBER}\s*\)?\s*;`,
+  String.raw`^(?:export )?const (\w+)\s*(?::[^=\n]+)?=\s*\(?\s*${NUMBER}\s*\)?\s*;`,
   "gm",
 );
 
 // A name that says it is a length of time or a wait, given a number: `forceKillAfter: 5000`, `duration: 10_000`, `timeout = 30`.
+// A bare `time` is not here: `{ time: 0 }` is a commit's timestamp, a point in time and not a length. `waitTime: 5` is.
 const TIME_KEY = new RegExp(
-  String.raw`\b\w*(?:killafter|duration|timeout|delay|interval|wait|deadline|ttl|after|time|${UNITS.replaceAll("?", "")})\s*[:=]\s*\(?\s*${NUMBER}\s*\)?\s*(?=[,;)}\n])`,
+  String.raw`\b\w*(?:killafter|duration|timeout|delay|interval|wait|deadline|ttl|after|\w+time|${UNITS.replaceAll("?", "")})\s*[:=]\s*\(?\s*${NUMBER}\s*\)?\s*(?=[,;)}\n])`,
   "i",
 );
 
@@ -180,4 +182,40 @@ it("K5 scenario: no code of the package holds a fixed duration or a fixed number
   }
 
   expect(found.toSorted(), "each constant that is a number is git's own, found once").toEqual(GIT_OWN.toSorted());
+});
+
+// Plant: widen `COUNT_CONSTANT` back to `^[ \t]*`: the function-local `const first = 0;` is found, red. Widen `TIME_KEY` back to a bare
+// `time`: `{ time: 0 }` is found, red. Drop `after` and `killafter` from `TIME_KEY`: `forceKillAfter: 5000` is not found, red; drop `\w+time`: `waitTime: 5` is not found, red.
+it("K5 vector: a number kept inside a function or as a timestamp is not a limit, and every spelling of a fixed limit stays caught", () => {
+  const constants = (text: string) => [...text.matchAll(COUNT_CONSTANT)].map(([, name]) => name);
+
+  for (const local of [
+    "const f = () => {\n  const first = 0;\n  return first;\n};",
+    "export const walk = () => {\n    const start = 1;\n};",
+    "const g = () => {\n\tconst last = 5 * 1000;\n};",
+  ]) {
+    expect(constants(local), local).toEqual([]);
+  }
+
+  expect(TIME_KEY.exec("const sig = { name, email, time: 0, offset: 0 };")?.[0]).toBeUndefined();
+
+  for (const [text, name] of [
+    ["const KILL_AFTER: Duration.Input = 5000;", "KILL_AFTER"],
+    ["const killAfter = 5000;", "killAfter"],
+    ["const KILL_AFTER = 5 * 1000;", "KILL_AFTER"],
+    ["export const MOST_PATHS = 1000;", "MOST_PATHS"],
+    ["const f = () => {\n  const first = 0;\n};\nconst LIMIT = 10_000;", "LIMIT"],
+  ] as const) {
+    expect(constants(text), text).toEqual([name]);
+  }
+
+  for (const text of [
+    "forceKillAfter: 5000,",
+    "duration: 10_000,",
+    "timeout = 30;",
+    "{ waitTime: 5 }",
+    "{ seconds: 5 }",
+  ]) {
+    expect(TIME_KEY.exec(text)?.[0], text).toBeDefined();
+  }
 });
