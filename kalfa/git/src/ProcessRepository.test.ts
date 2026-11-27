@@ -2410,7 +2410,9 @@ const STAGES = ["cat-file", "ls-tree", "hash-object", "mktree"];
 // the top folder before the folder below it, red; write a folder whose entries came out the same, so an edit that changes nothing runs
 // `mktree`, (l) red; list a folder the edit does not touch; pass a changed folder's old line beside its new one; give a command a path. Order the folders by the characters
 // of their paths, not the folders above them (`folder.split("")` for `folder.split("/")`), red. Take the path of a name that is not UTF-8 as
-// `<folder>/undefined`, so an edit of a file named `undefined` changes that entry, red.
+// `<folder>/undefined`, so an edit of a file named `undefined` changes that entry, red. Say two lists hold the same entries when the shorter is
+// the start of the longer in sorted order (`true` for `left.length === right.length` in `folder.ts` `same`), so a folder that lost its last entry
+// is not made again, red.
 it.effect.prop(
   "P22 editTree on the stand-in: cat-file --batch-check, the ls-tree -z listings top down, one hash-object per new content with its bytes byte for byte, then one mktree -z per changed folder, deepest first, whose stdin holds each untouched listed line byte for byte; a refused edit runs no hash-object and no mktree; an edit that changes nothing runs no mktree",
   EDIT_SPEC,
@@ -2513,6 +2515,10 @@ it.effect.prop(
           [`${long}/m`, fresh(2)],
           [`f${p}/g${p}/i${p}`, fresh(4)],
         ],
+        // A folder loses one of its two files and nothing else changes, for each file in turn: one of the two is the last of the folder's
+        // listing in sorted order, so the folder that is left is the start of what was listed, and it is still a different folder.
+        [[`c${p}/d${p}`, "absent"]],
+        [[`c${p}/e${p}`, "absent"]],
         // A file named `undefined` beside a name that is not UTF-8, at the top and in a folder: only that file changes.
         [[`undefined`, fresh(11)]],
         [[`n${p}/undefined`, fresh(12)]],
