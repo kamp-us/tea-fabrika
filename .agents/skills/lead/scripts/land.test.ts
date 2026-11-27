@@ -103,6 +103,8 @@ type World = {
   readonly readyRefused?: boolean;
   /** The pull request's description, with `\n` for a new line; a full template body when left out. */
   readonly body?: string;
+  /** The pull request's title; the quest's own when left out. */
+  readonly title?: string;
   /** The tracker's open tickets, and GitHub's open issues, as space-separated numbers. */
   readonly tickets?: string;
   readonly issues?: string;
@@ -147,6 +149,7 @@ const land = (world: World) => {
       LAND_STATE: world.state ?? "OPEN",
       LAND_MERGEABLE: world.mergeable ?? "MERGEABLE",
       LAND_BODY: world.body ?? full,
+      LAND_TITLE: world.title ?? "T652 fixture: one quest",
       LAND_PATCH: world.patch ?? "",
       LAND_TICKETS: world.tickets ?? "",
       LAND_ISSUES: world.issues ?? "",
@@ -665,6 +668,39 @@ describe("land.ts, today's tooling", () => {
     const ticket = land({ ...fine, body: text, tickets: "1843 5", command: ["check", "77"] });
     expect(ticket.code, ticket.err).toBe(0);
   }, 120_000);
+
+  // Plants: leave the gate out of one command's path (`check`, `queue`, `merge`, `merge --admin`, `admin` or `arm`), so it takes a pull request the others refuse. pr/Gate.test.ts holds the same law on every path and every refusal; this one runs the commands.
+  // Each world is its own law, 6 runs of one script run each, as the split above.
+  const PATHS: ReadonlyArray<ReadonlyArray<string>> = [
+    ["check", "77"],
+    ["queue", "77"],
+    // The two flags have no default, so each command names its own (a bare `merge 77` or `admin 77` is a usage error).
+    ["merge", "77", "--admin=false"],
+    ["merge", "77", "--admin"],
+    ["admin", "77", "--wait"],
+    ["arm", "77"],
+  ];
+
+  for (const [name, world, says] of [
+    ["is titled `Plan:`", { title: "Plan: a quest" }, "its title starts `Plan:`"],
+    [
+      "holds a commit nothing vouches for",
+      { unsignedCommit: true },
+      "1 commit(s) since main are not signed or made by stepcommit.sh:",
+    ],
+  ] as const) {
+    it(`scenario: every command that merges or checks a pull request that ${name} refuses it with the gate's words, and asks GitHub for no ready or merge`, () => {
+      for (const command of PATHS) {
+        const got = land({ ...fine, ...world, command });
+        expect(got.code, `${command.join(" ")}: ${got.err}`).toBe(1);
+        expect(got.err, command.join(" ")).toContain(says);
+        expect(
+          got.calls.filter((c) => /^gh pr (ready|merge)/.test(c)),
+          command.join(" "),
+        ).toEqual([]);
+      }
+    }, 300_000);
+  }
 
   // Plants: skip the signature read in `check`, count only the branch's tip, or name no commit.
   it("scenario: `land.ts check` refuses a commit since main with no signature, names it, and passes when every commit has a note", () => {

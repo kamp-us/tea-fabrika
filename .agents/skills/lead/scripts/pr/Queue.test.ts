@@ -14,6 +14,7 @@ import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
 import * as Queue from "./Queue.ts";
 import * as Sections from "./Sections.ts";
+import * as SignaturesTest from "./SignaturesTest.ts";
 import * as SweepsTest from "./SweepsTest.ts";
 import * as TicketsCli from "./TicketsCli.ts";
 import * as TicketsTest from "./TicketsTest.ts";
@@ -82,6 +83,7 @@ const memory = (w: World = {}) => {
     ChecksTest.layer([job(w.required ?? "success")], ""),
     TicketsTest.layer(tracker, w.failing?.tickets),
     SweepsTest.layer(sweeps, w.failing?.sweep),
+    SignaturesTest.layer(),
   );
 
   return { github, remote, tracker, sweeps, layer };

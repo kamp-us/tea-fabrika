@@ -1,9 +1,9 @@
 // Arm: how the lead turns on GitHub's merge when ready for one pull request (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips), the one
 // way it is turned on. Today's lead tooling, run on our own laptop; it is not product.
 //
-//   arm   the pull request is open, into main, and no plan -> the leak gate (./Leaks.ts) passes on
-//         its change, its commits and its words -> the description is the pr skill's template and not the draft placeholder (Sections.ts) and each new exported name is named under
-//         `## New names` (Queue.description, the check `land.ts check`, `queue` and the admin merge run; Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> scheduled proof at its head, or automatic ready CI
+//   arm   the merge gate passes (./Gate.ts, which `land.ts check` and every other merge path run too: open, into main, no conflict, no `can/` branch,
+//         no `Plan:` title, the leak grep on its change, commits and words, the description the pr skill's template with each new name under
+//         `## New names`, each `fabrika close ticket` line naming an open tracker ticket, every commit since main signed) -> scheduled proof at its head, or automatic ready CI
 //         with related-test coverage, is read -> green: marked ready if a draft, then merge when ready on, as a
 //         squash pinned to that head
 //
@@ -41,9 +41,8 @@ import { Effect, Option, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import { Job, type Run, Runs } from "../ci/Runs.ts";
 import { logText } from "../ci/typecheck.ts";
-import * as Leaks from "./Leaks.ts";
-import { type Detail, PullRequests } from "./PullRequests.ts";
-import * as Queue from "./Queue.ts";
+import * as Gate from "./Gate.ts";
+import { PullRequests } from "./PullRequests.ts";
 
 /** The separately started proof workflow, still authoritative when present at the current head. */
 export const WORKFLOW = "scheduled.yaml";
@@ -299,23 +298,6 @@ export type Ask = {
   readonly pr: number;
 };
 
-/** Why a pull request may not be armed whatever its runs say, or `null` when it may. A draft may. */
-export const refusal = (found: Detail): string | null => {
-  if (found.state !== "OPEN") {
-    return `${found.state.toLowerCase()}, not open; refused`;
-  }
-
-  if (found.base !== "main") {
-    return `merges into ${found.base}, not main; refused`;
-  }
-
-  // An open pull request for a plan to be read is titled `Plan: ...` (1279, 1344, 1365, 1373). A
-  // lowercase `plan:` title is how a change to the plan files merges (485, 1158), so it may be armed.
-  return found.title.startsWith("Plan:")
-    ? "its title starts `Plan:`, a plan's pull request, which is never armed; give it the title it lands with first (the pr skill)"
-    : null;
-};
-
 /** What `arm` did: turned merge when ready on at this head, or found it merged already. */
 export const Armed = Schema.TaggedUnion({
   armed: { pr: Schema.Finite, oid: Schema.String, readied: Schema.Boolean, full: Schema.String },
@@ -403,19 +385,11 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
     return Armed.cases.merged.make({ pr: found.number, commit: found.mergeCommit ?? found.oid });
   }
 
-  const refused = refusal(found);
+  // Merge when ready merges later with no one watching, so the gate runs before it is turned on. A draft is marked ready below.
+  const refused = yield* Gate.before({ dir: a.dir, found, readies: true });
 
   if (refused !== null) {
     return yield* refuse(refused);
-  }
-
-  // Merge when ready merges later with no one watching, so the leak gate runs before it is turned on.
-  yield* Leaks.gate(a.dir, found);
-
-  const unnamed = yield* Queue.description(found);
-
-  if (unnamed !== null) {
-    return yield* refuse(unnamed);
   }
 
   const files = yield* prs.files(found.number);

@@ -363,7 +363,7 @@ Read the header before you run one; this table only says what each is for.
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
 | `land.ts wait <pr>` | wait until `ci-required` has ended at the pull request's current head, as `queue --wait` and `admin --wait` do; exits 0 only on success, names a cancelled run; `--wait-minutes`, `--every-seconds` |
-| `land.ts check <pr>` | the body checks `queue` runs, alone: run it after the body is written and before `queue`; it changes nothing and exits 1 on any missing name, leak, or `fabrika close ticket` line whose number is no open tracker ticket (an open GitHub issue is closed with `Closes #N`) |
+| `land.ts check <pr>` | the merge gate, alone: the checks that `queue`, `merge`, `admin` and `arm` each run first, so a pull request that passes `check` is refused by none of them on these grounds. Run it after the body is written and before `queue`; it changes nothing and exits 1 on a `can/` branch, a `Plan:` title, a leak, a missing name, a `fabrika close ticket` line whose number is no open tracker ticket (an open GitHub issue is closed with `Closes #N`), or a commit nothing vouches for |
 | `replay.ts <pr>` | run a changed check on the last 20 merged and every open pull request before it lands; its header says which checks it replays and which it lists as `not replayed`; see [How a change lands](#how-a-change-lands) |
 | `sizecap.ts` | a diff's or a plan's size, as advice only; run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
@@ -577,7 +577,7 @@ visible, and never weaken the rules to hide this message.
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
    Read a backgrounded land command's exit code and its log before you report it.
    For any other pull request, write the body with the [pr skill](../pr/SKILL.md), run `land.ts check <pr>`
-   until it exits 0 (the body checks `queue` runs, alone: it prints each new exported name missing from `## New names` with its
+   until it exits 0 (the merge gate that every merge path runs first, alone: it prints each new exported name missing from `## New names` with its
    file, and changes nothing), then run `land.ts queue <pr>` once its checks
    are green; it marks a draft ready itself, once a CI run has started at its head, so give it `--wait` to
    let that run and the new `ci-required` appear. Both leak-check the change, each commit and the title and description, then add it to

@@ -38,6 +38,8 @@ import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
 import type * as Queue from "./Queue.ts";
 import * as Sections from "./Sections.ts";
+import * as SignaturesTest from "./SignaturesTest.ts";
+import * as TicketsTest from "./TicketsTest.ts";
 
 const oid = "0123456789abcdef0123456789abcdef01234567";
 
@@ -109,6 +111,8 @@ const memory = (w: World = {}) => {
     PushesTest.layer(remote, leaking(w.leak ?? "clean")),
     ChecksTest.layer([Option.some(job)], ""),
     BranchesTest.layer({ branches: [], ahead: {}, empty: [], behind: { [oid]: w.behind ?? 0 } }),
+    SignaturesTest.layer(),
+    TicketsTest.layer(TicketsTest.world()),
   );
 
   return { github, layer };

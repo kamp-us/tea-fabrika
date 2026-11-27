@@ -39,7 +39,12 @@ export const make = (
 
     const leakChange = Effect.fn("PushesProcess.leakChange")(
       function* (dir: string, head: string) {
-        const fetched = yield* ran("git", ["-C", dir, "fetch", "-q", "origin", "main", head], dir);
+        // No FETCH_HEAD: every fetch in a checkout writes it, and a stranger's session may be reading what it left there.
+        const fetched = yield* ran(
+          "git",
+          ["-C", dir, "fetch", "-q", "--no-write-fetch-head", "origin", "main", head],
+          dir,
+        );
 
         if (fetched.code !== 0) {
           return yield* LeakGrepRefused.make({
