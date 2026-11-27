@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 1750 slice 1 only; body 04ee45de73b0
+Approved by the lead agent, builds 1750 slice 1 only, amended; body 236a298db777
 Plancheck-Version: 3
 
 # Plan: @kalfa/git, fetch from a remote by name or by URL, with a credential asked on each fetch (ticket 1938)
@@ -30,6 +30,8 @@ const [main] = yield* repo.fetch({ remote: Remote.named(origin), under: refName(
 program.pipe(Effect.provide(Credentials.none)); // a local path, a /memory remote, a public remote
 program.pipe(Effect.provide(CodehostGit.credentials)); // later, ticket 1968: from an access grant
 ```
+
+**Lead amendment (2026-11-27), after the slice 1 review:** (1) the call's bound is `limits.time` plus two `limits.kill` waits, not one: a transfer that ignores the first signal holds its own scope for one `limits.kill`, and the folder's release can then wait another. Where this plan says "within `limits.time` plus `limits.kill`", read two kill waits; F14 adds the stubborn transfer. (2) `Url` refuses a URL whose parsed host is not exactly the text of its authority, so no dropped, mapped or decoded character can hide a host. (3) `/memory` copies a fetch's commits only after a good answer, as `/process` does, and a shared law holds that no answered tip is readable after a failure. (4) The `RepositoryTest.ts` re-export stays: `/test` ships `FetchTest`.
 
 ## Doubts, read first
 
