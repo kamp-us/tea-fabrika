@@ -14,7 +14,7 @@
 //     merge of main), which goes only to the branch's -wip backup. It reads no key, pushes nothing
 //     and opens nothing.
 //
-//   land.ts run <quest> <ticket>
+//   land.ts run <quest> <ticket> [--reviewed <sha> --reviewer <text>]
 //     the lead session, in the background:
 //       check        the tree is clean, on the ready branch, at the ready head
 //       leak         the PR body that will be posted, through leakgrep.sh --text
@@ -27,6 +27,8 @@
 //       push         botpush.mjs, to the branch (to its -wip backup for a mid-quest handover, and
 //                    stop there)
 //       pr           open the PR from the body file, or update the open one
+//       record       with --reviewed and --reviewer (the head the review read, and who judged), the review record on the pushed head, with this
+//                    command's own ticket, as `land.ts review` writes a fresh one; a refusal stops the run before the queue
 //       queue        as `land.ts queue <pr> --wait-ci` below
 //
 //   land.ts queue <pr> [--wait-ci] [--wait-minutes <n>] [--every-seconds <n>]
@@ -60,7 +62,8 @@
 //     description, the pr skill's sections and no draft placeholder, each new exported name named under `## New names`, and each
 //     `fabrika close ticket` line naming an open tracker ticket; and every commit on the branch since main signed (a note on
 //     refs/notes/fabrika, or a person's own signature) or made by `stepcommit.sh` (a `--commit-only` commit, signed at
-//     `land.ts run`, and a fix round's, which signs nothing), naming each one that is neither. The first refusal is the one printed.
+//     `land.ts run`, and a fix round's, which signs nothing), naming each one that is neither; and, last, that a pull request that changes a path that
+//     needs a review (next/, kalfa/, a root config file) holds a review record on its head (`land.ts review`). The first refusal is the one printed.
 //     Changes nothing but the refs it fetches. Exits 1 on a refusal, naming what is wrong and the file it comes from; else prints
 //     one line that lists the checks it passed and exits 0. `queue`, `run`, `merge`, `admin` and `arm` print that same line
 //     first (pr/Gate.ts `line`), unless the pull request was found merged already.
@@ -74,19 +77,22 @@
 //     head's first parents, only through the commits the pull request adds to main, to the nearest approval and writes that approval's
 //     `reviewed` on the new head, pointing at the first comment, and no new comment. A head that holds an approval already gets nothing.
 //     The words go through the leak grep first. Reads the statuses back and refuses unless the head reads as approved. It prints one line.
-//     Nothing reads this record yet: the merge gate does not ask for it.
+//     The merge gate reads this record: a pull request that changes a path that needs a review (next/, kalfa/, a root config file) is refused
+//     by every path until its head holds one, and a rebase drops the old head from the history, so a rebased pull request needs a fresh record
+//     (a merge of main carries, a rebase never does).
 //
 //   land.ts arm <pr>
 //     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips; pr/Arm.ts): runs the merge gate
 //     first, as `queue` does (so a `can/` branch, a `Plan:` title, a leak or a grep that could not run, a body the pr skill's checks
-//     refuse, an unsigned commit or a conflict with main refuses it); reads the proof run (scheduled.yaml) on its branch at its head, the
+//     refuse, an unsigned commit or a conflict with main refuses it; so does a pull request that changes a path that needs a review, record or
+//     not: merge when ready merges whatever the head is later, so it is queued with `land.ts queue <pr> --wait-ci` instead); reads the proof run (scheduled.yaml) on its branch at its head, the
 //     full set or, since the proof-run rule, the changed set, and refuses one that is red or not ended, printing
 //     each job that is not green, its failed steps and its failing test lines. With no run at the
 //     head it arms, as the arm-every-reviewed-pull-request rule allows, and says so in one line, unless the branch's newest run at an
 //     older head is not green or is a changed-set run, which proves only that head's change. Then
 //     marks a draft ready and turns on merge when ready, a squash pinned to the head that was read.
 //
-//   land.ts merge <pr> [--admin]
+//   land.ts merge <pr> [--admin [--override-review <reason>]]
 //     the lead session, the only way it merges a pull request by hand (pr/Merge.ts); never a bare
 //     `gh pr merge`. Without --admin, as `queue`. With --admin, an admin merge past the queue, which
 //     skips the queue and never a green check: every one needs `ci-required` green at the head,
@@ -94,9 +100,11 @@
 //     sev1, or one `open --allow` or `next` named in a sev0), a ready pull request a sev0 `allow`ed
 //     (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order), or any other pull request the owner asked for. A fix also needs origin/main's head in
 //     its history. Every one runs the merge gate first, which `queue` and `arm` run too: the leak gate on the change, each commit,
-//     the title and the description (a refusal on any hit or on a grep that could not run), and the rest of its refusals.
+//     the title and the description (a refusal on any hit or on a grep that could not run), and the rest of its refusals. An admin merge of a pull request
+//     that changes a path that needs a review and holds no record needs `--override-review <reason>` (one line, 128 characters at most): the reason is
+//     written on the head as a review override, a comment and a `failure` status, right before the squash, so a merge that refused earlier writes none.
 //
-//   land.ts admin <pr> [--wait] [--wait-minutes <n>] [--every-seconds <n>] [--queue-minutes <n>] [--queue-every-seconds <n>]
+//   land.ts admin <pr> [--override-review <reason>] [--wait] [--wait-minutes <n>] [--every-seconds <n>] [--queue-minutes <n>] [--queue-every-seconds <n>]
 //     the lead session, the one way it admin merges (a hand-written `gh pr checks --watch` chain once
 //     merged while ci-required was still pending). As `merge --admin` (a branch starting
 //     `can/` is refused by the gate, as it is on every path), and also: a draft is marked ready after the gate, then ci-required is given
@@ -172,6 +180,7 @@ import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as RunsGh from "./ci/RunsGh.ts";
 import * as Arm from "./pr/Arm.ts";
 import * as BranchesGit from "./pr/BranchesGit.ts";
+import * as ChangesGit from "./pr/ChangesGit.ts";
 import * as ClosesFs from "./pr/ClosesFs.ts";
 import * as Gate from "./pr/Gate.ts";
 import { Key } from "./pr/LandLog.ts";
@@ -782,6 +791,8 @@ const queueServices = (env: Env) =>
     ClosesFs.layer(`${env.BOXES}/state`),
     SweepsProcess.layer(HERE),
     SignaturesGit.layer,
+    ChangesGit.layer,
+    ReviewsGh.layer(env.GH_REPO, env.MAIN),
   );
 
 /**
@@ -829,9 +840,21 @@ const rollback = Effect.fn("land.rollback")(function* ({ ready }: Quest) {
 
 const run = Command.make(
   "run",
-  { quest: Argument.String("quest"), ticket: Argument.String("ticket") },
+  {
+    quest: Argument.String("quest"),
+    ticket: Argument.String("ticket"),
+    reviewed: Flag.String("reviewed").pipe(Flag.optional),
+    reviewer: Flag.String("reviewer").pipe(Flag.optional),
+  },
   Effect.fn("land.run")(
-    function* ({ quest: name, ticket }) {
+    function* ({ quest: name, ticket, reviewed, reviewer }) {
+      // The review's verdict, when the lead gives one: the head the review read and who judged. Checked first, so a bad flag changes nothing.
+      // The ticket is the one this command already names (a tracker number), never a flag of its own.
+      const verdict =
+        Option.isSome(reviewed) || Option.isSome(reviewer)
+          ? yield* reviewAsk(reviewed, reviewer, /^\d+$/.test(ticket) ? Option.some(Number(ticket)) : Option.none())
+          : undefined;
+
       const quest = yield* readReady(name, ticket);
       const say = (line: string) => Effect.andThen(note(quest.env.BOXES, name, `land.ts: ${line}`), Console.log(line));
       yield* checkTree(quest);
@@ -857,6 +880,13 @@ const run = Command.make(
       yield* say(
         `PR https://github.com/${quest.env.GH_REPO}/pull/${pr}; waiting for ${Queue.REQUIRED} to add it to the queue`,
       );
+
+      // The record goes on the pushed head, after the pull request is open and before it queues; a refusal stops the run here, before any enqueue.
+      if (verdict !== undefined) {
+        const recorded = yield* recordReview(quest.env, pr, verdict);
+        yield* say(recordedLine(pr, recorded));
+      }
+
       const added = yield* queue(quest.env, pr, Queue.QUEST_WAIT, quest.ready.tree);
 
       for (const said of gateLines(pr, added._tag === "merged")) {
@@ -965,7 +995,15 @@ const checkCommand = Command.make(
       const checked = yield* Effect.gen(function* () {
         const found = yield* (yield* PullRequests).view(pr);
 
-        return { found, refusal: yield* Gate.before({ dir: env.MAIN, found, marksReady: true }) };
+        return {
+          found,
+          refusal: yield* Gate.before({
+            dir: env.MAIN,
+            found,
+            marksReady: true,
+            way: Gate.Way.cases.queue.make({}),
+          }),
+        };
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
@@ -973,12 +1011,21 @@ const checkCommand = Command.make(
             PushesProcess.layer(HERE),
             TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
             SignaturesGit.layer,
+            ChangesGit.layer,
+            ReviewsGh.layer(env.GH_REPO, env.MAIN),
           ),
         ),
         Effect.mapError(
           (e) =>
             new Refused({
-              check: e._tag === "LeakGrepRefused" ? "leak" : e._tag === "SignaturesError" ? "check" : "body",
+              check:
+                e._tag === "LeakGrepRefused"
+                  ? "leak"
+                  : e._tag === "SignaturesError"
+                    ? "check"
+                    : e._tag === "ChangesError" || e._tag === "ReviewsError"
+                      ? "review"
+                      : "body",
               reason: e.reason,
               output: "",
             }),
@@ -1024,6 +1071,40 @@ const reviewAsk = Effect.fnUntraced(function* (
     );
 });
 
+/** One line for what `Review.record` did. */
+const recordedLine = (pr: number, done: Review.Recorded): string =>
+  Review.Recorded.match(done, {
+    fresh: (d) => `pr ${pr}: review recorded on ${d.head.slice(0, 12)} (reviewed ${d.reviewed.slice(0, 12)})`,
+    kept: (d) =>
+      `pr ${pr}: review carried to ${d.head.slice(0, 12)} from ${d.from.slice(0, 12)} (reviewed ${d.reviewed.slice(0, 12)}), kept`,
+    already: (d) => `pr ${pr}: review already recorded on ${d.head.slice(0, 12)}`,
+  });
+
+/** Records the review of pull request `pr` (pr/Review.ts) in the main checkout; every refusal is the `review` check's. */
+const recordReview = (env: Env, pr: number, ask: Review.Ask) =>
+  Review.record({ dir: env.MAIN, pr, ask }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+        BranchesGit.layer(env.MAIN),
+        PushesProcess.layer(HERE),
+        ReviewsGh.layer(env.GH_REPO, env.MAIN),
+        ReviewGit.layer(env.MAIN),
+      ),
+    ),
+    Effect.mapError(
+      (e) =>
+        new Refused({
+          check: "review",
+          reason:
+            "reason" in e && Predicate.isString(e.reason)
+              ? e.reason
+              : `the checkout's git could not be opened (${e._tag})`,
+          output: "",
+        }),
+    ),
+  );
+
 // The review record (pr/Review.ts): the one place the lead writes the verdict of a review on the pull request's head. A fresh record is
 // `--reviewed <sha> --reviewer <text>`; with neither it carries the nearest earlier approval to the head as it stands.
 const reviewCommand = Command.make(
@@ -1039,37 +1120,9 @@ const reviewCommand = Command.make(
       const env = yield* loadEnv;
       const ask = yield* reviewAsk(reviewed, reviewer, ticket);
 
-      const done = yield* Review.record({ dir: env.MAIN, pr, ask }).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            PullRequestsGh.layer(env.GH_REPO, env.MAIN),
-            BranchesGit.layer(env.MAIN),
-            PushesProcess.layer(HERE),
-            ReviewsGh.layer(env.GH_REPO, env.MAIN),
-            ReviewGit.layer(env.MAIN),
-          ),
-        ),
-        Effect.mapError(
-          (e) =>
-            new Refused({
-              check: "review",
-              reason:
-                "reason" in e && Predicate.isString(e.reason)
-                  ? e.reason
-                  : `the checkout's git could not be opened (${e._tag})`,
-              output: "",
-            }),
-        ),
-      );
+      const done = yield* recordReview(env, pr, ask);
 
-      yield* Console.log(
-        Review.Recorded.match(done, {
-          fresh: (d) => `pr ${pr}: review recorded on ${d.head.slice(0, 12)} (reviewed ${d.reviewed.slice(0, 12)})`,
-          kept: (d) =>
-            `pr ${pr}: review carried to ${d.head.slice(0, 12)} from ${d.from.slice(0, 12)} (reviewed ${d.reviewed.slice(0, 12)}), kept`,
-          already: (d) => `pr ${pr}: review already recorded on ${d.head.slice(0, 12)}`,
-        }),
-      );
+      yield* Console.log(recordedLine(pr, done));
     },
     recorded("review", ({ pr }) => [forPr(pr)]),
   ),
@@ -1097,6 +1150,8 @@ const armCommand = Command.make(
             ChecksGh.layer(env.GH_REPO),
             TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
             SignaturesGit.layer,
+            ChangesGit.layer,
+            ReviewsGh.layer(env.GH_REPO, env.MAIN),
           ),
         ),
         Effect.mapError(refusedAt("arm")),
@@ -1143,6 +1198,7 @@ const mergeBy = Effect.fn("land.mergeBy")(function* (
   route: Merge.Route,
   wait?: Queue.Wait,
   queueWait?: Queue.Wait,
+  override?: string,
 ) {
   const done = yield* Merge.merge({
     dir: env.MAIN,
@@ -1150,6 +1206,7 @@ const mergeBy = Effect.fn("land.mergeBy")(function* (
     route,
     ...(wait ? { wait } : {}),
     ...(queueWait ? { queueWait } : {}),
+    ...(override === undefined ? {} : { override }),
   }).pipe(
     Effect.provide(Layer.merge(queueServices(env), BranchesGit.layer(env.MAIN))),
     Effect.mapError(refusedAt("merge")),
@@ -1160,12 +1217,19 @@ const mergeBy = Effect.fn("land.mergeBy")(function* (
 
 const mergeCommand = Command.make(
   "merge",
-  { pr: PrNumber, admin: Flag.Boolean("admin") },
+  { pr: PrNumber, admin: Flag.Boolean("admin"), overrideReview: Flag.String("override-review").pipe(Flag.optional) },
   Effect.fn("land.mergeCommand")(
-    function* ({ pr, admin }) {
+    function* ({ pr, admin, overrideReview }) {
       const env = yield* loadEnv;
 
-      yield* mergeBy(env, pr, admin ? yield* adminRoute(env) : Merge.Route.cases.queue.make({}));
+      yield* mergeBy(
+        env,
+        pr,
+        admin ? yield* adminRoute(env) : Merge.Route.cases.queue.make({}),
+        undefined,
+        undefined,
+        Option.getOrUndefined(overrideReview),
+      );
     },
     recorded("merge", ({ pr }) => [forPr(pr)]),
   ),
@@ -1180,9 +1244,10 @@ const adminCommand = Command.make(
     wait: Flag.Boolean("wait"),
     queueMinutes: Flag.Int("queue-minutes").pipe(Flag.withDefault(Queue.QUEST_WAIT.minutes)),
     queueEvery: Flag.Int("queue-every-seconds").pipe(Flag.withDefault(Queue.QUEST_WAIT.every)),
+    overrideReview: Flag.String("override-review").pipe(Flag.optional),
   },
   Effect.fn("land.adminCommand")(
-    function* ({ pr, minutes, every, wait, queueMinutes, queueEvery }) {
+    function* ({ pr, minutes, every, wait, queueMinutes, queueEvery, overrideReview }) {
       const env = yield* loadEnv;
 
       yield* mergeBy(
@@ -1191,6 +1256,7 @@ const adminCommand = Command.make(
         yield* adminRoute(env),
         { minutes, every },
         wait ? { minutes: queueMinutes, every: queueEvery } : undefined,
+        Option.getOrUndefined(overrideReview),
       );
 
       // The merge happened, so this read only reports: a read that fails says so and the command still succeeds.

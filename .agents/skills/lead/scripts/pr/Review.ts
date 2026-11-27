@@ -55,7 +55,7 @@ const Line = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema
 const Who = Line.check(Schema.isMaxLength(300));
 
 /** 140 characters of a status description, less the 12 of `override v1 `: a reason always fits. */
-const Reason = Line.check(Schema.isMaxLength(128));
+export const Reason = Line.check(Schema.isMaxLength(128));
 
 /** The record, three cases. `v` is the version. */
 export const Record = Schema.TaggedUnion({

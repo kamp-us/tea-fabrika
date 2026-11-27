@@ -386,7 +386,7 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   }
 
   // Merge when ready merges later with no one watching, so the gate runs before it is turned on. A draft is marked ready below.
-  const refused = yield* Gate.before({ dir: a.dir, found, marksReady: true });
+  const refused = yield* Gate.before({ dir: a.dir, found, marksReady: true, way: Gate.Way.cases.arm.make({}) });
 
   if (refused !== null) {
     return yield* refuse(refused);

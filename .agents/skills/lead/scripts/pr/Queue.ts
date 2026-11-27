@@ -247,7 +247,7 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   }
 
   // The gate, which every merge path asks first. A draft is not refused for being a draft: it is marked ready below, once the gate has passed.
-  const refused = yield* Gate.before({ dir: a.dir, found, marksReady: true });
+  const refused = yield* Gate.before({ dir: a.dir, found, marksReady: true, way: Gate.Way.cases.queue.make({}) });
 
   if (refused !== null) {
     return yield* NotQueued.make({ reason: `pr ${found.number}: ${refused}` });

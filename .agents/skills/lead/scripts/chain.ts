@@ -89,7 +89,9 @@
 // The quest's pull request is a draft from its first commit: drive's pushing phase pushes each
 // step's commit to the branch and opens the draft when the branch has none (./pr/Publish.ts). The
 // `opening` phase pushes the reviewed head, gives the pull request the brief's `## pr` words and
-// marks it ready (`Publish.ready`), through the typed PullRequests service.
+// marks it ready (`Publish.ready`), through the typed PullRequests service, and then writes the review record on that head (`recordReady`):
+// the quest's review ran at the head the chain pushed, so the record's `reviewed` is that head. A refused record ends the quest there, so
+// nothing is queued with no record.
 // The chain holds every right (the bot's push, the PR, the merge queue, the commit and its signature); a
 // box or the judgment agent holds only its model login
 // (.kalfa/decisions/0027-parent-holds-every-right.md). The steps run the unmodified harness
@@ -167,10 +169,15 @@ import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
 import * as Pin from "./pin.ts";
 import * as Plants from "./plants.ts";
+import * as BranchesGit from "./pr/BranchesGit.ts";
+import * as ChangesGit from "./pr/ChangesGit.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
+import * as Review from "./pr/Review.ts";
+import * as ReviewGit from "./pr/ReviewGit.ts";
+import * as ReviewsGh from "./pr/ReviewsGh.ts";
 import * as SignaturesGit from "./pr/SignaturesGit.ts";
 import * as TicketsCli from "./pr/TicketsCli.ts";
 import { pinFolder, stepOf, wipBranch } from "./quest.ts";
@@ -1185,6 +1192,27 @@ type Setup = {
   readonly beats: Beats;
 };
 
+/**
+ * Records the review the quest ran, on the pull request's pushed head (pr/Review.ts, decision 0093). The chain pushes the head its review read,
+ * so `reviewed` is that head. Writes a comment and a status, or refuses and writes nothing.
+ */
+export const recordReady = (a: {
+  readonly dir: string;
+  readonly pr: number;
+  readonly head: string;
+  readonly quest: string;
+  readonly ticket: number | null;
+}) =>
+  Review.record({
+    dir: a.dir,
+    pr: a.pr,
+    ask: Review.Ask.cases.fresh.make({
+      reviewed: a.head,
+      reviewer: `chain.ts quest ${a.quest}, its review step`,
+      ticket: a.ticket,
+    }),
+  });
+
 /** The last `n` lines of a file, or a line saying it is not there. */
 const lastLines = (path: string | null, n: number): string =>
   path !== null && existsSync(path)
@@ -1620,6 +1648,27 @@ const handlers = (s: Setup) => {
 
         if (readied.pr === null) {
           return readied;
+        }
+
+        // The review ran at the head just pushed; record it before anything is queued, and stop here when the record is refused.
+        const recorded = yield* recordReady({
+          dir: env.MAIN,
+          pr: readied.pr,
+          head: cmd.head,
+          quest: s.quest,
+          ticket: /^\d+$/.test(s.ticket) ? Number(s.ticket) : null,
+        }).pipe(
+          Effect.as(readied),
+          Effect.catch((e) =>
+            Effect.succeed({
+              pr: null,
+              detail: `PR ${readied.pr} is ready, but its review record was refused: ${e.reason}`,
+            }),
+          ),
+        );
+
+        if (recorded.pr === null) {
+          return recorded;
         }
 
         note(`ready: https://github.com/${env.GH_REPO}/pull/${readied.pr}`);
@@ -2065,6 +2114,10 @@ const services = (env: Env) =>
     ChecksGh.layer(env.GH_REPO),
     TicketsCli.layer(env.MAIN, TicketsCli.defaultHome()),
     SignaturesGit.layer,
+    ChangesGit.layer,
+    ReviewsGh.layer(env.GH_REPO, env.MAIN),
+    BranchesGit.layer(env.MAIN),
+    ReviewGit.layer(env.MAIN),
   ).pipe(Layer.provideMerge(Layer.merge(NodeServices.layer, Digest.layerWebCrypto)));
 
 /**

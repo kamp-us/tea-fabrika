@@ -41,6 +41,11 @@ A carry answer: the approval no longer covers the new changeset, so it is asked 
 not kept is stale; there is no answer in between.
 _Avoid_: dismissed, outdated, invalid, glance, partial
 
+**Override**:
+A written reason for landing a changeset with no approval. It is recorded on the changeset's head, never counts as an
+approval, and makes the landing loud and attributable.
+_Avoid_: bypass, waiver, skip, force, exception
+
 **Change candidate**:
 The commit main would become if the change requests in it land: the newest main plus one or more changesets. How many
 it holds is a setting. Delivery builds candidates and never changes what a changeset holds. Candidates are made
