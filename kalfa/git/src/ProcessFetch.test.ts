@@ -71,6 +71,8 @@ interface World {
   readonly refs: string;
   /** What the first question prints, when it is not the four plain lines. */
   readonly probe?: string;
+  /** The hash format the repository says it has. */
+  readonly format?: "sha1" | "sha256";
 }
 
 const GOOD: World = {
@@ -96,7 +98,7 @@ const script =
         if (call.rest.includes("--show-object-format")) {
           return {
             code: 0,
-            stdout: world.probe ?? `${world.repositoryShallow}\nsha1\n${GIT_DIR}\n${OBJECTS}\n`,
+            stdout: world.probe ?? `${world.repositoryShallow}\n${world.format ?? "sha1"}\n${GIT_DIR}\n${OBJECTS}\n`,
           };
         }
 
@@ -205,15 +207,15 @@ const ask = (repo: Repository.Repository["Service"], remote: Remote.Remote = nam
 const folderMade = (events: ReadonlyArray<Event>): string =>
   events.find((event) => event.op === "makeTempDirectory")?.data ?? "";
 
-// Plant (F10): run the transfer with the repository's `--git-dir`; leave the alternates file out; init with no `--object-format`; rename the
+// Plant (F10): run the transfer with the repository's `--git-dir`; leave the alternates file out; init with no `--object-format`, or with `--object-format=sha1` always; rename the
 // `.idx` first; rename after a HistoryTooShort; drop `--update-shallow`; drop `--`; drop `protocol.allow=never`; ask the slot after `fetch`.
 it.effect.prop(
   "F10 scenario: a fetch by name reads the configured URL in the repository, then runs the transfer in a fresh git directory inside the repository's own, with the flags and the environment the plan gives, renames the pack in only after a good answer, and runs no transfer when the slot fails or the repository is shallow",
-  { id: commitIdArb, part: partArb },
-  ({ id, part }) =>
+  { id: commitIdArb, part: partArb, format: Arbitrary.schema(Schema.Literals(["sha1", "sha256"])) },
+  ({ id, part, format }) =>
     Effect.gen(function* () {
       const branch = refName(`refs/heads/${part}`);
-      const world: World = { ...GOOD, refs: `${id} commit  refs/fetched/refs/heads/${part}\n` };
+      const world: World = { ...GOOD, format, refs: `${id} commit  refs/fetched/refs/heads/${part}\n` };
       const { repo, stand, disk } = yield* open(world, "removes");
       const result = yield* ask(repo, named, branch);
 
@@ -266,7 +268,7 @@ it.effect.prop(
         "--bare",
         "--quiet",
         "--template=",
-        "--object-format=sha1",
+        `--object-format=${format}`,
       ]);
 
       const pins = (call: Call): ReadonlyArray<string> =>
@@ -466,9 +468,10 @@ it.effect(
     }),
 );
 
-// Plant (F11): read the value with `--get`, the last one, so two URLs read as one; put the configured text in the failure.
+// Plant (F11): read the value with `--get`, the last one, so two URLs read as one; put the configured text in the failure; drop the check that the last
+// piece after the NULs is empty, so a value with no NUL after it is read.
 it.effect.prop(
-  "F11 a named remote's config: exit 1 fails NoSuchRemote, two URLs fail BadRemoteUrl several, and a URL with a user and a password fails BadRemoteUrl refused, with no field, span or log holding any part of what was configured, and no transfer run",
+  "F11 a named remote's config: exit 1 fails NoSuchRemote, a reply with no NUL after its value fails GitUnavailable, two URLs fail BadRemoteUrl several, and a URL with a user and a password fails BadRemoteUrl refused, with no field, span or log holding any part of what was configured, and no transfer run",
   { part: partArb },
   ({ part }) =>
     Effect.gen(function* () {
@@ -494,6 +497,18 @@ it.effect.prop(
           "a user and a password",
           { code: 0, stdout: `https://user:${secret}@host.test/r.git\0` },
           (error) => expectFailure(error, Remote.BadRemoteUrl, { remote: ORIGIN, reason: "refused" }, "a password"),
+        ],
+        // A reply that does not end each value with a NUL byte is read in no way: not as one URL, and not as a refusal of one.
+        [
+          "a value with no NUL after it",
+          { code: 0, stdout: `https://user:${secret}@host.test/r.git` },
+          (error) =>
+            expect(Schema.is(Repository.GitUnavailable)(error), "a value with no NUL is GitUnavailable").toBe(true),
+        ],
+        [
+          "no value at all",
+          { code: 0, stdout: "" },
+          (error) => expect(Schema.is(Repository.GitUnavailable)(error), "no value is GitUnavailable").toBe(true),
         ],
       ];
 
@@ -593,9 +608,9 @@ const settle = Effect.forEach(Array.from({ length: 50 }), () => Effect.yieldNow,
 const REMOVALS: ReadonlyArray<Removal> = ["removes", "fails", "hangs"];
 
 // Plant (F14): read exit 1 as an answer; remove the folder only after an answer; use `makeTempDirectoryScoped`, whose release dies on a failing
-// remove; let the removal's failure replace the call's own; leave the release unbounded, so a hanging removal holds the call.
+// remove; let the removal's failure replace the call's own; leave the release unbounded, so a hanging removal holds the call; bound the release at two kill waits, so a hanging removal after a stubborn transfer holds the call a wait too long.
 it.effect.prop(
-  "F14 the folder is released after every ending: an answer, FetchFailed with exit 1 and with exit 128, TooMany, HistoryTooShort, RefNotCommit and TimedOut; a removal that fails or hangs past limits.kill never changes the call's own answer or failure, and the call ends within limits.time plus limits.kill",
+  "F14 the folder is released after every ending: an answer, FetchFailed with exit 1 and with exit 128, TooMany, HistoryTooShort, RefNotCommit and TimedOut; a removal that fails or hangs past limits.kill never changes the call's own answer or failure, and the call ends within limits.time plus two limits.kill waits, a transfer that ignores the first signal holding its own scope for one and a removal that hangs for another",
   { time: int(2, 3600), share: int(0, 3600) },
   ({ time, share }) =>
     Effect.gen(function* () {
@@ -609,8 +624,16 @@ it.effect.prop(
         for (const [label, world, limits, is] of [
           ...ENDINGS,
           ["TimedOut", { ...GOOD, fetch: "hang" as const }, {}, Schema.is(Repository.TimedOut)] as const,
+          [
+            "TimedOut, a stubborn transfer",
+            { ...GOOD, fetch: "hang, ignores the first signal" as const },
+            {},
+            Schema.is(Repository.TimedOut),
+          ] as const,
         ]) {
           const place = `${label}, a removal that ${removal}`;
+          const timed = label.startsWith("TimedOut");
+          const stubborn = label === "TimedOut, a stubborn transfer";
 
           const { repo, disk } = yield* open(world, removal, {
             time: `${time} seconds`,
@@ -623,18 +646,29 @@ it.effect.prop(
           yield* TestClock.adjust(Duration.millis(1));
           yield* settle;
 
-          if (label === "TimedOut") {
+          if (timed) {
             yield* TestClock.adjust(limit);
             yield* settle;
           }
 
+          // A transfer that ignores the first signal holds its own scope for one kill wait, and only then is the folder released.
+          if (stubborn) {
+            expect(fiber.pollUnsafe(), `${place}: the stubborn transfer holds the call`).toBeUndefined();
+            yield* TestClock.adjust(wait);
+            yield* settle;
+          }
+
+          // A removal that hangs holds the call for one more kill wait.
           if (removal === "hangs") {
             expect(fiber.pollUnsafe(), `${place}: the release holds the call`).toBeUndefined();
             yield* TestClock.adjust(wait);
             yield* settle;
           }
 
-          expect(fiber.pollUnsafe(), `${place}: the call has ended within limits.time plus limits.kill`).toBeDefined();
+          expect(
+            fiber.pollUnsafe(),
+            `${place}: the call has ended within limits.time plus two limits.kill waits`,
+          ).toBeDefined();
           const result = yield* Fiber.join(fiber);
           reached.push(place);
 
@@ -653,7 +687,7 @@ it.effect.prop(
         }
       }
 
-      expect(reached.length, "every ending and every removal").toBe(REMOVALS.length * (ENDINGS.length + 1));
+      expect(reached.length, "every ending and every removal").toBe(REMOVALS.length * (ENDINGS.length + 2));
     }),
   { arbitrary: { runs: 20, seed: 119120 } },
 );

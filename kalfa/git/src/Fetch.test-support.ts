@@ -485,7 +485,7 @@ const modelRefs = (
   refs.map((ref) => ({ name: ref.name, commit: idAt(seeded.remoteIds, ref.commit) }));
 
 /** Every commit the answered refs reach, read from this repository and equal to the remote's own. */
-const readBack = (
+export const readBack = (
   seeded: FetchSeeded,
   scenario: Scenario,
   refs: ReadonlyArray<{ readonly commit: number }>,
@@ -692,6 +692,71 @@ export const suite = (name: string, subject: FetchSubject, options: SuiteOptions
           );
 
           expect(fetched, "the law fetched").toBeGreaterThan(10);
+        }),
+      run,
+    );
+
+    // Plant: copy the remote's commits into the store before the cut check and the limit check, as the memory adapter once did, so a commit of a
+    // fetch that failed `HistoryTooShort` or `TooMany` reads back, F9 red.
+    it.effect.prop(
+      "F9 a failure adds no commit: after every failure of a fetch, each commit of the remote that this repository did not hold before still reads NoSuchCommit",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = fetchCarrier(texture);
+          const slot = yield* recorder(Option.none());
+          let failures = 0;
+          let checked = 0;
+          const kinds = new Set<string>();
+
+          yield* eachAttempt(
+            subject,
+            carrier,
+            (attempt) => attempt.outcome.kind !== "refs",
+            (seeded, _scenario, attempt) =>
+              Effect.forEach(
+                remoteForms(seeded, attempt),
+                (remote) =>
+                  Effect.gen(function* () {
+                    const place = `${attempt.label} (${remote._tag})`;
+
+                    const missing = yield* Effect.filter(
+                      seeded.remoteIds,
+                      (id) => Effect.map(Effect.result(seeded.repository.readCommit(id)), Result.isFailure),
+                      { concurrency: 1 },
+                    );
+
+                    const result = yield* Effect.result(call(seeded, remote, attempt.under, slot.layer));
+                    expect(Result.isFailure(result), `${place}: it fails`).toBe(true);
+                    failures += 1;
+                    kinds.add(attempt.outcome.kind);
+
+                    for (const id of missing) {
+                      const read = yield* Effect.result(seeded.repository.readCommit(id));
+                      expect(Result.isFailure(read), `${place}: ${id} is still missing`).toBe(true);
+
+                      if (Result.isFailure(read)) {
+                        expect(
+                          Schema.is(Repository.NoSuchCommit)(read.failure),
+                          `${place}: ${id} is NoSuchCommit`,
+                        ).toBe(true);
+                      }
+
+                      checked += 1;
+                    }
+                  }),
+                { concurrency: 1 },
+              ),
+          );
+
+          expect(failures, "the law failed some fetches").toBeGreaterThan(5);
+          expect(checked, "and looked at some commits").toBeGreaterThan(5);
+          expect([...kinds].toSorted(), "the failures it reached").toEqual([
+            "fetch-failed",
+            "no-such-remote",
+            "too-many",
+            "too-short",
+          ]);
         }),
       run,
     );

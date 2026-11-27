@@ -90,7 +90,7 @@ MergeCommitTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 }
 // I1 for the commit edit helper (S34, S35), the same laws as on `/memory`, over real bare repositories.
 CommitEditTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 });
 
-// I1 for fetch (F1 to F8), the same laws as on `/memory`, over two real bare repositories each, a remote and a local one, at 3 runs. This file is
+// I1 for fetch (F1 to F9), the same laws as on `/memory`, over two real bare repositories each, a remote and a local one, at 3 runs. This file is
 // refused on the laptop by its name, so none of the plants below was run here: CI runs them, one edit of ProcessRepository.ts at a time, each
 // undone after its run, and each must turn the named law red. The suite's time is not measured here either; the lead's proof run measures it
 // and cuts the runs past 850 s of this file's 1020 s step.
@@ -104,7 +104,8 @@ CommitEditTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 })
 // Plant (F4): drop `--update-shallow` from the transfer flags, so a cut remote answers without its ref; drop `whole(there)`, so a cut remote answers;
 // count with `>=` in place of `>`, so exactly the limit fails; skip the repository's shallow question, so the transfer runs and fails `FetchFailed`.
 // Plant (F5): keep each answer by URL and `under` in the layer. Plant (F6): fetch before the slot is asked. Plant (F7): put the user name in a span,
-// a log line or `FetchFailed.stderr`. Plant (F8): put the URL in the span; write `fetch` with `Effect.fnUntraced`.
+// a log line or `FetchFailed.stderr`. Plant (F8): put the URL in the span; write `fetch` with `Effect.fnUntraced`. Plant (F9): rename the pack into the
+// repository before the shallow check and the limit check, so a commit of a fetch that failed `HistoryTooShort` or `TooMany` reads back.
 FetchTest.suite("process", processFetchSubject, { runs: 3, timeout: 1_800_000 });
 
 const signature = (flat: FlatSignature): Commit.Signature =>
@@ -1080,6 +1081,11 @@ it.effect(
     }).pipe(Effect.provide(NodeServices.layer)),
 );
 
+/** One kind of key, so each shows its effect alone: the programs a config names, a rewrite of the URL, the limits that decide loose objects or a pack, or all of them. */
+type WayGroup = "programs" | "rewrite" | "limits" | "all";
+
+const WAY_GROUPS: ReadonlyArray<WayGroup> = ["programs", "rewrite", "limits", "all"];
+
 /** The keys of a repository's config that could steer a fetch: a program to run for the remote, a rewrite of the URL, a login helper, and the rest. */
 const wayIn = (
   local: string,
@@ -1087,6 +1093,7 @@ const wayIn = (
   decoy: string,
   tools: string,
   markers: string,
+  group: WayGroup,
 ): Effect.Effect<void, never, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -1107,27 +1114,35 @@ const wayIn = (
     const hook = yield* tool("packobjects", 'exec "$@"');
     const helper = yield* tool("helper", "exit 0");
 
-    const keys: ReadonlyArray<readonly [string, string]> = [
-      [`remote.${remote}.uploadpack`, upload],
-      [`remote.${asUrl}.uploadpack`, upload],
-      ["remote.origin.uploadpack", upload],
-      ["credential.helper", `!${helper}`],
-      ["core.askPass", askpass],
-      ["fetch.recurseSubmodules", "true"],
-      ["core.alternateRefsCommand", nothing],
-      ["core.alternateRefsPrefixes", "refs/heads/nothing/"],
-      ["transfer.unpackLimit", "1000000"],
-      ["fetch.unpackLimit", "1000000"],
-      ["uploadpack.packObjectsHook", hook],
+    const every: ReadonlyArray<readonly [WayGroup, string, string]> = [
+      ["programs", `remote.${remote}.uploadpack`, upload],
+      ["programs", `remote.${asUrl}.uploadpack`, upload],
+      ["programs", "remote.origin.uploadpack", upload],
+      ["programs", "credential.helper", `!${helper}`],
+      ["programs", "core.askPass", askpass],
+      ["programs", "fetch.recurseSubmodules", "true"],
+      ["programs", "core.alternateRefsCommand", nothing],
+      ["programs", "core.alternateRefsPrefixes", "refs/heads/nothing/"],
+      ["limits", "transfer.unpackLimit", "1000000"],
+      ["limits", "fetch.unpackLimit", "1000000"],
+      ["programs", "uploadpack.packObjectsHook", hook],
     ];
+
+    const keys = every
+      .filter(([kind]) => group === "all" || group === kind)
+      .map(([, key, value]) => [key, value] as const);
+
+    const rewrite = group === "all" || group === "rewrite";
 
     for (const [key, value] of keys) {
       yield* git(local, ["config", key, value]);
     }
 
     // The same rewrite twice, for a path and for a file URL: the fetch would go to another repository.
-    yield* git(local, ["config", "--add", `url.${decoy}.insteadOf`, remote]);
-    yield* git(local, ["config", "--add", `url.${decoy}.insteadOf`, asUrl]);
+    if (rewrite) {
+      yield* git(local, ["config", "--add", `url.${decoy}.insteadOf`, remote]);
+      yield* git(local, ["config", "--add", `url.${decoy}.insteadOf`, asUrl]);
+    }
 
     // The same keys again, in a file the config includes.
     const included = `${tools}/included.config`;
@@ -1136,15 +1151,21 @@ const wayIn = (
       yield* git(local, ["config", "--file", included, key, value]);
     }
 
-    yield* git(local, ["config", "--file", included, "--add", `url.${decoy}.insteadOf`, remote]);
+    if (rewrite) {
+      yield* git(local, ["config", "--file", included, "--add", `url.${decoy}.insteadOf`, remote]);
+    }
+
     yield* git(local, ["config", "include.path", included]);
   }).pipe(Effect.orDie);
 
-// Plant (F12): run the transfer in the repository itself with `-c` pins only, so the `uploadpack` program of `remote.<url>.uploadpack` runs and
-// its mark appears; read `ls-remote --get-url` for the URL, so the `url.<other>.insteadOf` rewrite sends the fetch to the other repository and
-// the answer is the other's. The credential helper and `core.askPass` can only act over HTTP, which F20 of slice 2 covers.
+// Plant (F12), one for each kind of key, each red in its own group and on its first check of it: run the transfer in the repository itself, with `-c`
+// pins only, and group `programs` fails on "no program of the config ran", the `uploadpack` program having left its mark; read `ls-remote --get-url` for
+// the URL, and group `rewrite` fails on "the given remote's refs", the `insteadOf` rewrite having sent the fetch to the other repository; drop
+// `transfer.unpackLimit=1` from the transfer's pins, and group `limits` fails on the read back of an answered commit, a small fetch having been
+// unpacked into loose objects and no pack renamed in. The credential helper and `core.askPass` can only act over HTTP, which F20 of slice 2 covers,
+// and the alternate-ref keys act only on a remote that has alternates: none of the three is seen here.
 it.effect.prop(
-  "F12 scenario: no key of the repository's config acts on a fetch: with a program to run for the remote, a rewrite of its URL, a login helper, an ask-pass program, alternate-ref keys, unpack limits, a pack hook and all of them again in an included file, a fetch by name and by URL answers the given remote's refs, and no program ran",
+  "F12 scenario: with a program to run for the remote, a rewrite of its URL, unpack limits and a pack hook in the repository's config, and all of them again in an included file, each kind alone and then all of them, a fetch by name and by URL ran no program of the config, answers the given remote's refs, and each answered commit and its history reads back as the remote's; the login helper, ask-pass and alternate-ref keys are set too, but only act over HTTP or on a remote with alternates, which this file does not reach",
   { texture: textureArb },
   ({ texture }) =>
     Effect.scoped(
@@ -1152,8 +1173,6 @@ it.effect.prop(
         const fs = yield* FileSystem.FileSystem;
         const carrier = FetchTest.fetchCarrier(texture);
         const scenario = carrier.scenarios.plain;
-        const seeded = yield* processFetchSubject.seed(scenario.remote, scenario.local, settings);
-        const [local = "", remote = ""] = seeded.hidden;
 
         // Another repository, whose refs are at a commit the remote does not hold.
         const first = scenario.remote.nodes[0];
@@ -1171,31 +1190,41 @@ it.effect.prop(
           settings,
         );
 
-        const tools = yield* fs.makeTempDirectoryScoped();
-        const markers = yield* fs.makeTempDirectoryScoped();
-        yield* wayIn(local, remote, decoy.hidden[0] ?? "", tools, markers);
+        // Each kind of key in a repository of its own, so what it does shows alone, and then all of them together.
+        for (const group of WAY_GROUPS) {
+          const seeded = yield* processFetchSubject.seed(scenario.remote, scenario.local, settings);
+          const [local = "", remote = ""] = seeded.hidden;
+          const tools = yield* fs.makeTempDirectoryScoped();
+          const markers = yield* fs.makeTempDirectoryScoped();
+          yield* wayIn(local, remote, decoy.hidden[0] ?? "", tools, markers, group);
 
-        const none = Credentials.none;
+          for (const under of ["refs/heads/main", "refs/heads"]) {
+            const expected = refsModel(scenario.remote, under).map((ref) => ({
+              name: ref.name,
+              commit: seeded.remoteIds[ref.commit],
+            }));
 
-        for (const under of ["refs/heads/main", "refs/heads"]) {
-          const expected = refsModel(scenario.remote, under).map((ref) => ({
-            name: ref.name,
-            commit: seeded.remoteIds[ref.commit],
-          }));
+            for (const via of [seeded.named, ...seeded.urls]) {
+              const place = `${group}, ${via._tag} ${under}`;
 
-          for (const via of [seeded.named, ...seeded.urls]) {
-            const answer = yield* seeded.repository
-              .fetch({ remote: via, under: refNameFrom(under) })
-              .pipe(Effect.provide(none));
+              const answer = yield* seeded.repository
+                .fetch({ remote: via, under: refNameFrom(under) })
+                .pipe(Effect.provide(Credentials.none));
 
-            expect(
-              answer.map((ref) => ({ name: ref.name, commit: ref.commit })),
-              `${via._tag} ${under}: the given remote's refs`,
-            ).toEqual(expected);
+              // First, whether any program ran, since a program that ran is the finding, whatever the answer was.
+              expect(yield* fs.readDirectory(markers), `${place}: no program of the config ran`).toEqual([]);
+
+              expect(
+                answer.map((ref) => ({ name: ref.name, commit: ref.commit })),
+                `${place}: the given remote's refs`,
+              ).toEqual(expected);
+
+              // The commits came as a pack the repository can read: a limit that wrote loose objects, or a rewrite that fetched another
+              // repository's commits, would fail here.
+              yield* FetchTest.readBack(seeded, scenario, refsModel(scenario.remote, under), place);
+            }
           }
         }
-
-        expect(yield* fs.readDirectory(markers), "no program of the config ran").toEqual([]);
       }).pipe(Effect.orDie),
     ).pipe(Effect.provide(NodeServices.layer)),
   { arbitrary: { runs: 3, seed: 119120 }, timeout: 1_800_000 },

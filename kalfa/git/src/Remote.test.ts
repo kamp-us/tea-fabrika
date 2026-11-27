@@ -25,6 +25,18 @@ const urlArb = Arbitrary.all({
   port: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65_535 }))),
 });
 
+/** What the URL parser drops, maps or decodes, so a host reads as another host than the text says. */
+const HIDING: ReadonlyArray<readonly [label: string, character: string]> = [
+  ["a zero width space", "\u200B"],
+  ["a byte order mark", "\uFEFF"],
+  ["a combining grapheme joiner", "\u034F"],
+  ["a soft hyphen", "\u00AD"],
+  ["a word joiner", "\u2060"],
+  ["a variation selector", "\uFE0F"],
+  ["a fullwidth letter", "\uFF45"],
+  ["a fullwidth dot", "\uFF0E"],
+];
+
 type Drawn = typeof urlArb extends Arbitrary.Arbitrary<infer A> ? A : never;
 
 /** The texts a fetch takes, one for each accepted class. */
@@ -60,6 +72,18 @@ const REFUSED = (drawn: Drawn): ReadonlyArray<readonly [label: string, text: str
     ["(w) a control character inside the path", `https://${host}/${drawn.first}\u0001${drawn.second}`],
     ["(w) a space inside the path", `https://${host}/${drawn.first} ${drawn.second}`],
     ["(w) a control character in a path", `/${drawn.first}\n/${drawn.second}`],
+    // (w) a backslash, which the parser reads as a slash in an https URL, and git reads as part of a name in a path.
+    ["(w) a backslash in an absolute path", `/${drawn.first}\\${drawn.second}`],
+    ["(w) a backslash after the host", `https://${host}\\${drawn.first}`],
+    // (h) the parser reads another host than the text says: it drops or maps a character, or decodes a percent-encoded one.
+    ...HIDING.map(([label, character]): readonly [string, string] => [
+      `(h) a host hidden by ${label}`,
+      `https://${drawn.host.slice(0, 1)}${character}${drawn.host.slice(1)}.${drawn.domain}/${drawn.first}`,
+    ]),
+    [
+      "(h) a host hidden by a percent-encoded letter",
+      `https://${drawn.host.slice(0, 1)}%${drawn.host.charCodeAt(1).toString(16).toUpperCase()}${drawn.host.slice(2)}.${drawn.domain}/${drawn.first}`,
+    ],
     // (x) no login rides in a URL.
     ["(x) a user", `https://${drawn.first}@${host}/${drawn.second}`],
     ["(x) a user and a password", `https://${drawn.first}:${drawn.second}@${host}/r`],
@@ -77,6 +101,9 @@ const REFUSED = (drawn: Drawn): ReadonlyArray<readonly [label: string, text: str
     ["(z) the ext transport", `ext::${drawn.first}`],
     ["(z) the fd transport", `fd::${drawn.port}`],
     ["(z) ssh", `ssh://${host}/${drawn.first}`],
+    ["(z) two leading slashes", `//${host}/${drawn.first}`],
+    ["(z) a file URL with one slash", `file:/${drawn.first}/${drawn.second}.git`],
+    ["(z) a file URL with a host", `file://${host}/${drawn.first}`],
     ["(z) https with one slash", `https:/${host}/${drawn.first}`],
     ["(z) https with no slash", `https:${host}/${drawn.first}`],
     ["(z) git's short ssh form", `git@${host}:${drawn.first}/${drawn.second}.git`],
@@ -99,6 +126,10 @@ const URL_CLASSES = [
   "(w) a control character inside the path",
   "(w) a space inside the path",
   "(w) a control character in a path",
+  "(w) a backslash in an absolute path",
+  "(w) a backslash after the host",
+  ...HIDING.map(([label]) => `(h) a host hidden by ${label}`),
+  "(h) a host hidden by a percent-encoded letter",
   "(x) a user",
   "(x) a user and a password",
   "(x) an empty user",
@@ -113,6 +144,9 @@ const URL_CLASSES = [
   "(z) the ext transport",
   "(z) the fd transport",
   "(z) ssh",
+  "(z) two leading slashes",
+  "(z) a file URL with one slash",
+  "(z) a file URL with a host",
   "(z) https with one slash",
   "(z) https with no slash",
   "(z) git's short ssh form",
@@ -123,9 +157,10 @@ const URL_CLASSES = [
 ];
 
 // Plant (F15): delete the control character check, so the tab and line feed URLs pass (w); delete the user check, so `https://u:p@host/r` passes
-// (x); take `http` to any host (y); take a relative path (z); take `ext::` (z).
+// (x); take `http` to any host (y); take a relative path (z); take `ext::` (z); delete the host check, so a hidden host (h) passes; delete the
+// backslash from the hidden characters (w); take two leading slashes as a path (z); delete the `file:///` prefix check (z).
 it.prop(
-  "F15 the URL: every text of (w) to (z) is refused, and an https URL with a host and a path, with a port, a file URL and an absolute path each decode to themselves",
+  "F15 the URL: every text of (h) and (w) to (z) is refused, a host the parser reads as another host included, and an https URL with a host and a path, with a port, a file URL and an absolute path each decode to themselves",
   { drawn: urlArb },
   ({ drawn }) => {
     const accepted = ACCEPTED(drawn);
@@ -142,6 +177,15 @@ it.prop(
 
       if (Result.isSuccess(result)) {
         expect(result.success, `${name} decodes to itself`).toBe(text);
+      }
+    }
+
+    // A class of (h) really is one the parser reads as another host: it parses, and its host is not the text's authority.
+    for (const [name, text] of refused) {
+      if (name.startsWith("(h)")) {
+        const authority = text.slice(text.indexOf("//") + 2).split("/")[0];
+        expect(URL.canParse(text), `${name} parses`).toBe(true);
+        expect(new URL(text).host, `${name} reads as another host than its text`).not.toBe(authority);
       }
     }
 

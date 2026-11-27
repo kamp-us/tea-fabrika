@@ -111,9 +111,9 @@ it("K3 scenario: no file of the package names a signature for a human being; the
   }
 });
 
-// Plant: export one more helper from either entry.
+// Plant: export one more helper from either entry; leave `FetchTest` out of `/test`.
 it("K4 scenario: the public test entries export only what a caller needs", () => {
-  expect(Object.keys(RepositoryTest).sort(), "/test").toEqual(["settings", "suite"]);
+  expect(Object.keys(RepositoryTest).sort(), "/test").toEqual(["FetchTest", "settings", "suite"]);
   expect(Object.keys(HistoryTest).sort(), "/test/History").toEqual(["shapes", "textureArb"]);
 });
 

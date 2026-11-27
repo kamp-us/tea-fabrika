@@ -151,6 +151,9 @@ export interface SuiteOptions {
 
 export { settings };
 
+/** The laws of `fetch`, shipped with `/test` as the laws of a commit edit are: an adapter that fetches runs `FetchTest.suite` beside `suite`. */
+export * as FetchTest from "./Fetch.test-support.ts";
+
 const nodeAt = (history: History, i: number): History["nodes"][number] => {
   const node = history.nodes[i];
 
