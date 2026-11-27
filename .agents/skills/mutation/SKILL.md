@@ -1,19 +1,22 @@
 ---
 name: mutation
-description: Run the hourly mutation check on what merged to main with StrykerJS, and file each real gap as a tracker ticket. Use when a brief says "use the mutation skill", for the hourly run or for a quest parked inside a mutation step.
+description: Run the hourly mutation check on what merged to main with StrykerJS, and sort each real gap by hand into a tracker ticket (the CI run files none). Use when a brief says "use the mutation skill", for the hourly run or for a quest parked inside a mutation step.
 ---
 
 # The mutation run
 
-Mutation is no step of a pull request. It runs once an hour against
-main, on the changed lines of what merged since the last run, in the container, with the tests
-beside the changed files. No new merge, no run. A merge never waits on it.
+Mutation is no step of a pull request. It runs against
+main, starting itself after a push and on an hourly catch-up, on the changed lines of what merged since
+the last passing run, in the container, with the tests beside the changed files. No new merge, no run.
+A merge never waits on it, and a heartbeat opens an issue when merges wait too long for a passing run.
 
-- **The hourly run** changes nothing in the repo. It sorts each survivor (step 3 below), files a
-  real gap as one tracker ticket per file, every one of them (0117: no daily cap), with its category
-  ([below](#a-gaps-category)), and counts noise without filing it.
-  A narrowing (arm a kills, arm b lets live) is filed as a ticket marked loosening. It logs its
-  counts: sampled, killed, survived, real, noise, tickets, minutes, and each real gap's category.
+- **The hourly run** changes nothing in the repo. Its result is the job summary and the `mutbox`
+  artifact. It files no ticket today: the CI job cannot reach the local tracker, so no real gap is
+  filed and nobody is told of one. Read the survivors from the artifact (step 3 below sorts them). A ticket
+  will add a filer; until it lands, the steps below that file tickets and the category list
+  ([below](#a-gaps-category)) are what a person or session does by hand from the artifact, and a
+  survivor the run finds is not yet a ticket. A narrowing (arm a kills, arm b lets live) is a loosening,
+  and is found the same way, by hand.
 - **A quest parked inside its mutation step before 0066** finishes it with the steps below, as the
   ticket's test writer, test files only; then the quest goes on to review.
 
@@ -146,17 +149,39 @@ lock before it starts mutbox, and the hourly run on CI has a lock of its own.
 ## The hourly run, in CI
 
 The hourly run on main runs in
-GitHub CI, in `.github/workflows/mutation.yaml`, on the free arm64 runner. Nothing starts it but a
-hand dispatch: no push, pull request or cron. It runs the command above with `--ticket 0`, the
-range's base as arm a, and the tests beside the changed files as `--related`.
+GitHub CI, in `.github/workflows/mutation.yaml`, on the free arm64 runner. It starts itself: on every
+push to main, on an hourly cron as the catch-up (GitHub's cron fires only about 3 times a day on
+this repo, so the push is the real clock), and by hand. No person or session has to remember it. It runs
+the command above with `--ticket 0`, the range's base as arm a, and the tests beside the changed files as
+`--related`. One run at a time: a run that starts while one runs waits, and only the newest waiting
+run is kept, so a burst of merges costs one more run up to the newest head.
 
-1. **Start it** with the commit the last run ended at. `head` is main's head unless you give one:
+The base is the commit the last passing run on main ended at, read from GitHub's run list (a run
+passed when its `mutation` job passed, so a run the gate skipped never counts). A run that fails leaves
+it where it was, so the next run mutates that range again. The range is cut so one run takes at most
+`MUTATION_MAX_RELATED` related test files (default 12, a setting in the workflow's `env`): mutbox stops
+the container at 900 s, so a range of hundreds of files could never pass and would only grow. `range.ts`
+moves the base forward along main's first-parent commits until the range fits, and the job summary says
+how many commits it left unmutated (the first run after the 13-day gap left about 660). Commits cut away
+are never mutated unless you run them by hand with a `base`: a bigger `MUTATION_MAX_RELATED` in a pull
+request, or a dispatch with an older `base` (the cap applies to it too). No gap paces the run: replayed on
+the real history it is about 44 runs a day, with no merge waiting more than 16 minutes at the 90th percentile
+(a 60-minute gap gave 0.65 false alarms a day). The gate (`mutation-gate.mjs`) only skips a head a passing run
+already covered, and backs off a run that keeps failing: after `MUTATION_FAIL_STREAK` failed runs in a row
+(default 3), a push starts the work only when none started within `MUTATION_FAIL_GAP_MINUTES` (default 60),
+so a broken image cannot burn a slot all day; a pass resets the count.
+
+1. **Start it by hand** (only to re-run, or to skip a range). `base` is the commit to mutate from, and
+   `head` is main's head unless you give one:
 
    ```sh
    gh workflow run mutation.yaml -f base=<sha>
    ```
 
-2. **Find it.** The newest row is yours; a second dispatch waits until the first ends:
+   A hand run with a `head` older than main's leaves the next base at main's head when it started, not
+   at that `head`; give no `head` unless you mean it. A hand run always passes the gate, backoff included.
+
+2. **Find it.** The newest row is yours; a second run waits until the first ends:
 
    ```sh
    gh run list --workflow mutation.yaml --limit 1 --json databaseId,status,conclusion,headSha
@@ -173,17 +198,33 @@ range's base as arm a, and the tests beside the changed files as `--related`.
    gh run download <id> --name mutbox --dir <folder>
    ```
 
-A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke. The next
-run's base is the `build` in this run's `mutbox.json`.
+A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke.
 
-`scripts/heartbeat.ts` says when a merge on main has waited too long for a passing run, and
-`scripts/limit.ts` sets each arm's test and hook limit; each header holds its numbers. Nothing runs
-the heartbeat on a schedule yet.
+### The heartbeat
+
+`.github/workflows/mutation-heartbeat.yaml` runs `scripts/heartbeat.ts --issue` on a push to
+main, each hour and by hand; its own gate lets a push or the cron through only when no check started in the last
+hour. It watches the outcome, so it alarms whichever way the runs stop
+(the push trigger, the cron, the backoff, GitHub's scheduler, or runs that fail). When a merge on main has waited
+longer than the limit (210 minutes, two full runs) for a passing run, it goes red and opens one GitHub issue
+titled "The hourly mutation run is late", labeled `mutation-heartbeat` (not `ci-scheduled`, which
+switches on a sev1). A passing run closes the issue. The script's header holds the rules.
+
+- **The limit** is `MUTATION_LATE_MINUTES`, the environment of the heartbeat job. Leave it unset for 210; it must be 105 to 1440 (below 105 a healthy run alarms).
+- **A pause on purpose** is `MUTATION_PAUSE` in the same job: `{"until":"<ISO time>","reason":"<why>"}`.
+  Until the end the check stays green and opens no issue; at the end the alarm is back on by itself. A pause
+  with no end or no reason fails the check. Set one in a pull request, so the commit says who and why.
+- **What it cannot see:** if the heartbeat workflow itself stops (disabled, or GitHub's scheduler
+  and pushes both fail), nothing says so. An outside dead-man switch would, and none is set up.
+
+`scripts/limit.ts` sets each arm's test and hook limit; its header holds the numbers.
 
 ## A gap's category
 
-Each real gap the hourly run files gets one category. The tracker tickets are the
-record: keep no other file. No script holds this yet, so do these steps by hand.
+Each real gap filed from the hourly run gets one category. The hourly run in CI files none itself
+today (it cannot reach the tracker; a ticket will add a filer), so a person or session reading
+the artifact files them by hand with these steps. The tracker tickets are the
+record: keep no other file. No script holds this yet.
 
 1. **Pick one category** by the test that is missing. The mutator is a hint, not the rule. The
    closed list is in 0077's table: `error_branch`, `boundary`, `condition`, `return_value`,
