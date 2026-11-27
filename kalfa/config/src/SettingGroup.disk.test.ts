@@ -26,6 +26,7 @@ import { expect, it } from "@effect/vitest";
 import { Recorder, runsFor } from "@kampus/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer, Logger, Path, References, Tracer } from "effect";
 import { type Setting, SettingGroup } from "./index.ts";
+import { RemoveEmptyDir } from "./internal/removeEmptyDir.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import {
   accepted,
@@ -140,6 +141,7 @@ const run = (scene: Scene) => {
     Effect.provide(
       Layer.mergeAll(
         Recorder.layer(FileSystem.FileSystem, disk.fileSystem),
+        Layer.succeed(RemoveEmptyDir)(disk.removeEmptyDir),
         Path.layer,
         ConfigProvider.layer(
           scene.unreadable === true

@@ -11,6 +11,7 @@ import type { Group } from "./check.ts";
 import { type SettingsError, stop } from "./error.ts";
 import type { Format } from "./format.ts";
 import { contents, type Names, repoPlace, userPlace } from "./place.ts";
+import { RemoveEmptyDir } from "./removeEmptyDir.ts";
 
 /** What one disk call is about: the edit it makes, and the file as a person reads it. */
 interface Call {
@@ -44,15 +45,15 @@ const folder = (fs: FileSystem.FileSystem, call: Call, path: string | undefined)
       );
 
 /**
- * Takes a folder this call made away again when it is still empty: another writer may have put its lock in it since.
+ * Takes a folder this call made away again, only while it is empty: one `rmdir` through `RemoveEmptyDir`, which the system refuses for a folder that holds anything, so a lock or a file another writer has put in it since stays. A folder left in place is no failure; any other refusal is logged.
  *
- * Known race: the listing and the remove are two calls, so a second writer can put its lock or its finished file in the folder between them, and the recursive remove then deletes it. Effect's `FileSystem.remove` has no remove-if-empty (Node's `fs.rm` without `recursive` refuses any folder, an empty one too), so no call removes only an empty folder.
+ * Two calls would not do: a list and then a recursive remove leave a gap, and a file that lands in it is deleted. Effect's `FileSystem.remove` cannot remove only an empty folder (without `recursive` it refuses every folder, an empty one too), which is why this goes through its own edge.
  */
-const unmake = (fs: FileSystem.FileSystem, call: Call, path: string) =>
-  fs.readDirectory(path).pipe(
-    Effect.flatMap((entries) => (entries.length === 0 ? fs.remove(path, { recursive: true }) : Effect.void)),
-    Effect.ignore({ log: "Warn", message: `${call.name}'s folder was not removed.` }),
-  );
+const unmake = Effect.fnUntraced(function* (call: Call, path: string) {
+  const remove = yield* RemoveEmptyDir;
+
+  yield* remove(path).pipe(Effect.ignore({ log: "Warn", message: `${call.name}'s folder was not removed.` }));
+});
 
 /** A remove with no file to take the key out of. The edit still checks the setting and the file's scope, on an empty text, so a remove refuses the same way whatever the disk holds. */
 const nothing = (call: Call) => call.edit("", call.names).pipe(Effect.as(false));
@@ -148,7 +149,7 @@ const onDisk = Effect.fnUntraced(function* (call: Call, place: Place) {
   return yield* Effect.acquireUseRelease(
     call.kind === "set" ? folder(fs, call, place.folder) : Effect.undefined,
     () => locked,
-    (made, exit) => (made !== undefined && Exit.isFailure(exit) ? unmake(fs, call, made) : Effect.void),
+    (made, exit) => (made !== undefined && Exit.isFailure(exit) ? unmake(call, made) : Effect.void),
   );
 });
 

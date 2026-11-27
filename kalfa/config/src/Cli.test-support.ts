@@ -37,6 +37,7 @@ import * as Rec from "effect/Record";
 import { TestConsole } from "effect/testing";
 import { config } from "./Cli.ts";
 import { Setting, SettingGroup } from "./index.ts";
+import { RemoveEmptyDir } from "./internal/removeEmptyDir.ts";
 import { debounce } from "./internal/window.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import { answer, readRefused } from "./SettingGroup.disk.test-support.ts";
@@ -681,6 +682,7 @@ export const run = (world: World, args: ReadonlyArray<string>) => {
     Effect.provide(
       Layer.mergeAll(
         Recorder.layer(FileSystem.FileSystem, disk.fileSystem),
+        Layer.succeed(RemoveEmptyDir)(disk.removeEmptyDir),
         Path.layer,
         ConfigProvider.layer(
           world.unreadable === true
