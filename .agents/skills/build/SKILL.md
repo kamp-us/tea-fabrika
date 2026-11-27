@@ -68,7 +68,12 @@ for the product code.
 
    A claim without one of the three ("equivalent", "never", "covered") is a guess. The newest row
    for a file and line wins, so a refused row is fixed by writing it again with proof in one more
-   empty commit. A mutant that does not type-check is a kill, since the box type-checks
+   empty commit. A row that points at code that has moved, or that you no longer need, is taken
+   back the same way, with `Survivor-withdrawn: <file>:<line> <reason>` (`<file>:*` for a `*`
+   row), on one line, in the empty commit. The place is the row's own. The gate then reads no row
+   for it, so its answer or its `refused` line is gone, and a mutant that still lives there is
+   listed again and needs a new `Survivor:` line. A withdrawal with no reason is `refused` like a
+   row with no proof. A mutant that does not type-check is a kill, since the box type-checks
    every survivor and counts the ones `tsc` refuses as `CompileError`, so such a mutant needs no line.
    Leave the `static` lines as they are:
    code that runs as the module loads, which Stryker skips and the reviewer plants by hand.

@@ -1730,6 +1730,9 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
     "Survivor: src/owned.ts:1 a help line only -- plant: sed -i s/a/b/ src/owned.ts",
     "Survivor: src/owned.ts:1 a help line only -- rg: rg -n help =>",
     "Survivor: src/owned.ts:1 a help line only -- law: none",
+    // A withdrawal with no reason, and one with no place.
+    "Survivor-withdrawn: src/owned.ts:1",
+    "Survivor-withdrawn: the code moved",
   ];
 
   /** An empty commit that carries `body`, as a build or fix step makes one for its Survivor: lines. */
@@ -1817,6 +1820,7 @@ describe("a slice PR opens with a signed lead commit, today's tooling", () => {
             "",
             "Survivor: src/owned.ts:2 a help line only -- plant: sed -i s/help/x/ src/owned.ts; vitest run owned.test.ts => 3 passed, still green",
             "Survivor: src/owned.ts:* thin glue -- law: H12 (owned.test.ts) already fails with it planted",
+            "Survivor-withdrawn: src/owned.ts:9 the code moved, the line is another now",
           ].join("\n");
 
           const got = carry(r, step, lines, only ? ["--commit-only"] : []);

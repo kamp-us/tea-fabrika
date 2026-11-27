@@ -35,7 +35,7 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one r
   `tests`, `build` or `fix` commit may too, to carry `Survivor:` lines (a `tests` one needs no `Plant:` line then): its body holds those lines and nothing else, each
   one a line `survivors.ts` takes as an answer, or the script refuses (exit 2) and names the line. A line
   answers when its evidence, after ` -- `, names a proof (`plant:`, `rg:` or `law:`); [the build
-  skill](../build/SKILL.md#steps) gives the three forms with an example of each, and the line stays on one row.
+  skill](../build/SKILL.md#steps) gives the three forms with an example of each, and the line stays on one row. A `Survivor-withdrawn: <file>:<line> <reason>` line, which takes an earlier row of that place back, is accepted in the same body.
   It signs and pushes like that step's other commits. A commit right after an empty one refuses (exit 4), since two empty links on one tree
   break the chain: put every line in one.
 - **Start with nothing staged.** If the index already holds changes, the script refuses (exit 4)
