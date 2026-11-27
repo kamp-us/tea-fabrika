@@ -281,16 +281,26 @@ describe("around: a started line first, then how the command ended, and nothing 
   // inside); stop passing the print to the terminal when the record cannot be written (red: the `recorded: false` case).
   it.effect.prop(
     "L2 property: what the command prints reaches the terminal unchanged and in order, with the record or without it, and done.said holds the same lines",
-    { said: SAID, recorded: Schema.Boolean },
-    ({ said, recorded }) =>
+    { said: SAID, pairs: Schema.Array(Schema.Tuple([Schema.String, Schema.String])), recorded: Schema.Boolean },
+    ({ said, pairs, recorded }) =>
       Effect.gen(function* () {
-        // With the record down, every append fails.
-        const got = yield* run(() => speak(said), {}, recorded ? undefined : () => true);
+        // A line of two values is shown as a terminal shows it: the values with a space between.
+        const printedLines = [...said, ...pairs.map(([a, b]) => `${a} ${b}`)];
 
-        expect(got.shown.said).toEqual(said);
+        // With the record down, every append fails.
+        const got = yield* run(
+          () =>
+            speak(said).pipe(
+              Effect.andThen(Effect.forEach(pairs, ([a, b]) => Console.log(a, b), { concurrency: 1, discard: true })),
+            ),
+          {},
+          recorded ? undefined : () => true,
+        );
+
+        expect(got.shown.said).toEqual(printedLines);
 
         if (recorded) {
-          expect(got.lines.at(-1)).toMatchObject({ _tag: "done", said });
+          expect(got.lines.at(-1)).toMatchObject({ _tag: "done", said: printedLines });
         }
       }),
     { arbitrary: { seed: 2345, runs: runsFor({ fast: 60, full: 200 }) } },
@@ -821,15 +831,30 @@ describe("last: what `land.ts last` says, in plain words, one line for each atte
       alive: Schema.Boolean,
       said: Schema.Array(Said),
       reason: Reason,
-      old: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 80 })),
+      // How old the newest attempt's last line is: minutes, hours or days, each a whole number of its own unit.
+      age: Schema.Union([
+        Schema.Struct({
+          unit: Schema.Literal("min"),
+          n: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 89 })),
+        }),
+        Schema.Struct({
+          unit: Schema.Literal("h"),
+          n: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 47 })),
+        }),
+        Schema.Struct({
+          unit: Schema.Literal("days"),
+          n: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 30 })),
+        }),
+      ]),
       older: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
       count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 5 })),
     },
-    ({ ends, alive, said, reason, old, older, count }) =>
+    ({ ends, alive, said, reason, age, older, count }) =>
       Effect.gen(function* () {
-        // The newest attempt's last line is `old` minutes old; `older` attempts that ended well stand before it.
+        // The newest attempt's last line is `age` old; `older` attempts that ended well stand before it.
+        const minutes = age.unit === "min" ? age.n : age.unit === "h" ? age.n * 60 : age.n * 1440;
         const lastAt = 1_000_000_000_000;
-        yield* TestClock.setTime(lastAt + old * 60_000);
+        yield* TestClock.setTime(lastAt + minutes * 60_000);
         const at = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(ms));
         const attempt = "4021.4021000";
 
@@ -901,7 +926,7 @@ describe("last: what `land.ts last` says, in plain words, one line for each atte
             expect(first).not.toContain("died");
           } else {
             expect(first).toContain("died");
-            expect(first).toContain(`${old} min`);
+            expect(first).toContain(`${age.n} ${age.unit} ago`);
             expect(first).not.toContain("still running");
           }
         } else {
