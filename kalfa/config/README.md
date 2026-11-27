@@ -194,7 +194,8 @@ The file is written the way git writes its config:
   no lock.
 - **The folder.** A set makes `.<app>/` when it is missing, and no folder above it: a missing parent fails `write`. A
   `$<APP>_HOME` that names a folder that is not there fails `write` too, since a typo there should not make a new folder.
-  A remove of a file or folder that is not there succeeds and writes nothing.
+  A set that fails after it made `.<app>/` takes the folder away again, but only while it is empty: a lock or a file
+  another writer has put in it since stays. A remove of a file or folder that is not there succeeds and writes nothing.
 - **No home.** With neither `$<APP>_HOME` nor `HOME`, there is no user configuration: a set fails `write`, and a remove has
   nothing to take out.
 
