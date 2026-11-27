@@ -705,29 +705,33 @@ describe("survivors, which mutants a Survivor: line answers", () => {
     fc.assert(
       fc.property(answer, words(1), (a, note) => {
         const line = a.line ?? 7;
-        const mine = { file: a.file, line };
-        const star = { file: a.file, line: null };
+        const mine = { ...a, line };
+        const star = { ...a, line: null };
         const bare = (at: string) => `Survivor: ${at} r -- unreachable`;
 
         const text = Arr.join(
           [
             row(mine),
             row(star),
-            row({ file: a.file, line: line + 1 }),
-            row({ file: `other/${a.file}`, line }),
+            row({ ...a, line: line + 1 }),
+            row({ ...a, file: `other/${a.file}`, line }),
             bare(`${a.file}:${line + 2}`),
             withdraw(mine, note),
           ],
           "\n",
         );
 
-        expect(answersIn(text)).toEqual([star, { file: a.file, line: line + 1 }, { file: `other/${a.file}`, line }]);
+        expect(answersIn(text)).toEqual([
+          { file: a.file, line: null },
+          { file: a.file, line: line + 1 },
+          { file: `other/${a.file}`, line },
+        ]);
 
         expect(refusedIn(text)).toEqual([bare(`${a.file}:${line + 2}`)]);
 
         // The other way round: `file:*` withdrawn leaves the line rows.
         const starred = `${row(mine)}\n${row(star)}\n${withdraw(star, note)}`;
-        expect(answersIn(starred)).toEqual([mine]);
+        expect(answersIn(starred)).toEqual([{ file: a.file, line }]);
       }),
       options,
     );
