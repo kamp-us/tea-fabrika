@@ -1,4 +1,4 @@
-import { Ledger, listed, memoryStorage, offer, Shell, start } from "@kampus/fabrika-old";
+import { Ledger, LedgerUnreachable, listed, memoryStorage, offer, Shell, start } from "@kampus/fabrika-old";
 import { driveFor } from "@kampus/fabrika-old/mcp";
 import { memoryService } from "@kampus/fabrika-old/memory";
 import { Effect, Layer, type Scope } from "effect";
@@ -12,31 +12,53 @@ import type { Shown } from "./machine.ts";
 //
 //   drive.call("tracker_query", {value: {ticket: 1}})   // view.page.number 1, opened.ticket "A"
 //   drive.call("tracker_query", {value: {ticket: 2}})   // view.page.number 2, opened.ticket "B"
-//   drive.call("tracker_file", {value: {title: "C", body: ""}})   // view.filed 3
+//   drive.call("tracker_file", {value: {title: "C", body: ""}})   // {filed: 3, failed: null}, and no page
+//
+// A write answers with what it produced and no more: a file with `filed`, never the page of every
+// ticket the tracker shows (a ledger of 1300 tickets answered one filing with 287,135 characters).
 
 const OWNER = { kind: "user", id: "owner" } as const;
 
 const services = (ledger: Ledger["Service"]) =>
   Layer.mergeAll(Layer.succeed(Ledger, ledger), Layer.succeed(Author, OWNER), pullRequestsOf([]));
 
-/** A ledger that already holds tickets 1 and 2, "A" and "B", filed by a tracker run of the person's. */
-const seeded = Effect.gen(function* () {
-  const ledger = memoryService();
-  yield* Effect.gen(function* () {
-    const started = yield* start(tracker, {}, {}, { id: "tracker:seed", storage: memoryStorage() });
+/** A ledger that already holds one ticket per title, in order from 1, filed by a tracker run of the person's. */
+const seededWith = (titles: readonly string[]) =>
+  Effect.gen(function* () {
+    const ledger = memoryService();
+    yield* Effect.gen(function* () {
+      const started = yield* start(tracker, {}, {}, { id: "tracker:seed", storage: memoryStorage() });
 
-    if (started.kind !== "running") {
-      return yield* Effect.die("the tracker did not start");
-    }
+      if (started.kind !== "running") {
+        return yield* Effect.die("the tracker did not start");
+      }
 
-    const { run } = started;
-    yield* offer(run, "file", { title: "A", body: "" });
-    yield* offer(run, "file", { title: "B", body: "" });
-    yield* offer(run, "quit", null);
-    yield* run.ended;
-  }).pipe(Effect.provide(services(ledger)), Effect.scoped);
-  return ledger;
-});
+      const { run } = started;
+
+      for (const title of titles) {
+        const word = yield* offer(run, "file", { title, body: "" });
+
+        if (word !== "queued") {
+          return yield* Effect.die(`the tracker took nothing of ${title}: ${word}`);
+        }
+      }
+
+      yield* offer(run, "quit", null);
+      yield* run.ended;
+    }).pipe(Effect.provide(services(ledger)), Effect.scoped);
+    return ledger;
+  });
+
+/** A ledger that already holds tickets 1 and 2, "A" and "B". */
+const seeded = seededWith(["A", "B"]);
+
+/** A ledger of 60 tickets with long titles: its list page alone is far past `SMALL`. */
+const crowded = seededWith(
+  Array.from({ length: 60 }, (_, i) => `Ticket ${i + 1}: ${"a long title ".repeat(4).trim()}`),
+);
+
+/** The most characters a write's answer may take, whatever the ledger holds. */
+const SMALL = 2_000;
 
 /** The agent's door on `ledger`: the tracker only, its own run started on the first call. */
 const doorOn = (ledger: Ledger["Service"]) =>
@@ -52,6 +74,10 @@ const viewOf = (answer: { readonly kind: string; readonly data?: unknown }): Sho
   const data = answer.data as { readonly view: Shown };
   return data.view;
 };
+
+/** What a write answered with, in the answer's `view`. */
+const answerOf = (answer: { readonly kind: string; readonly data?: unknown }): unknown =>
+  (answer.data as { readonly view: unknown }).view;
 
 describe("an agent's call on the tracker answers with its own view", () => {
   it("answers each ticket query with that ticket's page, two in a row", async () => {
@@ -98,17 +124,71 @@ describe("an agent's call on the tracker answers with its own view", () => {
         const numbers: unknown[] = [];
 
         for (const title of ["C", "D", "E"]) {
-          const view = viewOf(yield* drive.call("tracker_file", { value: { title, body: "" } }));
-          numbers.push([view.filed, view.saving.length]);
+          numbers.push(answerOf(yield* drive.call("tracker_file", { value: { title, body: "" } })));
         }
 
         return numbers;
       }),
     );
     expect(filed).toEqual([
-      [3, 0],
-      [4, 0],
-      [5, 0],
+      { filed: 3, failed: null },
+      { filed: 4, failed: null },
+      { filed: 5, failed: null },
     ]);
+  });
+});
+
+describe("an agent's write on the tracker answers with what it produced, not the page", () => {
+  it("answers a file on a ledger of 60 tickets in under 2 KB, with its `filed`", async () => {
+    const answer = await go(
+      Effect.gen(function* () {
+        const drive = yield* doorOn(yield* crowded);
+        return yield* drive.call("tracker_file", { value: { title: "New", body: "" } });
+      }),
+    );
+    const text = JSON.stringify(answer);
+    expect(text.length).toBeLessThan(SMALL);
+    expect(answerOf(answer)).toEqual({ filed: 61, failed: null });
+  });
+
+  it("answers a comment, a close and a reopen in under 2 KB, with no page and nothing failed", async () => {
+    const answers = await go(
+      Effect.gen(function* () {
+        const drive = yield* doorOn(yield* crowded);
+        return [
+          yield* drive.call("tracker_comment", { value: { ticket: 1, body: "Looks right." } }),
+          yield* drive.call("tracker_close", { value: { ticket: 1 } }),
+          yield* drive.call("tracker_reopen", { value: { ticket: 1 } }),
+        ];
+      }),
+    );
+
+    for (const answer of answers) {
+      expect(JSON.stringify(answer).length).toBeLessThan(SMALL);
+      expect(answerOf(answer)).toEqual({ failed: null });
+    }
+  });
+
+  it("says why a write failed, in the same small answer", async () => {
+    const answer = await go(
+      Effect.gen(function* () {
+        const ledger = yield* crowded;
+        const locked = () => Effect.fail(new LedgerUnreachable({ method: "send", message: "database is locked" }));
+        const drive = yield* doorOn({ ...ledger, send: locked, append: locked });
+        return yield* drive.call("tracker_file", { value: { title: "New", body: "" } });
+      }),
+    );
+    expect(JSON.stringify(answer).length).toBeLessThan(SMALL);
+    expect(answerOf(answer)).toMatchObject({ filed: null, failed: { why: expect.stringContaining("ledger") } });
+  });
+
+  it("still answers a query with the whole view", async () => {
+    const view = await go(
+      Effect.gen(function* () {
+        const drive = yield* doorOn(yield* crowded);
+        return viewOf(yield* drive.call("tracker_query", { value: { status: "all" } }));
+      }),
+    );
+    expect(view.page.kind === "list" ? view.page.tickets.length : 0).toBe(60);
   });
 });

@@ -80,6 +80,25 @@ describe("a program's view", () => {
       }),
     ).toThrow("lost's view reads nothing, which is not one of its machines");
   });
+
+  it("is refused when it answers an input the program does not have", () => {
+    expect(() =>
+      defineProgram({
+        name: "stray",
+        description: "Its view answers an input it does not have.",
+        inputs: { press: input(Schema.Literals(["plus", "done"]), "A press.") },
+        outputs: {},
+        machines: clicks.machines,
+        view: {
+          machine: "count",
+          data: Schema.Struct({ n: Schema.Int }),
+          of: (s) => ({ n: s.n }),
+          answers: { press: () => ({}), lift: () => ({}) },
+        },
+        main: () => Effect.void,
+      }),
+    ).toThrow("stray's view answers lift, which is not one of its inputs");
+  });
 });
 
 describe("what a window sends", () => {

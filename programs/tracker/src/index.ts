@@ -6,6 +6,7 @@ import { duplicatesCell } from "./duplicates.ts";
 import { foldersCell } from "./folders.ts";
 import { clockRunner, loadCell, pollRunner, saveCell, saveHintsCell } from "./ledger.ts";
 import {
+  filedOf,
   Find,
   over,
   Show,
@@ -16,6 +17,7 @@ import {
   Tracker,
   type TrackerMsg,
   tracker as tickets,
+  wroteOf,
 } from "./machine.ts";
 import { pullRequestsCell, pullRequestsWaitRunner } from "./pull-requests.ts";
 import {
@@ -217,11 +219,17 @@ export const tracker = defineProgram({
   inputs: {
     file: input(
       File,
-      'File a new ticket: its title and body, and from: the PR and step, the lane run, or the walk it came out of; leave it out only if none. {_tag: "pr", url, step?} | {_tag: "run", ticket, run, head?} | {_tag: "walk", url}. Writes its `filed`. The answer view has `filed`: the number the new ticket got.',
+      'File a new ticket: its title and body, and from: the PR and step, the lane run, or the walk it came out of; leave it out only if none. {_tag: "pr", url, step?} | {_tag: "run", ticket, run, head?} | {_tag: "walk", url}. Writes its `filed`. The answer has `filed`, the number the new ticket got (`null`: it did not land), and `failed`, why not.',
     ),
-    comment: input(Comment, 'Comment on a ticket. `asks: "changes"` requests changes. Writes one `commented`.'),
-    close: input(OneTicket, "Close a ticket. Writes its `closed`."),
-    reopen: input(OneTicket, "Reopen a closed ticket. Writes its `reopened`."),
+    comment: input(
+      Comment,
+      'Comment on a ticket. `asks: "changes"` requests changes. Writes one `commented`. The answer has `failed`, `null` when it landed.',
+    ),
+    close: input(OneTicket, "Close a ticket. Writes its `closed`. The answer has `failed`, `null` when it landed."),
+    reopen: input(
+      OneTicket,
+      "Reopen a closed ticket. Writes its `reopened`. The answer has `failed`, `null` when it landed.",
+    ),
     answer: input(
       Answer,
       "Answer an open ask on a ticket: a pick, a note, and the title and body as seen. A person only. Writes one `answered`.",
@@ -264,7 +272,14 @@ export const tracker = defineProgram({
     ),
   },
   machines: { tickets: ticketsKind },
-  view: { machine: "tickets", data: Shown, of: shownOf, settled: settledOf },
+  view: {
+    machine: "tickets",
+    data: Shown,
+    of: shownOf,
+    settled: settledOf,
+    // A write answers with its own outcome, a query with the page it asked for.
+    answers: { file: filedOf, comment: wroteOf, close: wroteOf, reopen: wroteOf },
+  },
   main: ({ serve, send, watch }) =>
     Effect.gen(function* () {
       const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;

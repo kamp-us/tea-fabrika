@@ -494,6 +494,15 @@ export interface View<S, V> {
    * always caught up.
    */
   readonly settled?: (view: V) => boolean;
+  /**
+   * What a call on an input answers an agent with, from the view once it has caught up, in place of
+   * the whole view: a write that produced one number says the number, not every page the window
+   * shows. Keyed by the input's name, which must be one of the program's inputs. An input left out
+   * answers with the whole view, as a query does.
+   *
+   *   answers: {file: (view) => ({filed: view.filed})}
+   */
+  readonly answers?: { readonly [input: string]: (view: V) => unknown };
 }
 
 /** A program's view, of any machine and any data: what a host holds. */
@@ -502,6 +511,7 @@ export interface AnyView {
   readonly data: Schema.Top;
   readonly of: (state: any) => unknown;
   readonly settled?: ((view: any) => boolean) | undefined;
+  readonly answers?: { readonly [input: string]: (view: any) => unknown } | undefined;
 }
 
 /** The view of each program `defineProgram` made with one. */
@@ -592,6 +602,12 @@ export function defineProgram<
 
   if (view !== undefined && !Object.hasOwn(machines, view.machine)) {
     throw new Error(`${definition.name}'s view reads ${view.machine}, which is not one of its machines`);
+  }
+
+  for (const input of Object.keys(view?.answers ?? {})) {
+    if (!Object.hasOwn(definition.inputs, input)) {
+      throw new Error(`${definition.name}'s view answers ${input}, which is not one of its inputs`);
+    }
   }
 
   // The mark is in the types only; `made` is what a run checks.
