@@ -24,6 +24,28 @@ export {
   TraceState,
 } from "./Format.ts";
 
+export {
+  /**
+   * @category errors
+   */
+  NoSharedVersion,
+} from "./Hello.ts";
+
+export type {
+  /**
+   * @category models
+   */
+  Answer,
+  /**
+   * @category models
+   */
+  Connected,
+  /**
+   * @category models
+   */
+  Hello,
+} from "./Hello.ts";
+
 export type {
   /**
    * @category models

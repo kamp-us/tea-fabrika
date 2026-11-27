@@ -1,13 +1,16 @@
 // Today's CI, serving both versions. The full run's gate (main's full run starts on a push to main and an hourly catch-up): the first job of scheduled.yaml,
 // which says whether this run starts the tests. A push to main or the hourly catch-up starts them
 // only when no full run on main started within the gap (`GAP_MINUTES`, a setting beside the cron
-// line), and only on a head that has had no full run; a hand start always does.
+// line), and only on a head that is not tested (see the table); a hand start always does.
 //
-//   the run's event      main's head had a full run   the last one started   the gate says
+//   the run's event      main's head is tested        the last one started   the gate says
 //   workflow_dispatch    either                       any time               start, by_hand
 //   push or schedule     yes                          any time               skip, tested
 //   push or schedule     no                           within the gap         skip, too_soon
 //   push or schedule     no                           before it, or never    start, due
+//
+// A head is tested by a full run that ended `success`, or by two that did not end `cancelled`, so a
+// red full run gets one more try, at the next tick.
 //
 // It runs while its own run holds the `scheduled` group, so every run ahead of it has ended: the
 // last full run's start is read, not guessed. A full run is one whose test legs ran (`isFull`).
@@ -28,8 +31,8 @@ const MINUTE = 60_000;
 
 /**
  * What the gate read: the run's event, the time, the gap in minutes, the newest full run on main
- * (`at` is when it left the queue: the earliest start of its jobs), and whether main's head has had
- * a full run that did not end `cancelled`.
+ * (`at` is when it left the queue: the earliest start of its jobs), and whether main's head is tested
+ * (a full run that ended `success`, or two that did not end `cancelled`).
  * @typedef {{
  *   event: string,
  *   now: number,
@@ -102,7 +105,7 @@ const isMap = (value) => typeof value === "object" && value !== null && !Array.i
 
 /**
  * Reads what the gate needs from GitHub with the job's own token: the newest full run on main, and
- * on a push or the catch-up whether main's head has had one. Rejects when the run gave no token,
+ * on a push or the catch-up whether main's head is tested. Rejects when the run gave no token,
  * repository or workflow file, when a call failed three times, or when the newest full run gave no
  * job start that parses.
  * @param {Record<string, string | undefined>} env
@@ -233,10 +236,18 @@ export const read = async (env, io = {}) => {
 
   // A hand start always starts, so it asks nothing about the head.
   if (event !== "workflow_dispatch") {
+    // A head's full runs that did not end `cancelled` count: one that ended `success` tests it, and
+    // two that did not end `cancelled` do too.
+    let counted = 0;
+
     for (const run of await runs(`&head_sha=${encodeURIComponent(head)}`)) {
       if (run["conclusion"] !== "cancelled" && isFull(await jobs(run))) {
-        tested = true;
-        break;
+        counted += 1;
+
+        if (run["conclusion"] === "success" || counted >= 2) {
+          tested = true;
+          break;
+        }
       }
     }
   }
@@ -273,7 +284,7 @@ export const main = async (env, io = {}) => {
       ? "no full run on main before"
       : `the last full run on main, ${seen.last.id} at ${seen.last.sha.slice(0, 9)}, started ${seen.started}, ${Math.floor((seen.now - seen.last.at) / MINUTE)} minutes ago`;
 
-  const line = `gate: ${seen.event} at ${(env["GITHUB_SHA"] ?? "").slice(0, 9)}: ${decision._tag}, ${decision.reason}; ${last}; the gap is ${seen.gap} minutes${seen.event === "workflow_dispatch" ? "" : `; the head ${seen.tested ? "has had" : "has had no"} full run`}`;
+  const line = `gate: ${seen.event} at ${(env["GITHUB_SHA"] ?? "").slice(0, 9)}: ${decision._tag}, ${decision.reason}; ${last}; the gap is ${seen.gap} minutes${seen.event === "workflow_dispatch" ? "" : `; the head is ${seen.tested ? "tested" : "not tested"}`}`;
 
   return { code: 0, output: `start=${decision._tag === "start"}\n`, summary: `${line}\n`, line };
 };
