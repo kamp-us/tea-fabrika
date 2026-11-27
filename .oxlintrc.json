@@ -3942,6 +3942,114 @@
       }
     },
     {
+      // V3 (@kalfa/quality/vitest): what the folder ships imports no kalfa package, so a repo's tests stay light. Its laws may import the package by its own name, so they are left out. An override replaces a rule's options, so this repeats Q8's entries and adds its own.
+      "files": ["kalfa/quality/src/vitest/**"],
+      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx", "kalfa/**/*Test.ts", "kalfa/**/*.test-support.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kalfa/*", "@kalfa/*/**"],
+                "message": "V3 (@kalfa/quality/vitest): what this folder ships imports no kalfa package, so a repo's tests stay light. Its laws may import the package by its own name."
+              },
+              {
+                "group": ["@kampus/*", "@tea-fabrika/*"],
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality reaches no product. It imports no @kampus or @tea-fabrika package; the repo's own values come in through its Settings, handed in at the edge."
+              },
+              {
+                "group": ["**/next/**", "**/packages/**", "**/.github/**"],
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // V4 (@kalfa/quality/vitest): the root loads no native database module. The four files the root reads import neither node:sqlite nor sqlite nor ./TestDatabase. It repeats V3's entries, which it replaces for these files, and a fifth root file has to be added to this list by hand.
+      "files": [
+        "kalfa/quality/src/vitest/index.ts",
+        "kalfa/quality/src/vitest/Depth.ts",
+        "kalfa/quality/src/vitest/Recorder.ts",
+        "kalfa/quality/src/vitest/Stub.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "node:sqlite",
+                "message": "V4 (@kalfa/quality/vitest): importing the root loads no native database module. Only TestDatabase.ts imports node:sqlite, and it is read through @kalfa/quality/vitest/TestDatabase."
+              },
+              {
+                "name": "sqlite",
+                "message": "V4 (@kalfa/quality/vitest): importing the root loads no native database module. Only TestDatabase.ts imports node:sqlite, and it is read through @kalfa/quality/vitest/TestDatabase."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kalfa/*", "@kalfa/*/**"],
+                "message": "V3 (@kalfa/quality/vitest): what this folder ships imports no kalfa package, so a repo's tests stay light. Its laws may import the package by its own name."
+              },
+              {
+                "group": ["@kampus/*", "@tea-fabrika/*"],
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality reaches no product. It imports no @kampus or @tea-fabrika package; the repo's own values come in through its Settings, handed in at the edge."
+              },
+              {
+                "group": ["**/next/**", "**/packages/**", "**/.github/**"],
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+              },
+              {
+                "group": ["./TestDatabase", "./TestDatabase.ts"],
+                "message": "V4 (@kalfa/quality/vitest): importing the root loads no native database module. TestDatabase is read through @kalfa/quality/vitest/TestDatabase, never from the root."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // D13 and D14 (@kalfa/diagnostics says what a diagnostic is and nothing about printing one): its source imports no kalfa or repo package and no path out of the package, no Node module in either spelling,
       // never prints (no Console, Stdio, Terminal, no console) and never picks an exit code (no process, no Runtime, no @effect/platform-node, whose runMain sets one). The global object is refused too, so
       // `globalThis.process` is no way round. Its tests are left out. An override replaces a rule's options, so this repeats the base entries and adds its own.
