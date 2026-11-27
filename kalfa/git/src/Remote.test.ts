@@ -46,6 +46,9 @@ const ACCEPTED = (drawn: Drawn): ReadonlyArray<readonly [label: string, text: st
     "https with a port and a deeper path",
     `https://${drawn.host}.${drawn.domain}:${drawn.port}/${drawn.first}/${drawn.second}.git`,
   ],
+  ["an upper-case host", `https://${`${drawn.host}.${drawn.domain}`.toUpperCase()}/${drawn.first}`],
+  ["an IPv6 host with a port", `https://[::1]:8443/${drawn.first}`],
+  ["an xn-- name", `https://xn--${drawn.host}-${drawn.domain}.test/${drawn.first}`],
   ["a file URL", `file:///${drawn.first}/${drawn.second}.git`],
   ["an absolute path", `/${drawn.first}/${drawn.second}.git`],
 ];
@@ -84,6 +87,16 @@ const REFUSED = (drawn: Drawn): ReadonlyArray<readonly [label: string, text: str
       "(h) a host hidden by a percent-encoded letter",
       `https://${drawn.host.slice(0, 1)}%${drawn.host.charCodeAt(1).toString(16).toUpperCase()}${drawn.host.slice(2)}.${drawn.domain}/${drawn.first}`,
     ],
+    [
+      "(h) a host hidden by a fullwidth capital letter inside an upper-case host",
+      `https://${host.toUpperCase().slice(0, 1)}\uFF25${host.toUpperCase().slice(1)}/${drawn.first}`,
+    ],
+    [
+      "(h) a host hidden by a zero width space inside an upper-case host",
+      `https://${host.toUpperCase().slice(0, 1)}\u200B${host.toUpperCase().slice(1)}/${drawn.first}`,
+    ],
+    // The Kelvin sign is `K` to the parser, and lowercases to `k` in Unicode, so only a lowercase of ASCII letters leaves it as it is.
+    ["(h) a host hidden by a Kelvin sign", `https://\u212A${host}/${drawn.first}`],
     // (x) no login rides in a URL.
     ["(x) a user", `https://${drawn.first}@${host}/${drawn.second}`],
     ["(x) a user and a password", `https://${drawn.first}:${drawn.second}@${host}/r`],
@@ -104,6 +117,7 @@ const REFUSED = (drawn: Drawn): ReadonlyArray<readonly [label: string, text: str
     ["(z) two leading slashes", `//${host}/${drawn.first}`],
     ["(z) a file URL with one slash", `file:/${drawn.first}/${drawn.second}.git`],
     ["(z) a file URL with a host", `file://${host}/${drawn.first}`],
+    ["(z) a file URL whose path starts with two slashes", `file:////${drawn.first}/${drawn.second}.git`],
     ["(z) https with one slash", `https:/${host}/${drawn.first}`],
     ["(z) https with no slash", `https:${host}/${drawn.first}`],
     ["(z) git's short ssh form", `git@${host}:${drawn.first}/${drawn.second}.git`],
@@ -117,6 +131,9 @@ const REFUSED = (drawn: Drawn): ReadonlyArray<readonly [label: string, text: str
 const URL_CLASSES = [
   "https with a host and a path",
   "https with a port and a deeper path",
+  "an upper-case host",
+  "an IPv6 host with a port",
+  "an xn-- name",
   "a file URL",
   "an absolute path",
   "(w) a tab inside the host",
@@ -130,6 +147,9 @@ const URL_CLASSES = [
   "(w) a backslash after the host",
   ...HIDING.map(([label]) => `(h) a host hidden by ${label}`),
   "(h) a host hidden by a percent-encoded letter",
+  "(h) a host hidden by a fullwidth capital letter inside an upper-case host",
+  "(h) a host hidden by a zero width space inside an upper-case host",
+  "(h) a host hidden by a Kelvin sign",
   "(x) a user",
   "(x) a user and a password",
   "(x) an empty user",
@@ -147,6 +167,7 @@ const URL_CLASSES = [
   "(z) two leading slashes",
   "(z) a file URL with one slash",
   "(z) a file URL with a host",
+  "(z) a file URL whose path starts with two slashes",
   "(z) https with one slash",
   "(z) https with no slash",
   "(z) git's short ssh form",
@@ -158,7 +179,9 @@ const URL_CLASSES = [
 
 // Plant (F15): delete the control character check, so the tab and line feed URLs pass (w); delete the user check, so `https://u:p@host/r` passes
 // (x); take `http` to any host (y); take a relative path (z); take `ext::` (z); delete the host check, so a hidden host (h) passes; delete the
-// backslash from the hidden characters (w); take two leading slashes as a path (z); delete the `file:///` prefix check (z).
+// backslash from the hidden characters (w); take two leading slashes as a path (z); delete the `file:///` prefix check (z); compare the host after
+// `normalize("NFKC").toLowerCase()`, a case-blind compare that also ignores the hiding characters (h); delete the check that a file path does not start
+// with two slashes (z); refuse an upper-case host (the accepted classes).
 it.prop(
   "F15 the URL: every text of (h) and (w) to (z) is refused, a host the parser reads as another host included, and an https URL with a host and a path, with a port, a file URL and an absolute path each decode to themselves",
   { drawn: urlArb },
@@ -185,7 +208,10 @@ it.prop(
       if (name.startsWith("(h)")) {
         const authority = text.slice(text.indexOf("//") + 2).split("/")[0];
         expect(URL.canParse(text), `${name} parses`).toBe(true);
-        expect(new URL(text).host, `${name} reads as another host than its text`).not.toBe(authority);
+        expect(
+          new URL(text).host,
+          `${name} reads as another host than its text, and not by capital letters alone`,
+        ).not.toBe(authority?.replace(/[A-Z]/g, (letter) => letter.toLowerCase()));
       }
     }
 
