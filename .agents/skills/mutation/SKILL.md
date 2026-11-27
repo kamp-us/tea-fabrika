@@ -126,6 +126,7 @@ holds the flags, the settings `MUTATE_SECONDS` (default 300), `MUTATE_FILES` (de
 exits, and what it cannot see. It prints one line per survivor: `lived` (a law ran it and
 passed), `no law ran`, or `no law loads` for a file no law reaches, then `static` lines Stryker
 skipped, then the counts and seconds. A scope past `MUTATE_FILES` is refused before Docker starts.
+A lint rule under `oxlint-plugins/` also gets the test beside it, `<rule>.test.ts`: it lints through another process, so no import reaches the rule. The output lists the laws found by import and those found by name. That test covers every mutant of its rule file, so a rule test that never lints through the mutated file leaves each mutant printed as `lived`, though no law ran that line.
 `MUTATE_RUNS` is the most cases a property law draws in the box, or `full` for each law's own count: the laws run
 three times over (the plain baseline, Stryker's dry run, then once per mutant they cover), so at full depth the slow
 ones alone passed the five minutes on `@kalfa/git`. A law that asks for fewer keeps its own count, the seed stays its

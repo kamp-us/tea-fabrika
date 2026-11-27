@@ -20,6 +20,7 @@ import {
   refusedIn,
   parentEntries,
   pick,
+  picked,
   readAnswers,
   reach,
   resolve,
@@ -240,6 +241,57 @@ describe("survivors, which laws load a file", () => {
           expect(laws).toEqual([...Arr.map(tests, name)].sort());
         },
       ),
+      options,
+    );
+  });
+
+  // Ticket 1314. Plants: pick no law by name, so a rule whose test lints through plant.ts is bare (the 89 "no law ran" mutants on no-hand-tag.ts);
+  // pick by name a rule that no test is named after, or a test of another folder; list a law found by import as by name too.
+  it("a lint rule's own test is picked by name when no import reaches the rule, and a law found by import is not named twice", () => {
+    const name = fc.stringMatching(/^[a-z][a-z-]{0,8}[a-z]$/);
+
+    fc.assert(
+      fc.property(name, name, (rule, other) => {
+        fc.pre(rule !== other);
+        const file = `oxlint-plugins/${rule}.ts`;
+        const law = `oxlint-plugins/${rule}.test.ts`;
+        const plant = "oxlint-plugins/plant.ts";
+        const tests = [law, `oxlint-plugins/${other}.test.ts`];
+
+        // The test reaches only plant.ts, which runs oxlint in another process.
+        const viaPlant = reach(tests, (from) => (from === plant ? [] : [plant]));
+        expect(picked([file], viaPlant, tests)).toEqual({ imported: [], named: [law], laws: [law], bare: [] });
+
+        // The same test imports the rule: found by import, named for nothing.
+        const direct = reach(tests, (from) => (from === law ? [file] : []));
+        expect(picked([file], direct, tests)).toEqual({ imported: [law], named: [], laws: [law], bare: [] });
+
+        // No test of the rule's name: another test that reaches it is by import, and one that does not leaves the rule bare.
+        const rest = [`oxlint-plugins/${other}.test.ts`];
+        expect(
+          picked(
+            [file],
+            reach(rest, () => [file]),
+            rest,
+          ),
+        ).toEqual({
+          imported: rest,
+          named: [],
+          laws: rest,
+          bare: [],
+        });
+        expect(
+          picked(
+            [file],
+            reach(rest, () => []),
+            rest,
+          ),
+        ).toEqual({ imported: [], named: [], laws: [], bare: [file] });
+
+        // A file that is no rule is named after nothing: support beside the rules, and a rule of another folder.
+        expect(picked([`oxlint-plugins/${rule}.test-support.ts`], viaPlant, tests).laws).toEqual([]);
+        expect(picked([`next/${rule}.ts`], viaPlant, tests).laws).toEqual([]);
+      }),
       options,
     );
   });
