@@ -123,6 +123,11 @@ A push that removes a ref from a remote and sends no commits. It names the commi
 keep its commits refuses one, as it refuses a force push.
 _Avoid_: remove, prune, drop
 
+**Edit**:
+Files of a commit to replace or remove, each by its path: new content, or absent. Committing an edit makes a new commit
+with that one commit as its parent.
+_Avoid_: patch, change set, diff, update
+
 **Rebase**:
 Putting a branch's own commits on a new base. It makes new commits; the old ones stay as they were.
 _Avoid_: replay, update branch, catch up, sync

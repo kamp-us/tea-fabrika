@@ -33,7 +33,7 @@
       "pure": false
     },
     "kalfa-config": {
-      "imports": ["next-vitest"],
+      "imports": ["kalfa-diagnostics", "next-vitest"],
       "pure": false
     },
     "kalfa-markdown": {
@@ -69,7 +69,15 @@
       "pure": false
     },
     "kalfa-secrets": {
-      "imports": ["kalfa-config"],
+      "imports": ["kalfa-config", "kalfa-diagnostics"],
+      "pure": false
+    },
+    "kalfa-ledger": {
+      "imports": ["kalfa-diagnostics"],
+      "pure": false
+    },
+    "kalfa-permissions": {
+      "imports": [],
       "pure": false
     },
     "kalfa-transport": {
@@ -101,6 +109,8 @@
     "kalfa/git": "kalfa-git",
     "kalfa/github": "kalfa-github",
     "kalfa/secrets": "kalfa-secrets",
+    "kalfa/ledger": "kalfa-ledger",
+    "kalfa/permissions": "kalfa-permissions",
     "kalfa/transport": "kalfa-transport"
   },
   "libraryRoots": ["next", "kalfa"],

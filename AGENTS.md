@@ -48,7 +48,7 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
 - **These need no approval,** in your own worktree and on your own files: `pnpm format` and `pnpm lint`; a fix for a
   lint, format or type error your own change caused; your own narrow test, run again after a change; a command tried
   again after a timeout; an install with `--frozen-lockfile`; a commit of your own paths with the step-commit skill,
-  which pushes for you (in a box, `drive.ts` commits and pushes instead).
+  which pushes it; `--commit-only` commits without pushing (in a box, `drive.ts` commits and pushes instead).
 - **Report for a reader who saw none of the work.** Give the answer first, then what changed, what ran, and what could
   not run and why. Write full sentences in plain words, use no name you made up along the way, and give a path or a full
   URL for each thing you cite, so the report stands on its own.
@@ -99,7 +99,7 @@ A lint finding is fixed in the code, never by switching its rule off:
 Everything here runs on a laptop a person is using. Before tests while other code agents run, a typecheck, an Electron
 test app, a Docker box, a wide search or the sandbox runtime, read
 [the lead skill's caps](./.agents/skills/lead/SKILL.md#go-easy-on-the-machine): each came from a laptop that froze.
-Before `gh pr edit`, `claude -p`, a repo-wide `rg` or `pnpm build`, read
+Before `claude -p`, a repo-wide `rg` or `pnpm build`, read
 [the tool facts](./.agents/skills/lead/SKILL.md#tool-facts-that-cost-us-time), and before any paid model run,
 [the money rules](./.agents/skills/lead/SKILL.md#money).
 

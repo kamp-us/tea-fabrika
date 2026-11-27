@@ -124,6 +124,28 @@ const importStream = (history: History): Uint8Array =>
     "reset refs/seed/tmp\n\n",
   );
 
+/** One entry of a tree a law writes with fast-import: a mode, a path as bytes (that need not be UTF-8) and a file's content or a gitlink's commit. */
+interface RawEntry {
+  readonly mode: "100644" | "100755" | "120000" | "160000";
+  readonly path: Uint8Array;
+  readonly content: Uint8Array | { readonly commit: string };
+}
+
+/**
+ * The fast-import stream of one commit that holds exactly these entries, with no parent: a `Path` cannot hold a byte that is not UTF-8, so a
+ * name made of such bytes is written here and nowhere else. A path that holds a line break or starts with a quote is not written.
+ */
+export const importCommit = (mark: number, ref: string, entries: ReadonlyArray<RawEntry>): Uint8Array =>
+  bytes(
+    `commit ${ref}\nmark :${mark}\nauthor Ada <ada@example.test> 1700000000 +0000\ncommitter Ada <ada@example.test> 1700000000 +0000\ndata 2\nc${mark}\ndeleteall\n`,
+    ...entries.flatMap((entry): ReadonlyArray<string | Uint8Array> =>
+      entry.content instanceof Uint8Array
+        ? [`M ${entry.mode} inline `, entry.path, `\ndata ${entry.content.length}\n`, entry.content, "\n"]
+        : [`M ${entry.mode} ${entry.content.commit} `, entry.path, "\n"],
+    ),
+    "\n",
+  );
+
 /** Runs fast-import on a stream and gives the id of each mark, in mark order. */
 export const fastImport = (dir: string, stream: Uint8Array): Effect.Effect<ReadonlyArray<string>, never, Needs> =>
   Effect.gen(function* () {
@@ -246,6 +268,33 @@ export const setConfigTable = (dir: string): Effect.Effect<void, never, Needs> =
       ["core.bigFileThreshold", "1"],
       ["filter.up.smudge", "tr a-z A-Z"],
       ["filter.up.clean", "tr A-Z a-z"],
+      // Ticket 1935, slice 2: what `mktree`, `hash-object` and the commit a write makes could read, each found by hand on git 2.40.1 to leave
+      // the ids of a tree and a commit as they are, except `i18n.commitEncoding`, which `commit-tree` writes as a header and `hash-object` does not.
+      ["core.protectHFS", "true"],
+      ["core.protectNTFS", "true"],
+      ["core.fsync", "all"],
+      ["core.fsyncObjectFiles", "true"],
+      ["core.compression", "9"],
+      ["core.looseCompression", "0"],
+      ["core.checkRoundtripEncoding", "utf-16"],
+      ["core.symlinks", "false"],
+      ["core.fileMode", "false"],
+      ["core.whitespace", "trailing-space"],
+      ["core.hooksPath", "/nonexistent"],
+      ["fsck.badTree", "ignore"],
+      ["fsck.zeroPaddedFilemode", "error"],
+      ["fsck.hasDotgit", "ignore"],
+      ["transfer.fsckObjects", "true"],
+      ["receive.fsckObjects", "true"],
+      ["i18n.commitEncoding", "ISO-8859-1"],
+      ["i18n.logOutputEncoding", "ISO-8859-1"],
+      ["commit.gpgSign", "true"],
+      ["gpg.program", "/bin/false"],
+      ["user.name", "Zed"],
+      ["user.email", "zed@example.test"],
+      ["user.signingKey", "0"],
+      ["author.name", "Zed"],
+      ["committer.name", "Zed"],
     ] as const) {
       yield* git(dir, ["config", key, value]);
     }

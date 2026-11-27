@@ -4,6 +4,7 @@ import type { Plugin } from "@oxlint/plugins";
 import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
+import { hiddenCause } from "./hidden-cause.ts";
 import { integrationTestName } from "./integration-test-name.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
 import { jsdocs } from "./jsdocs.ts";
@@ -31,6 +32,7 @@ import { noQuestionWordKey } from "./no-question-word-key.ts";
 import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
+import { noSleepOnTestClock } from "./no-sleep-on-test-clock.ts";
 import { noStabilityTag } from "./no-stability-tag.ts";
 import { noStageWord } from "./no-stage-word.ts";
 import { noStaticLayer } from "./no-static-layer.ts";
@@ -61,6 +63,7 @@ const plugin: Plugin = {
     "door-is-library": doorIsLibrary,
     "edge-comment": edgeComment,
     "effect-functions": effectFunctions,
+    "hidden-cause": hiddenCause,
     "integration-test-name": integrationTestName,
     "law-shape": lawShape,
     "isolate-boundary": isolateBoundary,
@@ -88,6 +91,7 @@ const plugin: Plugin = {
     "no-raw-try-catch": noRawTryCatch,
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
+    "no-sleep-on-test-clock": noSleepOnTestClock,
     "no-stability-tag": noStabilityTag,
     "no-stage-word": noStageWord,
     "no-static-layer": noStaticLayer,

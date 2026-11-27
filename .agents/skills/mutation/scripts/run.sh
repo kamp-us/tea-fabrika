@@ -9,6 +9,11 @@
 # BASELINE, when set, names vitest's JSON report of a plain run of the same tests here: the test
 # and hook limit is then limit.ts's answer for it, else the fast check's 10 s (ticket 605).
 # CAP_SECONDS is the time cap on Stryker, in whole seconds; unset, the fast check's five minutes.
+# RANGES, when set, is the list of mutation ranges to run in place of the sampler's (JSON strings, comma separated):
+# the full-depth recheck of the mutants that lived at the cap (recheck.ts). TEST_NAMES, when set, is a vitest
+# test-name pattern that narrows the related files to the tests that cover them. TEST_LIMIT, when set and with no
+# BASELINE, is the per-test limit in ms.
+# MUTATE_RUNS, when set, caps the cases a property law draws (depth.ts, ticket 1306); unset, every law keeps its own count.
 set -eu
 : "${T:?T must name the ticket}"
 : "${BUILD:?BUILD must name the build commit}"
@@ -17,7 +22,7 @@ case ${FINAL:-1} in 0|1) ;; *) echo "FINAL must be 0 or 1" >&2; exit 1 ;; esac
 case ${IN_PLACE:-0} in 0) IN_PLACE=false ;; 1) IN_PLACE=true ;; *) echo "IN_PLACE must be 0 or 1" >&2; exit 1 ;; esac
 CAP_SECONDS=${CAP_SECONDS:-300}
 case $CAP_SECONDS in ''|0*|*[!0-9]*) echo "CAP_SECONDS must be a whole number of seconds, 1 or more" >&2; exit 1 ;; esac
-export T BUILD RELATED IN_PLACE BASELINE CAP_SECONDS
+export T BUILD RELATED IN_PLACE BASELINE CAP_SECONDS TEST_NAMES
 exec node --input-type=module -e '
 import {spawn} from "node:child_process";
 import {rmSync} from "node:fs";
@@ -41,6 +46,7 @@ child.once("exit", (code) => {
   try { kill("SIGKILL"); }
   finally {
     rmSync("vitest.mutation.config.ts", {force: true});
+    rmSync("vitest.depth.config.ts", {force: true});
     process.exitCode = stopped ? 124 : code ?? 1;
   }
 });
@@ -51,31 +57,54 @@ if (!process.env.RELATED.split(",").some(p => p.trim())) {
 }'
 M=${TMPDIR:-/tmp}/mut-$T; mkdir -p "$M"
 S=packages/pipeline/node_modules/@stryker-mutator
+if [ -n "${RANGES:-}" ]; then ranges=$RANGES; else
 ranges=$(node .agents/skills/mutation/scripts/sample.ts \
   --build "$BUILD" ${SINCE:+--since "$SINCE"} --seed 119120 --max 150 --report "$M/sample.json")
+fi
 [ -n "$ranges" ] || { echo "no mutation ranges selected" >&2; exit 1; }
 # The fast check's 10 s limit, raised to fit the slowest plain test here, so one slow law no
 # longer stops the dry run before any mutant (ticket 605). The existing excludes stay.
-TEST_LIMIT=10000
+TEST_LIMIT=${TEST_LIMIT:-10000}
 [ -z "${BASELINE:-}" ] || TEST_LIMIT=$(node .agents/skills/mutation/scripts/limit.ts "$BASELINE")
 case $TEST_LIMIT in ''|*[!0-9]*) echo "limit.ts gave no limit for $BASELINE" >&2; exit 1 ;; esac
 export TEST_LIMIT
+# outside.setup.ts (ticket 1314) is added to the setup files when this repo has it; a toy repo (the run tests') has not.
+OUTSIDE_SETUP=
+[ ! -f .agents/skills/mutation/scripts/outside.setup.ts ] || OUTSIDE_SETUP=./.agents/skills/mutation/scripts/outside.setup.ts
+export OUTSIDE_SETUP
 cat > vitest.mutation.config.ts <<'TS'
 import {testConfig as base} from "./vitest.config.ts";
 import {defineConfig} from "vitest/config";
 const include = process.env.RELATED?.split(",").map(p => p.trim()).filter(Boolean);
 if (!include?.length) throw new Error("RELATED must list the test paths");
 const limit = Number(process.env.TEST_LIMIT || 10_000);
-export default defineConfig({...base, test: {...base.test, include, maxWorkers: 1,
+const names = process.env.TEST_NAMES;
+// outside.setup.ts: a lint rule's own test runs oxlint in another process, so the setup hands that process the active mutant
+// and covers the rule's mutants for the test (outside.ts, ticket 1314).
+// run.sh sets OUTSIDE_SETUP only where the file exists; a toy repo has none, so its config stays as it was.
+const setupFiles = [...(base.test?.setupFiles ?? []), ...(process.env.OUTSIDE_SETUP ? [process.env.OUTSIDE_SETUP] : [])];
+export default defineConfig({...base, test: {...base.test, include, setupFiles, maxWorkers: 1,
+  ...(names ? {testNamePattern: names} : {}),
   testTimeout: limit, hookTimeout: limit,
 	exclude: [...(base.test?.exclude ?? []), "**/node_modules/**", "**/dist/**",
 		"packages/pipeline/src/stages/mutation/stryker*.test.ts",
 		"packages/pipeline/src/stages/pipeline/{program,github}.test.ts"]}});
 TS
+# With a depth, Stryker reads a config that adds depth.ts's pieces to the one above. It is a second file so that a run with
+# no depth reads nothing of depth.ts (a toy repo without it loads the first config as it is).
+CONFIG=vitest.mutation.config.ts
+if [ -n "${MUTATE_RUNS:-}" ]; then
+  CONFIG=vitest.depth.config.ts
+  cat > "$CONFIG" <<'TS'
+import base from "./vitest.mutation.config.ts";
+import {depth, depthConfig} from "./.agents/skills/mutation/scripts/depth.ts";
+export default {...base, test: {...base.test, ...depthConfig(depth)}};
+TS
+fi
 # Stryker parses tsconfigFile with TypeScript's JS API only when it is one of the project's
 # files; TypeScript 7 has none. Nothing writes this path, so it is never a project file.
 cat > "$M/stryker.json" <<JSON
-{"testRunner": "vitest", "vitest": {"configFile": "vitest.mutation.config.ts", "related": false},
+{"testRunner": "vitest", "vitest": {"configFile": "$CONFIG", "related": false},
  "plugins": ["$PWD/$S/vitest-runner/dist/src/index.js"], "coverageAnalysis": "perTest",
  "mutate": [$ranges], "inPlace": $IN_PLACE, "ignoreStatic": true, "timeoutMS": 5000, "concurrency": 1,
  "incremental": true, "incrementalFile": "$M/incremental.json",

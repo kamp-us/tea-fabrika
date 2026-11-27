@@ -10,7 +10,7 @@ import type { NonEmptyReadonlyArray } from "effect/Array";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
 import type { Diff, PatchId } from "./Diff.ts";
-import { bytes } from "./internal/object.ts";
+import { byBytes, bytes } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
 import * as Settings from "./Settings.ts";
 import { Path, TreeId } from "./Tree.ts";
@@ -143,17 +143,31 @@ export class NotAFile extends Schema.TaggedError<NotAFile, { readonly brand: uni
 }) {}
 
 /**
- * A file holds more bytes than `limits.blob`, so `readFile` does not read it.
+ * A file holds more bytes than `limits.blob`: too large to read, or, given to `editTree`, too large to read back.
  *
  * **Details**
  *
- * It is checked before any content is read, so a file is never cut.
+ * It is checked before any content is read or written, so a file is never cut.
  *
  * @category errors
  */
 export class FileTooLarge extends Schema.TaggedError<FileTooLarge, { readonly brand: unique symbol }>()(
   "FileTooLarge",
   { path: Path, most: Schema.Int },
+) {}
+
+/**
+ * A file cannot be made at `path` because `other` is in the way: a file the edit keeps, or a file the edit adds, sits where `path` needs a folder.
+ *
+ * **Details**
+ *
+ * `path` is the first such new file by UTF-8 bytes, and `other` the shortest path in its way. A link or a submodule in the way fails `NotAFile` first.
+ *
+ * @category errors
+ */
+export class PathInTheWay extends Schema.TaggedError<PathInTheWay, { readonly brand: unique symbol }>()(
+  "PathInTheWay",
+  { path: Path, other: Path },
 ) {}
 
 /**
@@ -316,6 +330,13 @@ const found = (file: Option.Option<Uint8Array>): Effect.Effect<Option.Option<Uin
     file,
   );
 
+/**
+ * The files an edit replaces or removes, by path: new bytes, or `"absent"`, the word for a file that should not exist.
+ *
+ * @category models
+ */
+export type Edit = ReadonlyMap<Path, Uint8Array | "absent">;
+
 // What a caller says to write a commit: the committer is the settings' and the clock's, never the caller's.
 type NewCommit = {
   readonly tree: TreeId;
@@ -340,6 +361,7 @@ type NewCommit = {
  * - `readText` is `readFile` read as UTF-8 with no replacement: a byte that is not UTF-8 fails `NotUtf8` naming the path. A BOM, a CR and a NUL byte are text and are kept. It is one call, with one span and one time limit.
  * - `diff` answers every file the files of `from` and `to` differ in, sorted by path, with the lines added and removed, or `[]` when the two hold the same files. It fails as `patchId` does, with `NotAFile` for a submodule after the files limit and `NotUtf8` for a text file whose lines are not UTF-8 after the size limit.
  *
+ * - `editTree` answers the id of the tree of `base`'s files with each change of the edit applied, which the repository then holds. Every other path keeps its entry, byte for byte. A replaced file keeps its mode, a new file is `100644`, a folder left with no files goes, and an edit that changes nothing gives back `base`'s own tree. `"absent"` on a path that holds nothing is no change. It reads no history, so it answers in a shallow repository, and it moves no ref. It fails with `FileTooLarge` when a new content holds more than `limits.blob` bytes, naming the first such path by UTF-8 bytes, before anything else, then `NoSuchCommit`, then `NotAFile` for a path `readFile` refuses (removal included, so a link is never replaced or removed), then `PathInTheWay`. Nothing is written when it fails.
  * - `writeCommit` writes one commit and answers it. Its committer is the settings' one, at the clock's second and offset `+0000`. It fails when the message holds a NUL byte, when the object would pass `limits.bytes`, and when the tree is no tree or a parent is no commit. It moves no ref.
  * - `mergeTrees` merges the trees of `ours` and `theirs` over the tree of `mergeBase`, file by file, and answers the id of the merged tree, which the repository then holds. It fails `Conflict` naming each path that cannot be combined. It reads no history, so a shallow repository answers, and it moves no ref. Merging needs git 2.40 in the git adapter.
  * - `moveRef` points `ref` at `to`, making it or moving it, only if the ref is at `from` now: `Option.none()` means it must not exist. It fails `RefMoved` when it is elsewhere and `RefInTheWay` when another ref is in the way, and then leaves every ref as it was. A call that ends in `TimedOut` may have moved the ref, so read it again.
@@ -393,6 +415,10 @@ export class Repository extends Context.Service<
       Option.Option<PatchId>,
       UnclearBase | HistoryTooShort | NoSuchCommit | TooMany | DiffTooLarge | Fails
     >;
+    readonly editTree: (
+      base: CommitId,
+      changes: Edit,
+    ) => Effect.Effect<TreeId, FileTooLarge | NoSuchCommit | NotAFile | PathInTheWay | Fails>;
     readonly writeCommit: (
       commit: NewCommit,
     ) => Effect.Effect<Commit.Commit, NoSuchTree | NoSuchCommit | NulInMessage | TooLargeToWrite | Fails>;
@@ -421,7 +447,7 @@ export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "
 };
 
 /**
- * Wraps an adapter's eleven calls with a span each and the time limit, writes `rangePatchId` from two of them and `readText` from one, and gives each commit written its committer.
+ * Wraps an adapter's twelve calls with a span each and the time limit, writes `rangePatchId` from two of them and `readText` from one, checks the size of an edit's contents, and gives each commit written its committer.
  *
  * **When to use**
  *
@@ -548,6 +574,21 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
       });
 
       return files;
+    }),
+    editTree: Effect.fn("git.editTree")(function* (base: CommitId, changes: Edit) {
+      yield* Effect.annotateCurrentSpan({ "vcs.ref.base.revision": base, "kalfa.git.changes": changes.size });
+
+      // What the caller gave is checked before any command, as `writeCommit`'s are, so every file written can be read back.
+      for (const [path, change] of [...changes].toSorted(([a], [b]) => byBytes(a, b))) {
+        if (change !== "absent" && change.length > settings.limits.blob) {
+          return yield* new FileTooLarge({ path, most: settings.limits.blob });
+        }
+      }
+
+      const tree = yield* limited(raw.editTree(base, changes));
+      yield* Effect.annotateCurrentSpan({ "kalfa.git.tree": tree });
+
+      return tree;
     }),
     writeCommit: Effect.fn("git.writeCommit")(function* (commit: NewCommit) {
       yield* Effect.annotateCurrentSpan({ "kalfa.git.tree": commit.tree, "kalfa.git.parents": commit.parents });

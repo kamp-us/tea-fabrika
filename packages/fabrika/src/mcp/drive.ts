@@ -25,13 +25,14 @@ import { type Call, callOf, RUNS, type Tool, toolNamesOf, toolsOf } from "./tool
 // A call answers once the run has handled its value and its window has caught up: a query's view
 // is the page of that query, and a file's view says the number of the ticket it filed, never the
 // view an earlier call left. A program says what caught up means in its view's `settled`
-// (./../program/program.ts). The wait is bounded by `settle`, a setting of the door; when it runs
+// (./../program/program.ts), and what a write answers with in its view's `answers`: a tracker's
+// file answers `{filed: 8, failed: null}`, never the page of every ticket beside it. The wait is bounded by `settle`, a setting of the door; when it runs
 // out the call still answers, with the view as it is and `settled: false` beside it.
 //
 //   yield* drive.call("tracker_query", {value: {ticket: 7}})
 //   // {kind: "done", data: {program: "tracker", run: "tracker:agent:5c1e", word: "queued", view: {page: {kind: "ticket", number: 7, ...}, ...}}}
 //   yield* drive.call("tracker_file", {value: {title: "Login fails", body: ""}})
-//   // {kind: "done", data: {..., view: {filed: 8, saving: [], ...}}}
+//   // {kind: "done", data: {..., view: {filed: 8, failed: null}}}
 //
 // The runs live in the scope it is made in: the connection's. Closing it stops them, as a
 // terminal closing hangs up its shell. Their state is what their program keeps; the tracker's is
@@ -101,6 +102,16 @@ const FIRST_STATE = Duration.seconds(5);
  * (`settle`). A door's own value wins.
  */
 export const SETTLE = Duration.seconds(10);
+
+/**
+ * What a call on `input` answers with: the program's own answer for that input, from its view
+ * (`answers`, ./../program/program.ts), else the whole view.
+ */
+const answerOf = (run: AnyRun, input: string): unknown => {
+  const view = viewNow(run);
+  const answer = view === null ? undefined : viewOf(run.program)?.answers?.[input];
+  return answer === undefined ? view : answer(view);
+};
 
 /** What a run's window shows now: its view of its machine, or `null` (no view, or no state yet). */
 const viewNow = (run: AnyRun): unknown => {
@@ -320,7 +331,7 @@ export const driveFor = (options: {
                 program: c.program,
                 run: run.id,
                 word,
-                view: viewNow(run),
+                view: answerOf(run, c.input),
                 ...(Option.isSome(caught) ? {} : { settled: false }),
               },
             } as const;

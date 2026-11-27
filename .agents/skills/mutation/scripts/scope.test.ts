@@ -341,24 +341,21 @@ describe("kind siblings join the hourly pick (decision 0600, slice 2)", () => {
     ]);
   });
 
-  // Plant: drop `--tracked` from the step, or write the list after the pick.
-  it("scenario: Q17 the workflow's range step lists the head's files and hands them to the pick, before the existence check", () => {
+  // Plant: take range.ts out of the step, or hand `usable` no head file list (range.test.ts holds the pick itself).
+  it("scenario: Q17 the workflow's range step runs range.ts, which lists the head's files and hands them to the pick", () => {
     const workflow = parse(
       readFileSync(join(import.meta.dirname, "../../../../.github/workflows/mutation.yaml"), "utf8"),
     );
 
     const steps: ReadonlyArray<{ id?: string; run?: string }> = workflow.jobs.mutation.steps;
-    const lines = (steps.find((step) => step.id === "range")?.run ?? "").split("\n");
-    const at = (pattern: RegExp) => lines.findIndex((line) => pattern.test(line));
+    const run = steps.find((step) => step.id === "range")?.run ?? "";
+    const script = readFileSync(join(import.meta.dirname, "range.ts"), "utf8");
 
-    const list = at(/^\s*git ls-tree -r --name-only "\$head" > (\S+)\s*$/);
-    const scope = at(/^\s*node \.agents\/skills\/mutation\/scripts\/scope\.ts --tracked (\S+) </);
-    const exists = at(/git cat-file -e/);
-
-    expect([list >= 0, scope >= 0, exists >= 0]).toEqual([true, true, true]);
-    expect(list).toBeLessThan(scope);
-    expect(scope).toBeLessThan(exists);
-    // The file the list is written to is the file the pick reads.
-    expect(/> (\S+)\s*$/.exec(lines[list] ?? "")?.[1]).toBe(/--tracked (\S+)/.exec(lines[scope] ?? "")?.[1]);
+    expect(run).toMatch(/node \.agents\/skills\/mutation\/scripts\/range\.ts --base "\$base" --head "\$head"/);
+    // The head's file list is read once and goes to the pick, so a changed file's kind siblings are found.
+    expect(script).toMatch(/const tracked = lines\(git\(\["ls-tree", "-r", "--name-only", head\]\)\)/);
+    expect(script).toMatch(
+      /usable\(lines\(git\(\["diff", "--name-only", "--diff-filter=d", from, head\]\)\), tracked\)/,
+    );
   });
 });

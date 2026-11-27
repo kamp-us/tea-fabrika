@@ -155,6 +155,7 @@ import type { PullRequests } from "./pr/PullRequests.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import type { Pushes } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
+import * as Sections from "./pr/Sections.ts";
 import {
   boxTree,
   boxTrees,
@@ -1598,7 +1599,7 @@ const handlers = (env: Env, started: readonly Phase[], path: string) => {
         }
 
         const { ask } = cmd;
-        const text = { title: `T${ask.ticket} ${ask.quest}: the quest's steps are running`, body: Publish.DRAFT_BODY };
+        const text = { title: `T${ask.ticket} ${ask.quest}: the quest's steps are running`, body: Sections.DRAFT_BODY };
 
         return yield* Publish.publish({
           dir: env.MAIN,

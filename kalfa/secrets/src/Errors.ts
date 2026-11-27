@@ -5,9 +5,11 @@
  * **Details**
  *
  * A cause may quote a value, as a store's own client does when it reports what it read. So each failure holds its cause as a
- * `Redacted`, which no rendering shows: a caller makes it with `Redacted.make(cause)`, and code that needs the cause reads it on
- * purpose, with `Redacted.value(error.cause)`. A cause that is not hidden does not compile.
+ * `Hidden.Cause`, a `Redacted` that no rendering shows and that every codec writes as `<redacted>`, `Schema.toCodecJson` included: a
+ * caller makes it with `Redacted.make(cause)`, and code that needs the cause reads it on purpose, with `Redacted.value(error.cause)`. A
+ * cause that is not hidden does not compile.
  */
+import * as Hidden from "@kalfa/diagnostics/Hidden";
 import { Schema } from "effect";
 import * as Name from "./Name.ts";
 
@@ -18,7 +20,7 @@ import * as Name from "./Name.ts";
  * @category errors
  */
 export class StoreFailed extends Schema.TaggedError<StoreFailed, { readonly brand: unique symbol }>()("StoreFailed", {
-  cause: Schema.Redacted(Schema.Defect()),
+  cause: Hidden.Cause,
 }) {}
 
 /**
@@ -28,7 +30,7 @@ export class StoreFailed extends Schema.TaggedError<StoreFailed, { readonly bran
  */
 export class RecordFailed extends Schema.TaggedError<RecordFailed, { readonly brand: unique symbol }>()(
   "RecordFailed",
-  { cause: Schema.Redacted(Schema.Defect()) },
+  { cause: Hidden.Cause },
 ) {}
 
 /**

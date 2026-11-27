@@ -36,7 +36,7 @@ const manifest = Effect.gen(function* () {
   return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest))(text);
 });
 
-const MODULES = ["Diagnostic", "Diagnostics", "TestDiagnostics"];
+const MODULES = ["Diagnostic", "Diagnostics", "Hidden", "TestDiagnostics"];
 
 // D10. Plant: export an `expectMessage` helper from TestDiagnostics.ts, and its exports are four.
 it("D10 scenario: TestDiagnostics exports the service, its Layer and the read, and no wording helper", () => {
@@ -44,7 +44,25 @@ it("D10 scenario: TestDiagnostics exports the service, its Layer and the read, a
   expect(Object.keys(TestDiagnostics).toSorted()).toEqual(["TestDiagnostics", "layer", "reported"]);
 });
 
-// D11. Plant: add a repo package to the dev dependencies, and the check on package names fails.
+/** The module could not be loaded: it is read here, inside the law that names it, so one missing file fails one law. */
+class ModuleMissing extends Schema.TaggedError<ModuleMissing, { readonly brand: unique symbol }>()("ModuleMissing", {
+  cause: Schema.Defect(),
+}) {}
+
+// D10, widened. Plant: export a third name from Hidden.ts, and it is in the failure.
+it.effect("D10 scenario: Hidden exports the cause schema and the placeholder text, and nothing else", () =>
+  Effect.gen(function* () {
+    // scenario: the module's own exports at head; no generated input says what a module exports.
+    const Hidden = yield* Effect.tryPromise({
+      try: () => import("./Hidden.ts"),
+      catch: (cause) => new ModuleMissing({ cause }),
+    });
+
+    expect(Object.keys(Hidden).toSorted()).toEqual(["Cause", "placeholder"]);
+  }),
+);
+
+// D11. Plant: add a repo package to the dev dependencies, and the check on package names fails; drop `./Hidden` from the exports, and it is missing from the failure.
 it.effect(
   "D11 scenario: the manifest names no repo package, has no dependencies, one peer, and the exports listed",
   () =>

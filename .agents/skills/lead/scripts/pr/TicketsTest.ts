@@ -6,8 +6,8 @@ import { Tickets, TicketsError } from "./Tickets.ts";
 /** One call the layer took, as the caller made it. */
 export const Post = Schema.TaggedUnion({
   list: {},
-  comment: { ticket: Schema.Number, body: Schema.String },
-  close: { ticket: Schema.Number },
+  comment: { ticket: Schema.Finite, body: Schema.String },
+  close: { ticket: Schema.Finite },
 });
 
 export type Post = typeof Post.Type;
@@ -26,7 +26,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<Tickets> => 
       w.posts.push(post);
       const reason = failing[name];
 
-      return reason === undefined ? Effect.void : Effect.fail(new TicketsError({ reason }));
+      return reason === undefined ? Effect.void : Effect.fail(TicketsError.make({ reason }));
     });
 
   return Layer.succeed(
