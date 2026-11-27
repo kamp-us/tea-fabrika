@@ -1,7 +1,7 @@
 /**
  * The one call Effect's `FileSystem` lacks: remove a folder only when it is empty. Node's `rmdir` does it in one system call, which the system refuses for a folder that holds anything, so a file another writer has put there since is never deleted.
  *
- * Effect's `FileSystem.remove` cannot do it: without `recursive` it refuses every folder, an empty one too, and with `recursive` it deletes what is inside. When Effect has the call, this file goes.
+ * Effect's `FileSystem.remove` cannot do it: without `recursive` it refuses every folder, an empty one too, and with `recursive` it deletes what is inside. Effect has been asked for the call (https://github.com/Effect-TS/effect/issues/10998); when it has it, this file goes.
  */
 import { Context, Effect, PlatformError, Predicate } from "effect";
 
