@@ -34,23 +34,27 @@ const logger = {
   isFatalEnabled: () => false,
 };
 
-// Edge (a Promise API, marked as `next/` marks one): the instrumenter loads on first use, so importing the package loads no Stryker
+// oxlint-disable-next-line fabrika/no-promises -- edge: the instrumenter loads on first use, so importing the package loads no Stryker
 const load = () => import("@stryker-mutator/instrumenter");
 
 /** Every mutant the instrumenter makes on `text`, none left out by a range, an ignorer or an exclusion. */
-const instrument = (file: string, text: string) =>
-  // Edge (a Promise API, marked as `next/` marks one): the instrumenter's own call returns a Promise
-  Effect.tryPromise({
+const instrument = Effect.fnUntraced(function* (file: string, text: string) {
+  // oxlint-disable-next-line fabrika/no-promises -- edge: the dynamic import answers a Promise
+  const { Instrumenter } = yield* Effect.tryPromise({ try: load, catch: stuck });
+
+  // oxlint-disable-next-line fabrika/no-promises -- edge: the instrumenter's own call returns a Promise
+  const { mutants } = yield* Effect.tryPromise({
     try: () =>
-      load().then(({ Instrumenter }) =>
-        new Instrumenter(logger).instrument([{ name: file, content: text, mutate: true }], {
-          plugins: null,
-          excludedMutations: [],
-          ignorers: [],
-        }),
-      ),
+      new Instrumenter(logger).instrument([{ name: file, content: text, mutate: true }], {
+        plugins: null,
+        excludedMutations: [],
+        ignorers: [],
+      }),
     catch: stuck,
-  }).pipe(Effect.map(({ mutants }) => mutants));
+  });
+
+  return mutants;
+});
 
 /**
  * The real `Mutants`, running Stryker with `root` as its working folder.

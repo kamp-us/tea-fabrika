@@ -20,7 +20,7 @@ type Needs = FileSystem.FileSystem | Path.Path | Mutants | Scope.Scope;
 const stuck = () => new Refused({ reason: "could_not_run", at: [] });
 
 /** The folder of the nearest `package.json` at or above `file`'s folder, or `root` when none is nearer. */
-const packageOf = (root: string, file: string): Effect.Effect<string, Refused, FileSystem.FileSystem | Path.Path> =>
+const packageFolder = (root: string, file: string): Effect.Effect<string, Refused, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -43,7 +43,9 @@ const packageOf = (root: string, file: string): Effect.Effect<string, Refused, F
  */
 const checkPackages = (settings: Settings, root: string, file: string, law: string) =>
   Effect.gen(function* () {
-    const [target, tests] = yield* Effect.all([packageOf(root, file), packageOf(root, law)], { concurrency: 1 });
+    const [target, tests] = yield* Effect.all([packageFolder(root, file), packageFolder(root, law)], {
+      concurrency: 1,
+    });
 
     if (target !== tests && !settings.inPlace) {
       return yield* new Refused({ reason: "needs_in_place", at: [] });
