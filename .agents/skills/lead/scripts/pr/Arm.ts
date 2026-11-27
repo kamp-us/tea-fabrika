@@ -353,7 +353,7 @@ const proofNote = "automatic ready and queue CI provide the required checks";
 
 /** The line a head with no full run of its own is armed with (a pull request that needs no review has merge when ready on, and main's full run catches what slips). */
 const unrunNote = (seen: string, oid: string, docs: boolean): string =>
-  `no full run at ${oid.slice(0, 12)}${seen}; arming as the arm-every-reviewed-pull-request rule allows (${
+  `no full run at ${oid.slice(0, 12)}${seen}; arming as a pull request that needs no review allows (${
     docs ? "a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run" : proofNote
   })`;
 

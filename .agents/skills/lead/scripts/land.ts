@@ -79,7 +79,7 @@
 //     The words go through the leak grep first. Reads the statuses back and refuses unless the head reads as approved. It prints one line.
 //     The merge gate reads this record: a pull request that changes a path that needs a review (next/, kalfa/, a root config file) is refused
 //     by every path until its head holds one, and a rebase drops the old head from the history, so a rebased pull request needs a fresh record
-//     (a merge of main carries, a rebase never does).
+//     (a merge of main carries; a rebase that rewrites the reviewed head never carries).
 //
 //   land.ts arm <pr>
 //     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; a pull request that changes no path needing a review has merge when ready on, and main's full run catches what slips, while one that does is queued with `land.ts queue`, never armed; pr/Arm.ts): runs the merge gate
