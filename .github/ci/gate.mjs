@@ -234,9 +234,10 @@ export const read = async (env, io = {}) => {
 
   let tested = false;
 
-  // A hand start always starts, so it asks nothing about the head. Its full runs that did not end
-  // `cancelled` count: one that ended `success` tests it, and two that did not end `cancelled` do too.
+  // A hand start always starts, so it asks nothing about the head.
   if (event !== "workflow_dispatch") {
+    // A head's full runs that did not end `cancelled` count: one that ended `success` tests it, and
+    // two that did not end `cancelled` do too.
     let counted = 0;
 
     for (const run of await runs(`&head_sha=${encodeURIComponent(head)}`)) {

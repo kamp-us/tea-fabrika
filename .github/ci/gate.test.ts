@@ -1035,6 +1035,8 @@ const answerAt = (event: Event, list: readonly ReturnType<typeof onHead>[]) => {
 };
 
 it("G9a property: one red full run on main's head does not test it, so a tick starts the run again, with skipped and gate-failed runs beside it", async () => {
+  // Plant, after build, on gate.mjs and restored: `counted >= 1` in place of `counted >= 2`, the old rule that one
+  // red full run tests the head (red: G9a, G9d and G3 fail, since a head with one red run is skipped as tested).
   await fc.assert(
     fc.asyncProperty(
       fc.constantFrom<Event>("push", "schedule"),
@@ -1052,6 +1054,8 @@ it("G9a property: one red full run on main's head does not test it, so a tick st
 });
 
 it("G9b property: two or more full runs on main's head that did not end canceled test it, so a tick skips", async () => {
+  // Plants, after build, each on gate.mjs and restored: `counted >= 3` in place of `counted >= 2` (red: G9b alone
+  // fails); and the two-run path dropped, so only a green run tests the head (red: G9b alone fails).
   await fc.assert(
     fc.asyncProperty(
       fc.constantFrom<Event>("push", "schedule"),
@@ -1071,6 +1075,8 @@ it("G9b property: two or more full runs on main's head that did not end canceled
 });
 
 it("G9c property: one green full run on main's head tests it, so a tick skips, whatever else sits on the head", async () => {
+  // Plant, after build, on gate.mjs and restored: the `success` path dropped, so a green run no longer tests the head
+  // (red: G9c and G3 fail, since one green run starts the run again).
   await fc.assert(
     fc.asyncProperty(
       fc.constantFrom<Event>("push", "schedule"),
@@ -1088,6 +1094,8 @@ it("G9c property: one green full run on main's head tests it, so a tick skips, w
 });
 
 it("G9d property: a canceled full run on main's head neither tests it nor counts toward two, so with no green run one red run beside canceled ones still starts the run again", async () => {
+  // Plant, after build, on gate.mjs and restored: the `cancelled` filter dropped, so a canceled run counts toward two
+  // (red: G9d alone fails, since a red run beside a canceled one is skipped as tested).
   await fc.assert(
     fc.asyncProperty(
       fc.constantFrom<Event>("push", "schedule"),
