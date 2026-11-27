@@ -3,6 +3,7 @@
 // in-memory LandLogTest layer and the test clock, except the ones that need a folder that can refuse a file (L4 j, L10) or that
 // check a read leaves a folder alone (L14), which run on a real temp folder. The real-signal law (L16) is in
 // Recorded.integration.test.ts.
+import { spawnSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
@@ -684,14 +685,47 @@ describe("attempts: a record's lines are read into one attempt each, paired by `
   );
 });
 
+describe("pidExists: asking whether a process exists sends no signal", () => {
+  // Plant: the catch answers false (red: another user's process, whose pid the system answers EPERM for, reads as gone).
+  // A scenario, since the claim is about the real system: this process, one that is not ours and one that has ended.
+  it.effect(
+    "L9 scenario: pidExists is true for this process and for one that is another's (EPERM), and false for a child that ended",
+    () =>
+      Effect.gen(function* () {
+        expect(yield* Recorded.pidExists(process.pid)).toBe(true);
+        // The first process of the system: ours to ask about, not to signal.
+        expect(yield* Recorded.pidExists(1)).toBe(true);
+
+        // A child that has run and been waited for: its pid is no process any more.
+        const ended = yield* Effect.fromOption(Option.fromNullishOr(spawnSync(process.execPath, ["-e", ""]).pid));
+        expect(yield* Recorded.pidExists(ended)).toBe(false);
+      }),
+  );
+});
+
 // ---------------------------------------------------------------- L10, L11: where the lines go
 
 describe("around: each key's lines go to its own file, and a key that cannot be written to never stops the others", () => {
-  const Names = Schema.Literals(["t2344", "land-record", "a.b-c_d", "7", "A"]);
+  const Names = Schema.Literals(["t2344", "land-record", "a.b-c_d", "t7", "A"]);
 
   // Names that are no plain name: a slash, `..`, a leading dot, nothing at all, a space. `a/../../escape` walks out of
   // `runs/land` through a folder that exists (made below), which the others cannot.
-  const Bad = Schema.Literals(["a/../../escape", "../x", ".hidden", "", "a/b", "/abs", "-x", "x y", "..", "."]);
+  // An all-digit name is none either: `land.ts last` reads digits as a pull request, so a quest so named could be written and never read.
+  const Bad = Schema.Literals([
+    "a/../../escape",
+    "../x",
+    ".hidden",
+    "",
+    "a/b",
+    "/abs",
+    "-x",
+    "x y",
+    "..",
+    ".",
+    "7",
+    "2351",
+    "007",
+  ]);
 
   // Plant: delete the name check (red: a file lands outside the folder).
   it.effect.prop(

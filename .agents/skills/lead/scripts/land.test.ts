@@ -139,6 +139,8 @@ type World = {
   readonly settings?: Readonly<Record<string, string>>;
   /** `runs` in the main checkout is a file, so no record can be made under `runs/land`. */
   readonly blockRecord?: boolean;
+  /** The final command's boxes folder is under a plain file, so `ready` cannot make `state` there: a failure that is no refusal. */
+  readonly boxesUnderFile?: boolean;
   /** A second command, run right after `command` in the same checkout: it reads what the first left. */
   readonly afterwards?: ReadonlyArray<string>;
 };
@@ -397,10 +399,21 @@ const land = (world: World) => {
 
     const before = [git(quest, "rev-parse", "HEAD"), git(quest, "rev-parse", "refs/notes/fabrika")];
 
-    const ran = spawnSync(process.execPath, [script, ...(world.command ?? ["run", "t652f", "652"])], {
+    if (world.boxesUnderFile) {
+      writeFileSync(join(dir, "plain"), "a file, not a folder");
+    }
+
+    // `{tree}` in an argument is the quest's checkout.
+    const args = (world.command ?? ["run", "t652f", "652"]).map((arg) => arg.replace("{tree}", quest));
+
+    const ran = spawnSync(process.execPath, [script, ...args], {
       cwd: quest,
       encoding: "utf8",
-      env: { ...env, ...world.settings },
+      env: {
+        ...env,
+        ...(world.boxesUnderFile ? { BOXES: join(dir, "plain", "boxes") } : {}),
+        ...world.settings,
+      },
       timeout: 60_000,
     });
 
@@ -982,11 +995,37 @@ describe("land.ts leaves a start and an end line for every command (the land rec
     readonly name: string;
     readonly world: World;
     readonly code: number;
-    readonly ends: "done" | "refused";
+    readonly ends: "done" | "refused" | "failed";
+    /** The record's file the command's own lines are in. */
+    readonly file: string;
+    /** For a refusal, the check it says. */
+    readonly check?: string;
   }> = [
-    { name: "a refusal", world: { ...fine, state: "CLOSED", command: ["check", "77"] }, code: 1, ends: "refused" },
-    { name: "a success", world: { ...fine, command: ["wait", "77"] }, code: 0, ends: "done" },
-    { name: "a missing ready file", world: { ...fine, command: ["run", "nope", "1"] }, code: 1, ends: "refused" },
+    {
+      name: "a refusal",
+      world: { ...fine, state: "CLOSED", command: ["check", "77"] },
+      code: 1,
+      ends: "refused",
+      file: "77.jsonl",
+      check: "body",
+    },
+    { name: "a success", world: { ...fine, command: ["wait", "77"] }, code: 0, ends: "done", file: "77.jsonl" },
+    {
+      name: "a missing ready file",
+      world: { ...fine, command: ["run", "nope", "1"] },
+      code: 1,
+      ends: "refused",
+      file: "quest-nope.jsonl",
+      check: "ready",
+    },
+    // A failure that is no refusal: `ready` writes its state folder with no mapping to a refusal, so it ends as a plain failure.
+    {
+      name: "a failure that is no refusal",
+      world: { ...fine, boxesUnderFile: true, command: ["ready", "t652f", "--tree", "{tree}"] },
+      code: 1,
+      ends: "failed",
+      file: "quest-t652f.jsonl",
+    },
   ];
 
   for (const row of ENDED) {
@@ -995,8 +1034,21 @@ describe("land.ts leaves a start and an end line for every command (the land rec
       const blocked = land({ ...row.world, blockRecord: true });
 
       expect(normal.code, normal.err).toBe(row.code);
-      const file = Object.keys(normal.landed).find((name) => name !== "quest-t652f.jsonl") ?? "";
-      expect(normal.landed[file]?.at(-1)?._tag).toBe(row.ends);
+      const end = normal.landed[row.file]?.at(-1);
+      expect(end?._tag).toBe(row.ends);
+
+      if (row.ends === "refused") {
+        // The record says the check and the reason stderr says.
+        expect(end?.check).toBe(row.check);
+        expect(end?.reason).toBeTruthy();
+        expect(normal.err).toContain(`land: refused at the ${end?.check} check: ${end?.reason}`);
+      }
+
+      if (row.ends === "failed") {
+        expect(end?.reason).toBeTruthy();
+        // A failure that is no refusal is never read as one: stderr names no refusal, as before.
+        expect(normal.err).not.toContain("land: refused at the");
+      }
 
       // The same exit and the same output, and one more line on stderr that says the record is down.
       expect(blocked.code, blocked.err).toBe(normal.code);
