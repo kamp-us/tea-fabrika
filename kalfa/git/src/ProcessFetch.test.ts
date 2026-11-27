@@ -69,6 +69,8 @@ interface World {
   readonly fetch: Reply;
   /** What `for-each-ref` prints in the fresh directory. */
   readonly refs: string;
+  /** What the first question prints, when it is not the four plain lines. */
+  readonly probe?: string;
 }
 
 const GOOD: World = {
@@ -92,7 +94,10 @@ const script =
         return world.config;
       case "rev-parse":
         if (call.rest.includes("--show-object-format")) {
-          return { code: 0, stdout: `${world.repositoryShallow}\nsha1\n${GIT_DIR}\n${OBJECTS}\n` };
+          return {
+            code: 0,
+            stdout: world.probe ?? `${world.repositoryShallow}\nsha1\n${GIT_DIR}\n${OBJECTS}\n`,
+          };
         }
 
         return { code: 0, stdout: gitDirectory(call).endsWith("fetch.git") ? `${world.fetchedShallow}\n` : ".\n" };
@@ -421,6 +426,42 @@ it.effect(
           `${label}: no pack is renamed`,
         ).toEqual([]);
         expect(events.at(-1)?.op, `${label}: the folder is removed last`).toBe("remove");
+      }
+    }),
+);
+
+// Plant (F10c): drop the check of an empty git directory line, of an empty object folder line, of a hash format other than sha1 and sha256, of a
+// shallow answer other than true and false, of a missing last newline, or of a fifth line.
+it.effect(
+  "F10c scenario: a first question that git answers in another form fails GitUnavailable, makes no folder and runs no transfer",
+  () =>
+    Effect.gen(function* () {
+      const forms: ReadonlyArray<readonly [string, string]> = [
+        ["an empty git directory", `false\nsha1\n\n${OBJECTS}\n`],
+        ["an empty object folder", `false\nsha1\n${GIT_DIR}\n\n`],
+        ["a shallow word that is no answer", `maybe\nsha1\n${GIT_DIR}\n${OBJECTS}\n`],
+        ["a hash format of another name", `false\nmd5\n${GIT_DIR}\n${OBJECTS}\n`],
+        ["no last newline", `false\nsha1\n${GIT_DIR}\n${OBJECTS}`],
+        ["a fifth line", `false\nsha1\n${GIT_DIR}\n${OBJECTS}\nmore\n`],
+        ["a blank line and then more", `false\nsha1\n${GIT_DIR}\n${OBJECTS}\n\nmore\n`],
+        ["three lines", `false\nsha1\n${GIT_DIR}\n`],
+        ["nothing", ""],
+      ];
+
+      for (const [label, probe] of forms) {
+        const opened = yield* open({ ...GOOD, probe }, "removes");
+        const result = yield* ask(opened.repo);
+        expect(Result.isFailure(result), `${label}: the call fails`).toBe(true);
+
+        if (Result.isFailure(result)) {
+          expect(Schema.is(Repository.GitUnavailable)(result.failure), `${label}: GitUnavailable`).toBe(true);
+        }
+
+        expect(
+          (yield* opened.stand.calls).slice(2).map((call) => call.verb),
+          `${label}: no transfer`,
+        ).toEqual(["config", "rev-parse"]);
+        expect(yield* opened.disk.events, `${label}: no folder was made`).toEqual([]);
       }
     }),
 );

@@ -51,6 +51,7 @@ import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import { settings, type SuiteOptions } from "./RepositoryTest.ts";
 import type * as Settings from "./Settings.ts";
+import * as Tree from "./Tree.ts";
 
 // ---------------------------------------------------------------------------------------------------------
 // What a runner gives
@@ -502,6 +503,19 @@ const readBack = (
         const here = yield* seeded.repository.readCommit(id);
         const there = yield* seeded.remote.readCommit(id);
         expect(encodeCommit(here), `${place}: commit ${index} reads back as the remote's`).toEqual(encodeCommit(there));
+
+        // The files come with the commit: each path reads the remote's bytes, or fails as the remote's read does.
+        for (const file of scenario.remote.nodes[index]?.files ?? []) {
+          const path = Schema.decodeUnknownSync(Tree.Path)(file.path);
+          const mine = yield* Effect.result(seeded.repository.readFile(id, path));
+          const theirs = yield* Effect.result(seeded.remote.readFile(id, path));
+
+          expect(Result.isSuccess(mine), `${place}: commit ${index} reads ${file.path}`).toBe(Result.isSuccess(theirs));
+
+          if (Result.isSuccess(mine) && Result.isSuccess(theirs)) {
+            expect(mine.success, `${place}: commit ${index}, the bytes of ${file.path}`).toEqual(theirs.success);
+          }
+        }
       }),
     { concurrency: 1 },
   );
@@ -605,7 +619,8 @@ export const suite = (name: string, subject: FetchSubject, options: SuiteOptions
   describe(`${name}: the laws of fetch`, () => {
     // Plant: read the answer by text prefix (`startsWith(under)`), so `<under>-2` is answered, F1 red; fetch only `<under>/*`, so the exact ref is
     // missing, red; fetch only under `refs/heads/`, so the candidate ref is missing, red; fetch only the exact ref, so a folder is missing, red;
-    // answer only the refs whose commit was new to this repository, red.
+    // answer only the refs whose commit was new to this repository, red; copy the commits and not their trees or blobs in memory, so a file does not
+    // read, red.
     it.effect.prop(
       "F1 the answer: for (a) to (d), (f), (h) and (j), the answer equals the model of the remote's refs at and below under, sorted by UTF-8 bytes, and each answered commit and every commit it reaches reads back equal to the remote's; the carrier reached every class",
       { texture: textureArb },
