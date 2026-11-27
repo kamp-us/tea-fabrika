@@ -71,13 +71,16 @@ export TEST_LIMIT
 cat > vitest.mutation.config.ts <<'TS'
 import {testConfig as base} from "./vitest.config.ts";
 import {defineConfig} from "vitest/config";
+import {existsSync} from "node:fs";
 const include = process.env.RELATED?.split(",").map(p => p.trim()).filter(Boolean);
 if (!include?.length) throw new Error("RELATED must list the test paths");
 const limit = Number(process.env.TEST_LIMIT || 10_000);
 const names = process.env.TEST_NAMES;
 // outside.setup.ts: a lint rule's own test runs oxlint in another process, so the setup hands that process the active mutant
 // and covers the rule's mutants for the test (outside.ts, ticket 1314).
-const setupFiles = [...(base.test?.setupFiles ?? []), "./.agents/skills/mutation/scripts/outside.setup.ts"];
+// A toy repo (the run tests' own) has no such file, so it is added only where it sits beside this config.
+const outside = "./.agents/skills/mutation/scripts/outside.setup.ts";
+const setupFiles = [...(base.test?.setupFiles ?? []), ...(existsSync(new URL(outside, import.meta.url)) ? [outside] : [])];
 export default defineConfig({...base, test: {...base.test, include, setupFiles, maxWorkers: 1,
   ...(names ? {testNamePattern: names} : {}),
   testTimeout: limit, hookTimeout: limit,
