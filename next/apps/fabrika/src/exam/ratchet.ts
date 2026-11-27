@@ -10,7 +10,8 @@
 //   next-ledger.json, agents-ledger.json   file, rule and code (oxlint-plugins/ledger.ts), counted
 //   unreachable-ledger.json                scope, kind and id (code-graph's findingKey)
 //   .agents/tsconfig.json                  each `exclude` path: the lead files `pnpm typecheck` does not check yet (ticket 2358).
-//                                          A base with no `exclude` holds no list yet, so the change that writes the first one sets its start.
+//                                          A base whose `include` lacks the lead glob holds no list yet, so the change that adds the glob and the first rows sets
+//                                          its start; a head without the glob, or with another `extends`, is not a list.
 //
 // It prints one JSON line per list, and a GitHub annotation for each list that grew. Exit 1 when a
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
@@ -51,9 +52,18 @@ const DeadRows = Schema.fromJsonString(
 // A tsconfig is JSON with `//` comments. The lead's `exclude` list keeps one on the line above each path, so the reader
 // drops whole-line comments and reads the rest as JSON. A comment after a value does not parse, and a file that does
 // not parse is `not_a_list`: it fails closed.
-const TsconfigExclude = Schema.fromJsonString(
-  Schema.Struct({ exclude: Schema.optionalKey(Schema.Array(Schema.String)) }),
+const Tsconfig = Schema.fromJsonString(
+  Schema.Struct({
+    extends: Schema.optionalKey(Schema.String),
+    include: Schema.optionalKey(Schema.Array(Schema.String)),
+    exclude: Schema.optionalKey(Schema.Array(Schema.String)),
+  }),
 );
+
+/** The glob that puts every lead file under test, and the one config the tsconfig may extend. The list means nothing without both. */
+const LEAD_GLOB = "skills/**/*.ts";
+
+const LEAD_EXTENDS = "../tsconfig.base.json";
 
 const withoutComments = (text: string) =>
   pipe(
@@ -78,19 +88,28 @@ const deadKeys = (text: string, _renames?: Renames) =>
     Effect.map(({ entries }) => Arr.map(entries, (row) => JSON.stringify([row.scope, row.kind, row.id]))),
   );
 
-/** A tsconfig's `exclude` as written: absent when the file has none. */
-const readExclude = (text: string) =>
-  Schema.decodeEffect(TsconfigExclude)(withoutComments(text)).pipe(Effect.map(({ exclude }) => exclude));
+class NotTheLeadList extends Schema.TaggedError<NotTheLeadList, { readonly brand: unique symbol }>()("NotTheLeadList", {
+  reason: Schema.String,
+}) {}
+
+/** A tsconfig as written, whatever its `include`: the reader of a base from before the glob. */
+const readTsconfig = (text: string) => Schema.decodeEffect(Tsconfig)(withoutComments(text));
 
 /**
- * The keys of a tsconfig's `exclude`: each path from the top of the repo, so a rename git saw keeps its row. `folder`
- * is the tsconfig's own folder, which the paths in it are written from.
+ * The keys of the lead tsconfig's `exclude`: each path from the top of the repo, so a rename git saw keeps its row.
+ * `folder` is the tsconfig's own folder, which the paths in it are written from. A file that keeps its list somewhere
+ * the ratchet does not read it is no list: `include` must hold the glob, and `extends` must be the one base config,
+ * since `exclude` in another file, or `include` narrowed to some skills, would read as an empty list.
  */
 const excludeKeys =
   (folder: string) =>
   (text: string, renames: Renames = new Map()) =>
-    readExclude(text).pipe(
-      Effect.map((exclude = []) =>
+    readTsconfig(text).pipe(
+      Effect.filterOrFail(
+        ({ extends: base, include = [] }) => base === LEAD_EXTENDS && Arr.contains(include, LEAD_GLOB),
+        () => NotTheLeadList.make({ reason: "include lacks the glob, or extends is not the base config" }),
+      ),
+      Effect.map(({ exclude = [] }) =>
         Arr.map(exclude, (file) => {
           const path = `${folder}/${file}`;
 
@@ -99,17 +118,20 @@ const excludeKeys =
       ),
     );
 
-/** A tsconfig that has no `exclude` yet holds no list, so the change that writes the first one sets its start. */
-const noExclude = (text: string) =>
-  readExclude(text).pipe(
-    Effect.map((exclude) => exclude === undefined),
+/** A tsconfig whose `include` has no glob yet holds no list, so the change that writes the first one sets its start. */
+const beforeGlob = (text: string) =>
+  readTsconfig(text).pipe(
+    Effect.map(({ include = [] }) => !Arr.contains(include, LEAD_GLOB)),
     Effect.orElseSucceed(() => false),
   );
 
 /** One list file, and the key its own reader matches a row on. */
 interface List {
   readonly file: string;
-  readonly keys: typeof lintKeys;
+  readonly keys: (
+    text: string,
+    renames?: Renames,
+  ) => Effect.Effect<ReadonlyArray<string>, Schema.SchemaError | NotTheLeadList>;
   /** Whether a base's text holds no list yet. Such a base counts nothing as added: the head's rows are the start. */
   readonly unstarted?: (text: string) => Effect.Effect<boolean>;
 }
@@ -119,7 +141,7 @@ export const LISTS: ReadonlyArray<List> = [
   { file: "next-ledger.json", keys: lintKeys },
   { file: "agents-ledger.json", keys: lintKeys },
   { file: "unreachable-ledger.json", keys: deadKeys },
-  { file: ".agents/tsconfig.json", keys: excludeKeys(".agents"), unstarted: noExclude },
+  { file: ".agents/tsconfig.json", keys: excludeKeys(".agents"), unstarted: beforeGlob },
 ];
 
 /** The keys `head` holds beyond `base`, counted, in head order: one more copy of a key is added. */

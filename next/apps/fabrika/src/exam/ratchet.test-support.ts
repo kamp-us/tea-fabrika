@@ -13,6 +13,7 @@ export const tsconfigText = (paths: ReadonlyArray<string>, note = "why it fails"
   [
     "{",
     "  // the file's own comments, which the reader drops",
+    '  "extends": "../tsconfig.base.json",',
     '  "include": ["raw.d.ts", "skills/**/*.ts"],',
     '  "exclude": [',
     ...paths.map((path, i) => `    // ${note}\n    ${JSON.stringify(path)}${i < paths.length - 1 ? "," : ""}`),
@@ -23,3 +24,7 @@ export const tsconfigText = (paths: ReadonlyArray<string>, note = "why it fails"
 
 /** The key the ratchet gives an `exclude` path of `.agents/tsconfig.json`. */
 export const excludeKey = (path: string) => JSON.stringify([`.agents/${path}`]);
+
+/** The lead's tsconfig as the ratchet wants it, with some fields replaced: `include` and `extends` are what it checks. */
+export const leadConfig = (fields: object = {}) =>
+  JSON.stringify({ extends: "../tsconfig.base.json", include: ["raw.d.ts", "skills/**/*.ts"], ...fields });

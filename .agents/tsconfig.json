@@ -8,7 +8,8 @@
   // `next/apps/fabrika/src/exam/ratchet.ts` fails CI on a line added to it (ticket 2358). When you fix a file, delete
   // its line. To pass a new file, fix the file; do not add it to the list.
   // The ratchet reads this file after stripping whole-line `//` comments and nothing else, so keep every comment on
-  // its own line, never after a value.
+  // its own line, never after a value. It also refuses a file whose `include` lacks `skills/**/*.ts` or whose `extends`
+  // is not `../tsconfig.base.json`, since the list would then be somewhere it does not read.
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "plugins": [
@@ -119,7 +120,8 @@
     // TS2769 x2
     "skills/plan/scripts/plancheck.test.ts",
     //
-    // Clean itself, but imports a file above, and tsc reports an imported file's errors in whichever file imports it.
+    // Clean itself, but imports a file above. tsc checks an excluded file once a root file imports it, and reports its
+    // errors at that file's own path, so the importer has to be left out too.
     // Delete its line once the file it names is fixed.
     // imports boxfiles.ts
     "skills/lead/scripts/boxfiles.test.ts",
@@ -133,7 +135,7 @@
     "skills/lead/scripts/pr/Gate.test.ts",
     // imports replay.ts
     "skills/lead/scripts/replay.test.ts",
-    // imports depth.ts, vitest.config.ts
+    // imports depth.ts
     "skills/mutation/scripts/depth.config.ts",
     // imports depth.ts
     "skills/mutation/scripts/depth.test.ts",

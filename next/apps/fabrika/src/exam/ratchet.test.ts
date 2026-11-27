@@ -4,7 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Array as Arr, Effect, Exit } from "effect";
 import * as fc from "fast-check";
-import { excludeKey, ROWS, text, tsconfigText } from "./ratchet.test-support.ts";
+import { excludeKey, leadConfig, ROWS, text, tsconfigText } from "./ratchet.test-support.ts";
 
 import { added, judge, LISTS } from "./ratchet.ts";
 
@@ -201,7 +201,8 @@ describe("a renamed file keeps its rows (L5)", () => {
 // That list is a list file like the ledgers, so it only shrinks. Its text is JSON with `//` comment lines, and a path in
 // it is read from `.agents/`. Plants, each run once on ratchet.ts and restored: renames not read (red: the rename law);
 // comments not dropped (red: all three laws); the `.agents/` folder left off a path (red: all three laws); a base with
-// no `exclude` not read as the start (red: the scenario law).
+// no `exclude` key read as the start, in place of one with no glob (red: the first scenario law); a head's `include`
+// glob or `extends` not required (red: the second scenario law, once for each).
 describe("the lead's tsconfig exclude list only shrinks (L6)", () => {
   const path = fc.stringMatching(/^[a-z]{1,6}(\/[a-z]{1,6}){0,2}\.ts$/);
 
@@ -262,32 +263,48 @@ describe("the lead's tsconfig exclude list only shrinks (L6)", () => {
     );
   });
 
-  it("L6 scenario: no exclude key is an empty list, and a base with none starts the list; a file that is not JSON, or has a comment after a value, is not a list", () => {
+  it("L6 scenario: no exclude key is an empty list, and a base from before the glob starts the list; a base with the glob does not", () => {
     const base = tsconfigText(["a.ts"]);
-    expect(answer(TSCONFIG, base, '{ "include": [] }')).toEqual({ _tag: "done", file: TSCONFIG.file });
-    // The change that writes the first list sets its start; a head that does not read is still refused, and so is a growing list after.
-    expect(answer(TSCONFIG, '{ "include": [] }', base)).toEqual({ _tag: "done", file: TSCONFIG.file });
-    expect(answer(TSCONFIG, '{ "include": [] }', "{ not json")).toEqual({
-      _tag: "stuck",
-      file: TSCONFIG.file,
-      reason: "not_a_list",
-      rows: [],
-    });
-    expect(answer(TSCONFIG, '{ "include": [], "exclude": [] }', base)).toEqual({
+    const done = { _tag: "done", file: TSCONFIG.file };
+    expect(answer(TSCONFIG, base, leadConfig())).toEqual(done);
+    expect(answer(TSCONFIG, base, null)).toEqual(done);
+    expect(answer(TSCONFIG, null, base)).toEqual({
       _tag: "stuck",
       file: TSCONFIG.file,
       reason: "row_added",
       rows: [excludeKey("a.ts")],
     });
-    expect(answer(TSCONFIG, base, null)).toEqual({ _tag: "done", file: TSCONFIG.file });
-    expect(answer(TSCONFIG, null, tsconfigText(["a.ts"]))).toEqual({
+    // Before the glob there is no list to hold: the change that adds the glob and the first rows sets the start.
+    expect(answer(TSCONFIG, leadConfig({ include: ["raw.d.ts", "skills/lead/a.ts"] }), base)).toEqual(done);
+    // After it, a base with no `exclude` key is an empty list, so rows added later are added.
+    expect(answer(TSCONFIG, leadConfig(), base)).toEqual({
       _tag: "stuck",
       file: TSCONFIG.file,
       reason: "row_added",
       rows: [excludeKey("a.ts")],
     });
+  });
 
-    for (const head of ["{ not json", '{ "exclude": [ "a.ts" ] } // after a value', '{ "exclude": [1] }']) {
+  it("L6 scenario: a head with no glob in include, or another extends, is not a list, whatever its base", () => {
+    const base = tsconfigText(["a.ts"]);
+    const refused = { _tag: "stuck", file: TSCONFIG.file, reason: "not_a_list", rows: [] };
+
+    for (const head of [
+      leadConfig({ include: ["raw.d.ts", "skills/lead/**/*.ts"] }),
+      leadConfig({ include: [] }),
+      JSON.stringify({ extends: "../tsconfig.base.json", exclude: [] }),
+      leadConfig({ extends: "./tsconfig.lead.json" }),
+      JSON.stringify({ include: ["skills/**/*.ts"] }),
+    ]) {
+      expect(answer(TSCONFIG, base, head)).toEqual(refused);
+      expect(answer(TSCONFIG, leadConfig({ include: ["raw.d.ts"] }), head)).toEqual(refused);
+    }
+  });
+
+  it("L6 scenario: a file that is not JSON, has a comment after a value or lists a number is not a list; a base that does not read fails", () => {
+    const base = tsconfigText(["a.ts"]);
+
+    for (const head of ["{ not json", `${leadConfig()} // after a value`, leadConfig({ exclude: [1] })]) {
       expect(answer(TSCONFIG, base, head)).toEqual({
         _tag: "stuck",
         file: TSCONFIG.file,
