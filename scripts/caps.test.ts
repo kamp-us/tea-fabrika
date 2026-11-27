@@ -715,9 +715,6 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
           try {
             mkdirSync(join(dir, "scripts"));
             writeFileSync(join(dir, "scripts/vitest.setup.ts"), "process.env.FABRIKA_HOME = process.env.TEST_HOME;\n");
-            // run.sh adds outside.setup.ts (ticket 1314) to the setup files; the probe imports each one from `dir`.
-            mkdirSync(join(dir, ".agents/skills/mutation/scripts"), { recursive: true });
-            writeFileSync(join(dir, ".agents/skills/mutation/scripts/outside.setup.ts"), "");
             const source = readFileSync(join(root, ".agents/skills/mutation/scripts/run.sh"), "utf8")
               .split("<<'TS'\n")[1]
               ?.split("\nTS\n")[0];
