@@ -1,7 +1,7 @@
 // Sections: whether a pull request's description is a real one, written by the pr skill, and not the
 // placeholder a draft opens with. The pr skill's template has three sections, `## Summary`,
 // `## Evidence` and `## Merge Danger`, and a description missing one is refused with its name.
-// Queue.body reads it before the queue is asked (so `land.ts check` and `land.ts queue` agree), and
+// The merge gate (Gate.ts) reads it before any path asks GitHub (so `land.ts check` and every merge path agree), and
 // Publish writes the placeholder it refuses, so the writer and the check share one sentence. Pure.
 // Today's lead tooling, run on our own laptop. Read through its module: `Sections.refusal(...)`.
 import { Array as Arr, Option, String as Str, pipe } from "effect";

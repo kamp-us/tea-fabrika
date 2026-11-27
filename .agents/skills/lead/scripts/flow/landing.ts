@@ -9,7 +9,7 @@
 //   bot-push    act     botpush.mjs: the branch and the step notes, as the bot
 //   open-pr     act     gh: finds the branch's open pull request, or opens one
 //   ci          listen  gh pr checks --watch: waits for CI; red is stuck
-//   queue       act     pr/Queue.ts: the leak checks, ci-required green, then one pinned squash that adds
+//   queue       act     pr/Queue.ts: the merge gate (pr/Gate.ts), ci-required green, then one pinned squash that adds
 //                       the pull request to GitHub's merge queue; it ends queued, not merged (a `lead` step)
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
@@ -26,6 +26,7 @@ import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
 import { LeakGrepRefused, Pushes } from "../pr/Pushes.ts";
 import * as PushesProcess from "../pr/PushesProcess.ts";
 import * as Queue from "../pr/Queue.ts";
+import * as SignaturesGit from "../pr/SignaturesGit.ts";
 import * as TicketsCli from "../pr/TicketsCli.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
@@ -221,6 +222,8 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
         Effect.provideServiceEffect(Checks, ChecksGh.make(repo)),
         // The body check reads the tracker's open tickets (a `fabrika close ticket` line must name one); the worktree holds the app that asks it, and the home is env.sh's.
         Effect.provide(TicketsCli.layer(dir, TicketsCli.defaultHome())),
+        // The gate also reads each commit's signature, from the worktree.
+        Effect.provide(SignaturesGit.layer),
         Effect.match({ onFailure: queueRefused, onSuccess: (added) => Outcome.done(Queue.line(added)) }),
       ),
     );

@@ -17,6 +17,8 @@ import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
 import * as Sections from "./Sections.ts";
+import * as SignaturesTest from "./SignaturesTest.ts";
+import * as TicketsTest from "./TicketsTest.ts";
 
 const oid = "e42d1dce6a74f4ccb246ed19b4db04ad72c0d899";
 
@@ -160,6 +162,8 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
       ),
     ).pipe(Layer.provide(RunsTest.layer(actions))),
     ChecksTest.layer([], red.log),
+    SignaturesTest.layer(),
+    TicketsTest.layer(TicketsTest.world()),
   );
 
   for (const run of w.automatic ?? []) {

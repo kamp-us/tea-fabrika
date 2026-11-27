@@ -4,7 +4,8 @@
 //
 //   queue   as Queue.add: open, ready, into main -> the leak gate -> ci-required green -> one
 //           pinned squash, which adds it to the merge queue
-//   admin   open, ready, into main, no `Plan:` title, not a `can/` branch -> the leak gate -> ci-required
+//   admin   the merge gate passes (./Gate.ts, which every merge path asks first: open, ready, into main, no `Plan:` title, not a `can/` branch, the leak
+//           gate, the description, each close-ticket line, every commit signed) -> ci-required
 //           completed and green at the head, for every admin merge; a draft is marked ready first, and
 //           with `wait` the check is given that long to appear and end (`land.ts admin`) -> the head has
 //           not moved since it was read -> for a sev fix, also origin/main's head in its history -> one
@@ -21,9 +22,8 @@
 // code, and merged past a hit (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json).
 // Read through its module: `Merge.merge(...)`.
 import { Array as Arr, Duration, Effect, Option, Schedule, Schema } from "effect";
-import * as Arm from "./Arm.ts";
 import { Branches } from "./Branches.ts";
-import * as Leaks from "./Leaks.ts";
+import * as Gate from "./Gate.ts";
 import { PullRequests, PullRequestsError, type QueueEntry } from "./PullRequests.ts";
 import * as Queue from "./Queue.ts";
 
@@ -149,9 +149,6 @@ const queued = Effect.fn("Merge.queued")(function* (pr: number, wait: Queue.Wait
   return last ?? (yield* Effect.fail(failed ?? PullRequestsError.make({ reason: "the merge queue was not read" })));
 });
 
-/** A `can/` branch is a person's own work and never merged by the lead. */
-const CAN = "can/";
-
 const admin = Effect.fn("Merge.admin")(function* (
   dir: string,
   pr: number,
@@ -167,27 +164,25 @@ const admin = Effect.fn("Merge.admin")(function* (
     return Done.cases.merged.make({ pr: found.number, commit: found.mergeCommit ?? found.oid });
   }
 
-  if (found.head.startsWith(CAN)) {
-    return yield* refuse(`${found.head} is a ${CAN} branch, never merged here; not merged`);
-  }
-
-  // With a wait, a draft is not refused for being a draft: it is marked ready below, after the leak gate.
+  // With a wait, a draft is not refused for being a draft: it is marked ready below, after the gate.
   const marking = wait !== undefined && found.state === "OPEN" && found.draft;
-  const refused = Queue.refusal(marking ? { ...found, draft: false } : found) ?? Arm.refusal(found);
+  const refused = yield* Gate.before({ dir, found, marksReady: wait !== undefined });
 
   if (refused !== null) {
     return yield* refuse(refused);
   }
 
   const allowed = adminFor(found.head, route);
+  // The head the gate read. Every later read of the pull request must hold the same head, or what is merged is not what was gated.
+  const gated = found.oid;
 
-  yield* Leaks.gate(dir, found);
+  const reread = Effect.fn("Merge.reread")(function* () {
+    found = yield* prs.view(pr);
 
-  const unwritten = yield* Queue.description(found);
-
-  if (unwritten !== null) {
-    return yield* refuse(unwritten);
-  }
+    if (found.oid !== gated) {
+      return yield* refuse(`its head moved from ${gated} to ${found.oid} after the gate read it; not merged`);
+    }
+  });
 
   // A merge to main moves main under the queue and restarts the build of every entry in it: any other
   // pull request waits for the queue to empty. A sev fix and a sev0's ready pull request keep the sev
@@ -205,7 +200,7 @@ const admin = Effect.fn("Merge.admin")(function* (
       );
     }
 
-    found = yield* prs.view(pr);
+    yield* reread();
   }
 
   // Marking a draft ready starts its real `ci-required`, which has not registered yet: the wait below
@@ -213,7 +208,7 @@ const admin = Effect.fn("Merge.admin")(function* (
   // so no ready event lands in the seconds after a push.
   if (marking) {
     const began = yield* Queue.startedAt(found.oid, wait, found.number).pipe(
-      Effect.catchTag("Conflicting", () => refuse(Queue.conflictLine(found.number))),
+      Effect.catchTag("Conflicting", () => refuse(Gate.conflictLine(found.number))),
     );
 
     if (!began) {
@@ -221,14 +216,14 @@ const admin = Effect.fn("Merge.admin")(function* (
     }
 
     yield* prs.ready(found.number);
-    found = yield* prs.view(pr);
+    yield* reread();
   }
 
   // Every admin merge, docs included, lands once ci-required is green at the head: it skips the queue,
   // never the check.
   const at = yield* Queue.required(found.oid, wait, found.number).pipe(
     Effect.catchTags({
-      Conflicting: () => refuse(Queue.conflictLine(found.number)),
+      Conflicting: () => refuse(Gate.conflictLine(found.number)),
       Gone: (e) => refuse(`it is ${e.state}, not merged`),
     }),
   );
