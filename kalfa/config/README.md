@@ -78,8 +78,9 @@ in-memory file service above. `TomlParser.layer` supplies the TOML service. Snap
 
 A setting made with `Setting.make` from `@kalfa/config` holds plain data only: text, numbers,
 booleans, and arrays and records of those, branded or not. A `Date`, a `Duration`, a `URL`, a `Map`
-or a class does not compile. Declare a length of time or an address as text, and decode it where it
-is read:
+or a class does not compile. A value type written as an `interface` is refused too, since the type
+cannot tell an interface from a class: write it as a `type`. Declare a length of time or an address
+as text, and decode it where it is read:
 
 ```ts
 import { Setting } from "@kalfa/config";
