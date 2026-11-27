@@ -1,4 +1,4 @@
-// Laws R5 to R10 and R18, for `Recorder.layer` and `Recorder.calls`, on the made-up `Shelf` service beside it, and V5.
+// Laws R5 to R10, R18 and R19, for `Recorder.layer` and `Recorder.calls`, on the made-up `Shelf` service beside it, and V5.
 //
 // The shape these laws hold the module to: `Recorder.layer(Service, impl, { fails })` provides the
 // service from `impl` and records each run of an effectful member as `{ method, args }`, in run
@@ -7,6 +7,7 @@
 // one method's argument lists. Each build of the layer starts with no calls.
 import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -386,6 +387,42 @@ describe("a call is a run, a Stream is watched, and each build starts empty", ()
         expect(Layer.isLayer(left)).toBe(true);
         expect(Layer.isLayer(stray)).toBe(true);
       }),
+  );
+});
+
+/** A second made-up service, so a run can record two at once. */
+class Rack extends Context.Service<Rack, { readonly hang: (name: string) => Effect.Effect<number> }>()(
+  "@kalfa/quality/vitest/Rack",
+) {}
+
+describe("two recorded services keep their own calls", () => {
+  // Plant: give every service's store the same id, so the second layer's record replaces the first's.
+  it.effect.prop(
+    "R19 property: a run that records two services reads each one's own calls, whatever each was handed",
+    { shelved: Schema.NonEmptyArray(Name), racked: Schema.NonEmptyArray(Name) },
+    ({ shelved, racked }) =>
+      Effect.gen(function* () {
+        const s = yield* Shelf;
+        const r = yield* Rack;
+
+        for (const name of shelved) {
+          yield* s.count(name);
+        }
+
+        for (const name of racked) {
+          yield* r.hang(name);
+        }
+
+        expect(yield* Recorder.calls(Shelf, "count")).toEqual(shelved.map((name) => [name]));
+        expect(yield* Recorder.calls(Rack, "hang")).toEqual(racked.map((name) => [name]));
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Recorder.layer(Shelf, shelf([])),
+            Recorder.layer(Rack, { hang: (name) => Effect.succeed(name.length) }),
+          ),
+        ),
+      ),
   );
 });
 
