@@ -37,10 +37,15 @@ import {
   valueClasses,
   valueTexture,
   watched,
+  written,
+  writtenExit,
   type Value,
 } from "./Secrets.test-support.ts";
 
 const run = { arbitrary: { runs: 300, seed: SEED } };
+
+/** Every typed failure a fetch gives, as one schema, as an `Exit` that holds one is written. */
+const Failures = Schema.Union([Errors.SecretMissing, Errors.SecretsUnavailable]);
 
 /** Every way a program shows a thing as text, hidden properties included. */
 const displays = (thing: object): ReadonlyArray<string> => [
@@ -225,7 +230,8 @@ it.effect.prop(
 );
 
 // X4. Plant: put the value into `SecretMissing`'s message; put it into the proof defect's message; render the store's cause in `SecretsUnavailable`; give
-// the error a `toJSON` that lists the reason's cause.
+// the error a `toJSON` that lists the reason's cause; put `Schema.Redacted(Schema.Defect())` back on `RecordFailed`, which `Schema.toCodecJson` writes in full
+// where the recorder fails.
 it.effect.prop(
   "X4 rendered errors: [secrets] every failure of a fetch flow, through String, message, stack, JSON, Formatter, inspect with hidden properties and Cause.pretty, holds no value in any form",
   { texture: valueTexture },
@@ -244,7 +250,11 @@ it.effect.prop(
           ).toBe(each.id !== "success");
 
           const texts = [
-            ...(Exit.isFailure(each.result) ? [Cause.pretty(each.result.cause)] : []),
+            ...(Exit.isFailure(each.result)
+              ? [Cause.pretty(each.result.cause), ...writtenExit(Failures, each.result)]
+              : []),
+            // What the codecs write for each typed failure, alone and inside an `Exit`: a cause hidden from every rendering may still be written in full.
+            ...failed.filter(Schema.is(Failures)).flatMap((failure) => written(Failures, failure)),
             ...failed.flatMap((failure) => [
               ...(Predicate.isObject(failure) ? displays(failure) : [shown(() => String(failure))]),
               ...(failure instanceof Error

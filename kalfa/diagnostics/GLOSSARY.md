@@ -46,3 +46,12 @@ _Avoid_: level, advice, priority
 A code's full explanation, written in Markdown where the code is declared. The command prints it on request. A
 diagnostic's message stays short because the long text exists.
 _Avoid_: docs, description, explanation, help
+
+**Hidden cause**:
+The cause a typed error holds when it may quote a value, held as `Hidden.Cause`. In memory it is a `Redacted`, so no rendering
+shows it. Every codec that writes outward writes the placeholder in its place, and a read gives back an empty one.
+_Avoid_: redacted cause, secret cause, masked cause
+
+**Placeholder**:
+The one fixed text, `<redacted>`, that every codec writes for a hidden cause. It is the same whatever the cause was or how it was made.
+_Avoid_: mask, filler, redaction text

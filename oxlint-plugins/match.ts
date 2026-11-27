@@ -2,7 +2,7 @@
 // asked. They worked on text-like shapes, so `Effect.all(x)` matched and `Effect?.all(x)`,
 // `Effect.all<T>(x)` and `x.Effect.all(y)` did not. The rules keep that exactly: README.md says how
 // that was measured.
-import type { Context, ESTree, Visitor } from "@oxlint/plugins";
+import type { Context, ESTree, Variable, Visitor } from "@oxlint/plugins";
 import { Array as Arr, Predicate } from "effect";
 
 type Source = Context["sourceCode"];
@@ -110,6 +110,28 @@ export const pathIn = (context: Context): string => {
  * which agents read and copy (lead tooling under .agents/ follows next/'s code rules).
  */
 export const heldToNext = (file: string): boolean => file.startsWith("next/") || file.startsWith(".agents/");
+
+/** The import an identifier is bound to: its source and the name it imports (`*` for a namespace). `null` for anything that is not an import. */
+export const imported = (variable: Variable | undefined): { readonly from: string; readonly name: string } | null => {
+  const def = variable?.defs[0];
+
+  if (def === undefined || def.type !== "ImportBinding" || def.parent?.type !== "ImportDeclaration") {
+    return null;
+  }
+
+  const from = def.parent.source.value;
+  const spec = def.node;
+
+  if (spec.type === "ImportNamespaceSpecifier") {
+    return { from, name: "*" };
+  }
+
+  if (spec.type === "ImportSpecifier") {
+    return { from, name: spec.imported.type === "Identifier" ? spec.imported.name : String(spec.imported.value) };
+  }
+
+  return null;
+};
 
 /** The local names a file imports from Effect: `Effect` in `import {Effect} from "effect"`. */
 export const effectNames = (program: ESTree.Program): ReadonlySet<string> => {

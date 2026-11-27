@@ -33,7 +33,7 @@
       "pure": false
     },
     "kalfa-config": {
-      "imports": ["next-vitest"],
+      "imports": ["kalfa-diagnostics", "next-vitest"],
       "pure": false
     },
     "kalfa-markdown": {
@@ -69,7 +69,7 @@
       "pure": false
     },
     "kalfa-secrets": {
-      "imports": ["kalfa-config"],
+      "imports": ["kalfa-config", "kalfa-diagnostics"],
       "pure": false
     },
     "kalfa-permissions": {

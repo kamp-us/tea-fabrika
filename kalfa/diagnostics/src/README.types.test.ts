@@ -7,8 +7,9 @@
 import { expectTypeOf, it } from "@effect/vitest";
 import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import * as Diagnostics from "@kalfa/diagnostics/Diagnostics";
+import * as Hidden from "@kalfa/diagnostics/Hidden";
 import * as TestDiagnostics from "@kalfa/diagnostics/TestDiagnostics";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Redacted, Schema } from "effect";
 
 export const UnknownSetting = Diagnostic.make("config/unknown-setting", {
   explain: "A settings file names a setting that no app declares. Check the spelling against the settings reference.",
@@ -72,8 +73,16 @@ const reportCarried = (error: UnknownSettingError) =>
     onSome: (carried) => Diagnostics.report(carried.declared, carried.fields),
   });
 
+export class StoreFailed extends Schema.TaggedError<StoreFailed, { readonly brand: unique symbol }>()("StoreFailed", {
+  cause: Hidden.Cause,
+}) {}
+
+// The cause is made with `Redacted.make`; `Schema.toCodecJson` of the error writes its `cause` as "<redacted>".
+const failed = new StoreFailed({ cause: Redacted.make(new Error("bad value")) });
+
 it("D24 type: the README's examples compile", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(failed.cause).toEqualTypeOf<Redacted.Redacted<unknown>>();
   expectTypeOf(program).toBeObject();
   // `Option.match` gives a union of its two branches, so the check is `toExtend`, not equality.
   expectTypeOf(reportCarried).returns.toExtend<Effect.Effect<void, never, Diagnostics.Diagnostics>>();
