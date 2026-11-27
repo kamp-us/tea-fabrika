@@ -12,8 +12,9 @@ import {
   newest,
   Outcome,
   readOutput,
-  reconcileTickets,
   says,
+  staleAfter,
+  status,
   Sweep,
   sweep,
   sweeps,
@@ -248,7 +249,7 @@ describe("a sweep", () => {
     ));
 
   // Plant: take a live sweep's lock, keep a dead one's for good, or skip without a record.
-  it("scenario: a live holder's lock skips with its pid; a dead or two-period-old one is taken over", () =>
+  it("scenario: a live holder's lock skips with its pid until it is stale; a dead or older one is taken over", () =>
     ran(
       Effect.gen(function* () {
         const state = yield* temp;
@@ -268,7 +269,12 @@ describe("a sweep", () => {
         yield* write(Holder.make({ pid: 99_999_999, startedAt: new Date(now).toISOString() }));
         expect((yield* sweep(ask(state, echo(TOTAL)))).outcome._tag).toBe("ok");
 
-        yield* write(Holder.make({ pid: 1, startedAt: new Date(now - 61 * MIN).toISOString() }));
+        // Live and younger than the stale time: it holds. One minute older than that: taken over.
+        const stale = Duration.toMillis(staleAfter(ask(state, echo(TOTAL))));
+        yield* write(Holder.make({ pid: 1, startedAt: new Date(now - stale + MIN).toISOString() }));
+        expect((yield* sweep(ask(state, echo(TOTAL)))).outcome._tag).toBe("skipped");
+
+        yield* write(Holder.make({ pid: 1, startedAt: new Date(now - stale - MIN).toISOString() }));
         expect((yield* sweep(ask(state, echo(TOTAL)))).outcome._tag).toBe("ok");
 
         yield* fs.writeFileString(`${state}/gc.lock`, "not a holder");
@@ -290,6 +296,17 @@ describe("a sweep", () => {
         expect((yield* sweeps(state)).length).toBe(2);
       }),
     ));
+});
+
+// The lock goes stale after gc's budget, the ticket pass's budget and one period more.
+it("vector: the lock goes stale only after gc's budget, the ticket pass's budget and one period more", () => {
+  const stale = staleAfter({
+    limit: Duration.minutes(30),
+    minutes: 30,
+    tickets: { run: Effect.never, limit: Duration.minutes(30) },
+  });
+
+  expect(Duration.toMillis(stale)).toBe(90 * MIN);
 });
 
 describe("the ticket pass after a sweep: a tick closes the open tickets of recent merges, once each", () => {
@@ -326,12 +343,22 @@ describe("the ticket pass after a sweep: a tick closes the open tickets of recen
       Layer.provide(NodeServices.layer),
     );
 
-  /** One tick: a sweep whose ticket pass runs after its record, as gcloop runs it. */
+  /** The ticket pass as gcloop gives it a sweep: the newest 200 of the 1000 most recently updated merges, within one period. */
+  const ticketPass = (
+    state: string,
+    github: PullRequestsTest.World,
+    tracker: TicketsTest.World,
+    failing: TicketsTest.Failing = {},
+  ) => ({
+    run: Queue.reconcile({ repo: REPO, limit: 200, scan: 1000 }).pipe(
+      Effect.provide(services(state, github, tracker, failing)),
+    ),
+    limit: Duration.minutes(30),
+  });
+
+  /** One tick: a sweep that runs its ticket pass, as gcloop does. */
   const tick = (state: string, github: PullRequestsTest.World, tracker: TicketsTest.World) =>
-    sweep({
-      ...ask(state, ["true"]),
-      after: reconcileTickets(REPO, 200, Duration.minutes(30)).pipe(Effect.provide(services(state, github, tracker))),
-    });
+    sweep({ ...ask(state, ["true"]), tickets: ticketPass(state, github, tracker) });
 
   const posts = (tracker: TicketsTest.World) => tracker.posts.map((post) => post._tag);
 
@@ -345,10 +372,12 @@ describe("the ticket pass after a sweep: a tick closes the open tickets of recen
 
         yield* tick(state, github, tracker);
         expect(tracker.open.has(1307)).toBe(false);
-        expect(posts(tracker)).toEqual(["list", "comment", "close"]);
+        // The pass reads the tracker again just before its close.
+        expect(posts(tracker)).toEqual(["list", "list", "comment", "close"]);
+        expect((yield* status(state, 30)).text).toContain("tickets: closed 1");
 
         yield* tick(state, github, tracker);
-        expect(posts(tracker)).toEqual(["list", "comment", "close", "list"]);
+        expect(posts(tracker)).toEqual(["list", "list", "comment", "close", "list"]);
         expect(tracker.open.has(9)).toBe(true);
       }),
     ));
@@ -431,9 +460,7 @@ describe("the ticket pass after a sweep: a tick closes the open tickets of recen
 
         yield* sweep({
           ...ask(state, ["true"]),
-          after: reconcileTickets(REPO, 200, Duration.minutes(30)).pipe(
-            Effect.provide(services(state, github, tracker, { close: "tracker says no" })),
-          ),
+          tickets: ticketPass(state, github, tracker, { close: "tracker says no" }),
         });
         expect(tracker.open.has(1307)).toBe(true);
         const fs = yield* FileSystem.FileSystem;
@@ -441,6 +468,27 @@ describe("the ticket pass after a sweep: a tick closes the open tickets of recen
 
         yield* tick(state, github, tracker);
         expect(tracker.open.has(1307)).toBe(false);
+      }),
+    ));
+
+  // Plant: stop the pass at a torn record and say nothing about it in the status line.
+  it("scenario: a record whose last line is cut short stops the ticket pass, and the status line says why", () =>
+    ran(
+      Effect.gen(function* () {
+        const state = yield* temp;
+        const fs = yield* FileSystem.FileSystem;
+        const github = merged([[2317, "fabrika close ticket 1307\n"]]);
+        const tracker = TicketsTest.world([1307]);
+
+        yield* fs.writeFileString(`${state}/closes.jsonl`, '{"at":"2026-11-26T0');
+
+        yield* tick(state, github, tracker);
+        expect(tracker.open.has(1307)).toBe(true);
+        expect(posts(tracker).filter((post) => post !== "list")).toEqual([]);
+
+        const line = yield* status(state, 30);
+        expect(line.text).toContain("tickets stopped: cannot read the closes record");
+        expect(line.text).toContain("line 1 is cut short");
       }),
     ));
 
@@ -460,10 +508,14 @@ describe("the ticket pass after a sweep: a tick closes the open tickets of recen
 
         const done = yield* sweep({
           ...ask(state, ["true"]),
-          after: reconcileTickets(REPO, 200, Duration.millis(200)).pipe(Effect.provide(layers)),
+          tickets: {
+            run: Queue.reconcile({ repo: REPO, limit: 200, scan: 1000 }).pipe(Effect.provide(layers)),
+            limit: Duration.millis(200),
+          },
         });
 
         expect(done.outcome._tag).toBe("ok");
+        expect(done.pass?.stopped).toContain("ran out of time after");
         const fs = yield* FileSystem.FileSystem;
         expect(yield* fs.exists(`${state}/closes.jsonl`)).toBe(false);
       }),
@@ -486,9 +538,14 @@ describe("the ticket pass after a sweep: a tick closes the open tickets of recen
 
         const done = yield* sweep({
           ...ask(state, ["true"]),
-          after: Effect.sync(() => {
-            passes += 1;
-          }),
+          tickets: {
+            run: Effect.sync(() => {
+              passes += 1;
+
+              return Queue.Pass.make({ closed: [], failed: [], stopped: null, lines: [] });
+            }),
+            limit: Duration.minutes(1),
+          },
         });
 
         expect(done.outcome._tag).toBe("skipped");

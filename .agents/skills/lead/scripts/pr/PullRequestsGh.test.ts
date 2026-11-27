@@ -175,8 +175,13 @@ describe("PullRequestsGh merged read", () => {
   };
 
   const listed = JSON.stringify([
-    { number: 2317, body: "Done.\nfabrika close ticket 1307", mergeCommit: { oid: "a".repeat(40) } },
-    { number: 2318, body: "", mergeCommit: null },
+    {
+      number: 2317,
+      body: "Done.\nfabrika close ticket 1307",
+      mergeCommit: { oid: "a".repeat(40) },
+      mergedAt: "2026-11-26T00:00:00Z",
+    },
+    { number: 2318, body: "", mergeCommit: null, mergedAt: "2026-11-26T01:00:00Z" },
   ]);
 
   // Plant: read open pull requests, count a row with no merge commit, or read a shape it does not know as none.
@@ -185,7 +190,12 @@ describe("PullRequestsGh merged read", () => {
     () =>
       Effect.gen(function* () {
         expect(yield* (yield* PullRequests).merged(200)).toEqual([
-          { number: 2317, body: "Done.\nfabrika close ticket 1307", mergeCommit: "a".repeat(40) },
+          {
+            number: 2317,
+            body: "Done.\nfabrika close ticket 1307",
+            mergeCommit: "a".repeat(40),
+            mergedAt: "2026-11-26T00:00:00Z",
+          },
         ]);
 
         const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
@@ -209,7 +219,7 @@ describe("PullRequestsGh merged read", () => {
           "--limit",
           "200",
           "--json",
-          "number,body,mergeCommit",
+          "number,body,mergeCommit,mergedAt",
         ]);
       }).pipe(Effect.provide(listLayers(listed))),
   );

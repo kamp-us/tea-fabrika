@@ -38,6 +38,7 @@ const MergedListed = Schema.fromJsonString(
       number: Schema.Finite,
       body: Schema.String,
       mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
+      mergedAt: Schema.NullOr(Schema.String),
     }),
   ),
 );
@@ -182,9 +183,9 @@ export const make = (
         : Effect.succeed(prs),
     );
 
-    // One list call, most recently updated first (a merge is an update, so every recent merge is in it). A row
-    // with no merge commit is left out: GitHub gives one to every merged pull request.
-    const merged = Effect.fn("PullRequestsGh.merged")(function* (limit: number) {
+    // One search call, most recently updated first: the `scan` the caller asks for, in GitHub's update order. A
+    // row with no merge commit or no merge time is left out: GitHub gives both to every merged pull request.
+    const merged = Effect.fn("PullRequestsGh.merged")(function* (scan: number) {
       const out = yield* gh([
         "pr",
         "list",
@@ -197,9 +198,9 @@ export const make = (
         "--search",
         "sort:updated-desc",
         "--limit",
-        String(limit),
+        String(scan),
         "--json",
-        "number,body,mergeCommit",
+        "number,body,mergeCommit,mergedAt",
       ]);
 
       const rows = yield* Schema.decodeEffect(MergedListed)(out.trim() || "[]").pipe(
@@ -207,7 +208,9 @@ export const make = (
       );
 
       return rows.flatMap((row): ReadonlyArray<Merged> =>
-        row.mergeCommit === null ? [] : [{ number: row.number, body: row.body, mergeCommit: row.mergeCommit.oid }],
+        row.mergeCommit === null || row.mergedAt === null
+          ? []
+          : [{ number: row.number, body: row.body, mergeCommit: row.mergeCommit.oid, mergedAt: row.mergedAt }],
       );
     });
 

@@ -62,10 +62,15 @@ export const QueueEntry = Schema.Struct({ number: Schema.Finite, state: Schema.S
 export type QueueEntry = typeof QueueEntry.Type;
 
 /**
- * One merged pull request as the recent-merges list gives it: its number, its description, and the
- * commit it merged at (the commit the close note names).
+ * One merged pull request as the recent-merges list gives it: its number, its description, the commit
+ * it merged at (the commit the close note names), and when it merged.
  */
-export const Merged = Schema.Struct({ number: Schema.Finite, body: Schema.String, mergeCommit: Schema.String });
+export const Merged = Schema.Struct({
+  number: Schema.Finite,
+  body: Schema.String,
+  mergeCommit: Schema.String,
+  mergedAt: Schema.String,
+});
 
 export type Merged = typeof Merged.Type;
 
@@ -80,10 +85,12 @@ export class PullRequests extends Context.Service<
     /** Every pull request of the repo, open, closed and merged. Fails when one read cannot hold all. */
     readonly all: Effect.Effect<ReadonlyArray<PullRequest>, PullRequestsError>;
     /**
-     * The pull requests merged into main, most recently updated first, at most `limit`. A merge is an
-     * update, so every recent merge is among the newest `limit` by update, whatever its age.
+     * The `scan` pull requests merged into main that were most recently updated, in update order, not merge
+     * order. A merge is an update, and so is a late comment on an old merge, so a merge can fall out of the
+     * scan once more than `scan` merged pull requests were updated after it. GitHub's search answers at most
+     * 1000. A caller that wants the newest merges sorts by `mergedAt` itself.
      */
-    readonly merged: (limit: number) => Effect.Effect<ReadonlyArray<Merged>, PullRequestsError>;
+    readonly merged: (scan: number) => Effect.Effect<ReadonlyArray<Merged>, PullRequestsError>;
     /** Opens a draft pull request from `branch` into main, and answers its number. */
     readonly draft: (branch: string, text: Text, head: string) => Effect.Effect<number, PullRequestsError>;
     /** Sets the title and description of pull request `number`. */
