@@ -1,8 +1,9 @@
 # @kalfa/quality
 
-Our testing, linting and formatting tooling, one subpath per tool. So far one subpath exists:
-`@kalfa/quality/stryker`, the plant runner. It is private, imports no product code and no path
-into the repo (lint holds that), and reads every repo-specific value as data from its edge.
+Our testing, linting and formatting tooling, one subpath per tool. So far two subpaths exist:
+`@kalfa/quality/stryker`, the plant runner, and `@kalfa/quality/vitest`, the test helpers. The package
+is private, imports no product code and no path into the repo (lint holds that), and reads every
+repo-specific value as data from its edge.
 
 ## A plant
 
@@ -114,6 +115,41 @@ makes a plant answer at all, and the report path and sandbox folder are a scoped
 | `src/stryker/MutantsMemory.ts` | the stand-in the laws run on |
 | `src/stryker/Run.ts` | `plant` and `survey` |
 | `src/cli.ts` | the `quality` command |
+
+## Test helpers
+
+`@kalfa/quality/vitest` holds four helpers for a law in any repo. It imports no other kalfa package
+(lint holds that), so a repo's tests stay light.
+
+```ts
+import { Recorder, runsFor, Stub } from "@kalfa/quality/vitest";
+import * as TestDatabase from "@kalfa/quality/vitest/TestDatabase";
+
+fc.assert(property, { seed, numRuns: runsFor({ fast: 10, full: 100 }) });
+```
+
+- **The depth and `runsFor({ fast, full })`.** A law reads its case count here, never as a number of its own:
+  `fast` on a pull request, `full` on a deeper run. The depth is read once, while the module loads, from
+  `KALFA_QUALITY_VITEST_DEPTH` and from nothing else. Unset is `fast`, `fast` and `full` are the two words, and any
+  other value, the empty string too, fails the import of the test file, so no law runs at a depth nobody asked for.
+  `fast` may not be above `full` or under 3 (or under `full`, when that is smaller), and both must be whole numbers.
+- **`Recorder`.** `Recorder.layer(Service, impl, { fails })` provides a service from `impl` and records each run of its
+  effectful members as `{ method, args }`, in run order. `Recorder.calls(Service)` reads them back, typed from the
+  service's own interface. It starts no span.
+- **`Stub`.** `Stub.make(rest, own)` is a stand-in for a platform object: a member of `own` answers as given, every other
+  method name answers `rest(name)`, and `then` and symbol keys answer `undefined`, so awaiting a stub never hangs.
+- **`TestDatabase`, on its own subpath.** `make(file)` opens a SQLite file the test owns, with its journal in memory and
+  no disk sync; `open(file, { readOnly, wait })` opens one that something else owns and changes nothing in it. Both close
+  the connection when the scope closes. It is the one file that imports `node:sqlite`, so the root never loads it, and
+  lint holds that too.
+
+| File | Job |
+|---|---|
+| `src/vitest/index.ts` | the root: the depth, `Recorder` and `Stub` |
+| `src/vitest/Depth.ts` | `depth`, `runsFor`, `runsAt`, `decodeDepth`; reads `KALFA_QUALITY_VITEST_DEPTH` |
+| `src/vitest/Recorder.ts` | the call recorder |
+| `src/vitest/Stub.ts` | the platform-object stand-in |
+| `src/vitest/TestDatabase.ts` | the test database; the only file that imports `node:sqlite` |
 
 ## What it cannot tell you
 
