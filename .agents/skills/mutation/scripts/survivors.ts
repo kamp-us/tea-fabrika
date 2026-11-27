@@ -21,6 +21,9 @@
 //   reason and the evidence stay on it. `--answers` names a file of such lines too, such as the commit body about to be
 //   written. An answered mutant is counted and no longer listed, so exit 0 says every survivor is killed or
 //   answered. Without either flag no line is read and a mutant that lived is always listed.
+//   A later commit takes back an earlier row with `Survivor-withdrawn: <file>:<line> <reason>` (`<file>:*` for a `*` row; the
+//   place is the row's own): that place has no row any more, so its answer or its `refused` line is gone, and a mutant there that
+//   lived is listed again. A withdrawal with no reason or no place is `refused` like a row with no proof.
 // - `--out` is your scratch folder; mutbox's whole answer is `<out>/mutbox.json`.
 //
 // The vitest runner strips types, so a mutant that `tsc` refuses would run and live. After the run, the box type-checks each mutant that
@@ -93,7 +96,7 @@ import {
 import type { PlatformError } from "effect";
 import { Command, Flag } from "effect/cli";
 import { alive, bounded, DOCKER_SECONDS, heldBy, loads, secondsFor, Summary } from "../../lead/scripts/mutbox.ts";
-import { ANSWER } from "./answer.ts";
+import { ANSWER, WITHDRAWN } from "./answer.ts";
 import * as Saved from "./gatecache.ts";
 import { inLine, noteLine } from "./gatequeue.ts";
 import type { Line } from "./gatequeue.ts";
@@ -448,18 +451,27 @@ export const staticLines = (rows: ReadonlyArray<Row>): ReadonlyArray<string> => 
  *
  * The newest row for a file and line wins: a commit can never be rewritten, so an older row with no proof stands down once a newer
  * row on the same place has one, and a newer row with none takes the answer away. Texts are read oldest first, and rows in order.
+ *
+ * A `Survivor-withdrawn: <file>:<line> <reason>` row is such a newer row that answers nothing and is not refused: the place has no
+ * row any more, so a mutant there is open again if it lived (a withdrawal never answers a mutant), and a refused row of old code that
+ * moved stops holding the gate. A withdrawal with no reason or no place is refused like a `Survivor:` row with no proof.
  */
 export type Answer = { readonly file: string; readonly line: number | null };
 
-/** The place a `Survivor:` row answers, `file:line` or `file:*`; `null` for a row too broken to say. */
-const PLACE = /^Survivor:[ \t]+(\S+:(?:\d+|\*))(?=[ \t])/;
+/** The place a `Survivor:` or `Survivor-withdrawn:` row names, `file:line` or `file:*`; `null` for a row too broken to say. */
+const PLACE = /^Survivor(?:-withdrawn)?:[ \t]+(\S+:(?:\d+|\*))(?=[ \t]|$)/;
 
-type Said = { readonly text: string; readonly place: string | null; readonly answer: Answer | null };
+type Said = {
+  readonly text: string;
+  readonly place: string | null;
+  readonly answer: Answer | null;
+  readonly withdrawn: boolean;
+};
 
-/** The `Survivor:` rows of a text, oldest first, and of each place only the last: the rest stand down. Pure. */
+/** The `Survivor:` and `Survivor-withdrawn:` rows of a text, oldest first, and of each place only the last: the rest stand down. Pure. */
 const standing = (text: string): ReadonlyArray<Said> => {
   const rows = Arr.flatMap(Str.split(text, "\n"), (text): ReadonlyArray<Said> => {
-    if (!text.startsWith("Survivor:")) {
+    if (!text.startsWith("Survivor:") && !text.startsWith("Survivor-withdrawn:")) {
       return [];
     }
 
@@ -470,6 +482,7 @@ const standing = (text: string): ReadonlyArray<Said> => {
         text,
         place: PLACE.exec(text)?.[1] ?? null,
         answer: found === null ? null : { file: found[1] ?? "", line: found[2] === "*" ? null : Number(found[2]) },
+        withdrawn: WITHDRAWN.test(text),
       },
     ];
   });
@@ -479,15 +492,15 @@ const standing = (text: string): ReadonlyArray<Said> => {
   return Arr.filter(rows, (row, i) => row.place === null || last.get(row.place) === i);
 };
 
-/** The answers of the `Survivor:` rows that stand and carry a proof; a row with no reason, or evidence naming no plant, search or law, answers nothing. Pure. */
+/** The answers of the `Survivor:` rows that stand and carry a proof; a row with no reason, or evidence naming no plant, search or law, answers nothing, and a withdrawn place has none. Pure. */
 export const answersIn = (text: string): ReadonlyArray<Answer> =>
   Arr.flatMap(standing(text), (row) => (row.answer === null ? [] : [row.answer]));
 
 export { notAnswers } from "./answer.ts";
 
-/** The `Survivor:` rows that stand and answer nothing, the ones the check refuses by name. A newer row on the same place with a proof clears an older one. Pure. */
+/** The rows that stand and answer nothing, the ones the check refuses by name: a `Survivor:` row with no proof, or a withdrawal with no reason or place. A newer row on the same place with a proof, or a withdrawal, clears an older one. Pure. */
 export const refusedIn = (text: string): ReadonlyArray<string> =>
-  Arr.flatMap(standing(text), (row) => (row.answer === null ? [row.text] : []));
+  Arr.flatMap(standing(text), (row) => (row.answer === null && !row.withdrawn ? [row.text] : []));
 
 /** The commit bodies `git log --format=%B%x00` gives, newest first, as one text with the oldest first, so a newer row wins. Pure. */
 export const oldestFirst = (log: string): string =>
@@ -898,7 +911,7 @@ const check = Effect.fnUntraced(function* (ask: {
 
   for (const line of refused) {
     yield* Console.log(
-      `refused  ${line}  (its evidence names no plant:, rg: or law:; re-answer it with proof in an empty commit: \`stepcommit.sh --empty <step> ...\`)`,
+      `refused  ${line}  (its evidence names no plant:, rg: or law:; re-answer it with proof, or take it back with a \`Survivor-withdrawn: <file>:<line> <reason>\` line, in an empty commit: \`stepcommit.sh --empty <step> ...\`)`,
     );
   }
 

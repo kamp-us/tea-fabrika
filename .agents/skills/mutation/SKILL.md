@@ -137,6 +137,7 @@ Before that recheck, the box type-checks each mutant that lived, in its own pack
 runner strips types, so a mutant `tsc` refuses would otherwise live. One that does not compile is a kill (`CompileError`), is not listed and is
 not run again at full depth, and the last line counts them. A package that fails `tsc` as it is, or a file in no package, is not judged.
 A `Survivor:` line answers only with a proof in its evidence (`plant:`, `rg:` or `law:`), as [the build skill](../build/SKILL.md) shows.
+A later commit takes a row back with `Survivor-withdrawn: <file>:<line> <reason>`: the place then has no row, so a `refused` line of old code is gone and a mutant that lived there is listed again.
 A call whose base, tree, files and scripts match a saved run reads it and starts no box, and a call that
 needs the box waits its turn in line, one box at a time; its header holds the settings and says how.
 `mutbox.ts run --wait <seconds>` takes a place in the same line. Drive's mutation step still refuses at the
