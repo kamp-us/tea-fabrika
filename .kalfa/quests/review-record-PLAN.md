@@ -737,3 +737,20 @@ The root config question the earlier draft held is answered (see Records).
   request in `Arm.docsOnly` (`.agents/skills/lead/scripts/pr/Arm.ts`, `docsOnly(files)`, and
   `.agents/skills/lead/scripts/pr/PullRequestsGh.ts`, the `files` jq `.[].filename`). This plan no longer fixes it, since
   the review check now reads paths from git; it stays a finding for a separate change.
+
+## Amendment 1 (lead, slice 2, round 2)
+
+This section overrides the body where they differ.
+
+- **R10, a squash that fails after the override was written.** The body says each refusal after the gate (class x) writes nothing, and lists "the pinned
+  squash itself fails" among them. Both cannot hold: the override is written as the step directly before the squash, after every read that could refuse,
+  so a squash that then fails leaves the override on the head. The order stays. The law pins: the override is written once (a comment, then a `failure`
+  status), nothing is merged, and the refusal names the written override (its reason and the head), so a red status on the head is never read as a merge
+  that happened. Every other refusal after the gate still writes nothing.
+- **R8, the one gate.** For every refusal but the review's, each path answers with exactly the words `check` answers, as before this plan. Only the review's
+  refusal differs by way (it names `land.ts review`, `land.ts queue` or `--override-review`), so only it is compared within one way.
+- **R11, the chain half.** The chain's ready step (push, the brief's words, ready, then the record) is one exported function, `readyAndRecord`, which the
+  law runs; it answers no pull request, with why, when a part is refused, so the quest stops before CI and the queue.
+- **R2, the reason.** A reason or a reviewer holding U+2028 or U+2029 is refused (`Line`), since the pattern that reads a description back stops at them.
+- **Gate line.** An admin merge that went past a missing record on a reason prints "no review is recorded on the head: gone past on a written reason" in
+  place of "a review on the head, or no path that needs one". `land.ts merge --override-review` without `--admin` is refused.
