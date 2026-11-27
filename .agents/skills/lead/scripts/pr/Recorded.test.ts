@@ -326,6 +326,23 @@ describe("around: a started line first, then how the command ended, and nothing 
   );
 });
 
+describe("around: a closed terminal ends the command as an interrupt, so its ending is written", () => {
+  // Plant: start the handler before the signal handler is set (red: the handler sees no listener). This is the in-process stand-in
+  // for the real SIGHUP of Recorded.integration.test.ts; no signal is sent here.
+  it.effect(
+    "L1 scenario: the SIGHUP listener stands before the command's first step runs, and is gone when it ends, so a closed terminal cannot slip between",
+    () =>
+      Effect.gen(function* () {
+        const before = process.listenerCount("SIGHUP");
+
+        const inside = yield* run(() => Effect.sync(() => process.listenerCount("SIGHUP")));
+
+        expect(inside.outcome).toEqual({ _tag: "success", value: before + 1 });
+        expect(process.listenerCount("SIGHUP")).toBe(before);
+      }),
+  );
+});
+
 // ---------------------------------------------------------------- L4: a record that cannot be written changes nothing
 
 describe("around: a record that cannot be written changes neither the result, nor what is printed, nor the exit", () => {
