@@ -7,13 +7,17 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Match, Option, Predicate, Result, Schema, Tracer } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as FileSystem from "effect/FileSystem";
+import { TestClock } from "effect/testing";
 import * as Commit from "./Commit.ts";
 import * as CommitEditTest from "./CommitEdit.test-support.ts";
 import * as CommitEdit from "./CommitEdit.ts";
 import * as CommitId from "./CommitId.ts";
 import * as Diff from "./Diff.ts";
 import {
+  AGAINST_GIT_CLASSES,
+  GIT_DROPS,
   TREE_CARRIER_CLASSES,
+  againstGitCarrier,
   editCarrier,
   readCarrier,
   shapes,
@@ -23,6 +27,7 @@ import {
   type FlatSignature,
   type History,
 } from "./History.test-support.ts";
+import { byBytes } from "./internal/object.ts";
 import { editFrom, encodeCommit } from "./Laws.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
 import { memorySubject } from "./MemorySeed.test-support.ts";
@@ -31,13 +36,15 @@ import {
   bareRepository,
   fastImport,
   git,
+  gitIn,
   importCommit,
   openRepository,
   processSubject,
   setConfigTable,
+  workingCopy,
 } from "./ProcessSeed.test-support.ts";
 import * as Ref from "./Ref.ts";
-import { expectFailure } from "./Repository.test-support.ts";
+import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as RepositoryTest from "./RepositoryTest.ts";
 import * as Tree from "./Tree.ts";
@@ -1049,4 +1056,297 @@ it.effect(
         (yield* git(dir, ["rev-parse", `${first}^{tree}`])).trim(),
       );
     }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+// ---------------------------------------------------------------------------------------------------------
+// Ticket 1936, slice 1: `rebase` on real git. The plain laws (S37 to S41) run on `/process` above, in I1; these two hold git itself
+// to what the call and the stand-in say: a repository's own inputs steer no rebase (I13), and the call answers what `git rebase` does.
+// ---------------------------------------------------------------------------------------------------------
+
+/**
+ * One file of ten lines, so git's rename detection finds it again after a move and a change of one line. Two changes to one file merge
+ * clean only when an unchanged line lies between them: changes on neighboring lines conflict.
+ */
+const lines = (word: string, changed = -1): Uint8Array =>
+  new TextEncoder().encode(
+    Array.from({ length: 10 }, (_, i) => (i === changed ? `${word} changed\n` : `${word} line ${i}\n`)).join(""),
+  );
+
+const isConflict = Schema.is(Repository.Conflict);
+
+/** What a rebase answered, as data two answers can be compared as: the commits' ids, or the paths of the conflict. */
+const answered = <E>(result: Result.Result<ReadonlyArray<Commit.Commit>, E>) => {
+  if (Result.isSuccess(result)) {
+    return { kind: "commits", ids: result.success.map((made) => made.id) } as const;
+  }
+
+  return isConflict(result.failure)
+    ? ({ kind: "conflict", paths: result.failure.paths } as const)
+    : ({ kind: "other", error: result.failure } as const);
+};
+
+// Plants (I13), each an edit to a product file and the law it turns red. Each is checked by hand on git 2.40.1 for what git answers;
+// the law itself runs only here, in CI's full run.
+//   1. ProcessRepository.ts, in MERGE_PINS, delete the line `"merge.renameLimit=7000",`. The configured repository's limit of 1
+//      is then in force, git finds no rename of `one` to `uno` and `two` to `dos` (each changed by one line, so no exact rename), and
+//      the rebase of "a rename against a change" answers a Conflict on `one` and `two` (modify/delete) where the plain repository
+//      answers commits. The two sides change lines 7 and 2 of each file: neighboring lines would conflict as text, with or without
+//      the rename, which is how the first version of this law failed on CI.
+//   2. ProcessRepository.ts, in PINNED, delete the line `GIT_ATTR_SOURCE: EMPTY_TREE,`. On a git that reads a tree's attributes (2.43
+//      and newer; older gits ignore the variable, so this plant stays green there) `attr.tree` and HEAD's `* merge=union` merge the
+//      clash by union, and "a clash" answers commits where the plain repository answers a Conflict on `clash`.
+// A repository's own inputs: two files renamed at once with `merge.renameLimit=1` and `diff.renameLimit=1`, `diff.renames=false`, and a
+// line both sides change with `* merge=union` read from `attr.tree` and from the tree `HEAD` names. The same commits are rebased in a
+// repository with none of it, and the answers are the same commit ids and the same conflict.
+it.effect(
+  "I13 scenario: with a rename limit, no rename detection, `attr.tree` and HEAD's attributes that merge by union set on the repository, a rebase of a rename against a change and a rebase of a clash answer what a plain repository answers, the same commit ids and the same Conflict",
+  () =>
+    Effect.gen(function* () {
+      const person = (name: string) => ({
+        name,
+        email: `${name}@example.test`,
+        seconds: 1_600_000_000,
+        offset: "+0000",
+      });
+
+      const file = (path: string, content: Uint8Array) => ({ path, mode: "100644" as const, content });
+      const text = (value: string) => new TextEncoder().encode(value);
+      const [one, two] = [lines("one"), lines("two")];
+
+      const node = (
+        parents: ReadonlyArray<number>,
+        files: ReadonlyArray<ReturnType<typeof file>>,
+        message: string,
+      ) => ({
+        parents,
+        author: person("ada"),
+        committer: person("ada"),
+        message,
+        files,
+      });
+
+      const history: History = {
+        nodes: [
+          node([], [file("one", one), file("two", two)], "base\n"),
+          node([0], [file("uno", lines("one", 7)), file("dos", lines("two", 7))], "onto\n"),
+          node([0], [file("one", lines("one", 2)), file("two", lines("two", 2))], "change\n"),
+          node([], [file("clash", text("x\n"))], "clash base\n"),
+          node([3], [file("clash", text("o\n"))], "clash onto\n"),
+          node([3], [file("clash", text("t\n"))], "clash change\n"),
+          node([], [file(".gitattributes", text("* merge=union\n"))], "attributes\n"),
+        ],
+        refs: [{ name: "refs/heads/attrs", commit: 6 }],
+        shallow: [],
+      };
+
+      const pairs = [
+        ["a rename against a change", 0, 2, 1],
+        ["a clash", 3, 5, 4],
+      ] as const;
+
+      yield* TestClock.setTime(1_700_000_000 * 1000);
+
+      const rebased = (configure: boolean) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const seeded = yield* processSubject.seed(history, settings);
+            const dir = seeded.hidden[0] ?? "";
+
+            if (configure) {
+              for (const [key, value] of [
+                ["merge.renameLimit", "1"],
+                ["diff.renameLimit", "1"],
+                ["diff.renames", "false"],
+                ["attr.tree", "refs/heads/attrs"],
+                ["i18n.commitEncoding", "ISO-8859-1"],
+              ] as const) {
+                yield* git(dir, ["config", key, value]);
+              }
+
+              yield* git(dir, ["symbolic-ref", "HEAD", "refs/heads/attrs"]);
+            }
+
+            return yield* Effect.forEach(
+              pairs,
+              ([, upstream, commit, onto]) =>
+                Effect.map(
+                  Effect.result(
+                    seeded.repository.rebase({
+                      upstream: commitIdFrom(seeded.ids[upstream] ?? ""),
+                      commit: commitIdFrom(seeded.ids[commit] ?? ""),
+                      onto: commitIdFrom(seeded.ids[onto] ?? ""),
+                    }),
+                  ),
+                  answered,
+                ),
+              { concurrency: 1 },
+            );
+          }),
+        );
+
+      const plain = yield* rebased(false);
+      const steered = yield* rebased(true);
+
+      expect(plain[0]?.kind, "a rename that git follows rebases clean").toBe("commits");
+      expect(plain[1], "a line both sides change conflicts").toMatchObject({ kind: "conflict", paths: ["clash"] });
+      expect(steered, "the repository's own inputs change no answer").toEqual(plain);
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+/** What `git rebase` made of one case in a working copy: the new commits oldest first, or the unmerged paths of its conflict. */
+const gitRebased = (
+  copy: { readonly root: string },
+  clone: Repository.Repository["Service"],
+  args: { readonly upstream: string; readonly commit: string; readonly onto: string },
+  flags: ReadonlyArray<string>,
+  committer: Record<string, string>,
+) =>
+  Effect.gen(function* () {
+    yield* gitIn(copy.root, ["checkout", "-q", "--detach", args.commit]);
+
+    const ran = yield* gitIn(
+      copy.root,
+      ["rebase", "--force-rebase", ...flags, "--onto", args.onto, args.upstream],
+      committer,
+    );
+
+    if (ran.code !== 0) {
+      // `-z` leaves a name as it is: with no `-z`, git quotes a name that holds a byte past ASCII.
+      const unmerged = (yield* gitIn(copy.root, ["diff", "--name-only", "-z", "--diff-filter=U"])).stdout;
+      yield* gitIn(copy.root, ["rebase", "--abort"]);
+
+      return {
+        kind: "conflict",
+        paths: unmerged
+          .split("\0")
+          .filter((path) => path !== "")
+          .toSorted(byBytes),
+      } as const;
+    }
+
+    const listed = (yield* gitIn(copy.root, ["rev-list", "--reverse", `${args.onto}..HEAD`])).stdout;
+    const ids = listed.split("\n").filter((line) => line !== "");
+
+    const made = yield* Effect.forEach(ids, (id) => Effect.orDie(clone.readCommit(commitIdFrom(id))), {
+      concurrency: 1,
+    });
+
+    return { kind: "commits", made } as const;
+  });
+
+/** A message without the lines `git rebase` removes from its start: each one empty or holding only spaces and tabs. */
+const withoutLeadingBlankLines = (message: string): string => message.replace(/^([ \t]*\n)+/, "");
+
+// Plants (I14), each an edit to Repository.ts, in `rebase`, and the case it turns red:
+//   1. After `const tree = yield* raw.mergeTrees(...)`, add `if (tree === (yield* raw.readCommit(tip)).tree) { continue; }`, so a commit
+//      that has no change is dropped: red at "a commit that starts empty" (the call keeps every commit, as git does with `--empty=keep`).
+//   2. In the `raw.writeCommit({ ... committer })` call, replace `committer` with `committer: commit.committer`: red at the first case,
+//      since git's committer is the one from its environment.
+//   3. In the same call, replace `author: commit.author` with `author: committer`: red at the first case.
+// The cases are the ones the plan lists: git's rebase is run in a temporary clone with a working copy, with
+// `--force-rebase --empty=keep --reapply-cherry-picks`, which keeps every commit as the call does, and with `--force-rebase` alone,
+// which drops the commit that becomes empty and the patch the upstream holds. A message with leading blank lines, or leading lines of
+// only spaces and tabs, is the one place the commits themselves differ, since git strips them and the call keeps a message byte for
+// byte. A conflict's paths are read with `-z` and sorted by UTF-8 bytes, as the call names them.
+it.effect.prop(
+  "I14 against git rebase: for each case, the call's commit ids equal those of git rebase --force-rebase --empty=keep --reapply-cherry-picks, and against git rebase --force-rebase alone they differ only where git drops a commit that becomes empty or a patch the upstream holds, and where git strips a message's leading blank lines",
+  { texture: textureArb },
+  ({ texture }) =>
+    Effect.gen(function* () {
+      const made = againstGitCarrier(texture);
+      expect(
+        made.cases.map((each) => each.label),
+        "the generator reaches every case",
+      ).toEqual(AGAINST_GIT_CLASSES);
+
+      const seeded = yield* processSubject.seed(made.history, settings);
+      const copy = yield* workingCopy(made.history);
+      const clone = yield* openRepository(`${copy.root}/.git`, settings);
+      expect(copy.ids, "both repositories hold the same commit ids").toEqual(seeded.ids);
+      const seconds = 1_700_000_000;
+      yield* TestClock.setTime(seconds * 1000);
+
+      const committer = {
+        GIT_COMMITTER_NAME: COMMITTER.name,
+        GIT_COMMITTER_EMAIL: COMMITTER.email,
+        GIT_COMMITTER_DATE: `${seconds} +0000`,
+      };
+
+      for (const each of made.cases) {
+        const wanted = {
+          upstream: seeded.ids[each.upstream] ?? "",
+          commit: seeded.ids[each.commit] ?? "",
+          onto: seeded.ids[each.onto] ?? "",
+        };
+
+        const ours = yield* Effect.result(
+          seeded.repository.rebase({
+            upstream: commitIdFrom(wanted.upstream),
+            commit: commitIdFrom(wanted.commit),
+            onto: commitIdFrom(wanted.onto),
+          }),
+        );
+
+        const keeping = yield* gitRebased(copy, clone, wanted, ["--empty=keep", "--reapply-cherry-picks"], committer);
+        const dropping = yield* gitRebased(copy, clone, wanted, [], committer);
+
+        if (keeping.kind === "conflict") {
+          expect(answered(ours), `${each.label}: both conflict, on the same paths`).toEqual({
+            kind: "conflict",
+            paths: keeping.paths,
+          });
+          expect(dropping, `${each.label}: git conflicts the same way without the flags`).toEqual(keeping);
+          continue;
+        }
+
+        const own = Result.isSuccess(ours) ? ours.success : [];
+        expect(Result.isSuccess(ours), `${each.label}: the call rebases where git does`).toBe(true);
+        expect(own.length, `${each.label}: every commit is kept`).toBe(keeping.made.length);
+
+        for (const [i, mine] of own.entries()) {
+          const theirs = keeping.made[i];
+
+          if (theirs === undefined) {
+            return yield* Effect.die(new Error(`${each.label}: git made no commit ${i}`));
+          }
+
+          const same = withoutLeadingBlankLines(mine.message) === mine.message;
+
+          // The same tree, author, committer and message, and so the same id; a message with leading blank lines is the one difference.
+          expect(
+            {
+              tree: mine.tree,
+              author: mine.author,
+              committer: mine.committer,
+              message: withoutLeadingBlankLines(mine.message),
+            },
+            `${each.label}: commit ${i}`,
+          ).toEqual({
+            tree: theirs.tree,
+            author: theirs.author,
+            committer: theirs.committer,
+            message: theirs.message,
+          });
+
+          if (same) {
+            expect(mine.id, `${each.label}: commit ${i} has git's id`).toBe(theirs.id);
+          }
+        }
+
+        if (dropping.kind === "commits") {
+          const dropped = GIT_DROPS.includes(each.label);
+          expect(dropping.made.length < keeping.made.length, `${each.label}: git drops commits only for a cause`).toBe(
+            dropped,
+          );
+
+          if (!dropped) {
+            expect(
+              dropping.made.map((commit) => commit.id),
+              `${each.label}: nothing dropped`,
+            ).toEqual(keeping.made.map((commit) => commit.id));
+          }
+        }
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  { arbitrary: { runs: 3, seed: 119120 }, timeout: 1_800_000 },
 );

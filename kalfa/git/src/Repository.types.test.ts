@@ -362,6 +362,46 @@ const commitEdits = () => {
   >();
 };
 
+// Plant (T8, ticket 1936 slice 1): add `NoSuchTree` to `rebase`'s errors; require `rebase` of an adapter, so `Raw` has it and the
+// `@ts-expect-error` is unused; type `reason` of `CannotRebase` as a string; leave `onto` out of the input; give `rebase` a requirement;
+// leave `Conflict` or `CannotRebase` out of its errors; make its answer a mutable array.
+const rebases = (raw: Repository.Raw, commit: CommitId, text: string) => {
+  expectTypeOf<Repository.Repository["Service"]["rebase"]>().toEqualTypeOf<
+    (rebase: {
+      readonly upstream: CommitId;
+      readonly commit: CommitId;
+      readonly onto: CommitId;
+    }) => Effect.Effect<
+      ReadonlyArray<Commit>,
+      | Repository.CannotRebase
+      | Repository.Conflict
+      | Repository.NulInMessage
+      | Repository.TooLargeToWrite
+      | Repository.NoSuchCommit
+      | Repository.TooMany
+      | Repository.TooLarge
+      | Repository.UnreadableCommit
+      | Repository.HistoryTooShort
+      | Fails,
+      never
+    >
+  >();
+  expectTypeOf<ConstructorParameters<typeof Repository.CannotRebase>[0]["reason"]>().toEqualTypeOf<"merge" | "root">();
+  expectTypeOf<ConstructorParameters<typeof Repository.CannotRebase>[0]["commits"]>().toEqualTypeOf<
+    readonly [CommitId, ...Array<CommitId>]
+  >();
+  // @ts-expect-error `rebase` is written once in `make`: an adapter has none.
+  const written = raw.rebase;
+  // @ts-expect-error A refusal names at least one commit.
+  const nobody = new Repository.CannotRebase({ reason: "merge", commits: [] });
+  // @ts-expect-error A reason is one of the two words.
+  const other = new Repository.CannotRebase({ reason: text, commits: [commit] });
+  // @ts-expect-error The call names the commit the branch is moved onto.
+  const noOnto = (repo: Repository.Repository["Service"]) => repo.rebase({ upstream: commit, commit });
+
+  return [written, nobody, other, noOnto];
+};
+
 it("type: each call has the answer and errors the plan gives, and each layer the plan's types", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(calls).toBeFunction();
@@ -376,6 +416,7 @@ it("type: each call has the answer and errors the plan gives, and each layer the
   expectTypeOf(merges).toBeFunction();
   expectTypeOf(mergeCommits).toBeFunction();
   expectTypeOf(refNotCommit).toBeFunction();
+  expectTypeOf(rebases).toBeFunction();
 });
 
 // Plant (U2, ticket 2018): type the line `override readonly cause: unknown = this.reason`; leave `GitTooOld` out of the reason's union; give `cause` another type

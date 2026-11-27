@@ -3702,3 +3702,648 @@ export const folderCarrier = (
 
   return { history: { nodes, refs: [], shallow: [] }, cases };
 };
+
+// ---------------------------------------------------------------------------------------------------------
+// Rebasing own commits onto a new base (ticket 1936, slice 1)
+// ---------------------------------------------------------------------------------------------------------
+
+/**
+ * What a rebase must answer, by index into the history: one new commit for each own commit, each with the node whose files
+ * are the model's tree, or the failure the model names.
+ */
+export type RebaseAnswer =
+  | {
+      readonly kind: "commits";
+      readonly steps: ReadonlyArray<{ readonly own: number; readonly tree: number }>;
+    }
+  | { readonly kind: "conflict"; readonly paths: ReadonlyArray<string> }
+  /** The merge commits among the own commits, in index order: the law sorts them by id. */
+  | { readonly kind: "merge"; readonly commits: ReadonlyArray<number> }
+  /** The root commits among the own commits, when there is no merge commit. */
+  | { readonly kind: "root"; readonly commits: ReadonlyArray<number> }
+  /** An own commit's message holds a NUL byte, and nothing before the check refuses. */
+  | { readonly kind: "nul" };
+
+/** The model of a rebase, with the files each new commit must hold and not yet a node. */
+export type RebaseModel =
+  | {
+      readonly kind: "commits";
+      readonly steps: ReadonlyArray<{ readonly own: number; readonly files: ReadonlyArray<FileSpec> }>;
+    }
+  | Exclude<RebaseAnswer, { readonly kind: "commits" }>;
+
+/**
+ * The model of `rebase({ upstream, commit, onto })`, step by step as the plan says. The own commits are those `commit` reaches
+ * that neither `upstream` nor `onto` reaches. A merge commit among them, else a root, refuses; then a NUL in a message
+ * refuses; else each own commit is merged over its own parent as the merge base, with the new tip's files as ours and its
+ * own files as theirs, and the first merge that conflicts ends the call with its paths.
+ */
+export const rebaseModel = (history: History, upstream: number, commit: number, onto: number): RebaseModel => {
+  const own = walkModel(history, [commit], [upstream, onto]);
+  const commitAt = (i: number): Node => nodeAtIndex(history, i);
+  const merges = own.filter((i) => commitAt(i).parents.length > 1);
+
+  if (merges.length > 0) {
+    return { kind: "merge", commits: merges };
+  }
+
+  const roots = own.filter((i) => commitAt(i).parents.length === 0);
+
+  if (roots.length > 0) {
+    return { kind: "root", commits: roots };
+  }
+
+  if (own.some((i) => commitAt(i).message.includes("\0"))) {
+    return { kind: "nul" };
+  }
+
+  let tip = commitAt(onto).files;
+  const steps: Array<{ own: number; files: ReadonlyArray<FileSpec> }> = [];
+
+  for (const i of own) {
+    const parent = commitAt(i).parents[0];
+    const merged = mergeModel(parent === undefined ? [] : commitAt(parent).files, tip, commitAt(i).files);
+
+    if (merged.kind === "conflict") {
+      return { kind: "conflict", paths: merged.paths };
+    }
+
+    tip = merged.files;
+    steps.push({ own: i, files: merged.files });
+  }
+
+  return { kind: "commits", steps };
+};
+
+const nodeAtIndex = (history: History, i: number): Node => {
+  const node = history.nodes[i];
+
+  if (node === undefined) {
+    throw new Error(`no commit ${i}`);
+  }
+
+  return node;
+};
+
+/** One rebase of the carrier: the three commits it is asked with, by index, and what the model answers. */
+export interface RebaseCase {
+  readonly label: string;
+  readonly upstream: number;
+  readonly commit: number;
+  readonly onto: number;
+  readonly expected: RebaseAnswer;
+}
+
+/** A history that holds a rebase for each class of `REBASE_CLASSES`, each among commits of its own. */
+export interface RebaseCarrier {
+  readonly history: History;
+  readonly cases: ReadonlyArray<RebaseCase>;
+}
+
+/** The classes a rebase run reaches in every run, each applied to the run's drawn value, in the order the carrier makes them. */
+export const REBASE_CLASSES: ReadonlyArray<string> = [
+  "(a) one commit",
+  "(a) three commits",
+  "(a) a file three folders deep",
+  "(a) the last file of a folder deleted",
+  "(a) a mode made executable",
+  "(a) binary content",
+  "(a) a link's target",
+  "(a) names on the object prototype",
+  "(a) a path onto also changed to the same bytes",
+  "(a) a later commit changes what the commit before it changed",
+  "(a) a commit undoes the commit before it",
+  "(b) the commit is reached by the upstream",
+  "(b) the commit is reached by onto only",
+  "(c) a commit that starts empty",
+  "(c) a commit that becomes empty",
+  "(d) every message class but the NUL and every signature class, one for each commit",
+  "(k) three commits that end in a character of one, three and four bytes",
+  "(n) onto already reaches the first commit of the branch",
+  "(e) conflicts at the first own commit, and again at the second",
+  "(e) conflicts at the third, after two clean ones that the third changes again",
+  ...CONFLICT_MERGE_CLASSES.map((label) => `(e) ${label}`),
+  "(f) one merge commit among the own commits",
+  "(f) two merge commits among the own commits",
+  "(f) three merge commits among the own commits",
+  "(f) a merge commit below the upstream",
+  "(g) own commits that reach a root",
+  "(g) a merge commit and a root together",
+  "(l) a NUL in the third message, after two clean commits",
+  "(l) a NUL in the second message, after a commit that conflicts",
+];
+
+/** The committer of the commits of the byte-limit branch: short, so a settings' committer is longer. */
+const SHORT_COMMITTER = { name: "o", email: "o", offset: "+0000" } as const;
+
+/**
+ * One history for a rebase law, made from one drawn texture: a base, a new base (`onto`) and a branch for each class. Each case is
+ * `rebaseModel` run on the history so far, and each clean step has a node of its own that holds the files the step must give, so a
+ * law compares tree ids and never lists files. `tag` goes in front of every path's first part, so a law can make each path carry a
+ * canary. No side of any merge both deletes a path and adds another, so git finds no rename and the model and git agree.
+ */
+export const rebaseCarrier = (texture: Texture, tag = ""): RebaseCarrier => {
+  const draw = new Draw(texture);
+  const nodes: Array<Node> = [];
+  const cases: Array<RebaseCase> = [];
+  const filesAt = (i: number): ReadonlyArray<FileSpec> => nodeAtIndex({ nodes, refs: [], shallow: [] }, i).files;
+
+  const make = (
+    parents: ReadonlyArray<number>,
+    files: ReadonlyArray<FileSpec>,
+    over: Partial<Pick<Node, "author" | "committer" | "message">> = {},
+  ): number => {
+    nodes.push({
+      parents,
+      author: over.author ?? draw.signature(draw.int(4_000_000_000)),
+      committer: over.committer ?? draw.signature(BASE_SECONDS + nodes.length * 60),
+      message: over.message ?? draw.word(),
+      files,
+    });
+
+    return nodes.length - 1;
+  };
+
+  const add = (label: string, upstream: number, commit: number, onto: number): void => {
+    const model = rebaseModel({ nodes, refs: [], shallow: [] }, upstream, commit, onto);
+
+    const expected: RebaseAnswer =
+      model.kind === "commits"
+        ? { kind: "commits", steps: model.steps.map((step) => ({ own: step.own, tree: make([], step.files) })) }
+        : model;
+
+    cases.push({ label, upstream, commit, onto, expected });
+  };
+
+  // `walk` leaves out what either reaches, so the upstream is the new base or the old one, by turns.
+  let turn = 0;
+  const upstreamFor = (base: number, onto: number): number => (turn++ % 2 === 0 ? onto : base);
+
+  /** A branch of one commit: its parent holds `sides.base`, the new base `sides.ours` and the commit `sides.theirs`. */
+  const single = (label: string, sides: Sides): void => {
+    const base = make([], sides.base);
+    const onto = make([base], sides.ours);
+    const commit = make([base], sides.theirs);
+    add(label, upstreamFor(base, onto), commit, onto);
+  };
+
+  const flipped = (sides: Sides): Sides => ({ base: sides.base, ours: sides.theirs, theirs: sides.ours });
+  const v0 = draw.blob();
+  const [v1, v2] = [bump(v0, 1), bump(v0, 2)];
+
+  // One file more than the files before it, so each own commit of a branch is a change of its own.
+  const grown = (i: number, files: ReadonlyArray<FileSpec>): ReadonlyArray<FileSpec> => [
+    ...files,
+    file(`${tag}c${i}${draw.part()}`, draw.blob()),
+  ];
+
+  // (a) clean lines
+  single("(a) one commit", join(focus("only theirs changes a path", draw, tag), beside(draw, tag)));
+
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    const first = make([base], around.theirs);
+    const second = make([first], grown(2, filesAt(first)));
+    const third = make([second], grown(3, filesAt(second)));
+    add("(a) three commits", upstreamFor(base, onto), third, onto);
+  }
+
+  {
+    const x = `${tag}x${draw.part()}`;
+    const deep = `${tag}g${draw.part()}/h${draw.part()}/i${draw.part()}/y${draw.part()}`;
+
+    single(
+      "(a) a file three folders deep",
+      join({ base: [file(x, v0)], ours: [file(x, v0)], theirs: [file(x, v0), file(deep, v1)] }, beside(draw, tag)),
+    );
+  }
+
+  {
+    const [x, last, other] = [
+      `${tag}x${draw.part()}`,
+      `${tag}f${draw.part()}/y${draw.part()}`,
+      `${tag}z${draw.part()}`,
+    ];
+
+    single(
+      "(a) the last file of a folder deleted",
+      join(
+        {
+          base: [file(x, v0), file(last, v1), file(other, v2)],
+          ours: [file(x, bump(v0, 3)), file(last, v1), file(other, v2)],
+          theirs: [file(x, v0), file(other, v2)],
+        },
+        beside(draw, tag),
+      ),
+    );
+  }
+
+  single(
+    "(a) a mode made executable",
+    join(flipped(focus("a mode made executable on one side", draw, tag)), beside(draw, tag)),
+  );
+  single(
+    "(a) binary content",
+    join(flipped(focus("binary content changed on one side", draw, tag)), beside(draw, tag)),
+  );
+  single(
+    "(a) a link's target",
+    join(flipped(focus("a link's target changed on one side", draw, tag)), beside(draw, tag)),
+  );
+  single(
+    "(a) names on the object prototype",
+    join(focus("names on the object prototype", draw, tag), beside(draw, tag)),
+  );
+  single(
+    "(a) a path onto also changed to the same bytes",
+    join(focus("both make the same change", draw, tag), beside(draw, tag)),
+  );
+
+  for (const [label, last] of [
+    ["(a) a later commit changes what the commit before it changed", v2],
+    ["(a) a commit undoes the commit before it", v0],
+  ] as const) {
+    // The second commit changes the file the first one changed, or puts it back. Merged over the first commit's parent,
+    // the first would conflict and the second would keep the change.
+    const around = beside(draw, tag);
+    const p = `${tag}p${draw.part()}`;
+    const base = make([], [...around.base, file(p, v0)]);
+    const onto = make([base], [...around.ours, file(p, v0)]);
+    const first = make([base], [...around.theirs, file(p, v1)]);
+    const second = make([first], [...around.theirs, file(p, last)]);
+    add(label, upstreamFor(base, onto), second, onto);
+  }
+
+  // (b) nothing to do
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    const commit = make([base], around.theirs);
+    const merged = make([commit, onto], around.theirs);
+    add("(b) the commit is reached by the upstream", merged, commit, onto);
+  }
+
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const commit = make([base], around.theirs);
+    const onto = make([commit], [...around.theirs, file(`${tag}u${draw.part()}`, v1)]);
+    add("(b) the commit is reached by onto only", base, commit, onto);
+  }
+
+  // (c) empty commits
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    const commit = make([base], around.base);
+    add("(c) a commit that starts empty", upstreamFor(base, onto), commit, onto);
+  }
+
+  {
+    const x = `${tag}x${draw.part()}`;
+    const around = beside(draw, tag);
+    const base = make([], [...around.base, file(x, v0)]);
+    const onto = make([base], [...around.ours, file(x, v1)]);
+    const commit = make([base], [...around.base, file(x, v1)]);
+    add("(c) a commit that becomes empty", upstreamFor(base, onto), commit, onto);
+  }
+
+  // (d) what is kept: one commit for each class of signature, each with a message of a class of its own
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    const messages = messageVariants(draw.word()).filter(([label]) => label !== "a NUL");
+    let parent = base;
+    let files = around.theirs;
+
+    for (const [i, [, author]] of signatureVariants(draw.signature(draw.int(4_000_000_000))).entries()) {
+      files = grown(i, files);
+      parent = make([parent], files, { author, message: at(messages, i)[1] });
+    }
+
+    add(
+      "(d) every message class but the NUL and every signature class, one for each commit",
+      upstreamFor(base, onto),
+      parent,
+      onto,
+    );
+  }
+
+  // (k) messages that end in a character of one, three and four bytes, by a short committer, so a settings' committer is longer
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    const author = draw.signature(draw.int(4_000_000_000));
+    let parent = base;
+    let files = around.theirs;
+
+    for (const [i, [, message]] of edgeMessages(draw.word()).entries()) {
+      files = grown(i, files);
+      parent = make([parent], files, {
+        author,
+        message,
+        committer: { ...SHORT_COMMITTER, seconds: BASE_SECONDS + nodes.length },
+      });
+    }
+
+    add(
+      "(k) three commits that end in a character of one, three and four bytes",
+      upstreamFor(base, onto),
+      parent,
+      onto,
+    );
+  }
+
+  // (n) onto already reaches the first commit of the branch, so that commit is left out
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const first = make([base], around.theirs);
+    const second = make([first], grown(2, filesAt(first)));
+    const third = make([second], grown(3, filesAt(second)));
+    const onto = make([first], [...filesAt(first), file(`${tag}n${draw.part()}`, v1)]);
+    add("(n) onto already reaches the first commit of the branch", base, third, onto);
+  }
+
+  // (e) conflicts
+  {
+    // The first commit conflicts with onto on `x`. The second would conflict on `y`, but is never merged.
+    const [x, y] = [`${tag}x${draw.part()}`, `${tag}y${draw.part()}`];
+    const word = draw.word();
+    const line = (side: string): Uint8Array => utf8(`${side}:${word}\n`);
+    const base = make([], [file(x, line("b")), file(y, line("b"))]);
+    const onto = make([base], [file(x, line("o")), file(y, line("o"))]);
+    const first = make([base], [file(x, line("t")), file(y, line("b"))]);
+    const second = make([first], [file(x, line("t")), file(y, line("t"))]);
+    add("(e) conflicts at the first own commit, and again at the second", base, second, onto);
+  }
+
+  {
+    // The third commit conflicts with onto on `x`, and changes `q` again, which the first commit changed: merged over the
+    // first commit's parent, `q` would conflict too.
+    const [x, q, kept] = [`${tag}x${draw.part()}`, `${tag}q${draw.part()}`, `${tag}k${draw.part()}`];
+    const word = draw.word();
+    const line = (side: string): Uint8Array => utf8(`${side}:${word}\n`);
+    const base = make([], [file(x, line("x0")), file(q, line("q0")), file(kept, v0)]);
+    const onto = make([base], [file(x, line("xo")), file(q, line("q0")), file(kept, v0)]);
+    const first = make([base], [file(x, line("x0")), file(q, line("q1")), file(kept, v0)]);
+    const second = make([first], [file(x, line("x0")), file(q, line("q1")), file(kept, v1)]);
+    const third = make([second], [file(x, line("x3")), file(q, line("q2")), file(kept, v1)]);
+    add("(e) conflicts at the third, after two clean ones that the third changes again", base, third, onto);
+  }
+
+  for (const label of MERGE_CLASSES.slice(13)) {
+    single(`(e) ${label}`, join(focus(label, draw, tag), beside(draw, tag)));
+  }
+
+  // (f) merge commits among the own commits
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    const sideFile = file(`${tag}s${draw.part()}`, v1);
+    const side = make([base], [...around.base, sideFile]);
+    const first = make([base], around.theirs);
+    const merge = make([first, side], [...around.theirs, sideFile]);
+    const last = make([merge], filesAt(merge));
+    add("(f) one merge commit among the own commits", base, last, onto);
+  }
+
+  const merges = (label: string, count: number): void => {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    let tip = make([base], around.theirs);
+
+    for (let i = 0; i < count; i++) {
+      const side = make([base], [...around.base, file(`${tag}s${i}${draw.part()}`, draw.blob())]);
+      tip = make([make([tip, side], around.theirs)], around.theirs);
+    }
+
+    add(label, base, tip, onto);
+  };
+
+  merges("(f) two merge commits among the own commits", 2);
+  merges("(f) three merge commits among the own commits", 3);
+
+  {
+    // A merge commit the upstream reaches is no own commit: the rebase goes on from it.
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const [leftFile, rightFile] = [file(`${tag}l${draw.part()}`, v1), file(`${tag}r${draw.part()}`, v2)];
+    const left = make([base], [...around.base, leftFile]);
+    const right = make([base], [...around.base, rightFile]);
+    const joined = [...around.base, leftFile, rightFile];
+    const merge = make([left, right], joined);
+
+    const [ontoFile, firstFile, secondFile] = [
+      file(`${tag}u${draw.part()}`, v0),
+      file(`${tag}c${draw.part()}`, v1),
+      file(`${tag}e${draw.part()}`, v2),
+    ];
+
+    // The new base is a branch of its own: it does not reach the merge commit, which only the upstream does.
+    const onto = make([base], [...joined, ontoFile]);
+    const first = make([merge], [...joined, firstFile]);
+    const second = make([first], [...joined, firstFile, secondFile]);
+    add("(f) a merge commit below the upstream", merge, second, onto);
+  }
+
+  // (g) roots
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    const root = make([], around.theirs);
+    const commit = make([root], grown(1, around.theirs));
+    add("(g) own commits that reach a root", base, commit, onto);
+  }
+
+  {
+    const around = beside(draw, tag);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    const root = make([], around.theirs);
+    const [left, right] = [make([root], grown(1, around.theirs)), make([root], grown(2, around.theirs))];
+    const merge = make([left, right], around.theirs);
+    const commit = make([merge], grown(3, around.theirs));
+    add("(g) a merge commit and a root together", base, commit, onto);
+  }
+
+  // (l) a NUL in an own commit's message, which is refused before any commit is made
+  {
+    const around = beside(draw, tag);
+    const [, nul] = at(nulMessages(draw.word()), 1);
+    const base = make([], around.base);
+    const onto = make([base], around.ours);
+    const first = make([base], around.theirs);
+    const second = make([first], grown(1, filesAt(first)));
+    const third = make([second], grown(2, filesAt(second)), { message: nul });
+    add("(l) a NUL in the third message, after two clean commits", base, third, onto);
+  }
+
+  {
+    // The first commit conflicts with onto and the second holds the NUL: the NUL is found first, before any merge.
+    const [x, y] = [`${tag}x${draw.part()}`, `${tag}y${draw.part()}`];
+    const word = draw.word();
+    const line = (side: string): Uint8Array => utf8(`${side}:${word}\n`);
+    const [, nul] = at(nulMessages(draw.word()), 0);
+    const base = make([], [file(x, line("b")), file(y, line("b"))]);
+    const onto = make([base], [file(x, line("o")), file(y, line("b"))]);
+    const first = make([base], [file(x, line("t")), file(y, line("b"))]);
+    const second = make([first], [file(x, line("t")), file(y, line("t"))], { message: nul });
+    add("(l) a NUL in the second message, after a commit that conflicts", base, second, onto);
+  }
+
+  return { history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] }, cases };
+};
+
+/** What a rebase is compared against `git rebase` for: the commits `git rebase --force-rebase` drops, besides the call's own. */
+export const GIT_DROPS: ReadonlyArray<string> = ["a commit that becomes empty", "a patch the upstream already holds"];
+
+export const AGAINST_GIT_CLASSES: ReadonlyArray<string> = [
+  "a commit that starts empty",
+  "a commit that becomes empty",
+  "a patch the upstream already holds",
+  "a rename on one side and a change on the other",
+  "the same rename on both",
+  "a file added in a folder the other side renamed",
+  "a message with no final newline",
+  "a message with leading blank lines",
+  "a message with leading lines of spaces and tabs",
+];
+
+/** One rebase to compare with `git rebase`: the three commits by index. */
+export interface AgainstGitCase {
+  readonly label: string;
+  readonly upstream: number;
+  readonly commit: number;
+  readonly onto: number;
+}
+
+/**
+ * A history with one small branch for each class of `AGAINST_GIT_CLASSES`, each with files git's rename detection can follow (ten
+ * lines of text, so a moved file is the same file). The call and `git rebase --force-rebase` are asked the same question about each.
+ */
+export const againstGitCarrier = (
+  texture: Texture,
+): { readonly history: History; readonly cases: ReadonlyArray<AgainstGitCase> } => {
+  const draw = new Draw(texture);
+  const { nodes, commit } = commits(draw);
+  const cases: Array<AgainstGitCase> = [];
+
+  const ten = (word: string, changed = -1): string =>
+    Array.from({ length: 10 }, (_, i) => (i === changed ? `${word} changed\n` : `${word} line ${i}\n`)).join("");
+
+  const one = (
+    label: string,
+    base: ReadonlyArray<FileSpec>,
+    onto: ReadonlyArray<FileSpec>,
+    own: ReadonlyArray<FileSpec>,
+    message?: string,
+  ) => {
+    const b = commit([], base);
+    const o = commit([b], onto);
+    const c = commit([b], own);
+
+    if (message !== undefined) {
+      nodes[c] = { ...nodeAtIndex({ nodes, refs: [], shallow: [] }, c), message };
+    }
+
+    cases.push({ label, upstream: b, commit: c, onto: o });
+  };
+
+  const [a, z, extra] = [`a${draw.part()}`, `z${draw.part()}`, `e${draw.part()}`];
+  const [w1, w2, w3] = [draw.word(), draw.word(), draw.word()];
+  const moved = `r${draw.part()}/${a}`;
+  const kept = textFile(z, ten(w3));
+
+  one(
+    "a commit that starts empty",
+    [textFile(a, ten(w1)), kept],
+    [textFile(a, ten(w1)), kept, textFile(extra, ten(w2))],
+    [textFile(a, ten(w1)), kept],
+  );
+
+  one(
+    "a commit that becomes empty",
+    [textFile(a, ten(w1)), kept],
+    [textFile(a, ten(w1, 4)), kept],
+    [textFile(a, ten(w1, 4)), kept],
+  );
+
+  {
+    // The upstream holds the same change as the branch, made on the same base: its patch is the branch's.
+    const b = commit([], [textFile(a, ten(w1)), kept]);
+    const u = commit([b], [textFile(a, ten(w1, 4)), kept]);
+    const c = commit([b], [textFile(a, ten(w1, 4)), kept]);
+    cases.push({ label: "a patch the upstream already holds", upstream: u, commit: c, onto: u });
+  }
+
+  one(
+    "a rename on one side and a change on the other",
+    [textFile(a, ten(w1)), kept],
+    [textFile(moved, ten(w1)), kept],
+    [textFile(a, ten(w1, 4)), kept],
+  );
+
+  one(
+    "the same rename on both",
+    [textFile(a, ten(w1)), kept],
+    [textFile(moved, ten(w1)), kept],
+    [textFile(moved, ten(w1, 4)), kept],
+  );
+
+  {
+    const folder = `d${draw.part()}`;
+    const moves = `n${draw.part()}`;
+    const inside = (name: string, i: number, words: string): FileSpec => textFile(`${name}/f${i}`, ten(words));
+    const texts = [w1, `${w1}${w1}`, `${w2}${w2}${w2}`];
+    const base = [...texts.map((words, i) => inside(folder, i, words)), kept];
+
+    one(
+      "a file added in a folder the other side renamed",
+      base,
+      [...texts.map((words, i) => inside(moves, i, words)), kept],
+      [...base, textFile(`${folder}/new${draw.part()}`, ten(w3))],
+    );
+  }
+
+  one(
+    "a message with no final newline",
+    [textFile(a, ten(w1)), kept],
+    [textFile(a, ten(w1)), kept, textFile(extra, ten(w2))],
+    [textFile(a, ten(w1)), kept, textFile(`${extra}-own`, ten(w3))],
+    "no final newline",
+  );
+
+  one(
+    "a message with leading blank lines",
+    [textFile(a, ten(w1)), kept],
+    [textFile(a, ten(w1)), kept, textFile(extra, ten(w2))],
+    [textFile(a, ten(w1)), kept, textFile(`${extra}-own`, ten(w3))],
+    "\n\nleading blank lines\n",
+  );
+
+  {
+    // `git rebase` also skips a line that holds only spaces and tabs; the first line with text keeps its own spaces.
+    const blank = Array.from({ length: 1 + draw.int(3) }, () => (draw.int(2) === 0 ? " " : "\t")).join("");
+    const first = draw.int(2) === 0 ? "" : " ";
+
+    one(
+      "a message with leading lines of spaces and tabs",
+      [textFile(a, ten(w1)), kept],
+      [textFile(a, ten(w1)), kept, textFile(extra, ten(w2))],
+      [textFile(a, ten(w1)), kept, textFile(`${extra}-spaced`, ten(w3))],
+      `${blank}\n${draw.int(2) === 0 ? "\n" : ""}${first}${w2}\n`,
+    );
+  }
+
+  return { history: { nodes, refs: [], shallow: [] }, cases };
+};
