@@ -348,7 +348,7 @@ Read the header before you run one; this table only says what each is for.
 |---|---|
 | `box.sh new`, `run`, `fetch` | one box's start, Codex run and fetch; a quest's boxes are made by `drive.ts`, never by hand |
 | `box.sh gc` | remove boxes and landed worktrees whose work is safe elsewhere (`gc.ts` says when); `gcloop.ts` runs it ([below](#box-cleanup-on-a-timer)) |
-| `gcloop.ts` | the box cleanup's loop: a timer sweep, a sweep after each merge, and `status` |
+| `gcloop.ts` | the box cleanup's loop: a timer sweep, a sweep after each merge, the ticket pass that closes the tickets of recent merges (once each), and `status` |
 | `drive.ts` | one step end to end, with no agent waiting ([below](#use-drivets-for-any-step)) |
 | `chain.ts` | a whole quest end to end, to the merge queue ([below](#run-a-whole-quest-with-chaints)) |
 | `quests.ts` | what each quest is doing now, read-only |
@@ -362,8 +362,8 @@ Read the header before you run one; this table only says what each is for.
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
-| `land.ts wait <pr>` | wait until `ci-required` has ended at the pull request's current head, as `queue --wait` and `admin --wait` do; exits 0 only on success, names a cancelled run; `--wait-minutes`, `--every-seconds` |
-| `land.ts check <pr>` | the body checks `queue` runs, alone: run it after the body is written and before `queue`; it changes nothing and exits 1 on any missing name, leak, or `fabrika close ticket` line whose number is no open tracker ticket (an open GitHub issue is closed with `Closes #N`) |
+| `land.ts wait <pr>` | wait until `ci-required` has ended at the pull request's current head, as `queue --wait-ci` and `admin --wait` do; exits 0 only on success, names a cancelled run; `--wait-minutes`, `--every-seconds` |
+| `land.ts check <pr>` | the merge gate, alone: the checks that `queue`, `merge`, `admin` and `arm` each run first, so a pull request that passes `check` is refused by none of them on these grounds. Run it after the body is written and before `queue`; it changes nothing and exits 1 on a `can/` branch, a `Plan:` title, a leak, a missing name, a `fabrika close ticket` line whose number is no open tracker ticket (an open GitHub issue is closed with `Closes #N`), or a commit nothing vouches for |
 | `replay.ts <pr>` | run a changed check on the last 20 merged and every open pull request before it lands; its header says which checks it replays and which it lists as `not replayed`; see [How a change lands](#how-a-change-lands) |
 | `sizecap.ts` | a diff's or a plan's size, as advice only; run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
@@ -559,7 +559,7 @@ visible, and never weaken the rules to hide this message.
    or replaced law, using exact test titles. Save that table as `mapping.md` for the command.
    A pure addition needs no replacement row. `loosening.sh`'s header says what counts as a hit;
    it fails closed, so every hit is yours to check by hand. A law narrowed with no changed
-   `expect` is found by the hourly mutation run instead, as a ticket marked loosening.
+   `expect` is found by the hourly mutation run instead, which shows it in its job summary and artifact: the run cannot reach the tracker, so it files no loosening ticket until a ticket adds a filer, and a person or session files it by hand.
    Before this new check blocks anything, measure false alarms on the last 20 merged `next/`
    PRs and record the count. Do not claim that measure from generated tests alone.
    Never write "owner read" unless the owner did. Log each required owner read in a field note.
@@ -577,9 +577,9 @@ visible, and never weaken the rules to hide this message.
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
    Read a backgrounded land command's exit code and its log before you report it.
    For any other pull request, write the body with the [pr skill](../pr/SKILL.md), run `land.ts check <pr>`
-   until it exits 0 (the body checks `queue` runs, alone: it prints each new exported name missing from `## New names` with its
+   until it exits 0 (the merge gate that every merge path runs first, alone: it prints each new exported name missing from `## New names` with its
    file, and changes nothing), then run `land.ts queue <pr>` once its checks
-   are green; it marks a draft ready itself, once a CI run has started at its head, so give it `--wait` to
+   are green; it marks a draft ready itself, once a CI run has started at its head, so give it `--wait-ci` to
    let that run and the new `ci-required` appear. Both leak-check the change, each commit and the title and description, then add it to
    the queue with one squash pinned to the head; `land.ts`'s header says how. `land.ts merge <pr>`
    is the only way to merge by hand; a bare `gh pr merge` is never used, since it skips the leak
@@ -605,7 +605,7 @@ visible, and never weaken the rules to hide this message.
    `--queue-every-seconds`), so run it in the background. A sev fix and a sev0's ready pull request
    never wait on the queue: the sev skill's one-at-a-time rule is theirs alone.
    A pull request the queue puts back out stays open: the
-   quest merges main or fixes the red check, pushes, and it is queued again. `land.ts queue --wait` exits 1 at once when
+   quest merges main or fixes the red check, pushes, and it is queued again. `land.ts queue --wait-ci` exits 1 at once when
    the pull request conflicts with main (GitHub starts no check on one), naming `gh pr update-branch <pr>`; merge main in, push, queue again. No pull request is in a native stack: GitHub refuses `gh pr merge` and merge when ready on a stack member
    (github/gh-stack#591), so a chain is plain pull requests. A child targets its parent's branch.
    When the parent lands, GitHub moves the child onto main, and the child is armed next with
@@ -629,7 +629,9 @@ visible, and never weaken the rules to hide this message.
     ticket the description names on a line of its own, `fabrika close ticket <N>`, so put that line
     in when the PR finishes the ticket. Each close gets a comment
     naming the PR and its merge commit (`scripts/pr/Queue.ts`). When it has not merged yet, it says
-    so and does nothing; run it again later. No row per merge is written: that measure is proposed.
+    so and does nothing; run it again later. The timer's pass (`gcloop.ts`, after each sweep) also closes
+    the open tickets that recent merges name, once each, so a `merged` run that never happened is caught
+    within one period. No row per merge is written: that measure is proposed.
 Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
@@ -669,7 +671,7 @@ Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in th
   which `oxlint-plugins/tracked-scripts.ts` holds. Product code keeps its steps.
 - **`land.ts wait <pr>` is the one wait for CI.** It reads `ci-required`, the check `land.ts` itself reads, at the
   head the pull request holds on each read, and exits 0 only on a success; a cancelled run is named.
-  `queue --wait` and `admin --wait` make the same wait, so a hand-written loop over `gh run list` or a
+  `queue --wait-ci` and `admin --wait` make the same wait, so a hand-written loop over `gh run list` or a
   workflow run picked by head SHA has no place (a ready event starts a second run at one head, and such a loop read the first).
   Before you name a cause for a red or cancelled run, read the failed step's log:
   `gh api repos/kamp-us/tea-fabrika/actions/jobs/<id>/logs --allow-escape-sequences`, on the job whose
@@ -818,8 +820,6 @@ these caps. Each one came from a laptop that became unusable. This list is their
 
 ## Tool facts that cost us time
 
-- `gh pr edit` fails here with a classic Projects error. To change an open PR's title and body, run
-  `publish.ts <branch> --title <t> --body-file <f>`; it patches through the API and leaves the draft state alone.
 - On a draft pull request the required check is named `ci-required (draft)` on purpose
   (`.github/workflows/check.yaml`), so `gh pr checks <pr> --required` finds nothing. Use
   `gh pr checks <pr>` without the flag, or mark the pull request ready first. Right after that,

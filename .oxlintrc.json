@@ -749,7 +749,10 @@
         "kalfa/diagnostics/src/**",
         "kalfa/git/src/**",
         "kalfa/github/src/**",
-        "kalfa/markdown/src/**"
+        "kalfa/ledger/src/**",
+        "kalfa/markdown/src/**",
+        "kalfa/permissions/src/**",
+        "kalfa/transport/src/**"
       ],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
       "rules": {
@@ -1542,6 +1545,15 @@
       "rules": { "fabrika/no-cause-squash": "off" }
     },
     {
+      // An error's hidden cause stays hidden when the error is written as JSON (ticket 1310). `Schema.Redacted` hides its value from every rendering but writes
+      // it in full through `Schema.toCodecJson`, so a kalfa error that crosses a socket would carry a cause that quotes a secret. The rule refuses it in a
+      // kalfa error class's fields, and any `cause` that is not `Schema.Defect()` or `Hidden.Cause` from `@kalfa/diagnostics/Hidden`, in every kalfa file.
+      // A test makes errors with any cause to probe them, so tests and test support are left out; a shared suite such as `StoreTest.ts` is held.
+      "files": ["kalfa/**"],
+      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx", "kalfa/**/*.test-support.ts"],
+      "rules": { "fabrika/hidden-cause": "error" }
+    },
+    {
       // A test that needs a real resource runs only in main's full run: a test file whose own code drives a real resource is named `*.integration.test.ts`, or
       // `*.visual.test.ts` for a browser or Electron, so Vitest keeps it off pull requests. Measured
       // on experiment 292's classified tree: 73 files fired, 72 drive a resource (oxlint-plugins/README.md).
@@ -1564,6 +1576,12 @@
         "kalfa/**/*.test-support.ts"
       ],
       "rules": { "fabrika/test-database": "error" }
+    },
+    {
+      // Ticket 1311: `it.effect` runs on Effect's `TestClock`, which moves only when a test adjusts it, so a real wait inside it never ends and the test
+      // hangs until its timeout. A test waits in `it.live`, or moves the clock with `TestClock.adjust` in the same body.
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*Test.ts", "**/*.test-support.ts"],
+      "rules": { "fabrika/no-sleep-on-test-clock": "error" }
     },
     {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
@@ -4334,6 +4352,421 @@
       }
     },
     {
+      // The Ledger (@kalfa/ledger, ticket 2082) is a library that imports `@kalfa/diagnostics/Hidden` and no other kalfa package, no Telemetry, no Node module and no platform package: its spans are made with `Effect.fn`, and the app joins the Node layer at the top. An override replaces a rule's options, so this repeats the base entries and adds its own. Every pattern that means "and below" ends in /**, never /*. `fast-sha256` is imported by `EntryId.ts` alone (the next override). Tests and test support are left out, and `LedgerTest.ts`, the one file that loads the test tools, has the override after the next one.
+      "files": ["kalfa/ledger/src/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/platform-node",
+                "message": "@kalfa/ledger: the app provides the Node layer at the top, so this package never imports it."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/ledger: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/ledger: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/ledger: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "fast-sha256",
+                "message": "@kalfa/ledger: only EntryId.ts hashes (L2), so the one dependency is imported in one place."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib"
+                ],
+                "message": "@kalfa/ledger imports no Node module, so it runs in a browser, a Worker and Node alike. Both spellings are refused: node:crypto and crypto."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/ledger imports no Telemetry: its spans are made with Effect.fn (decision 0063)."
+              },
+              {
+                "group": ["effect/process", "effect/process/**"],
+                "message": "@kalfa/ledger spawns no process."
+              },
+              {
+                "group": [
+                  "@effect/platform-*",
+                  "@effect/platform-*/**",
+                  "@effect/vitest/**",
+                  "vitest/**",
+                  "fast-check/**",
+                  "fast-sha256/**"
+                ],
+                "message": "@kalfa/ledger: no platform package and no test tools in product files."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**", "!@kalfa/diagnostics/Hidden"],
+                "message": "@kalfa/ledger imports `@kalfa/diagnostics/Hidden`, the hidden cause its failures hold, and no other package of this repository (it ranks just above Diagnostics, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/ledger imports no path out of its own folder."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": ["error", "process", "console", "globalThis", "global", "self", "window"],
+        "eslint/no-console": "error"
+      },
+      "excludeFiles": [
+        "**/*.test.ts",
+        "**/*.test-support.ts",
+        "kalfa/ledger/src/EntryId.ts",
+        "kalfa/ledger/src/LedgerTest.ts"
+      ]
+    },
+    {
+      // @kalfa/ledger's one file that hashes: the same rows as above, less `fast-sha256`, which EntryId.ts alone may import (L2).
+      "files": ["kalfa/ledger/src/EntryId.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/platform-node",
+                "message": "@kalfa/ledger: the app provides the Node layer at the top, so this package never imports it."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/ledger: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/ledger: test tools load only in /test (the Test.ts files) and in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/ledger: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib"
+                ],
+                "message": "@kalfa/ledger imports no Node module, so it runs in a browser, a Worker and Node alike. Both spellings are refused: node:crypto and crypto."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/ledger imports no Telemetry: its spans are made with Effect.fn (decision 0063)."
+              },
+              {
+                "group": ["effect/process", "effect/process/**"],
+                "message": "@kalfa/ledger spawns no process."
+              },
+              {
+                "group": [
+                  "@effect/platform-*",
+                  "@effect/platform-*/**",
+                  "@effect/vitest/**",
+                  "vitest/**",
+                  "fast-check/**"
+                ],
+                "message": "@kalfa/ledger: no platform package and no test tools in product files."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**", "!@kalfa/diagnostics/Hidden"],
+                "message": "@kalfa/ledger imports `@kalfa/diagnostics/Hidden`, the hidden cause its failures hold, and no other package of this repository (it ranks just above Diagnostics, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/ledger imports no path out of its own folder."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": ["error", "process", "console", "globalThis", "global", "self", "window"],
+        "eslint/no-console": "error"
+      }
+    },
+    {
+      // The Ledger's `/test` entry point (@kalfa/ledger, ticket 2082, L1): the same rows as the package's own override, less the two test tools, which this file alone loads. It takes `vitest` and `@effect/vitest` by their roots and nothing else of what the rest of the package refuses: no kalfa package but `@kalfa/diagnostics/Hidden`, no Telemetry, no Node module, no platform package, no `fast-check` and no `fast-sha256`. An override replaces a rule's options, so this repeats the base entries.
+      "files": ["kalfa/ledger/src/LedgerTest.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/platform-node",
+                "message": "@kalfa/ledger: the app provides the Node layer at the top, so this package never imports it."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/ledger: generators use Effect's Arbitrary, so this package needs no fast-check."
+              },
+              {
+                "name": "fast-sha256",
+                "message": "@kalfa/ledger: only EntryId.ts hashes (L2), so the one dependency is imported in one place."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib"
+                ],
+                "message": "@kalfa/ledger imports no Node module, so it runs in a browser, a Worker and Node alike. Both spellings are refused: node:crypto and crypto."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/ledger imports no Telemetry: its spans are made with Effect.fn (decision 0063)."
+              },
+              {
+                "group": ["effect/process", "effect/process/**"],
+                "message": "@kalfa/ledger spawns no process."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**", "fast-check/**", "fast-sha256/**"],
+                "message": "@kalfa/ledger: no platform package, and no test tool but the roots of `vitest` and `@effect/vitest` (the Test.ts file)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**", "!@kalfa/diagnostics/Hidden"],
+                "message": "@kalfa/ledger imports `@kalfa/diagnostics/Hidden`, the hidden cause its failures hold, and no other package of this repository (it ranks just above Diagnostics, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/ledger imports no path out of its own folder."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": ["error", "process", "console", "globalThis", "global", "self", "window"],
+        "eslint/no-console": "error"
+      }
+    },
+    {
       // CI paths, law 20 (the plan for CI paths, slice 2): the tests on the reader list in
       // .github/ci/changes.mjs, which a comment-only change still runs, may import the exam's plant
       // helper. Each block repeats the rule as its own folder's override has it, less the plant entry:
@@ -4908,9 +5341,10 @@
                   "@tea-fabrika/**",
                   "@kalfa/*",
                   "@kalfa/**",
+                  "!@kalfa/diagnostics/Hidden",
                   "**/next/**"
                 ],
-                "message": "The config engine imports no workspace package at runtime; tests keep only their test toolbox."
+                "message": "The config engine imports no workspace package at runtime but `@kalfa/diagnostics/Hidden`, the hidden cause its errors hold (decision 0084 gave it Diagnostics); tests keep only their test toolbox."
               }
             ]
           }
@@ -4994,9 +5428,10 @@
                   "@tea-fabrika/**",
                   "@kalfa/*",
                   "@kalfa/**",
+                  "!@kalfa/diagnostics/Hidden",
                   "**/next/**"
                 ],
-                "message": "The config engine imports no workspace package at runtime; tests keep only their test toolbox."
+                "message": "The config engine imports no workspace package at runtime but `@kalfa/diagnostics/Hidden`, the hidden cause its errors hold (decision 0084 gave it Diagnostics); tests keep only their test toolbox."
               }
             ]
           }
@@ -5639,8 +6074,15 @@
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
               {
-                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "../../**", "!@kalfa/config"],
-                "message": "@kalfa/secrets imports `@kalfa/config`'s root and nothing else of ours: not its other entry points, not another kalfa package, not `@kampus/vitest`, and nothing of this repo (decision 0047)."
+                "group": [
+                  "@kalfa/**",
+                  "@kampus/**",
+                  "@tea-fabrika/**",
+                  "../../**",
+                  "!@kalfa/config",
+                  "!@kalfa/diagnostics/Hidden"
+                ],
+                "message": "@kalfa/secrets imports `@kalfa/config`'s root and `@kalfa/diagnostics/Hidden`, the hidden cause its errors hold, and nothing else of ours: not their other entry points, not another kalfa package, not `@kampus/vitest`, and nothing of this repo (decision 0047)."
               },
               {
                 "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
@@ -5986,6 +6428,966 @@
           {
             "name": "WebSocket",
             "message": "@kalfa/secrets does no IO: no network of its own."
+          }
+        ]
+      }
+    },
+    {
+      // @kalfa/transport (ticket 2066) moves values over a socket it is given. It imports no other package of this repository and no tea package (decision 0047: it is usable alone), no Telemetry (its span is made with Effect's own calls, decision 0063), no platform package and no Node module (the app joins the socket Layer at the top), and no test tool. Tests, test support and the integration file are left out below: an override applies to product files only. An override replaces a rule's options, so this repeats the base entries and adds its own. Every pattern that means "and below" ends in /**, never /*.
+      "files": ["kalfa/transport/src/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test-support.ts", "**/*.integration.test.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib",
+                  "assert/**",
+                  "async_hooks/**",
+                  "buffer/**",
+                  "child_process/**",
+                  "cluster/**",
+                  "console/**",
+                  "constants/**",
+                  "crypto/**",
+                  "dgram/**",
+                  "diagnostics_channel/**",
+                  "dns/**",
+                  "domain/**",
+                  "events/**",
+                  "fs/**",
+                  "http/**",
+                  "http2/**",
+                  "https/**",
+                  "inspector/**",
+                  "module/**",
+                  "net/**",
+                  "os/**",
+                  "path/**",
+                  "perf_hooks/**",
+                  "process/**",
+                  "punycode/**",
+                  "querystring/**",
+                  "readline/**",
+                  "repl/**",
+                  "stream/**",
+                  "string_decoder/**",
+                  "sys/**",
+                  "timers/**",
+                  "tls/**",
+                  "trace_events/**",
+                  "tty/**",
+                  "url/**",
+                  "util/**",
+                  "v8/**",
+                  "vm/**",
+                  "wasi/**",
+                  "worker_threads/**",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/transport imports no Node module, so it runs in a browser and in Node alike: the app joins a socket Layer at the top. Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/transport imports no platform package: the app provides the socket Layer (NodeSocket.layerWebSocket and its kin) at the top."
+              },
+              {
+                "group": ["@effect/vitest/**", "vitest/**", "fast-check/**"],
+                "message": "@kalfa/transport: no test tools in product files."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/transport imports no Telemetry: its span is made with Effect's own calls (decision 0063)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**"],
+                "message": "@kalfa/transport imports no other package of this repository and no tea package (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/transport imports no path out of its own folder."
+              },
+              {
+                "group": ["alchemy", "alchemy/**", "@alchemy.run/**"],
+                "message": "L2: the core of @kalfa/transport imports no Alchemy. Only src/cloudflare/** reaches it."
+              },
+              {
+                "group": ["./cloudflare/**", "**/cloudflare/**"],
+                "message": "L2: the core of @kalfa/transport imports nothing from src/cloudflare/**: the Cloudflare entry points sit above the core."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The Cloudflare half of @kalfa/transport (ticket 2067): `Gateway`, `Hibernation` and the stand-in, in src/cloudflare/**. It repeats the package override's entries, WITHOUT the two Alchemy patterns the core refuses (this half imports `alchemy` and `@alchemy.run/cloudflare` on purpose), and adds L1: Cloudflare is reached only through Alchemy, so no `cloudflare:*`, no `@cloudflare/**`, no `miniflare`, `workerd`, `wrangler`, no `@alchemy.run/cloudflare-runtime`, no Alchemy `RawWebSocket` name, and no `WebSocketPair`, `WebSocketRequestResponsePair` or `Response` global. L2: it reads the core only through `../index.ts` and `../MemorySocket.ts`. @kalfa/transport (ticket 2066) moves values over a socket it is given. It imports no other package of this repository and no tea package (decision 0047: it is usable alone), no Telemetry (its span is made with Effect's own calls, decision 0063), no platform package and no Node module (the app joins the socket Layer at the top), and no test tool. Tests, test support and the integration file are left out below: an override applies to product files only. An override replaces a rule's options, so this repeats the base entries and adds its own. Every pattern that means "and below" ends in /**, never /*.
+      "files": ["kalfa/transport/src/cloudflare/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test-support.ts", "**/*.integration.test.ts"],
+      "rules": {
+        // `RawWebSocket` is the platform's own socket type (L1): refused as a name an import brings in. A path entry with `importNames` would also refuse `import * as Cloudflare`, which every file here writes.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how", "RawWebSocket"],
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "WebSocketPair",
+            "message": "L1: Cloudflare is reached only through Alchemy. Accept a socket with `Cloudflare.upgrade`, never `new WebSocketPair()`."
+          },
+          {
+            "name": "WebSocketRequestResponsePair",
+            "message": "L1: Cloudflare is reached only through Alchemy. Accept a socket with `Cloudflare.upgrade`."
+          },
+          {
+            "name": "Response",
+            "message": "L1: answer with Effect's HttpServerResponse (Alchemy's `Cloudflare.upgrade` gives it), never a raw `Response`."
+          }
+        ],
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib",
+                  "assert/**",
+                  "async_hooks/**",
+                  "buffer/**",
+                  "child_process/**",
+                  "cluster/**",
+                  "console/**",
+                  "constants/**",
+                  "crypto/**",
+                  "dgram/**",
+                  "diagnostics_channel/**",
+                  "dns/**",
+                  "domain/**",
+                  "events/**",
+                  "fs/**",
+                  "http/**",
+                  "http2/**",
+                  "https/**",
+                  "inspector/**",
+                  "module/**",
+                  "net/**",
+                  "os/**",
+                  "path/**",
+                  "perf_hooks/**",
+                  "process/**",
+                  "punycode/**",
+                  "querystring/**",
+                  "readline/**",
+                  "repl/**",
+                  "stream/**",
+                  "string_decoder/**",
+                  "sys/**",
+                  "timers/**",
+                  "tls/**",
+                  "trace_events/**",
+                  "tty/**",
+                  "url/**",
+                  "util/**",
+                  "v8/**",
+                  "vm/**",
+                  "wasi/**",
+                  "worker_threads/**",
+                  "zlib/**",
+                  "!effect/http",
+                  "!effect/http/**"
+                ],
+                "message": "@kalfa/transport imports no Node module, so it runs in a browser and in Node alike: the app joins a socket Layer at the top. Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/transport imports no platform package: the app provides the socket Layer (NodeSocket.layerWebSocket and its kin) at the top."
+              },
+              {
+                "group": ["@effect/vitest/**", "vitest/**", "fast-check/**"],
+                "message": "@kalfa/transport: no test tools in product files."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/transport imports no Telemetry: its span is made with Effect's own calls (decision 0063)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**"],
+                "message": "@kalfa/transport imports no other package of this repository and no tea package (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/transport imports no path out of its own folder."
+              },
+              {
+                "group": ["@alchemy.run/cloudflare/**"],
+                "importNames": ["RawWebSocket"],
+                "message": "L1: `RawWebSocket` is the platform's own socket type. A slot takes `HeldSocket`, Alchemy's wrapper, and never the raw one."
+              },
+              {
+                "group": [
+                  "cloudflare:*",
+                  "cloudflare:**",
+                  "@cloudflare/**",
+                  "miniflare",
+                  "miniflare/**",
+                  "workerd",
+                  "workerd/**",
+                  "wrangler",
+                  "wrangler/**",
+                  "@alchemy.run/cloudflare-runtime",
+                  "@alchemy.run/cloudflare-runtime/**"
+                ],
+                "message": "L1: Cloudflare is reached only through Alchemy (`@alchemy.run/cloudflare`): no `cloudflare:*`, no `@cloudflare/**`, no miniflare, workerd, wrangler, and no Alchemy runtime package."
+              },
+              {
+                "group": ["../**", "!../index.ts", "!../MemorySocket.ts"],
+                "message": "L2: src/cloudflare/** reads the core only through `../index.ts` and `../MemorySocket.ts`."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The stream functions (Transport.ts) and the hello (Hello.ts and the two files under internal/ it is built on) stay apart from the format: they call `Format`'s `write` and `read` and never the JSON-RPC frame's own writer (the line format a test passes in its place must work with no change here). The package override's entries, repeated, and one more.
+      "files": [
+        "kalfa/transport/src/Transport.ts",
+        "kalfa/transport/src/Hello.ts",
+        "kalfa/transport/src/internal/message.ts",
+        "kalfa/transport/src/internal/connection.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib",
+                  "assert/**",
+                  "async_hooks/**",
+                  "buffer/**",
+                  "child_process/**",
+                  "cluster/**",
+                  "console/**",
+                  "constants/**",
+                  "crypto/**",
+                  "dgram/**",
+                  "diagnostics_channel/**",
+                  "dns/**",
+                  "domain/**",
+                  "events/**",
+                  "fs/**",
+                  "http/**",
+                  "http2/**",
+                  "https/**",
+                  "inspector/**",
+                  "module/**",
+                  "net/**",
+                  "os/**",
+                  "path/**",
+                  "perf_hooks/**",
+                  "process/**",
+                  "punycode/**",
+                  "querystring/**",
+                  "readline/**",
+                  "repl/**",
+                  "stream/**",
+                  "string_decoder/**",
+                  "sys/**",
+                  "timers/**",
+                  "tls/**",
+                  "trace_events/**",
+                  "tty/**",
+                  "url/**",
+                  "util/**",
+                  "v8/**",
+                  "vm/**",
+                  "wasi/**",
+                  "worker_threads/**",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/transport imports no Node module, so it runs in a browser and in Node alike: the app joins a socket Layer at the top. Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/transport imports no platform package: the app provides the socket Layer (NodeSocket.layerWebSocket and its kin) at the top."
+              },
+              {
+                "group": ["@effect/vitest/**", "vitest/**", "fast-check/**"],
+                "message": "@kalfa/transport: no test tools in product files."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/transport imports no Telemetry: its span is made with Effect's own calls (decision 0063)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**"],
+                "message": "@kalfa/transport imports no other package of this repository and no tea package (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/transport imports no path out of its own folder."
+              },
+              {
+                "group": ["alchemy", "alchemy/**", "@alchemy.run/**"],
+                "message": "L2: the core of @kalfa/transport imports no Alchemy. Only src/cloudflare/** reaches it."
+              },
+              {
+                "group": ["./cloudflare/**", "**/cloudflare/**"],
+                "message": "L2: the core of @kalfa/transport imports nothing from src/cloudflare/**: the Cloudflare entry points sit above the core."
+              },
+              {
+                "group": ["./internal/jsonRpc*", "**/internal/jsonRpc*", "**/jsonRpc", "**/jsonRpc.ts"],
+                "message": "The stream functions and the hello call the format through `Format`, never the JSON-RPC frame's own writer: a test Layer replaces the format with no change to them."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The memory pair (MemorySocket.ts) is a socket and knows no format and no stream function: it imports neither the JSON-RPC frame, `Format.ts` nor `Transport.ts`. The package override's entries, repeated, and more.
+      "files": ["kalfa/transport/src/MemorySocket.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@effect/vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "vitest",
+                "message": "@kalfa/transport: test tools load only in test files."
+              },
+              {
+                "name": "fast-check",
+                "message": "@kalfa/transport: generators use Effect's Arbitrary, so this package needs no fast-check."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "node:*",
+                  "node:*/**",
+                  "assert",
+                  "assert/strict",
+                  "async_hooks",
+                  "buffer",
+                  "child_process",
+                  "cluster",
+                  "console",
+                  "constants",
+                  "crypto",
+                  "dgram",
+                  "diagnostics_channel",
+                  "dns",
+                  "dns/promises",
+                  "domain",
+                  "events",
+                  "fs",
+                  "fs/promises",
+                  "http",
+                  "http2",
+                  "https",
+                  "inspector",
+                  "inspector/promises",
+                  "module",
+                  "net",
+                  "os",
+                  "path",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "process",
+                  "punycode",
+                  "querystring",
+                  "readline",
+                  "readline/promises",
+                  "repl",
+                  "stream",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "sys",
+                  "timers",
+                  "timers/promises",
+                  "tls",
+                  "trace_events",
+                  "tty",
+                  "url",
+                  "util",
+                  "util/types",
+                  "v8",
+                  "vm",
+                  "wasi",
+                  "worker_threads",
+                  "zlib",
+                  "assert/**",
+                  "async_hooks/**",
+                  "buffer/**",
+                  "child_process/**",
+                  "cluster/**",
+                  "console/**",
+                  "constants/**",
+                  "crypto/**",
+                  "dgram/**",
+                  "diagnostics_channel/**",
+                  "dns/**",
+                  "domain/**",
+                  "events/**",
+                  "fs/**",
+                  "http/**",
+                  "http2/**",
+                  "https/**",
+                  "inspector/**",
+                  "module/**",
+                  "net/**",
+                  "os/**",
+                  "path/**",
+                  "perf_hooks/**",
+                  "process/**",
+                  "punycode/**",
+                  "querystring/**",
+                  "readline/**",
+                  "repl/**",
+                  "stream/**",
+                  "string_decoder/**",
+                  "sys/**",
+                  "timers/**",
+                  "tls/**",
+                  "trace_events/**",
+                  "tty/**",
+                  "url/**",
+                  "util/**",
+                  "v8/**",
+                  "vm/**",
+                  "wasi/**",
+                  "worker_threads/**",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/transport imports no Node module, so it runs in a browser and in Node alike: the app joins a socket Layer at the top. Both spellings are refused: node:fs/promises and fs/promises."
+              },
+              {
+                "group": ["@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/transport imports no platform package: the app provides the socket Layer (NodeSocket.layerWebSocket and its kin) at the top."
+              },
+              {
+                "group": ["@effect/vitest/**", "vitest/**", "fast-check/**"],
+                "message": "@kalfa/transport: no test tools in product files."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/transport imports no Telemetry: its span is made with Effect's own calls (decision 0063)."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "@demlik/**"],
+                "message": "@kalfa/transport imports no other package of this repository and no tea package (it ranks lowest, and each kalfa package stands alone)."
+              },
+              {
+                "group": ["**/next/**", "../../**"],
+                "message": "@kalfa/transport imports no path out of its own folder."
+              },
+              {
+                "group": ["alchemy", "alchemy/**", "@alchemy.run/**"],
+                "message": "L2: the core of @kalfa/transport imports no Alchemy. Only src/cloudflare/** reaches it."
+              },
+              {
+                "group": ["./cloudflare/**", "**/cloudflare/**"],
+                "message": "L2: the core of @kalfa/transport imports nothing from src/cloudflare/**: the Cloudflare entry points sit above the core."
+              },
+              {
+                "group": [
+                  "./internal/jsonRpc*",
+                  "**/internal/jsonRpc*",
+                  "**/jsonRpc",
+                  "**/jsonRpc.ts",
+                  "./Format.ts",
+                  "./Format",
+                  "**/Format.ts",
+                  "**/Format",
+                  "./Transport.ts",
+                  "./Transport",
+                  "**/Transport.ts",
+                  "**/Transport"
+                ],
+                "message": "MemorySocket.ts is a socket and knows no format: it imports neither the JSON-RPC frame, Format.ts nor Transport.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // @kalfa/permissions (ticket 2092) declares a model of what a subject may do, and checks a permission against relationships. Slice 1 (the model) imports no kalfa or repo package (decision 0047: it is usable alone; slice 2 lets through the Ledger's error classes by name, decision 0091), no Telemetry (its spans are made with Effect's own), no Node module and no platform package, and prints nothing. `node:*` holds `node:fs` and not `node:fs/promises`, so both spellings are listed, and every name of Node 26's
+      // `require("node:module").builtinModules` is written bare below, subpaths included (regenerate the list with that call when Node moves). Its tests and test support are left out. An override replaces a rule's options, so this repeats the base entries.
+      "files": ["kalfa/permissions/src/**"],
+      "excludeFiles": ["kalfa/permissions/src/**/*.test.ts", "kalfa/permissions/src/**/*.test-support.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "../../**"],
+                "message": "@kalfa/permissions imports no kalfa package and nothing of this repo in this slice (decision 0047): it is usable alone."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/permissions imports no Telemetry: its spans are made with Effect's own."
+              },
+              {
+                "group": ["node:*", "node:*/**", "@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/permissions takes values and does no IO: no Node module and no platform package."
+              },
+              {
+                "group": [
+                  "_http_agent",
+                  "_http_agent/**",
+                  "_http_client",
+                  "_http_client/**",
+                  "_http_common",
+                  "_http_common/**",
+                  "_http_incoming",
+                  "_http_incoming/**",
+                  "_http_outgoing",
+                  "_http_outgoing/**",
+                  "_http_server",
+                  "_http_server/**",
+                  "_tls_common",
+                  "_tls_common/**",
+                  "_tls_wrap",
+                  "_tls_wrap/**",
+                  "assert",
+                  "assert/**",
+                  "assert/strict",
+                  "async_hooks",
+                  "async_hooks/**",
+                  "buffer",
+                  "buffer/**",
+                  "child_process",
+                  "child_process/**",
+                  "cluster",
+                  "cluster/**",
+                  "console",
+                  "console/**",
+                  "constants",
+                  "constants/**",
+                  "crypto",
+                  "crypto/**",
+                  "dgram",
+                  "dgram/**",
+                  "diagnostics_channel",
+                  "diagnostics_channel/**",
+                  "dns",
+                  "dns/**",
+                  "dns/promises",
+                  "domain",
+                  "domain/**",
+                  "events",
+                  "events/**",
+                  "fs",
+                  "fs/**",
+                  "fs/promises",
+                  "http",
+                  "http/**",
+                  "http2",
+                  "http2/**",
+                  "https",
+                  "https/**",
+                  "inspector",
+                  "inspector/**",
+                  "inspector/promises",
+                  "module",
+                  "module/**",
+                  "net",
+                  "net/**",
+                  "os",
+                  "os/**",
+                  "path",
+                  "path/**",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "perf_hooks/**",
+                  "process",
+                  "process/**",
+                  "punycode",
+                  "punycode/**",
+                  "querystring",
+                  "querystring/**",
+                  "readline",
+                  "readline/**",
+                  "readline/promises",
+                  "repl",
+                  "repl/**",
+                  "stream",
+                  "stream/**",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "string_decoder/**",
+                  "sys",
+                  "sys/**",
+                  "timers",
+                  "timers/**",
+                  "timers/promises",
+                  "tls",
+                  "tls/**",
+                  "trace_events",
+                  "trace_events/**",
+                  "tty",
+                  "tty/**",
+                  "url",
+                  "url/**",
+                  "util",
+                  "util/**",
+                  "util/types",
+                  "v8",
+                  "v8/**",
+                  "vm",
+                  "vm/**",
+                  "wasi",
+                  "wasi/**",
+                  "worker_threads",
+                  "worker_threads/**",
+                  "zlib",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/permissions takes values and does no IO: no Node module, written without its node: prefix either."
+              }
+            ]
+          }
+        ],
+        "eslint/no-console": "error",
+        "eslint/no-new-func": "error",
+        "eslint/no-restricted-globals": [
+          "error",
+          { "name": "console", "message": "@kalfa/permissions prints nothing." },
+          { "name": "process", "message": "@kalfa/permissions reads no process and no environment." },
+          { "name": "Buffer", "message": "@kalfa/permissions uses no Node global." },
+          {
+            "name": "globalThis",
+            "message": "A ban on `process` alone misses `globalThis.process`: no global object here."
+          },
+          { "name": "global", "message": "@kalfa/permissions uses no Node global." },
+          { "name": "self", "message": "@kalfa/permissions uses no global object." },
+          { "name": "window", "message": "@kalfa/permissions uses no global object." },
+          { "name": "Function", "message": "@kalfa/permissions builds no function from text." },
+          {
+            "name": "fetch",
+            "message": "@kalfa/permissions does no IO: no network of its own."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "@kalfa/permissions does no IO: no network of its own."
+          },
+          {
+            "name": "WebSocket",
+            "message": "@kalfa/permissions does no IO: no network of its own."
           }
         ]
       }

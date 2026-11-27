@@ -2,8 +2,14 @@
 // compiles their declarations; the package's exports do not change (the manifest check below). Plant: leave
 // `internal/toml.ts` out of the build, so the consumer's edit fails.
 // T1076 P2. Plants: ship a source export, omit parser JS/declarations, or keep a workspace runtime dependency.
+// Ticket 1846 P1 (slice 2): the entry `./Cli` ships beside them, with the `config` command: the consumer runs `config list`
+// on one group over an in-memory file through `Command.runWith`, reads the listing, and compiles the declaration. Plant:
+// leave `./Cli` out of `publishConfig.exports`, so the consumer's import fails and the export list differs.
 // Ticket 1839 P1: the root entry `.` ships beside the twelve modules, mapped to `dist/index`. Plant: drop `.` from the
 // published exports, so the manifest check below and the consumer's import of `@kalfa/config` fail.
+// Ticket 1310 C4 (slice 2): the package depends on `@kalfa/diagnostics`, for the hidden cause its errors hold, so the consumer installs that package's archive beside
+// it, and the packed dependencies are exactly the two of the parser and that one, with a plain version. Plant: leave `@kalfa/diagnostics` as a dev dependency of the
+// package, so its declarations name a package the consumer cannot find, and the consumer's typecheck fails.
 // scenario: only a real build, archive and installation prove installed Node and compiler resolution.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -24,6 +30,7 @@ const modules = [
   "Print",
   "Snapshot",
   "Load",
+  "Cli",
 ] as const;
 
 /** The root entry: `import { Setting, SettingGroup } from "@kalfa/config"`. */
@@ -70,6 +77,8 @@ it.effect(
       const root = path.resolve(import.meta.dirname, "../../..");
 
       const pkg = path.join(root, "kalfa/config");
+
+      const diagnostics = path.join(root, "kalfa/diagnostics");
 
       const runner = process.env.RUNNER_TEMP;
 
@@ -141,15 +150,22 @@ it.effect(
       // prepack owns the one scoped package build; root pnpm build does not select this package.
       yield* command(pkg, "pnpm", ["pack", "--pack-destination", packed]);
 
-      const archives = (yield* fs.readDirectory(packed)).filter((name) => name.endsWith(".tgz"));
+      yield* command(diagnostics, "pnpm", ["pack", "--pack-destination", packed]);
 
-      expect(archives).toEqual(["kalfa-config-0.0.0.tgz"]);
+      const archives = (yield* fs.readDirectory(packed)).filter((name) => name.endsWith(".tgz")).toSorted();
+
+      expect(archives).toEqual(["kalfa-config-0.0.0.tgz", "kalfa-diagnostics-0.0.0.tgz"]);
 
       const archive = path.join(packed, "kalfa-config-0.0.0.tgz");
 
+      const hidden = path.join(packed, "kalfa-diagnostics-0.0.0.tgz");
+
       const sha256 = yield* digest.digestHex(Digest.sha256, yield* fs.readFile(archive));
 
-      const entries = (yield* command(stage, "tar", ["-tf", archive])).split("\n");
+      const entries = [
+        ...(yield* command(stage, "tar", ["-tf", archive])).split("\n"),
+        ...(yield* command(stage, "tar", ["-tf", hidden])).split("\n"),
+      ];
 
       expect(entries.some((name) => /(?:^|\/)(?:src|test|node_modules)\//.test(name))).toBe(false);
 
@@ -192,6 +208,7 @@ it.effect(
         "--userconfig",
         path.join(consumer, "empty.npmrc"),
         archive,
+        hidden,
         "effect@4.1.3",
         "typescript@7.0.2",
         "@types/node@26.6.6",
@@ -231,7 +248,26 @@ it.effect(
         expect(yield* fs.exists(path.join(installed, `dist/${name}.d.ts`))).toBe(true);
       }
 
-      expect(Object.keys(manifest.dependencies).sort()).toEqual(["@decimalturn/toml-patch", "toml-eslint-parser"]);
+      expect(Object.keys(manifest.dependencies).sort()).toEqual([
+        "@decimalturn/toml-patch",
+        "@kalfa/diagnostics",
+        "toml-eslint-parser",
+      ]);
+
+      // The one kalfa dependency is packed with a plain version, and its own archive ships `dist/`, with the hidden cause among its exports.
+      expect(manifest.dependencies["@kalfa/diagnostics"]).toMatch(/^\d+\.\d+\.\d+$/);
+
+      const installedHidden = path.join(consumer, "node_modules/@kalfa/diagnostics");
+
+      const hiddenManifest = Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Struct({ exports: Manifest.fields.exports })),
+      )(yield* fs.readFileString(path.join(installedHidden, "package.json")));
+
+      expect(hiddenManifest.exports["./Hidden"]).toEqual({ types: "./dist/Hidden.d.ts", default: "./dist/Hidden.js" });
+
+      expect(yield* fs.exists(path.join(installedHidden, "dist/Hidden.js"))).toBe(true);
+
+      expect(yield* fs.exists(path.join(installedHidden, "dist/Hidden.d.ts"))).toBe(true);
 
       expect(Object.keys(manifest.peerDependencies)).toEqual(["effect"]);
 
@@ -240,7 +276,9 @@ it.effect(
         ...manifest.peerDependencies,
         ...manifest.optionalDependencies,
       })) {
-        expect(name).not.toMatch(/^@(?:kampus|tea-fabrika|kalfa)\//);
+        expect(name).not.toMatch(/^@(?:kampus|tea-fabrika)\//);
+
+        expect(name === "@kalfa/diagnostics" || !name.startsWith("@kalfa/")).toBe(true);
 
         expect(version).not.toMatch(/^(?:workspace:|catalog:|link:|file:|\.\.?\/|\/)/);
       }
@@ -255,6 +293,8 @@ it.effect(
             private: Schema.Literal("passed"),
             // Ticket 1843 P1: the installed archive runs `SettingGroup.edit(...).set` and `.remove`.
             edit: Schema.Literal("passed"),
+            // Ticket 1846 P1: the installed archive runs `config list` through `@kalfa/config/Cli`.
+            config: Schema.Literal("passed"),
           }),
         ),
       )(yield* command(consumer, "node", ["consumer.mjs"]));

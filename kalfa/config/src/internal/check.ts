@@ -1,13 +1,15 @@
 /**
  * The whole-file check of a setting group: a file is read against the settings that may be set in it, and its first fault is the one error. It reads no file and starts nothing.
  */
-import { Effect, Option, Schema, SchemaAST, SchemaIssue, type SemVer } from "effect";
+import { Effect, Option, Predicate, Schema, SchemaAST, SchemaIssue, type SemVer } from "effect";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import type * as Setting from "../Declaration.ts";
 import { Origin } from "../Sources.ts";
 import { distance, drop, leaf, lineAt, type Path, same } from "./document.ts";
+import { prefix } from "./edit.ts";
 import { type Position, type SettingsError, stop } from "./error.ts";
+import type { Document } from "./format.ts";
 import { segments, variable } from "./names.ts";
 import type { Loaded, Names } from "./place.ts";
 
@@ -74,7 +76,7 @@ export const fields = (
   );
 
 /** The setting names within two edits of `typed`, nearest first: the "Did you mean" of the mistyped-key check. */
-const near = (names: ReadonlyArray<string>, typed: string): Option.Option<string> =>
+export const near = (names: ReadonlyArray<string>, typed: string): Option.Option<string> =>
   Option.map(
     Option.fromNullishOr(
       names
@@ -87,6 +89,23 @@ const near = (names: ReadonlyArray<string>, typed: string): Option.Option<string
 
 /** Whether `path` is the setting's own name or one of its tables. */
 const under = (s: Setting.Any, path: ReadonlyArray<string>) => path.every((word, n) => segments(s.name)[n] === word);
+
+/** The line of the fault at `path`: its own key's, else the nearest table's above it, else the first line of anything below the nearest table that has one, since a table written only by deeper headers has no line of its own. */
+const faultLine = (document: Document, path: Path): number | undefined => {
+  for (let n = path.length; n > 0; n--) {
+    const above = path.slice(0, n);
+    const span = document.spans.find((s) => same(s.path, above)) ?? document.spans.find((s) => prefix(above, s.path));
+
+    if (span !== undefined) {
+      return span.line;
+    }
+  }
+
+  return undefined;
+};
+
+/** Whether `path` is the setting's own name or goes on inside its value: a member of a record, a field of a table. */
+const reaches = (s: Setting.Any, path: ReadonlyArray<string>) => segments(s.name).every((word, n) => path[n] === word);
 
 /** Where a setting may be set, as a message says it: its files, and its variable unless only a file may set it. */
 export const places = (app: string, s: Setting.Any, names: Names) =>
@@ -112,12 +131,19 @@ const explain = (
   const stopped = (reason: SettingsError["reason"], text: string, key: ReadonlyArray<string>) =>
     stop(app, reason, text, { file: found.name, line: lineAt(found.document, key) }, undefined, closing);
 
-  if (own.some((s) => under(s, path))) {
-    const s = own.find((s) => same(segments(s.name), path));
+  // A fault inside a setting's value (a member of a record, a field of a table) is the setting's own, at its own line: the member's key is part of the value, and a message never holds one.
+  const holder = own.find((s) => reaches(s, path));
 
-    return s === undefined
-      ? stopped("invalid", `${path.join(".")} is a table of settings, not a value.`, path)
-      : refused(app, s, Origin.cases.file.make({ file: found.name, line: lineAt(found.document, path) ?? 0 }), closing);
+  if (holder !== undefined) {
+    const line = faultLine(found.document, path);
+
+    return line === undefined
+      ? unfit(app, holder, found.name, issue, closing)
+      : refused(app, holder, Origin.cases.file.make({ file: found.name, line }), issue, closing);
+  }
+
+  if (own.some((s) => under(s, path))) {
+    return stopped("invalid", `${path.join(".")} is a table of settings, not a value.`, path);
   }
 
   const key = leaf(found.document.value, path);
@@ -145,28 +171,74 @@ const explain = (
   );
 };
 
-/** What a setting's schema asks for, as a message says it, in place of the value it refused. */
-const wanted = (s: Setting.Any, name: string) => {
-  const expected = SchemaAST.resolveTitle(s.schema.ast) ?? "a valid value";
-  const rule = SchemaAST.resolveDescription(s.schema.ast);
+/**
+ * What a type was expected to be, as one sentence, from an issue made fresh with no input, so no input can reach it. Effect writes `Expected <type>`, and the schema author's own `message`, where one is declared, as written: that sentence is said as the author wrote it, as a description is, and the other gets its full stop.
+ */
+const expected = (ast: SchemaAST.AST): string => {
+  const text = SchemaIssue.makeFormatterDefault()(new SchemaIssue.InvalidType(ast));
 
-  return `${name} is not ${expected}.${rule === undefined ? "" : ` ${rule}`}`;
+  return Predicate.isString(ast.annotations?.message) ? text : `${text}.`;
+};
+
+/**
+ * What a refused value had to be, as a sentence, from the declared parts of its issue only: never the input, never a message a check wrote at run time, never a path inside the value.
+ */
+const rule = (issue: SchemaIssue.Issue): Option.Option<string> => {
+  switch (issue._tag) {
+    case "Filter":
+      return Option.map(
+        Option.fromNullishOr(issue.filter.annotations?.expected),
+        (declared) => `Expected ${declared}.`,
+      );
+    case "InvalidType":
+    case "AnyOf":
+    case "OneOf":
+      return Option.some(expected(issue.ast));
+    case "Pointer":
+    case "Encoding":
+      return rule(issue.issue);
+    case "Composite":
+      return rule(issue.issues[0]);
+    case "MissingKey":
+      return Option.some("Expected a table with every key it needs.");
+    case "UnexpectedKey":
+      return Option.some("Expected a table with no other keys.");
+    case "InvalidValue":
+    case "Forbidden":
+      return Option.none();
+  }
+};
+
+/** What a setting's schema asks for, as a message says it, in place of the value it refused: its title and description, else the rule its issue declares. */
+const wanted = (s: Setting.Any, name: string, issue: SchemaIssue.Issue) => {
+  const title = SchemaAST.resolveTitle(s.schema.ast);
+  const description = SchemaAST.resolveDescription(s.schema.ast);
+
+  const tail =
+    description !== undefined
+      ? ` ${description}`
+      : Option.match(rule(issue), {
+          onSome: (said) => ` ${said}`,
+          onNone: () => (title === undefined ? " Its schema names no rule." : ""),
+        });
+
+  return `${name} is not ${title ?? "a valid value"}.${tail}`;
 };
 
 /** The `invalid` error for a value its setting's schema refuses, naming where it was and never what it was. */
-export const refused = (app: string, s: Setting.Any, origin: Origin, closing?: string) =>
+export const refused = (app: string, s: Setting.Any, origin: Origin, issue: SchemaIssue.Issue, closing?: string) =>
   Origin.matchOrElse(
     origin,
     {
-      file: ({ file, line }) => stop(app, "invalid", wanted(s, s.name), { file, line }, undefined, closing),
-      default: () => stop(app, "invalid", wanted(s, s.name), undefined, undefined, closing),
+      file: ({ file, line }) => stop(app, "invalid", wanted(s, s.name, issue), { file, line }, undefined, closing),
+      default: () => stop(app, "invalid", wanted(s, s.name, issue), undefined, undefined, closing),
     },
-    ({ name }) => stop(app, "invalid", wanted(s, name), undefined, undefined, closing),
+    ({ name }) => stop(app, "invalid", wanted(s, name, issue), undefined, undefined, closing),
   );
 
 /** The `invalid` error for a value an edit was asked to write that its setting's schema refuses: the file is named, no line, and never the value. */
-export const unfit = (app: string, s: Setting.Any, file: string, closing: string) =>
-  stop(app, "invalid", wanted(s, s.name), { file }, undefined, closing);
+export const unfit = (app: string, s: Setting.Any, file: string, issue: SchemaIssue.Issue, closing?: string) =>
+  stop(app, "invalid", wanted(s, s.name, issue), { file }, undefined, closing);
 
 /** How a check of one file differs from the start's: the closing sentence, and one key left out. */
 interface Options {

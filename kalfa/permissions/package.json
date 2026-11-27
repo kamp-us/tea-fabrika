@@ -1,0 +1,27 @@
+{
+  "name": "@kalfa/permissions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Permissions: declare a model of what a subject may do on an object, check a permission, and guard a step so it runs only with a proof.",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

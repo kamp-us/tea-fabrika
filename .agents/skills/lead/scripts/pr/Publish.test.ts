@@ -9,6 +9,7 @@ import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes, PushRefused } from "./Pushes.ts";
 import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
+import * as Sections from "./Sections.ts";
 
 /** Branch names of every kind the commit step meets: the bot's, a quest's backup, a person's, a bare one. */
 const Branch = Schema.Literals(["fabrikalfa/a", "fabrikalfa/quest-wip", "person/b", "c"]);
@@ -18,7 +19,7 @@ const Sha = Schema.Literals(["1".repeat(40), "2".repeat(40), "a".repeat(40)]);
 /** No PR on the branch yet, an open draft, or an open ready one. */
 const Already = Schema.NullOr(Schema.Boolean);
 
-const text = { title: "T1 tests: a law", body: Publish.DRAFT_BODY };
+const text = { title: "T1 tests: a law", body: Sections.DRAFT_BODY };
 
 const open = (number: number, head: string, draft: boolean): PullRequest => ({
   number,
@@ -241,7 +242,7 @@ describe("publish.ts's words: a new draft takes the title and body it is given",
       return Effect.gen(function* () {
         yield* Publish.publish({ ...ask(b, head), text: given });
         expect(m.github.calls).toEqual([
-          { _tag: "draft", branch: b, title: title ?? "the subject", body: body ?? Publish.DRAFT_BODY },
+          { _tag: "draft", branch: b, title: title ?? "the subject", body: body ?? Sections.DRAFT_BODY },
         ]);
       }).pipe(Effect.provide(m.layer));
     },
@@ -261,7 +262,7 @@ describe("publish.ts's words: a new draft takes the title and body it is given",
   );
 });
 
-describe("publish.ts with --title or --body-file on an open pull request (gh pr edit fails here, so helpers patched by hand twice)", () => {
+describe("publish.ts with --title or --body-file on an open pull request", () => {
   const Given = Schema.Struct({
     title: Schema.NullOr(Schema.Literals(["New title", "T9 fix: x"])),
     body: Schema.NullOr(Schema.Literals(["New body", "## Summary\n\nWhy"])),

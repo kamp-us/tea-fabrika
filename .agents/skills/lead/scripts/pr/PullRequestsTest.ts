@@ -3,6 +3,7 @@ import { Array as Arr, Effect, Layer, Option, Schema } from "effect";
 // writes change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
 import {
   type Detail,
+  type Merged,
   type Patch,
   type PullRequest,
   PullRequests,
@@ -27,6 +28,7 @@ export type Failing = Partial<
   Record<
     | "openOn"
     | "all"
+    | "merged"
     | "draft"
     | "edit"
     | "ready"
@@ -58,6 +60,8 @@ export type World = {
   readonly files: Map<number, ReadonlyArray<string>>;
   /** The diff hunks of each file a pull request changes, by number: none when absent. */
   readonly patches: Map<number, ReadonlyArray<Patch>>;
+  /** When each pull request merged and was last updated, by number, as ISO times (see `dated`). */
+  readonly dates: Map<number, { readonly mergedAt: string; readonly updatedAt: string }>;
 };
 
 /** A fresh world over these pull requests; the layer reads and changes it in place. */
@@ -69,7 +73,15 @@ export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({
   issues: new Set(),
   files: new Map(),
   patches: new Map(),
+  dates: new Map(),
 });
+
+/** An ISO time `minutes` after 2026-11-01: a higher number is a later time. */
+const stamp = (minutes: number): string => new Date(Date.UTC(2026, 10, 1) + minutes * 60_000).toISOString();
+
+/** When pull request `number` merged and was last updated: as the world says, else as its number says (a higher number merged later). */
+const dated = (w: World, number: number) =>
+  w.dates.get(number) ?? { mergedAt: stamp(number), updatedAt: stamp(number) };
 
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests> => {
   const fails = (name: keyof Failing) => {
@@ -84,6 +96,20 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
       openOn: (branch) =>
         Effect.map(fails("openOn"), () => Arr.findFirst(w.prs, (pr) => pr.head === branch && pr.state === "OPEN")),
       all: Effect.map(fails("all"), () => [...w.prs]),
+      // GitHub's update order, as a search sorted by update gives it: a merge is an update, and so is a late comment.
+      merged: (scan) =>
+        Effect.map(fails("merged"), (): ReadonlyArray<Merged> =>
+          w.prs
+            .filter((pr) => pr.state === "MERGED" && (w.more.get(pr.number)?.base ?? "main") === "main")
+            .toSorted((a, b) => Date.parse(dated(w, b.number).updatedAt) - Date.parse(dated(w, a.number).updatedAt))
+            .slice(0, scan)
+            .map((pr) => ({
+              number: pr.number,
+              body: w.more.get(pr.number)?.body ?? "",
+              mergeCommit: w.more.get(pr.number)?.mergeCommit ?? pr.oid,
+              mergedAt: dated(w, pr.number).mergedAt,
+            })),
+        ),
       draft: (branch, text) =>
         Effect.map(fails("draft"), () => {
           const number = Math.max(0, ...Arr.map(w.prs, (pr) => pr.number)) + 1;

@@ -39,6 +39,14 @@ this skill for the law. The reviewer reads that law on its recheck.
      nothing or to push edge cases. Effect's own tools come first, `effect/testing` (`TestClock`,
      `TestConsole`, `TestSchema`) included. Case counts use `runsFor`, as the neighbors do.
    - A property states its coverage and fails loudly when a required case is never reached.
+   - **A check on a property's tally runs only when the property drew its full count.** The mutation
+     box caps each property's case count, and a capped run is too short to reach every kind. Count the
+     cases inside the property and gate the tally check on that count. The gate's number is the same
+     constant as the property's `runs` (the same `runsFor` value for a depth-aware law), never a second
+     literal. Assert the count too (the cases drawn equal the smaller of the property's count and the
+     box's cap), so a lost counter or a changed count fails and never skips the check quietly. This
+     skip of a capped run is the one exception to "fails loudly when a required case is never
+     reached". A guard of `tally.size > 0` only proves the property ran, not that it ran fully.
    - When moving a law onto a schema's Arbitrary, keep its old reach: set size and run counts at
      least as large as the old generator, and test the real limit, not the schema's cap.
    - **A lower run count or input size keeps each plant red.** Any change that lowers a law's run
@@ -194,6 +202,7 @@ These hold in every tests round, so the brief does not repeat them.
   `stepcommit.sh` leak-checks and pushes. No force push. A refused push is reported with its
   exact command, never worked around. When `drive.ts` runs you in a box, commit nothing: drive
   commits.
+  The tests step may also carry `Survivor:` answers on their own: `stepcommit.sh --empty --body-file <file> tests <ticket> "<subject>"`, as [the build skill](../build/SKILL.md#steps) shows.
 - **Public repo:** no secrets, no absolute paths from anyone's machine, no personal names in
   committed text.
 - **Report** for a reader who saw none of the work, the answer first: every planned law written,

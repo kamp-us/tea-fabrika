@@ -15,14 +15,22 @@ import {
   leftOut,
   mutable,
   normal,
+  notAnswers,
+  oldestFirst,
+  refusalNote,
+  refusedIn,
   parentEntries,
   pick,
+  picked,
   readAnswers,
   reach,
   resolve,
+  recheckText,
+  runsFlag,
   staticLines,
   survivorLines,
   testsIn,
+  typedText,
 } from "./survivors.ts";
 import type { Run } from "./survivors.ts";
 
@@ -238,6 +246,57 @@ describe("survivors, which laws load a file", () => {
     );
   });
 
+  // Ticket 1314. Plants: pick no law by name, so a rule whose test lints through plant.ts is bare (the 89 "no law ran" mutants on no-hand-tag.ts);
+  // pick by name a rule that no test is named after, or a test of another folder; list a law found by import as by name too.
+  it("a lint rule's own test is picked by name when no import reaches the rule, and a law found by import is not named twice", () => {
+    const name = fc.stringMatching(/^[a-z][a-z-]{0,8}[a-z]$/);
+
+    fc.assert(
+      fc.property(name, name, (rule, other) => {
+        fc.pre(rule !== other);
+        const file = `oxlint-plugins/${rule}.ts`;
+        const law = `oxlint-plugins/${rule}.test.ts`;
+        const plant = "oxlint-plugins/plant.ts";
+        const tests = [law, `oxlint-plugins/${other}.test.ts`];
+
+        // The test reaches only plant.ts, which runs oxlint in another process.
+        const viaPlant = reach(tests, (from) => (from === plant ? [] : [plant]));
+        expect(picked([file], viaPlant, tests)).toEqual({ imported: [], named: [law], laws: [law], bare: [] });
+
+        // The same test imports the rule: found by import, named for nothing.
+        const direct = reach(tests, (from) => (from === law ? [file] : []));
+        expect(picked([file], direct, tests)).toEqual({ imported: [law], named: [], laws: [law], bare: [] });
+
+        // No test of the rule's name: another test that reaches it is by import, and one that does not leaves the rule bare.
+        const rest = [`oxlint-plugins/${other}.test.ts`];
+        expect(
+          picked(
+            [file],
+            reach(rest, () => [file]),
+            rest,
+          ),
+        ).toEqual({
+          imported: rest,
+          named: [],
+          laws: rest,
+          bare: [],
+        });
+        expect(
+          picked(
+            [file],
+            reach(rest, () => []),
+            rest,
+          ),
+        ).toEqual({ imported: [], named: [], laws: [], bare: [file] });
+
+        // A file that is no rule is named after nothing: support beside the rules, and a rule of another folder.
+        expect(picked([`oxlint-plugins/${rule}.test-support.ts`], viaPlant, tests).laws).toEqual([]);
+        expect(picked([`next/${rule}.ts`], viaPlant, tests).laws).toEqual([]);
+      }),
+      options,
+    );
+  });
+
   // Plants: take the repo's top as a package, so every test in the repo is a candidate; skip the
   // nearest package for a farther one.
   it("a file's laws are looked for in its nearest package, or in its own folder when none is above it", () => {
@@ -412,54 +471,111 @@ describe("survivors, which mutants a Survivor: line answers", () => {
   const words = (min: number) =>
     fc.array(fc.stringMatching(/^[a-z]{1,8}$/), { minLength: min, maxLength: 5 }).map((parts) => Arr.join(parts, " "));
 
+  // The three proofs (ticket 1309): a plant run with its result, a search with what it found, a law's id. Prose may come before one.
+  const proof = fc.oneof(
+    fc.tuple(words(1), words(1)).map(([command, result]) => `plant: ${command} => ${result}`),
+    fc.tuple(words(1), words(1)).map(([search, found]) => `rg: ${search} => ${found}`),
+    fc.stringMatching(/^[A-Z][A-Za-z]{0,3}[0-9]{1,2}$/).map((id) => `law: ${id}`),
+  );
+
+  const evidence = fc
+    .tuple(fc.option(words(1), { nil: null }), proof)
+    .map(([prose, p]) => (prose === null ? p : `${prose} ${p}`));
+
   const answer = fc.record({
     file: anyFile,
     line: fc.option(fc.integer({ min: 1, max: 400 }), { nil: null }),
     reason: words(1),
-    evidence: words(2),
+    evidence,
   });
 
   const row = (a: { file: string; line: number | null; reason: string; evidence: string }) =>
     `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- ${a.evidence}`;
 
-  // A line that gives no answer: a missing reason, no ` -- `, no evidence, or one bare word of it.
+  // A line that gives no answer: a missing reason, no ` -- `, no evidence, one bare word of it, words that name no proof, or a proof marker
+  // without its result or its id.
   const unsound = fc
-    .tuple(answer, fc.constantFrom("no reason", "no dashes", "no evidence", "one word"))
-    .map(([a, flaw]) =>
-      flaw === "no reason"
-        ? `Survivor: ${a.file}:${a.line ?? "*"} -- ${a.evidence}`
-        : flaw === "no dashes"
-          ? `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} ${a.evidence}`
-          : flaw === "no evidence"
-            ? `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- `
-            : `Survivor: ${a.file}:${a.line ?? "*"} ${a.reason} -- unreachable`,
-    );
+    .tuple(
+      answer,
+      fc.constantFrom(
+        "no reason",
+        "no dashes",
+        "no evidence",
+        "one word",
+        "prose only",
+        "plant without result",
+        "rg without result",
+        "plant without command",
+        "rg without command",
+        "law without id",
+        "no colon",
+      ),
+      words(2),
+    )
+    .map(([a, flaw, prose]) => {
+      const at = `Survivor: ${a.file}:${a.line ?? "*"}`;
+
+      switch (flaw) {
+        case "no reason":
+          return `${at} -- ${a.evidence}`;
+        case "no dashes":
+          return `${at} ${a.reason} ${a.evidence}`;
+        case "no evidence":
+          return `${at} ${a.reason} -- `;
+        case "one word":
+          return `${at} ${a.reason} -- unreachable`;
+        case "prose only":
+          return `${at} ${a.reason} -- ${prose}`;
+        case "plant without result":
+          return `${at} ${a.reason} -- plant: ${prose}`;
+        case "rg without result":
+          return `${at} ${a.reason} -- rg: ${prose} =>`;
+        case "plant without command":
+          return `${at} ${a.reason} -- plant: => ${prose} => ${prose}`;
+        case "rg without command":
+          return `${at} ${a.reason} -- rg:=> ${prose} => ${prose}`;
+        case "law without id":
+          return `${at} ${a.reason} -- law: ${prose}`;
+        default:
+          return `${at} ${a.reason} -- plant ${prose} => green`;
+      }
+    });
 
   const noise = fc.constantFrom(
     "",
     "Plant: a: b: c",
     "tests: add a law",
     "survivor: lower case",
-    "  Survivor: indented a.ts:1 r -- e f",
+    "  Survivor: indented a.ts:1 r -- plant: e => f",
   );
 
-  // Plants: accept a line with no evidence; accept one bare word of evidence; read `*` as a number; match a
+  /** Rows with a place of their own each (the index in front of the file), so no row stands down for another. */
+  const distinct = (rows: ReadonlyArray<string>) =>
+    Arr.map(rows, (text, i) => text.replace(/^Survivor: /, `Survivor: ${i}/`));
+
+  // Plants: accept a line with no evidence; accept one bare word of evidence; accept evidence that names no proof; read `*` as a number; match a
   // line by file only; let a file's own `*` answer a different file.
-  it("a Survivor: line with a reason and evidence answers its mutant, and nothing else does", () => {
+  it("a Survivor: line with a reason and a plant, search or law answers its mutant, and nothing else does", () => {
     fc.assert(
       fc.property(
         fc.array(fc.tuple(answer, fc.array(fc.oneof(unsound, noise), { maxLength: 3 })), { maxLength: 6 }),
         fc.nat(),
         (rows, pick) => {
-          const text = Arr.join(
-            Arr.flatMap(rows, ([a, other]) => [...other, row(a)]),
-            "\n",
+          const entries = Arr.flatMap(rows, ([a, other]) => [
+            ...Arr.map(other, (text) => ({ text, a: null })),
+            { text: row(a), a },
+          ]);
+
+          const text = Arr.join(distinct(Arr.map(entries, (e) => e.text)), "\n");
+
+          const want = Arr.flatMap(entries, (e, i) =>
+            e.a === null ? [] : [{ file: `${i}/${e.a.file}`, line: e.a.line }],
           );
 
           const got = answersIn(text);
-          expect(got).toEqual(Arr.map(rows, ([a]) => ({ file: a.file, line: a.line })));
+          expect(got).toEqual(want);
 
-          for (const [a] of rows) {
+          for (const a of want) {
             // A file's own line is answered, and a `*` answers any line of its file and the file no law loads.
             expect(isAnswered(got, a.file, a.line ?? pick)).toBe(true);
             expect(isAnswered(got, a.file, null)).toBe(Arr.some(got, (g) => g.file === a.file && g.line === null));
@@ -479,11 +595,283 @@ describe("survivors, which mutants a Survivor: line answers", () => {
     );
   });
 
-  // Plants: let a text of no Survivor: line answer anything; take a line without its evidence.
-  it("lines that carry no evidence, or no reason, answer nothing", () => {
+  // Plants: let the oldest row of a place win; let any row with a proof win; keep every row of a place; let a newer row with no proof leave an older proof standing;
+  // treat `file:*` and `file:12` as one place.
+  it("the newest row of a place wins: an older row with no proof stands down for a newer one with it, and a newer one with none takes the answer away", () => {
+    fc.assert(
+      fc.property(
+        answer,
+        fc.array(fc.boolean(), { minLength: 1, maxLength: 5 }),
+        fc.array(fc.oneof(unsound, noise), { maxLength: 3 }),
+        (a, proven, other) => {
+          const here = (ok: boolean, i: number) =>
+            ok ? row({ ...a, reason: `r${i}` }) : `Survivor: ${a.file}:${a.line ?? "*"} r${i} -- unreachable`;
+
+          const mine = Arr.map(proven, here);
+
+          const elsewhere = Arr.map(distinct(other), (text) =>
+            text.replace(/^Survivor: (\d+)\//, "Survivor: elsewhere$1/"),
+          );
+
+          const text = Arr.join([...elsewhere, ...mine], "\n");
+          const last = proven.at(-1) === true;
+
+          expect(Arr.filter(answersIn(text), (x) => x.file === a.file && x.line === a.line)).toEqual(
+            last ? [{ file: a.file, line: a.line }] : [],
+          );
+
+          expect(Arr.filter(refusedIn(text), (r) => r.startsWith(`Survivor: ${a.file}:${a.line ?? "*"} `))).toEqual(
+            last ? [] : [here(false, proven.length - 1)],
+          );
+
+          // Another place is its own: a `*` row does not stand in for a line row.
+          const star = `Survivor: ${a.file}:* r -- unreachable`;
+          const line = `Survivor: ${a.file}:7 r -- unreachable`;
+          expect(refusedIn(`${star}\n${line}`)).toEqual([star, line]);
+        },
+      ),
+      options,
+    );
+  });
+
+  // Plants: read the log newest first (an older row without proof then wins); keep the empty piece after the last separator as a body.
+  it("the commit bodies of git log are read oldest first, so a newer commit's proof clears an older commit's bare row", () => {
+    const old = "Survivor: a/b.ts:3 r -- unreachable";
+    const fresh = "Survivor: a/b.ts:3 r -- plant: sed -i s/x/y/ a/b.ts => still green";
+    const log = `${fresh}\n\u0000${old}\n\u0000`;
+
+    expect(answersIn(oldestFirst(log))).toEqual([{ file: "a/b.ts", line: 3 }]);
+    expect(refusedIn(oldestFirst(log))).toEqual([]);
+
+    // The other order: the proof is older and a newer commit says it with none.
+    const back = `${old}\n\u0000${fresh}\n\u0000`;
+    expect(answersIn(oldestFirst(back))).toEqual([]);
+    expect(refusedIn(oldestFirst(back))).toEqual([old]);
+    expect(oldestFirst("")).toBe("");
+  });
+
+  const place = (a: { file: string; line: number | null }) => `${a.file}:${a.line ?? "*"}`;
+
+  const withdraw = (a: { file: string; line: number | null }, reason: string) =>
+    `Survivor-withdrawn: ${place(a)} ${reason}`;
+
+  // A withdrawal that says nothing sound: no reason (bare, or with trailing blanks), no place, or a place that is no `file:line`.
+  const unsoundWithdrawal = fc
+    .tuple(answer, fc.constantFrom("no reason", "blank reason", "no place", "no line"), words(2))
+    .map(([a, flaw, prose]) => {
+      switch (flaw) {
+        case "no reason":
+          return `Survivor-withdrawn: ${place(a)}`;
+        case "blank reason":
+          return `Survivor-withdrawn: ${place(a)}   `;
+        case "no place":
+          return `Survivor-withdrawn: ${prose}`;
+        default:
+          return `Survivor-withdrawn: ${a.file} ${prose}`;
+      }
+    });
+
+  // Ticket 2320: a refused row, once in a branch's history, kept the gate at exit 1 and a builder had to answer old line numbers
+  // again. Plants: let a withdrawn row keep its answer; keep its refusal; read the withdrawal oldest-wins (a row written after it is
+  // then ignored); let a withdrawal before a row remove that row; list a well-formed withdrawal as a row that answers nothing.
+  it("a withdrawn place no longer counts, answer or refusal, and a row written after the withdrawal counts again", () => {
+    fc.assert(
+      fc.property(answer, fc.boolean(), words(1), words(1), (a, proven, reason, note) => {
+        const old = proven ? row(a) : `Survivor: ${place(a)} r -- unreachable`;
+        const gone = `${old}\n${withdraw(a, note)}`;
+
+        expect(answersIn(gone)).toEqual([]);
+        expect(refusedIn(gone)).toEqual([]);
+        expect(notAnswers(withdraw(a, note))).toEqual([]);
+
+        // A newer row of the place stands again, with its own proof or its own refusal.
+        const again = `${gone}\n${row({ ...a, reason })}`;
+        expect(answersIn(again)).toEqual([{ file: a.file, line: a.line }]);
+        expect(refusedIn(again)).toEqual([]);
+
+        const bare = `${gone}\nSurvivor: ${place(a)} r -- unreachable`;
+        expect(answersIn(bare)).toEqual([]);
+        expect(refusedIn(bare)).toEqual([`Survivor: ${place(a)} r -- unreachable`]);
+
+        // A withdrawal written before a row withdraws nothing: the row is newer.
+        expect(answersIn(`${withdraw(a, note)}\n${row(a)}`)).toEqual([{ file: a.file, line: a.line }]);
+      }),
+      options,
+    );
+  });
+
+  // Plants: withdraw every row of the file; read `file:*` and `file:12` as one place; withdraw the first row by place alone; withdraw
+  // every row of the same line number in another file; drop the withdrawn place's neighbors.
+  it("a withdrawal clears its own place only: another line, `file:*`, or another file keeps its answer and its refusal", () => {
+    fc.assert(
+      fc.property(answer, words(1), (a, note) => {
+        const line = a.line ?? 7;
+        const mine = { ...a, line };
+        const star = { ...a, line: null };
+        const bare = (at: string) => `Survivor: ${at} r -- unreachable`;
+
+        const text = Arr.join(
+          [
+            row(mine),
+            row(star),
+            row({ ...a, line: line + 1 }),
+            row({ ...a, file: `other/${a.file}`, line }),
+            bare(`${a.file}:${line + 2}`),
+            withdraw(mine, note),
+          ],
+          "\n",
+        );
+
+        expect(answersIn(text)).toEqual([
+          { file: a.file, line: null },
+          { file: a.file, line: line + 1 },
+          { file: `other/${a.file}`, line },
+        ]);
+
+        expect(refusedIn(text)).toEqual([bare(`${a.file}:${line + 2}`)]);
+
+        // The other way round: `file:*` withdrawn leaves the line rows.
+        const starred = `${row(mine)}\n${row(star)}\n${withdraw(star, note)}`;
+        expect(answersIn(starred)).toEqual([{ file: a.file, line }]);
+      }),
+      options,
+    );
+  });
+
+  // Plants: let a withdrawal with no reason, no place or no line withdraw; leave it out of notAnswers; leave it out of refusedIn; drop its
+  // place from the key so a newer proven row cannot clear it.
+  it("a malformed withdrawal is refused like a malformed Survivor: line, and a newer row or a sound withdrawal of its place clears it", () => {
+    fc.assert(
+      fc.property(unsoundWithdrawal, answer, words(1), (bad, a, note) => {
+        expect(notAnswers(bad)).toEqual([bad]);
+        expect(refusedIn(bad)).toEqual([bad]);
+        expect(answersIn(bad)).toEqual([]);
+
+        // It withdraws nothing: an older place with a proof is not made open by a broken withdrawal elsewhere.
+        const other = { ...a, file: `other/${a.file}` };
+        expect(answersIn(`${row(other)}\n${bad}`)).toEqual([{ file: other.file, line: other.line }]);
+        expect(refusedIn(`${row(other)}\n${bad}`)).toEqual([bad]);
+
+        // A broken withdrawal that names its place is cleared by a newer row or a sound withdrawal of that place.
+        const named = /^Survivor-withdrawn: (\S+:(?:\d+|\*))(?:[ \t]*)$/.exec(bad)?.[1];
+
+        if (named !== undefined) {
+          const [file = "", at = "*"] = [
+            named.slice(0, named.lastIndexOf(":")),
+            named.slice(named.lastIndexOf(":") + 1),
+          ];
+
+          const target = { file, line: at === "*" ? null : Number(at) };
+          expect(refusedIn(`${bad}\n${withdraw(target, note)}`)).toEqual([]);
+          expect(refusedIn(`${bad}\n${row({ ...target, reason: note, evidence: a.evidence })}`)).toEqual([]);
+        }
+      }),
+      options,
+    );
+  });
+
+  // A bare `Survivor: <file>:<line>` row (no reason, nothing after the place) still names its place, so the newest row of that place wins.
+  // Plants: give a bare row no place (a later proven row then leaves its refusal standing for good); let an older proof outlive a newer bare row.
+  it("a bare Survivor: row names its place: a later proven row clears its refusal, and a later bare row takes a proof away", () => {
+    fc.assert(
+      fc.property(answer, (a) => {
+        const bare = `Survivor: ${place(a)}`;
+
+        expect(refusedIn(bare)).toEqual([bare]);
+        expect(refusedIn(`${bare}\n${row(a)}`)).toEqual([]);
+        expect(answersIn(`${bare}\n${row(a)}`)).toEqual([{ file: a.file, line: a.line }]);
+
+        expect(answersIn(`${row(a)}\n${bare}`)).toEqual([]);
+        expect(refusedIn(`${row(a)}\n${bare}`)).toEqual([bare]);
+      }),
+      options,
+    );
+  });
+
+  // The words a refused row prints name what that row lacks. Plants: print the proof words for a withdrawal; print the withdrawal words for a
+  // Survivor: row; drop the way out (a withdrawal) from either.
+  it("a refused row says what it lacks: a Survivor: row a proof, a withdrawal a place and a reason", () => {
+    fc.assert(
+      fc.property(answer, fc.boolean(), (a, withdrawal) => {
+        const text = refusalNote(
+          withdrawal ? `Survivor-withdrawn: ${place(a)}` : `Survivor: ${place(a)} r -- unreachable`,
+        );
+
+        expect(text).toContain("Survivor-withdrawn: <file>:<line> <reason>");
+
+        if (withdrawal) {
+          expect(text).toContain("needs a <file>:<line> and a reason");
+          expect(text).not.toContain("plant:");
+        } else {
+          expect(text).toContain("names no plant:, rg: or law:");
+        }
+      }),
+      options,
+    );
+  });
+
+  // The three forms by example, as the build skill shows them. Plants: refuse one form; accept the same line with its marker, its result or its id cut.
+  it("each of the three proofs answers, and the same line without its marker, result or id does not", () => {
+    const at = "Survivor: kalfa/git/src/Ref.ts:12 the arm cannot run";
+
+    const forms = [
+      "plant: sed -i 's/true/false/' kalfa/git/src/Ref.ts && pnpm exec vitest run kalfa/git/src/Ref.test.ts => 12 passed, still green",
+      'rg: rg -n "parseRef" kalfa --glob "*.ts" => one caller, kalfa/git/src/Repository.ts:40, which never passes a bare name',
+      "law: R3 fails with the line planted",
+    ];
+
+    for (const form of forms) {
+      expect(answersIn(`${at} -- ${form}`), form).toEqual([{ file: "kalfa/git/src/Ref.ts", line: 12 }]);
+    }
+
+    const cut = [
+      "sed -i 's/true/false/' kalfa/git/src/Ref.ts and the laws stayed green",
+      "plant: sed -i 's/true/false/' kalfa/git/src/Ref.ts",
+      'rg: rg -n "parseRef" kalfa =>',
+      "the laws never call it, rg found one caller",
+      "law:  fails with the line planted",
+      "law: three",
+      "plant: => 12 passed => still green",
+      "rg: => one caller => none reads it",
+      "rg:=> one caller => none reads it",
+    ];
+
+    for (const form of cut) {
+      expect(answersIn(`${at} -- ${form}`), form).toEqual([]);
+    }
+  });
+
+  // Plants: list a row that answers; leave out a blank-free row that answers nothing; list a blank row; list rows by their first word alone.
+  it("notAnswers lists the nonblank rows that answer nothing, in order", () => {
+    fc.assert(
+      fc.property(fc.array(fc.oneof(answer.map(row), unsound, noise), { maxLength: 8 }), (rows) => {
+        expect(notAnswers(Arr.join(rows, "\n"))).toEqual(
+          Arr.filter(rows, (r) => r.trim() !== "" && answersIn(r).length === 0),
+        );
+      }),
+      options,
+    );
+  });
+
+  // Plants: list a Survivor: row that answers; leave out one that answers nothing; list a row that is no Survivor: row; list the rows out of order.
+  it("refusedIn lists the Survivor: rows that answer nothing, in order, and no other row", () => {
+    fc.assert(
+      fc.property(fc.array(fc.oneof(answer.map(row), unsound, noise), { maxLength: 8 }), (all) => {
+        const rows = distinct(all);
+
+        expect(refusedIn(Arr.join(rows, "\n"))).toEqual(
+          Arr.filter(rows, (r) => r.startsWith("Survivor:") && answersIn(r).length === 0),
+        );
+      }),
+      options,
+    );
+  });
+
+  // Plants: let a text of no Survivor: line answer anything; take a line without its evidence or its proof.
+  it("lines that carry no proof, or no reason, answer nothing", () => {
     fc.assert(
       fc.property(fc.array(fc.oneof(unsound, noise), { maxLength: 8 }), (rows) => {
-        expect(answersIn(Arr.join(rows, "\n"))).toEqual([]);
+        expect(answersIn(Arr.join(distinct(rows), "\n"))).toEqual([]);
       }),
       options,
     );
@@ -494,10 +882,11 @@ describe("survivors, the exit code and the answers file", () => {
   // Zero is as likely as any count, so the case with nothing left to answer is always reached.
   const count = fc.oneof(fc.constant(0), fc.nat({ max: 20 }));
 
-  // Plants: always 0; always 1; count only the mutants that lived and not the files no law loads (or the reverse).
-  it("the exit code is 1 while any mutant or any unloaded file has no answer, and 0 otherwise", () => {
+  // Plants: always 0; always 1; count only the mutants that lived and not the files no law loads (or the reverse); leave a refused line out.
+  it("the exit code is 1 while any mutant or any unloaded file has no answer or a Survivor: line was refused, and 0 otherwise", () => {
     fc.assert(
-      fc.property(count, count, (open, unloaded) => {
+      fc.property(count, count, count, (open, unloaded, refused) => {
+        expect(exitCode(open, unloaded, refused)).toBe(open === 0 && unloaded === 0 && refused === 0 ? 0 : 1);
         expect(exitCode(open, unloaded)).toBe(open === 0 && unloaded === 0 ? 0 : 1);
       }),
       options,
@@ -530,8 +919,9 @@ describe("survivors, the exit code and the answers file", () => {
       name: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)),
       lines: Schema.Array(
         Schema.Literals([
-          "Survivor: a/b.ts:3 log text -- the line only words a message and no input changes what runs",
-          "Survivor: a/b.ts:* thin glue -- no law loads it, and a call of it only forwards",
+          "Survivor: a/b.ts:3 log text -- rg: rg -n message a => the line only words a message and no reader branches on it",
+          "Survivor: a/b.ts:* thin glue -- law: G1 pins what the glue forwards",
+          "Survivor: a/b.ts:4 log text -- the line only words a message and no input changes what runs",
           "Plant: a law: a break: red",
         ]),
       ),
@@ -552,9 +942,42 @@ describe("survivors, the exit code and the answers file", () => {
   );
 });
 
+describe("survivors, the run depth it hands the box", () => {
+  // Ticket 1306. Plants: pass `--runs full`; pass no flag for a number; pass the number under another flag.
+  it("a depth is mutbox's --runs flag, and full is no flag, so the box leaves each law its own count", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 5000 }), (n) => {
+        expect(runsFlag(n)).toEqual(["--runs", String(n)]);
+      }),
+      options,
+    );
+    expect(runsFlag("full")).toEqual([]);
+  });
+
+  // Plants: print a recheck when none ran; leave out how many died, or how many lived, at full depth.
+  it("the last line gives the counts at both depths: none when no recheck ran, else how many died and how many lived at full depth", () => {
+    expect(recheckText(null, 25)).toBe("");
+
+    const text = recheckText({ asked: 5, cleared: [], confirmed: 2, unreached: 1 }, 25);
+    expect(text).toContain("0 of the 5 that lived at 25 cases died there");
+    expect(text).toContain("2 lived there too (1 not reached)");
+    expect(recheckText({ asked: 1, cleared: [], confirmed: 1, unreached: 0 }, 25)).not.toContain("not reached");
+  });
+
+  // Plants: print the count when none is a type error; leave the count out; count a status other than CompileError.
+  it("the last line says how many mutants do not type-check and count as kills, and nothing when none does", () => {
+    expect(typedText({ Killed: 9, Survived: 2 })).toBe("");
+    expect(typedText({ CompileError: 0 })).toBe("");
+
+    const text = typedText({ Killed: 9, CompileError: 4 });
+    expect(text).toContain("4 mutants do not type-check");
+    expect(text).toContain("count as kills");
+  });
+});
+
 describe("survivors, a saved run", () => {
   const key = (files: ReadonlyArray<string>) =>
-    Saved.key({ base: "b0", tree: "t0", files, version: "v0", seconds: 300 });
+    Saved.key({ base: "b0", tree: "t0", files, version: "v0", seconds: 300, runs: 10 });
 
   /** The wait for a turn with nobody in line: the box is free, and a box taken in that moment is not looked for. */
   const direct = <E, R>(turn: { readonly use: Effect.Effect<Option.Option<Run>, E, R> }) =>
@@ -603,7 +1026,10 @@ describe("survivors, a saved run", () => {
 
   const body = (rows: ReadonlyArray<typeof Row.Type>) =>
     Arr.join(
-      Arr.map(rows, (row) => `Survivor: ${row.file}:${row.line} a log line -- no input changes what runs here`),
+      Arr.map(
+        rows,
+        (row) => `Survivor: ${row.file}:${row.line} a log line -- plant: sed -n 1p ${row.file} => no law fails`,
+      ),
       "\n",
     );
 
@@ -652,6 +1078,40 @@ describe("survivors, a saved run", () => {
         expect(read, "the lines were read on each call").toBe(2);
         expect(second.open).toEqual(rows.filter((row) => !answered.has(`${row.file}:${row.line}`)));
         expect(Option.isSome(yield* Saved.find("/gate", "k1").pipe(Effect.provide(disk.layer)))).toBe(true);
+      }),
+    { arbitrary: { seed: options.seed, runs: options.numRuns } },
+  );
+
+  // Plants: leave the withdrawn answer in force (the mutant stays answered); open every mutant when any place is withdrawn; open a mutant
+  // of another place; leave the exit code at 0 with a mutant open.
+  effect.effect.prop(
+    "a withdrawn answer opens its mutant again, and the gate still exits 1 for any mutant that lived with no live answer",
+    {
+      rows: Schema.Array(Row).check(Schema.isMinLength(1), Schema.isMaxLength(6)),
+      mask: Schema.Array(Schema.Boolean),
+    },
+    ({ rows, mask }) =>
+      Effect.gen(function* () {
+        const withdrawn = rows.filter((_, i) => mask[i] === true);
+        const gone = new Set(withdrawn.map((row) => `${row.file}:${row.line}`));
+
+        const text = Arr.join(
+          [body(rows), ...Arr.map(withdrawn, (row) => `Survivor-withdrawn: ${row.file}:${row.line} the code moved`)],
+          "\n",
+        );
+
+        const got = yield* judge({
+          dir: "/gate",
+          key: "k3",
+          days: 7,
+          answers: Effect.succeed(answersIn(text)),
+          start: Effect.succeed(Option.some(answer("done", rows, 1))),
+          line: direct,
+        }).pipe(Effect.provide(memory().layer));
+
+        expect(got.open).toEqual(rows.filter((row) => gone.has(`${row.file}:${row.line}`)));
+        expect(refusedIn(text)).toEqual([]);
+        expect(exitCode(got.open.length, 0, refusedIn(text).length)).toBe(gone.size === 0 ? 0 : 1);
       }),
     { arbitrary: { seed: options.seed, runs: options.numRuns } },
   );

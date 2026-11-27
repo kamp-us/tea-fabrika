@@ -10,7 +10,7 @@ import { inspect } from "node:util";
  * Every class is built from the drawn seeds in every run, none is left to chance, and each law keeps the ids it reached and fails when one is missing (slice 2's `Reach`). An id is the class and the case, as `u:home`.
  */
 import { expect } from "@effect/vitest";
-import { Cause, ConfigProvider, Effect, Exit, FileSystem, Path, PlatformError, Schema } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, FileSystem, Path, PlatformError, Result, Schema } from "effect";
 import { Setting, SettingGroup } from "./index.ts";
 import type * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import { Draw } from "./SettingGroup.edit.test-support.ts";
@@ -215,6 +215,32 @@ export const Answer = Schema.TaggedUnion({
 
 export type Answer = typeof Answer.Type;
 
+/**
+ * Every text the codecs give for a refusal: the JSON codec, the string-tree codec and the Go-style JSON codec, each alone, and the JSON codec over an `Exit` that
+ * fails with it and an `Exit` that dies of it. An encode that throws gives its message instead, so a refused encode is read too.
+ */
+const written = (error: unknown): string => {
+  const exit = Schema.toCodecJson(Schema.Exit(Schema.Void, SettingGroup.SettingsError, Schema.Defect()));
+
+  const attempts: ReadonlyArray<() => unknown> = [
+    () => Schema.encodeUnknownSync(Schema.toCodecJson(SettingGroup.SettingsError))(error),
+    () => Schema.encodeUnknownSync(Schema.toCodecStringTree(SettingGroup.SettingsError))(error),
+    () => Schema.encodeUnknownSync(Schema.toCodecGoJson(SettingGroup.SettingsError))(error),
+    () => Schema.encodeUnknownSync(exit)(Exit.fail(error)),
+    () => Schema.encodeUnknownSync(exit)(Exit.die(error)),
+  ];
+
+  return attempts
+    .map((attempt) =>
+      Result.match(Result.try(attempt), {
+        onSuccess: (value) => JSON.stringify(value) ?? "",
+        onFailure: (refused) =>
+          refused instanceof Error ? `${refused.message}\n${refused.stack ?? ""}` : String(refused),
+      }),
+    )
+    .join("\n");
+};
+
 export const answer = (exit: Exit.Exit<void, unknown>): Answer => {
   if (Exit.isSuccess(exit)) {
     return Answer.cases.done.make({});
@@ -238,6 +264,7 @@ export const answer = (exit: Exit.Exit<void, unknown>): Answer => {
           error.message,
           String(error.cause),
           inspect(error, { depth: null, customInspect: false, showHidden: true }),
+          written(error),
         ].join("\n"),
       })
     : Answer.cases.failed.make({

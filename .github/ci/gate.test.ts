@@ -17,7 +17,7 @@ const promised = <A>(run: () => PromiseLike<A>) =>
 
 // Today's CI, serving both versions. Covers gate.mjs, the first job of scheduled.yaml (main's full run starts on a push to main and an hourly catch-up): a push
 // to main or the hourly catch-up starts the full run only when no full run on main started within
-// the gap (`GAP_MINUTES`), the catch-up only on a head that has had none, and a hand start always.
+// the gap (`GAP_MINUTES`), the catch-up only on a head that is not tested (G9), and a hand start always.
 // GitHub is a fake that answers the run list and the jobs list from a list of runs, filtered by the
 // query as GitHub filters it, and records each call.
 //
@@ -355,7 +355,7 @@ const runsOf = (
 };
 
 it.live(
-  "G3 property: the reader asks the two run lists of main and one jobs list per run it walks, stops at the first full run, takes its earliest job start, and counts a run at the head only when it is full and not canceled",
+  "G3 property: the reader asks the two run lists of main and one jobs list per run it walks, stops at the first full run, takes its earliest job start, and counts a run at the head only when it is full and not canceled, and tests the head by one that ended success or by two that did not end canceled",
   () =>
     Effect.gen(function* () {
       // Plants, after build, each on gate.mjs and restored: drop `branch=main`, so a branch run counts
@@ -387,7 +387,9 @@ it.live(
               const walked = first === -1 ? mains : mains.slice(0, first + 1);
               const full = first === -1 ? undefined : mains[first];
               const atHead = mains.filter((r) => r.head_sha === HEAD);
-              const tested = atHead.some((r) => r.conclusion !== "cancelled" && r.jobs.some(isLeg));
+              // Tested: a full run that ended `success`, or two that did not end `cancelled` (G9).
+              const counted = atHead.filter((r) => r.conclusion !== "cancelled" && r.jobs.some(isLeg));
+              const tested = counted.some((r) => r.conclusion === "success") || counted.length >= 2;
 
               expect(seen.event).toBe(event);
               expect(seen.gap).toBe(gap);
@@ -988,3 +990,131 @@ it.live(
       ).toBe(true);
     }),
 );
+
+// ---------------------------------------------------------------- G9, a red head gets one more try
+
+// The head's rule (gate.mjs): a head is tested by a full run that ended `success`, or by two full runs
+// that did not end `cancelled`. So one red full run leaves the head untested, and the next tick runs it
+// again, and a canceled run counts for nothing.
+
+/** A run at main's head, of a kind and an ending, as `history` makes one. */
+const onHead = (kind: "full" | "skipped" | "gate failed", conclusion: string) => ({
+  kind,
+  branch: "main",
+  sha: HEAD,
+  conclusion,
+  event: "push",
+  waited: 0,
+  gated: true,
+});
+
+const redRun = onHead("full", "failure");
+
+const greenRun = onHead("full", "success");
+
+const canceledRun = onHead("full", "cancelled");
+
+const skippedRun = onHead("skipped", "success");
+
+const gateFailedRun = onHead("gate failed", "failure");
+
+/** A run at the head that does not count for it: not full, or a gate that failed. */
+const notCounted = fc.constantFrom(skippedRun, gateFailedRun);
+
+/** A run at the head of any kind and ending. */
+const anyRun = fc.constantFrom(redRun, greenRun, canceledRun, skippedRun, gateFailedRun);
+
+/**
+ * The gate's whole answer to a push or a tick at `HEAD`, with `list` the runs at the head. The clock
+ * is far past every run, so no full run on main is too recent, and only the head decides.
+ */
+const answerAt = (event: Event, list: readonly ReturnType<typeof onHead>[]) => {
+  const { send } = github(runsOf(list));
+
+  return gate.main(envOf(event, HEAD, 60), { send, sleep: waits().sleep, now: () => BASE + 9999 * MINUTE });
+};
+
+it("G9a property: one red full run on main's head does not test it, so a tick starts the run again, with skipped and gate-failed runs beside it", async () => {
+  // Plant, after build, on gate.mjs and restored: `counted >= 1` in place of `counted >= 2`, the old rule that one
+  // red full run tests the head (red: G9a, G9d and G3 fail, since a head with one red run is skipped as tested).
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom<Event>("push", "schedule"),
+      fc.array(notCounted, { maxLength: 3 }),
+      fc.array(notCounted, { maxLength: 3 }),
+      async (event, before, after) => {
+        const answer = await answerAt(event, [...before, redRun, ...after]);
+
+        expect(answer.output).toBe("start=true\n");
+        expect(answer.line).toContain("start, due");
+      },
+    ),
+    options,
+  );
+});
+
+it("G9b property: two or more full runs on main's head that did not end canceled test it, so a tick skips", async () => {
+  // Plants, after build, each on gate.mjs and restored: `counted >= 3` in place of `counted >= 2` (red: G9b alone
+  // fails); and the two-run path dropped, so only a green run tests the head (red: G9b alone fails).
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom<Event>("push", "schedule"),
+      fc.integer({ min: 2, max: 4 }),
+      fc.array(notCounted, { maxLength: 3 }),
+      fc.array(notCounted, { maxLength: 3 }),
+      async (event, reds, before, after) => {
+        const middle = Array.from({ length: reds }, () => redRun);
+        const answer = await answerAt(event, [...before, ...middle, ...after]);
+
+        expect(answer.output).toBe("start=false\n");
+        expect(answer.line).toContain("skip, tested");
+      },
+    ),
+    options,
+  );
+});
+
+it("G9c property: one green full run on main's head tests it, so a tick skips, whatever else sits on the head", async () => {
+  // Plant, after build, on gate.mjs and restored: the `success` path dropped, so a green run no longer tests the head
+  // (red: G9c and G3 fail, since one green run starts the run again).
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom<Event>("push", "schedule"),
+      fc.array(anyRun, { maxLength: 4 }),
+      fc.array(anyRun, { maxLength: 4 }),
+      async (event, before, after) => {
+        const answer = await answerAt(event, [...before, greenRun, ...after]);
+
+        expect(answer.output).toBe("start=false\n");
+        expect(answer.line).toContain("skip, tested");
+      },
+    ),
+    options,
+  );
+});
+
+it("G9d property: a canceled full run on main's head neither tests it nor counts toward two, so with no green run one red run beside canceled ones still starts the run again", async () => {
+  // Plant, after build, on gate.mjs and restored: the `cancelled` filter dropped, so a canceled run counts toward two
+  // (red: G9d alone fails, since a red run beside a canceled one is skipped as tested).
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom<Event>("push", "schedule"),
+      fc.integer({ min: 0, max: 1 }),
+      fc.integer({ min: 1, max: 3 }),
+      fc.array(fc.oneof(notCounted, fc.constant(canceledRun)), { maxLength: 3 }),
+      fc.array(fc.oneof(notCounted, fc.constant(canceledRun)), { maxLength: 3 }),
+      async (event, reds, canceled, before, after) => {
+        const middle = [
+          ...Array.from({ length: canceled }, () => canceledRun),
+          ...Array.from({ length: reds }, () => redRun),
+        ];
+
+        const answer = await answerAt(event, [...before, ...middle, ...after]);
+
+        expect(answer.output).toBe("start=true\n");
+        expect(answer.line).toContain("start, due");
+      },
+    ),
+    options,
+  );
+});

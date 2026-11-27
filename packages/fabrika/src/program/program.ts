@@ -494,6 +494,15 @@ export interface View<S, V> {
    * always caught up.
    */
   readonly settled?: (view: V) => boolean;
+  /**
+   * What a call on an input answers an agent with, from the view once it has caught up, in place of
+   * the whole view: a write that produced one number says the number, not every page the window
+   * shows. Keyed by the input's name, which must be one of the program's inputs. An input left out
+   * answers with the whole view, as a query does.
+   *
+   *   answers: {file: (view) => ({filed: view.filed})}
+   */
+  readonly answers?: { readonly [input: string]: (view: V) => unknown };
 }
 
 /** A program's view, of any machine and any data: what a host holds. */
@@ -502,6 +511,7 @@ export interface AnyView {
   readonly data: Schema.Top;
   readonly of: (state: any) => unknown;
   readonly settled?: ((view: any) => boolean) | undefined;
+  readonly answers?: { readonly [input: string]: (view: any) => unknown } | undefined;
 }
 
 /** The view of each program `defineProgram` made with one. */
@@ -511,9 +521,11 @@ const views = new WeakMap<object, AnyView>();
 export const viewOf = (program: AnyProgram): AnyView | undefined => views.get(program);
 
 /** A view of one of the machines `Ks`, typed by that machine's state, its data `V`. */
-export type ViewOf<Ks extends Kinds, V> = {
-  readonly [K in keyof Ks & string]: Omit<View<StateOfKind<Ks[K]>, V>, "machine"> & {
+export type ViewOf<Ks extends Kinds, V, I extends Inputs = Inputs> = {
+  readonly [K in keyof Ks & string]: Omit<View<StateOfKind<Ks[K]>, V>, "machine" | "answers"> & {
     readonly machine: K;
+    /** `View.answers`, keyed by the program's own inputs: a key that is none is a type error. */
+    readonly answers?: { readonly [Name in keyof I & string]?: (view: V) => unknown };
   };
 }[keyof Ks & string];
 
@@ -560,7 +572,8 @@ export function defineProgram<
   R = never,
   V = never,
 >(
-  definition: Definition<F, I, O, Ks, E, R> & NoInfer<Parented<F, O, Ks>> & { readonly view?: ViewOf<NoInfer<Ks>, V> },
+  definition: Definition<F, I, O, Ks, E, R> &
+    NoInfer<Parented<F, O, Ks>> & { readonly view?: ViewOf<NoInfer<Ks>, V, NoInfer<I>> },
 ): Program<F, I, O, Ks, E, R> & Viewed<V> {
   if (definition.name.trim() === "") {
     throw new Error("a program needs a name");
@@ -594,12 +607,19 @@ export function defineProgram<
     throw new Error(`${definition.name}'s view reads ${view.machine}, which is not one of its machines`);
   }
 
+  for (const input of Object.keys(view?.answers ?? {})) {
+    if (!Object.hasOwn(definition.inputs, input)) {
+      throw new Error(`${definition.name}'s view answers ${input}, which is not one of its inputs`);
+    }
+  }
+
   // The mark is in the types only; `made` is what a run checks.
   const program = { ...definition, flags: definition.flags ?? none, machines, capacity } as Program<F, I, O, Ks, E, R>;
   made.add(program);
 
   if (view !== undefined) {
-    views.set(program, view);
+    // Typed by this program's inputs here; a host holds it as any program's, keyed by plain names.
+    views.set(program, view as AnyView);
   }
 
   // The view's data type is in the returned type alone: what its window is typed by.

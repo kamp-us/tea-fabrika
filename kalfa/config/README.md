@@ -103,6 +103,29 @@ export const branchWait = Setting.make("delivery.branch-wait", Wait).pipe(
 
 A URL works the same way, with `Schema.URLFromString` where it is read.
 
+## When a start is refused, and why
+
+A refusal of `SettingGroup.layer` says what went wrong in the words a person can act on, and never holds a value, a
+secret or an absolute path. An `invalid` refusal names the rule the value broke, from what the setting's schema declares:
+its title and description when it has them, else the rule of the check that failed, else the type it expected.
+
+```
+.demo/demo.toml, line 2: net.port is not a valid value. Expected a value greater than 1023.
+  demo did not start.
+```
+
+A `read` refusal says why the read failed, from the failure's kind and its POSIX code:
+
+```
+~/.demo/demo.toml: could not be read, because permission was denied (EACCES).
+  demo did not start.
+```
+
+The error's `cause` is kept, as a `Hidden.Cause` (`@kalfa/diagnostics/Hidden`), since a platform error prints the path it failed on:
+no rendering shows it, and every codec, `Schema.toCodecJson` included, writes it as `<redacted>`. `SnapshotError`'s cause is held the same
+way. Code that must see a cause reads it on purpose with `Redacted.value`. Every refusal ends the span of its call: `config.layer`, `config.set`,
+`config.remove`, `config.edit` or the command's own.
+
 ## Change one setting in a file's text
 
 `SettingGroup.edit(group, text, file)` changes one setting in the text of a configuration file. It is pure: no
@@ -281,15 +304,56 @@ write a check as a pattern or a bound. A text's length check is exact only for a
 Effect counts UTF-16 units and JSON Schema counts code points. The `<app>-version` pattern reads a version as a start
 does, a number up to the largest safe integer included. The quiet window of a group with a live setting is in both.
 
+## The config command
+
+`@kalfa/config/Cli` exports `config(app, groups, { version, repo })`, an `effect/cli` command named by its root name
+that answers questions about every group of one app. `@kalfa/cli` mounts it as its built-in `config`, and an app can mount
+it under its own command. It takes every group, so one file shared by many packages is checked against all of them: a
+key of a group left out is refused as unknown. `repo` is the folder that holds `.<app>/`, and is handed in: the command
+reads no other folder, the current one included. `version` is the running app's.
+
+| Subcommand | Prints |
+|---|---|
+| `get <name>` | the value as one line of JSON, as `"owner"` |
+| `set <name> <value> [--file repo\|user]` | nothing. The text is read as an environment variable's text is read |
+| `remove <name> [--file repo\|user]` | nothing |
+| `list` | every setting: its value as JSON, where it came from, `live` or `restart` (and `file-only`), its description |
+| `schema [--file repo\|user]` | `SettingGroup.jsonSchema` of the joined settings, the repo's when left out |
+| `reference` | `SettingGroup.reference` of the joined settings |
+
+`set` and `remove` change the file `--file` names, else the first file the setting may be set in, with the same edit as
+`SettingGroup.edit`: every comment and other key stays, and a file left unchanged is not touched. A text the setting's
+schema refuses fails before any file is found, and the error never holds the text. `list` and `get` read as a start
+reads, so they meet a start's faults, and each ends `<app> would not start with these settings.` A name that is no
+setting fails `unknown`, with the nearest name when one is within two edits. Each text is built whole and printed once,
+so a failed run prints nothing. Each run is a span `config.<subcommand>` with `kalfa.config.app`, and no value.
+
+```ts
+import { Setting, SettingGroup } from "@kalfa/config";
+import { config } from "@kalfa/config/Cli";
+import { Schema } from "effect";
+
+const port = Setting.make("instance.port", Schema.Int).pipe(
+  Setting.withDefault(18800),
+  Setting.withDescription("The port the service listens on."),
+);
+
+// `kalfa config get instance.port` prints 18800
+const command = config("demo", [SettingGroup.make("demo", port)], { version: "1.2.3", repo: process.cwd() });
+```
+
+`config` throws an `Error` when a group is another app's, or two groups declare settings that are one name, a value and
+its table, or one environment variable. A field two groups share is fine: each group yields its own.
+
 ## Public modules
 
 Import these explicit subpaths: `App`, `Setting`, `Sources`, `Toml`, `TomlParser`, `Codec`,
-`Files`, `JsonSchema`, `Reference`, `Print`, `Snapshot` and `Load`.
+`Files`, `JsonSchema`, `Reference`, `Print`, `Snapshot`, `Load` and `Cli`.
 For example, `@kalfa/config/Reference` reads rows from a loaded snapshot, and
 `@kalfa/config/Print` prints those rows. `internal/` and test files are private.
 
 Workspace imports read `src/`. The archive exports ESM JavaScript and declarations from `dist/`.
-Its runtime dependencies are the TOML parser and serializer. Effect is a peer supplied by the caller.
+Its runtime dependencies are the TOML parser and serializer, and `@kalfa/diagnostics`, for the hidden cause its errors hold. Effect is a peer supplied by the caller.
 
 ## Build an archive from source
 

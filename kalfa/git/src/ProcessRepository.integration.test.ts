@@ -8,6 +8,8 @@ import { Effect, Match, Option, Predicate, Result, Schema, Tracer } from "effect
 import * as Digest from "effect/crypto/Digest";
 import * as FileSystem from "effect/FileSystem";
 import * as Commit from "./Commit.ts";
+import * as CommitEditTest from "./CommitEdit.test-support.ts";
+import * as CommitEdit from "./CommitEdit.ts";
 import * as CommitId from "./CommitId.ts";
 import * as Diff from "./Diff.ts";
 import {
@@ -17,9 +19,11 @@ import {
   shapes,
   textureArb,
   treeCarrier,
+  treeEditCarrier,
   type FlatSignature,
   type History,
 } from "./History.test-support.ts";
+import { editFrom, encodeCommit } from "./Laws.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
 import { memorySubject } from "./MemorySeed.test-support.ts";
 import * as MergeCommitTest from "./MergeCommit.test-support.ts";
@@ -27,6 +31,7 @@ import {
   bareRepository,
   fastImport,
   git,
+  importCommit,
   openRepository,
   processSubject,
   setConfigTable,
@@ -62,11 +67,16 @@ const bytes = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
 
 const ADA = "Ada <ada@example.test> 1700000000 +0000";
 
-// I1 runs the shared laws S1 to S24 on real git, 10 runs each, over bare repositories the seeder fills with files.
+// I1 runs the shared laws on real git, 6 runs each, over bare repositories the seeder fills with files. The whole file must end inside
+// the CI step's 17 minutes on a slow runner: 10 runs took 575 s on a fast one and past 1000 s on a slow one before the edit laws came, which
+// ended the step with the merge commit's laws not yet run. /memory runs the same laws at 100.
 // Plant: each S law's plant, run once on `/process`.
-RepositoryTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
+RepositoryTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 });
 
-MergeCommitTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
+MergeCommitTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 });
+
+// I1 for the commit edit helper (S34, S35), the same laws as on `/memory`, over real bare repositories.
+CommitEditTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 });
 
 const signature = (flat: FlatSignature): Commit.Signature =>
   new Commit.Signature({ name: flat.name, email: flat.email, at: { seconds: flat.seconds, offset: flat.offset } });
@@ -678,22 +688,60 @@ const CONFIG_READS: ReadonlyArray<readonly [label: string, text: boolean]> = [
   ["(a) CRLF lines", true],
   ["(g) UTF-8 text with line breaks and wide characters", true],
   ["(a) names past U+024F, from U+E000 to U+FFFF and outside the Basic Multilingual Plane", true],
+  ["(g) a CR and a NUL", true],
+  ["(g) latin-1 bytes", true],
   ["(a) past 1000 bytes", false],
   ["(a) a file three folders deep beside a file at the top", false],
   ["(b) a path below a file", false],
   ["(c) a folder at the top", false],
 ];
 
+/** What a failure of an edit or a commit is, as text a law compares: its tag and the fields it holds. */
+const failureText = (error: CommitEditTest.CommitFailure): string =>
+  Match.value(error).pipe(
+    Match.tag("NotAFile", (failed) => `NotAFile ${failed.path} ${failed.holds}`),
+    Match.tag("PathInTheWay", (failed) => `PathInTheWay ${failed.path} ${failed.other}`),
+    Match.tag("FileTooLarge", (failed) => `FileTooLarge ${failed.path} ${failed.most}`),
+    Match.tag("NoSuchCommit", (failed) => `NoSuchCommit ${failed.id}`),
+    Match.orElse((failed) => failed._tag),
+  );
+
+/** What an edit came to, as text a law compares: the tree made or the commit as it reads, or the failure. */
+const editOutcome = (
+  edit: Effect.Effect<Tree.TreeId | typeof Commit.Commit.Encoded, CommitEditTest.CommitFailure>,
+): Effect.Effect<string> =>
+  Effect.map(Effect.result(edit), (result) => {
+    if (Result.isFailure(result)) {
+      return failureText(result.failure);
+    }
+
+    return Predicate.isString(result.success) ? `tree:${result.success}` : `commit:${JSON.stringify(result.success)}`;
+  });
+
+// The edits of I10, drawn by class from the edit carrier, and one more that holds text a filter would change: lines that end in CRLF and
+// capital letters, which `core.autocrlf`, `core.eol` and the filter's `clean` command would turn into other bytes if git were asked to filter.
+const CONFIG_EDITS = [
+  "(k) several files in several folders in one call",
+  "(k) the last file of three nested folders removed, so all three go",
+  "(k) a file made a folder",
+  "(m) an executable file replaced stays 100755",
+  "(l) a file replaced with its own bytes",
+  "(q) names on the object prototype",
+] as const;
+
 // Plant (I10): run `cat-file --filters --path=<path>` for a file's bytes, which `core.autocrlf` and the attributes file turn into
-// other bytes, (w) red; give `ls-tree` the path as an argument, so `core.ignoreCase` and `core.precomposeUnicode` act, (w) red. The
-// answers of the drawn reads, asked of one bare repository, are the same before and after its config gets every key of the table,
-// and the same as `/memory` gives for the same history. About 80 git commands in a run: 8 reads, 3 of them asked as text too, 2 times.
+// other bytes, (w) red; give `ls-tree` the path as an argument, so `core.ignoreCase` and `core.precomposeUnicode` act, (w) red; run
+// `hash-object` with `--path=<path>` and no `--no-filters`, so a new file's bytes and id change, (w) red; write a commit with
+// `commit-tree`, so `i18n.commitEncoding` adds a header. The answers of the drawn reads and edits, asked of one bare repository, are the
+// same before and after its config gets every key of the table, and the same as `/memory` gives for the same history. Under 200 git
+// commands in a run: 10 reads, 4 edits and 2 commits, each asked twice on git.
 it.effect.prop(
-  "I10 scenario: a repository's own config steers no read: core.quotePath, core.precomposeUnicode, core.ignoreCase, core.autocrlf, core.eol, core.safecrlf, a filter, core.attributesFile, info/attributes and core.bigFileThreshold change no answer of readFile or readText, and the answers are /memory's",
+  "I10 scenario: a repository's own config steers no read and no edit: core.quotePath, core.precomposeUnicode, core.ignoreCase, core.autocrlf, core.eol, core.safecrlf, a filter, core.attributesFile, info/attributes, core.bigFileThreshold, i18n.commitEncoding, commit.gpgSign, user.* and the rest of the table change no answer of readFile, readText, editTree or commitEdit, and the answers are /memory's",
   { texture: textureArb },
   ({ texture }) =>
     Effect.gen(function* () {
       const carrier = readCarrier(texture);
+      const edits = treeEditCarrier(texture);
 
       const drawn = CONFIG_READS.map(([label, text], k) => {
         const hits = carrier.cases.filter((each) => each.classes.includes(label));
@@ -702,27 +750,53 @@ it.effect.prop(
         return { each: hits[(texture.nums[k] ?? 0) % hits.length], text };
       });
 
+      // Three edits by class, from a draw, and the edit that holds text a filter would change; a commit of a change, of no change and of a refusal.
+      const classes = [0, 1, 2].map((k) => CONFIG_EDITS[(texture.nums[k + 20] ?? 0) % CONFIG_EDITS.length]);
+
+      const chosen = [
+        ...classes.flatMap((label) => edits.cases.filter((each) => each.classes.includes(label ?? "")).slice(0, 1)),
+        ...["(l) a file replaced with its own bytes", "(n) a link replaced"].flatMap((label) =>
+          edits.cases.filter((each) => each.classes.includes(label)).slice(0, 1),
+        ),
+      ];
+
+      const mixed = edits.history.nodes[edits.bases.mixed]?.files ?? [];
+      const target = mixed.find((each) => each.mode === "100644")?.path ?? "none";
+      const text = new TextEncoder().encode("Line One\r\nLINE Two\r\nMixed Case\r\n");
+
+      const bait = {
+        base: edits.bases.mixed,
+        changes: [
+          ["bait/Upper.txt", text],
+          [target, text],
+        ] as const,
+      };
+
+      expect(chosen.length, "the generator reaches the classes the edits are drawn from").toBe(5);
+
       yield* Effect.scoped(
         Effect.gen(function* () {
           const real = yield* processSubject.seed(carrier.history, settings);
           const model = yield* memorySubject.seed(carrier.history, settings);
-          const [dir] = real.hidden;
+          const realEdits = yield* processSubject.seed(edits.history, settings);
+          const modelEdits = yield* memorySubject.seed(edits.history, settings);
+          const dirs = [real.hidden[0], realEdits.hidden[0]];
 
-          if (dir === undefined) {
+          if (dirs[0] === undefined || dirs[1] === undefined) {
             return yield* Effect.die("the seeder gave no repository folder");
           }
 
           const answers = (seeded: RepositoryTest.Seeded) =>
             Effect.forEach(
-              drawn.flatMap(({ each, text }) => (each === undefined ? [] : [{ each, text }])),
-              ({ each, text }) => {
+              drawn.flatMap(({ each, text: asText }) => (each === undefined ? [] : [{ each, text: asText }])),
+              ({ each, text: asText }) => {
                 const commit = idAt(seeded.ids, each.commit);
                 const path = Schema.decodeUnknownSync(Tree.Path)(each.path);
 
                 return Effect.all(
                   [
                     readOutcome(seeded.repository.readFile(commit, path)),
-                    text ? readOutcome(seeded.repository.readText(commit, path)) : Effect.succeed("not asked"),
+                    asText ? readOutcome(seeded.repository.readText(commit, path)) : Effect.succeed("not asked"),
                   ],
                   { concurrency: 1 },
                 );
@@ -730,15 +804,65 @@ it.effect.prop(
               { concurrency: 1 },
             );
 
+          const editing = (seeded: RepositoryTest.Seeded) =>
+            Effect.gen(function* () {
+              const out: Array<string> = [];
+
+              for (const [k, each] of [...chosen, bait].entries()) {
+                const parent = idAt(seeded.ids, each.base);
+                const changes = editFrom(each.changes, k % 2 === 1);
+                out.push(yield* editOutcome(seeded.repository.editTree(parent, changes)));
+
+                // The commit of the same edit: the commit as it reads back, or why there is none.
+                out.push(
+                  yield* editOutcome(
+                    Effect.map(
+                      CommitEdit.commitEdit({
+                        parent,
+                        changes,
+                        message: "an edit\n",
+                        author: signature({
+                          name: "Ada",
+                          email: "ada@example.test",
+                          seconds: 1_700_000_000,
+                          offset: "+0000",
+                        }),
+                      }).pipe(Effect.provideService(Repository.Repository, seeded.repository)),
+                      encodeCommit,
+                    ),
+                  ),
+                );
+              }
+
+              return out;
+            });
+
           const without = yield* answers(real);
           expect(without, "git answers what /memory answers").toEqual(yield* answers(model));
-          yield* setConfigTable(dir);
+          const editsWithout = yield* editing(realEdits);
+          expect(editsWithout, "git edits as /memory edits").toEqual(yield* editing(modelEdits));
+          yield* setConfigTable(dirs[0]);
+          yield* setConfigTable(dirs[1]);
           expect(yield* answers(real), "the same answers with every key of the config table set").toEqual(without);
+          expect(yield* editing(realEdits), "the same edits with every key of the config table set").toEqual(
+            editsWithout,
+          );
           expect(without.filter(([raw]) => raw?.startsWith("file:")).length, "the reads have files").toBeGreaterThan(3);
           expect(
-            without.filter(([, text]) => text?.startsWith("text:")).length,
+            without.filter(([, asText]) => asText?.startsWith("text:")).length,
             "the reads have text, which the filter would change",
           ).toBeGreaterThan(1);
+          expect(
+            editsWithout.filter((each) => each.startsWith("tree:")).length,
+            "the edits make trees",
+          ).toBeGreaterThan(2);
+          expect(
+            editsWithout.filter((each) => each.startsWith("commit:")).length,
+            "the edits make commits",
+          ).toBeGreaterThan(1);
+          expect(editsWithout.filter((each) => each === "NoChange").length, "an edit changes nothing").toBeGreaterThan(
+            0,
+          );
         }),
       );
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -806,5 +930,123 @@ it.effect(
         Option.isNone(yield* repo.readFile(commit, path("sub-not"))),
         "a name that only starts like the submodule's is none",
       ).toBe(true);
+
+      // Slice 2: an edit at a submodule or below it fails NotAFile naming it, and an edit beside it keeps its entry, so the tree is the one
+      // fast-import makes for the files the edit should leave.
+      const text = new TextEncoder().encode("new\n");
+
+      const edit = (changes: ReadonlyArray<readonly [string, Uint8Array | "absent"]>) =>
+        repo.editTree(commit, new Map(changes.map(([target, change]) => [path(target), change] as const)));
+
+      for (const [label, changes, named] of [
+        ["a submodule replaced", [["sub", text]], "sub"],
+        ["a submodule removed", [["sub", "absent"]], "sub"],
+        ["a file below a submodule", [["sub/x/y", text]], "sub"],
+        ["a submodule in a folder replaced", [["dir/inner", text]], "dir/inner"],
+        ["a file below a submodule in a folder", [["dir/inner/z", text]], "dir/inner"],
+        ["absent below a submodule", [["dir/inner/z", "absent"]], "dir/inner"],
+        [
+          "a submodule beside a change that works",
+          [
+            ["a", text],
+            ["sub", text],
+          ],
+          "sub",
+        ],
+      ] as const) {
+        expectFailure(
+          yield* Effect.flip(edit(changes)),
+          Repository.NotAFile,
+          { path: named, holds: "submodule" },
+          `${label}, editTree`,
+        );
+      }
+
+      const beside = yield* edit([
+        ["a", text],
+        ["dir/g", text],
+        ["dir/f", "absent"],
+      ]);
+
+      const [expected] = yield* fastImport(
+        dir,
+        importCommit(1, "refs/heads/expected", [
+          { mode: "100644", path: bytes("a"), content: text },
+          { mode: "100644", path: bytes("dir/g"), content: text },
+          { mode: "160000", path: bytes("sub"), content: { commit: GITLINK_A } },
+          { mode: "160000", path: bytes("dir/inner"), content: { commit: GITLINK_B } },
+        ]),
+      );
+
+      expect(
+        beside,
+        "an edit beside the submodules keeps their entries: the tree is fast-import's tree of the files that are left",
+      ).toBe((yield* git(dir, ["rev-parse", `${expected}^{tree}`])).trim());
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+// Plant (I12): rebuild a rewritten folder from decoded names, so a name that is not UTF-8 changes, (x) red; pass an untouched entry's name
+// through a text decode; give `mktree` the entries of a folder in the order of their names as text. A `Path` cannot hold a byte that is no
+// UTF-8, so such a name is made with fast-import: a file beside it at the top and in a folder, a folder of that kind, a submodule and an
+// executable. An edit beside them keeps each byte for byte, and the tree is the one fast-import makes for the files the edit should leave.
+it.effect(
+  "I12 scenario: with names that are not UTF-8, made by fast-import, an edit beside them keeps each name byte for byte, so the tree equals fast-import's tree of the files that are left",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bareRepository;
+      const odd = Uint8Array.of(0xff, 0x2d, 0x6e);
+      const top = Uint8Array.of(0xfe, 0x61);
+      const old = new TextEncoder().encode("old\n");
+      const next = new TextEncoder().encode("next\n");
+      const added = new TextEncoder().encode("added\n");
+
+      const kept = [
+        { mode: "100755", path: top, content: old },
+        { mode: "100644", path: bytes("dir/", odd), content: old },
+        { mode: "100644", path: bytes(odd, "-d/inner"), content: old },
+        { mode: "160000", path: bytes("sub"), content: { commit: GITLINK_A } },
+      ] as const;
+
+      const [first] = yield* fastImport(
+        dir,
+        importCommit(1, "refs/heads/main", [
+          { mode: "100644", path: bytes("a"), content: old },
+          { mode: "100644", path: bytes("dir/f"), content: old },
+          { mode: "100644", path: bytes("dir/gone"), content: old },
+          ...kept,
+        ]),
+      );
+
+      const [expected] = yield* fastImport(
+        dir,
+        importCommit(1, "refs/heads/expected", [
+          { mode: "100644", path: bytes("a"), content: next },
+          { mode: "100644", path: bytes("dir/f"), content: old },
+          { mode: "100644", path: bytes("dir/new"), content: added },
+          ...kept,
+        ]),
+      );
+
+      const repo = yield* openRepository(dir, settings);
+      const path = (text: string) => Schema.decodeUnknownSync(Tree.Path)(text);
+
+      const made = yield* repo.editTree(
+        commitIdFrom(first ?? ""),
+        new Map<Tree.Path, Uint8Array | "absent">([
+          [path("a"), next],
+          [path("dir/gone"), "absent"],
+          [path("dir/new"), added],
+        ]),
+      );
+
+      expect(made, "the tree is fast-import's tree of the files that are left").toBe(
+        (yield* git(dir, ["rev-parse", `${expected}^{tree}`])).trim(),
+      );
+
+      // An edit that changes nothing beside them is the tree it was made on.
+      const same = yield* repo.editTree(commitIdFrom(first ?? ""), new Map([[path("a"), old]]));
+      expect(same, "no change gives the base's own tree").toBe(
+        (yield* git(dir, ["rev-parse", `${first}^{tree}`])).trim(),
+      );
     }).pipe(Effect.provide(NodeServices.layer)),
 );

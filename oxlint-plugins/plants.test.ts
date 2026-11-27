@@ -643,6 +643,9 @@ describe("each rule refuses what it is there to refuse", () => {
         "no-static-layer",
         // Generated no-cause-squash.test.ts plants run at next/ and .agents/ paths with the real lint config.
         "no-cause-squash",
+        // Ticket 1310's rule reads kalfa's product files only: generated hidden-cause.test.ts files run through RuleTester, and one real lint run per path kind
+        // plants the same body at kalfa product paths and at the paths it leaves out.
+        "hidden-cause",
         // P16's rule reads the program package, so generated packages plant it in its own test file.
         "program-package-layout",
         // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
@@ -663,6 +666,9 @@ describe("each rule refuses what it is there to refuse", () => {
         // The real-resource rule is on for next/'s and kalfa/'s test files only: integration-test-name.test.ts plants a plain
         // and a named file under each and runs oxlint over them with the real lint config.
         "integration-test-name",
+        // Ticket 1311's rule reads test files and test kits only: no-sleep-on-test-clock.test.ts plants generated
+        // test bodies at those paths and at product paths, with the real lint config.
+        "no-sleep-on-test-clock",
         // Ticket 1029's rule reads only next/'s test files, suites and test kits: test-database.test.ts
         // plants generated lines at those paths, and at product and outside paths it must pass.
         "test-database",

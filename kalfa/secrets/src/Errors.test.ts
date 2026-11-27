@@ -2,9 +2,26 @@ import { inspect } from "node:util";
 // E2, the two failures a store side has: a store that cannot answer (`StoreFailed`) and a recorder that cannot write (`RecordFailed`). Each is a
 // tagged error that keeps its cause, hidden in a `Redacted` that gives it back on purpose, and is caught by its tag.
 import { expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Effect, Exit, Formatter, Redacted, Schema } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Formatter, Option, Redacted, Schema } from "effect";
 import * as Errors from "./Errors.ts";
-import { marker, pick, reachable, SEED } from "./Secrets.test-support.ts";
+import * as Name from "./Name.ts";
+import {
+  acceptedNames,
+  acceptedStoreIds,
+  causeClasses,
+  causes as drawnCauses,
+  fieldsOf,
+  type Plain,
+  marker,
+  nameTexture,
+  pick,
+  reachable,
+  SEED,
+  showsAny,
+  wordValue,
+  needles,
+  written,
+} from "./Secrets.test-support.ts";
 
 /** A failure of either kind, typed as the union, so a handler may name either tag. */
 const failing = (error: Errors.StoreFailed | Errors.RecordFailed) => Effect.fail(error);
@@ -63,10 +80,10 @@ it.effect.prop(
         record: { reason: drawn.word, nested: { reason: drawn.word } },
       }[drawn.form];
 
-      for (const error of [
-        new Errors.StoreFailed({ cause: Redacted.make(cause) }),
-        new Errors.RecordFailed({ cause: Redacted.make(cause) }),
-      ]) {
+      for (const [schema, error] of [
+        [Errors.StoreFailed, new Errors.StoreFailed({ cause: Redacted.make(cause) })],
+        [Errors.RecordFailed, new Errors.RecordFailed({ cause: Redacted.make(cause) })],
+      ] as const) {
         const texts = [
           error.message,
           error.stack ?? "",
@@ -77,12 +94,123 @@ it.effect.prop(
           Cause.pretty(Cause.fail(error)),
           Cause.pretty(Cause.die(error)),
           ...reachable(error),
+          // The texts the codecs give, alone and inside an `Exit`: a cause hidden from every rendering may still be written in full.
+          ...written(schema, error),
         ];
 
         expect(
           texts.filter((each) => each.includes(drawn.word)),
           `${error._tag} over a ${drawn.form}`,
         ).toEqual([]);
+      }
+    }),
+  { arbitrary: { runs: 100, seed: SEED } },
+);
+
+// S1. [secrets] Plant: put `Schema.Redacted(Schema.Defect())` back on `StoreFailed`; the same on `RecordFailed`; give `SecretsUnavailable` a `cause` field of its
+// own, so a key is written that the plan does not list.
+it.effect.prop(
+  "S1 errors: [secrets] StoreFailed, RecordFailed and SecretsUnavailable are written as JSON with the placeholder in the cause's place and nothing else new, read back with their tag and fields and an empty hidden cause, and cross inside an Exit",
+  { names: nameTexture, drawn: drawnCauses },
+  ({ names, drawn }) =>
+    Effect.sync(() => {
+      const found = needles(wordValue(drawn.word));
+      const classes = causeClasses(drawn);
+      expect(classes.map((each) => each.id).join(""), "the generator reaches every class").toBe("etrl");
+
+      const secret = Schema.decodeUnknownSync(Name.SecretName)(acceptedNames(names)[0]?.text);
+      const store = Schema.decodeUnknownSync(Name.StoreId)(acceptedStoreIds(names)[2]);
+
+      const json = <S extends Plain>(schema: S) => ({
+        write: (error: S["Type"]): Schema.Json => Schema.encodeUnknownSync(Schema.toCodecJson(schema))(error),
+        read: (wire: Schema.Json): S["Type"] => Schema.decodeUnknownSync(Schema.toCodecJson(schema))(wire),
+      });
+
+      const Every = Schema.Union([Errors.StoreFailed, Errors.RecordFailed, Errors.SecretsUnavailable]);
+
+      const crossing = Schema.toCodecJson(Schema.Exit(Schema.Void, Every, Schema.Defect()));
+
+      const empty = (cause: Redacted.Redacted<unknown>): boolean =>
+        Redacted.isRedacted(cause) && Redacted.value(cause) === undefined;
+
+      for (const each of classes) {
+        const storeFailed = new Errors.StoreFailed({ cause: each.hidden });
+        const recordFailed = new Errors.RecordFailed({ cause: each.hidden });
+
+        const failures = [
+          {
+            reason: storeFailed,
+            write: (): Schema.Json => Schema.encodeUnknownSync(Schema.toCodecJson(Errors.StoreFailed))(storeFailed),
+            read: (wire: Schema.Json) => Schema.decodeUnknownSync(Schema.toCodecJson(Errors.StoreFailed))(wire),
+          },
+          {
+            reason: recordFailed,
+            write: (): Schema.Json => Schema.encodeUnknownSync(Schema.toCodecJson(Errors.RecordFailed))(recordFailed),
+            read: (wire: Schema.Json) => Schema.decodeUnknownSync(Schema.toCodecJson(Errors.RecordFailed))(wire),
+          },
+        ];
+
+        for (const { reason, write, read: readBack } of failures) {
+          const named = `${reason._tag} over a ${each.id}`;
+          const wire = write();
+
+          expect(fieldsOf(wire), `${named}: written`).toEqual([
+            ["_tag", reason._tag],
+            ["cause", "<redacted>"],
+          ]);
+
+          const read = readBack(wire);
+          expect([read._tag, empty(read.cause)], `${named}: read back`).toEqual([reason._tag, true]);
+
+          const unavailable = new Errors.SecretsUnavailable({ secret, store, reason });
+          const wrapped = json(Errors.SecretsUnavailable).write(unavailable);
+
+          const held = fieldsOf(wrapped);
+
+          expect(
+            held.map(([key]) => key),
+            `${named} held by SecretsUnavailable: the keys written`,
+          ).toEqual(["_tag", "reason", "secret", "store"]);
+          expect(
+            held.filter(([key]) => key !== "reason"),
+            `${named} held by SecretsUnavailable: the fields written`,
+          ).toEqual([
+            ["_tag", "SecretsUnavailable"],
+            ["secret", secret],
+            ["store", store],
+          ]);
+          expect(
+            fieldsOf(held.find(([key]) => key === "reason")?.[1] ?? null),
+            `${named} held by SecretsUnavailable: the reason written`,
+          ).toEqual([
+            ["_tag", reason._tag],
+            ["cause", "<redacted>"],
+          ]);
+
+          const back = json(Errors.SecretsUnavailable).read(wrapped);
+          expect(
+            [back._tag, back.secret, back.store, back.reason._tag, empty(back.reason.cause)],
+            `${named} held by SecretsUnavailable: read back`,
+          ).toEqual(["SecretsUnavailable", secret, store, reason._tag, true]);
+
+          for (const error of [reason, unavailable]) {
+            const crossed = Schema.decodeUnknownSync(crossing)(Schema.encodeUnknownSync(crossing)(Exit.fail(error)));
+
+            expect(
+              [
+                Exit.isFailure(crossed),
+                Exit.isFailure(crossed)
+                  ? Option.map(Cause.findErrorOption(crossed.cause), (e) => e._tag)
+                  : Option.none(),
+              ],
+              `${error._tag} over a ${each.id}: inside an Exit`,
+            ).toEqual([true, Option.some(error._tag)]);
+            expect(
+              showsAny(written(Every, error), found),
+              `${error._tag} over a ${each.id}: the word in what is written`,
+            ).toEqual([]);
+          }
+        }
       }
     }),
   { arbitrary: { runs: 100, seed: SEED } },

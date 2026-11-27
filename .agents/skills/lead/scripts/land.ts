@@ -27,19 +27,21 @@
 //       push         botpush.mjs, to the branch (to its -wip backup for a mid-quest handover, and
 //                    stop there)
 //       pr           open the PR from the body file, or update the open one
-//       queue        as `land.ts queue <pr> --wait` below
+//       queue        as `land.ts queue <pr> --wait-ci` below
 //
-//   land.ts queue <pr> [--wait] [--wait-minutes <n>] [--every-seconds <n>]
-//     the lead session, for any pull request whose steps passed (pr/Queue.ts, a pull request whose steps passed lands on green CI and a clean leak check alone): refuses one
-//     that is closed or not into main; leak-greps its net change, each of its commits and
-//     its title and description, which become the squash commit's text; marks a draft ready for
+//   land.ts queue <pr> [--wait-ci] [--wait-minutes <n>] [--every-seconds <n>]
+//     the lead session, for any pull request whose steps passed (pr/Queue.ts, a pull request whose steps passed lands on green CI and a clean leak check alone): first the merge gate
+//     below, which refuses one that is closed, not into main, in conflict with main, a `can/` branch or titled `Plan:`, that leaks (the
+//     leak grep on its net change, each of its commits and its title and description, which become the squash commit's text), whose
+//     body fails the pr skill's checks, or with an unsigned commit; then marks a draft ready for
 //     review, as `admin` does, which starts its real `ci-required`; reads `ci-required` at its
-//     head, once, or with --wait again each minute for up to an hour, in the background (a draft just
-//     marked ready has no `ci-required` yet, so give it --wait; a pull request that conflicts with main, or turns to
+//     head, once, or with --wait-ci again each minute for up to an hour, in the background (a draft just
+//     marked ready has no `ci-required` yet, so give it --wait-ci; a pull request that conflicts with main, or turns to
 //     conflict during the wait, exits 1 at once with the command that merges main in); then one
 //     `gh pr merge --squash --match-head-commit <head>`, which adds it to GitHub's merge queue.
 //     It prints `queued`, never `merged`: GitHub tests it on newest main and merges it later. No
-//     --admin, no --auto, no other merge method.
+//     --admin, no --auto, no other merge method. `--wait` is refused: it was renamed `--wait-ci`, which waits for
+//     `ci-required` and returns at `queued`, never at the merge.
 //
 //   land.ts wait <pr> [--wait-minutes <n>] [--every-seconds <n>]
 //     the one wait for CI, in place of a hand-written loop that picks a workflow run by head SHA (a ready
@@ -47,22 +49,26 @@
 //     `land.ts` itself reads, at the head the pull request holds on each read (default 60 minutes, every 60
 //     seconds), until it has ended; a push or an update-branch moves the head and the next read follows it.
 //     Prints the conclusion and exits 0 on success, 1 on any other (a cancelled one says so and names its
-//     run, a pull request that turns to conflict with main ends it at once). `queue --wait` and `admin
+//     run, a pull request that turns to conflict with main ends it at once). `queue --wait-ci` and `admin
 //     --wait` make this same wait before they act, and take the same two flags.
 //
 //   land.ts check <pr>
-//     the lead session, after it writes a pull request's body and before `queue`: runs exactly the body checks `queue`
-//     runs (Queue.body: the leak grep on the title and description, each new exported name named under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket),
-//     one function shared with `queue`. It also checks that every commit on the branch since main is signed (a note on
+//     the lead session, after it writes a pull request's body and before `queue`: runs the merge gate (pr/Gate.ts) alone, the one
+//     function that `queue`, `run`, `merge`, `merge --admin`, `admin` and `arm` run first, so `check` refuses exactly what each of them
+//     refuses before it asks for CI or a merge. In order: not a `can/` branch; open, into main and not in conflict with main (a draft
+//     passes: `queue` marks it ready); no `Plan:` title; the leak grep on the net change and each commit; the leak grep on the title and
+//     description, the pr skill's sections and no draft placeholder, each new exported name named under `## New names`, and each
+//     `fabrika close ticket` line naming an open tracker ticket; and every commit on the branch since main signed (a note on
 //     refs/notes/fabrika, or a person's own signature) or made by `stepcommit.sh` (a `--commit-only` commit, signed at
-//     `land.ts run`, and a fix round's, which signs nothing), and names each one that is neither. Changes nothing but the refs it
-//     fetches. Prints each missing name with the file it comes from and exits 1 on any refusal; else prints one line and exits 0.
+//     `land.ts run`, and a fix round's, which signs nothing), naming each one that is neither. The first refusal is the one printed.
+//     Changes nothing but the refs it fetches. Exits 1 on a refusal, naming what is wrong and the file it comes from; else prints
+//     one line that lists the checks it passed and exits 0. `queue`, `run`, `merge`, `admin` and `arm` print that same line
+//     first (pr/Gate.ts `line`), unless the pull request was found merged already.
 //
 //   land.ts arm <pr>
-//     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips; pr/Arm.ts): refuses
-//     one that is not open, not into main, or titled `Plan:`; runs the leak gate (pr/Leaks.ts) on its
-//     net change, each of its commits and its title and description, and refuses on any hit or on a
-//     grep that could not run; reads the proof run (scheduled.yaml) on its branch at its head, the
+//     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips; pr/Arm.ts): runs the merge gate
+//     first, as `queue` does (so a `can/` branch, a `Plan:` title, a leak or a grep that could not run, a body the pr skill's checks
+//     refuse, an unsigned commit or a conflict with main refuses it); reads the proof run (scheduled.yaml) on its branch at its head, the
 //     full set or, since the proof-run rule, the changed set, and refuses one that is red or not ended, printing
 //     each job that is not green, its failed steps and its failing test lines. With no run at the
 //     head it arms, as the arm-every-reviewed-pull-request rule allows, and says so in one line, unless the branch's newest run at an
@@ -76,13 +82,13 @@
 //     docs included. It lands a sev fix at either level (a sev fix is admin-merged one at a time on current main: the branch `sev.ts fix` named in a
 //     sev1, or one `open --allow` or `next` named in a sev0), a ready pull request a sev0 `allow`ed
 //     (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order), or any other pull request the owner asked for. A fix also needs origin/main's head in
-//     its history. Every one runs the leak gate first, on the change, each commit, the title and the
-//     description, and refuses on any hit or on a grep that could not run.
+//     its history. Every one runs the merge gate first, which `queue` and `arm` run too: the leak gate on the change, each commit,
+//     the title and the description (a refusal on any hit or on a grep that could not run), and the rest of its refusals.
 //
 //   land.ts admin <pr> [--wait] [--wait-minutes <n>] [--every-seconds <n>] [--queue-minutes <n>] [--queue-every-seconds <n>]
 //     the lead session, the one way it admin merges (a hand-written `gh pr checks --watch` chain once
-//     merged while ci-required was still pending). As `merge --admin`, and also: a branch starting
-//     `can/` is refused; a draft is marked ready after the leak gate, then ci-required is given
+//     merged while ci-required was still pending). As `merge --admin` (a branch starting
+//     `can/` is refused by the gate, as it is on every path), and also: a draft is marked ready after the gate, then ci-required is given
 //     --wait-minutes (default 30, read every --every-seconds, default 30) to appear and end, and only
 //     once a CI run has started at its head, never in the seconds after a push (a ready event then
 //     starts a second run on one commit, and the required check stays "expected"); it must be
@@ -99,7 +105,8 @@
 //     each ticket its description names on a line of its own, `fabrika close ticket <N>`, with a
 //     comment naming the pull request and its merge commit (a merge closes only the tickets its pull request names with our own phrase), and starts one box cleanup sweep
 //     (`gcloop.ts kick`, box cleanup runs on a timer and after a merge, never on a step's start path), which removes the quest's boxes and worktree. Not merged: one line
-//     saying how it stands. Running it again closes nothing twice.
+//     saying how it stands. Running it again closes nothing twice. The timer's pass (gcloop.ts) closes the
+//     tickets a missed run leaves open, once each.
 //
 //   land.ts close-named <pr>...
 //     as `merged`, but only the ticket closes: no box cleanup sweep. For a pull request that merged
@@ -116,7 +123,19 @@
 // calls them in order.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Result, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  Console,
+  DateTime,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import { Alerts } from "../../sev/scripts/Alerts.ts";
@@ -126,12 +145,18 @@ import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as RunsGh from "./ci/RunsGh.ts";
 import * as Arm from "./pr/Arm.ts";
 import * as BranchesGit from "./pr/BranchesGit.ts";
+import * as ClosesFs from "./pr/ClosesFs.ts";
+import * as Gate from "./pr/Gate.ts";
+import * as MainFetch from "./pr/MainFetch.ts";
 import * as Merge from "./pr/Merge.ts";
 import { PullRequests } from "./pr/PullRequests.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
+import * as Sections from "./pr/Sections.ts";
+import { Signatures } from "./pr/Signatures.ts";
+import * as SignaturesGit from "./pr/SignaturesGit.ts";
 import * as SweepsProcess from "./pr/SweepsProcess.ts";
 import * as TicketsCli from "./pr/TicketsCli.ts";
 
@@ -183,10 +208,7 @@ class Ready extends Schema.Class<Ready>("Ready")({
  */
 const ReadyJson = Schema.fromJsonString(Schema.Union([Ready, Ready.pipe(Schema.encodeKeys({ quest: "lane" }))]));
 
-/** The identity `stepcommit.sh` commits as; a commit with this author is one of its own. */
-const BOT_EMAIL = "353269643+fabrikalfa[bot]@users.noreply.github.com";
-
-const BOT = ["-c", "user.name=fabrikalfa[bot]", "-c", `user.email=${BOT_EMAIL}`];
+const BOT = ["-c", "user.name=fabrikalfa[bot]", "-c", `user.email=${SignaturesGit.BOT_EMAIL}`];
 
 type Ran = { readonly code: number; readonly out: string; readonly err: string };
 
@@ -349,6 +371,13 @@ const ready = Command.make(
       return yield* new Refused({ check: "ready", reason: "the body file's first line is the PR title", output: "" });
     }
 
+    // The body file is the pull request's description: a placeholder or a missing section is found here, before a push, not at the queue.
+    const unwritten = pr === undefined ? null : Sections.refusal(prBody(yield* fs.readFileString(pr.body), "").body);
+
+    if (unwritten !== null) {
+      return yield* new Refused({ check: "ready", reason: `the body file: ${unwritten}`, output: "" });
+    }
+
     const head = yield* must("ready", "HEAD does not read", tree, "git", ["rev-parse", "HEAD"]);
     const lead: string[] = [];
 
@@ -439,6 +468,12 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ quest, ready, env 
   }
 
   const posted = prBody(yield* fs.readFileString(ready.pr.body), yield* fs.readFileString(ready.pr.loosening));
+  const unwritten = Sections.refusal(posted.body);
+
+  if (unwritten !== null) {
+    return yield* new Refused({ check: "ready", reason: `the PR body: ${unwritten}`, output: "" });
+  }
+
   const file = `${env.BOXES}/${quest}-land-body.md`;
   yield* fs.writeFileString(file, posted.body);
   yield* must("leak", "the leak grep refused the PR body", ready.tree, "sh", [`${HERE}/leakgrep.sh`, "--text", file]);
@@ -446,29 +481,9 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ quest, ready, env 
   return { title: posted.title, file };
 });
 
-/**
- * Fetches origin's main into a ref of this call alone and gives back its commit, then removes the ref. Never FETCH_HEAD
- * (every fetch in a checkout writes it, and a session that fetched there at once swapped it before the read: "the fetched
- * main is not a commit") and never a shared ref. Writes no FETCH_HEAD, so it takes none from anyone else.
- */
-const fetchedMain = Effect.fnUntraced(function* (tree: string, check: typeof Check.Type) {
-  const git = gitIn(tree);
-  const ref = `refs/land-fetch/${process.pid}-${globalThis.crypto.randomUUID()}`;
-
-  return yield* Effect.acquireUseRelease(
-    git(
-      check,
-      "origin main could not be fetched",
-      "fetch",
-      "-q",
-      "--no-write-fetch-head",
-      "origin",
-      `+refs/heads/main:${ref}`,
-    ),
-    () => git(check, "the fetched main is not a commit", "rev-parse", `${ref}^{commit}`),
-    () => sh(tree, "git", ["update-ref", "-d", ref]),
-  );
-});
+/** Origin's main as a commit (./pr/MainFetch.ts), a refusal at `check` when it cannot be read. */
+const fetchedMain = (tree: string, check: typeof Check.Type) =>
+  MainFetch.fetchedMain(tree).pipe(Effect.mapError((e) => new Refused({ check, reason: e.reason, output: e.output })));
 
 /** Fetches main and merges it in as the bot, never a rebase; a conflict names each file's step. */
 export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: Quest) {
@@ -621,7 +636,7 @@ export const push = Effect.fn("land.push")(function* ({ ready }: Quest) {
   return { target, tip: yield* gitIn(ready.tree)("push", "HEAD does not read", "rev-parse", "HEAD") };
 });
 
-/** Opens the PR, or updates the open one through the REST API (`gh pr edit` fails here, AGENTS.md). */
+/** Opens the PR, or updates the open one through the REST API. */
 export const openPr = Effect.fn("land.openPr")(function* (
   { ready, env }: Quest,
   draft: { readonly title: string; readonly file: string },
@@ -689,8 +704,17 @@ const queueServices = (env: Env) =>
     PushesProcess.layer(HERE),
     ChecksGh.layer(env.GH_REPO),
     TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
+    ClosesFs.layer(`${env.BOXES}/state`),
     SweepsProcess.layer(HERE),
+    SignaturesGit.layer,
   );
+
+/**
+ * The line every merge path prints before its own, the one `check` prints: the merge gate passed it (./pr/Gate.ts). None for a
+ * pull request found merged already, which no gate read. A path that got past the gate held an open pull request.
+ */
+const gateLines = (pr: number, merged: boolean): ReadonlyArray<string> =>
+  merged ? [] : [Gate.line({ number: pr, state: "OPEN" })];
 
 /**
  * Adds pull request `pr` to GitHub's merge queue (pr/Queue.ts): the leak checks, `ci-required`
@@ -757,7 +781,13 @@ const run = Command.make(
     yield* say(
       `PR https://github.com/${quest.env.GH_REPO}/pull/${pr}; waiting for ${Queue.REQUIRED} to add it to the queue`,
     );
-    yield* say(Queue.line(yield* queue(quest.env, pr, Queue.QUEST_WAIT, quest.ready.tree)));
+    const added = yield* queue(quest.env, pr, Queue.QUEST_WAIT, quest.ready.tree);
+
+    for (const said of gateLines(pr, added._tag === "merged")) {
+      yield* say(said);
+    }
+
+    yield* say(Queue.line(added));
   }),
 );
 
@@ -769,16 +799,33 @@ const waitFlags = (fallback: Queue.Wait) => ({
   every: Flag.Int("every-seconds").pipe(Flag.withDefault(fallback.every)),
 });
 
+// `--wait` was renamed `--wait-ci`: it returns at "queued", not at the merge. The old flag stays only to refuse, by name.
 const queueCommand = Command.make(
   "queue",
-  { pr: PrNumber, wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)), ...waitFlags(Queue.QUEST_WAIT) },
-  Effect.fn("land.queueCommand")(function* ({ pr, wait, minutes, every }) {
-    yield* Console.log(Queue.line(yield* queue(yield* loadEnv, pr, wait ? { minutes, every } : undefined)));
+  {
+    pr: PrNumber,
+    waitCi: Flag.Boolean("wait-ci").pipe(Flag.withDefault(false)),
+    wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)),
+    ...waitFlags(Queue.QUEST_WAIT),
+  },
+  Effect.fn("land.queueCommand")(function* ({ pr, waitCi, wait, minutes, every }) {
+    if (wait) {
+      return yield* new Refused({
+        check: "queue",
+        reason:
+          "--wait is now --wait-ci. --wait-ci waits for ci-required and then says queued: it does not wait for the merge, which GitHub's queue does later.",
+        output: "",
+      });
+    }
+
+    const added = yield* queue(yield* loadEnv, pr, waitCi ? { minutes, every } : undefined);
+
+    yield* Console.log(Arr.join([...gateLines(pr, added._tag === "merged"), Queue.line(added)], "\n"));
   }),
 );
 
 // The one wait for CI: reads `ci-required` at the pull request's head as it stands on each read (a push or an
-// update-branch is followed), until it has ended, and says how. Exit 0 only on success. `queue --wait` and
+// update-branch is followed), until it has ended, and says how. Exit 0 only on success. `queue --wait-ci` and
 // `admin --wait` make the same wait; no hand-written loop picks a workflow run instead.
 const waitCommand = Command.make(
   "wait",
@@ -790,7 +837,7 @@ const waitCommand = Command.make(
       Effect.provide(queueServices(env)),
       Effect.mapError((e) =>
         e._tag === "Conflicting"
-          ? new Refused({ check: "wait", reason: `pr ${pr}: ${Queue.conflictLine(pr)}`, output: "" })
+          ? new Refused({ check: "wait", reason: `pr ${pr}: ${Gate.conflictLine(pr)}`, output: "" })
           : e._tag === "Gone"
             ? new Refused({ check: "wait", reason: `pr ${pr}: it is ${e.state}, not open`, output: "" })
             : new Refused({ check: "wait", reason: e.reason, output: "" }),
@@ -808,47 +855,22 @@ const waitCommand = Command.make(
 );
 
 /**
- * The commits on the branch since main (merges of main included, oldest first) that no tool vouches for: no note on
+ * The commits on the branch since main (merges of main included, oldest first) that are unsigned: no note on
  * refs/notes/fabrika, no signature of a person's own, and not made by `stepcommit.sh` (a fix round's, which signs nothing, or a `--commit-only` commit, which `land.ts` signs later; its author is the bot's). A plain
- * `git commit` is the one that slips; CI never reads signatures on a PR branch, so this is where it is found. Fetches
- * main and, when the head is not here, the head; changes nothing else.
+ * `git commit` is the one that slips; CI never reads signatures on a PR branch, so the merge gate (pr/Gate.ts) is where it is found, on every path.
+ * Fetches main and, when the head is not here, the head; changes nothing else. This is `Signatures.unsigned`, run on real git,
+ * for `replay.ts`, whose child node runs it on a pull request's head.
  */
-export const unsignedCommits = Effect.fn("land.unsignedCommits")(function* (tree: string, head: string) {
-  const git = gitIn(tree);
-  const main = yield* fetchedMain(tree, "check");
+export const unsignedCommits = Effect.fn("land.unsignedCommits")(
+  function* (tree: string, head: string) {
+    return yield* (yield* Signatures).unsigned(tree, head);
+  },
+  Effect.provide(SignaturesGit.layer),
+  Effect.mapError((e) => new Refused({ check: "check", reason: e.reason, output: "" })),
+);
 
-  if ((yield* sh(tree, "git", ["cat-file", "-e", `${head}^{commit}`])).code !== 0) {
-    yield* git(
-      "check",
-      `the pull request head ${head.slice(0, 8)} could not be fetched`,
-      "fetch",
-      "-q",
-      "--no-write-fetch-head",
-      "origin",
-      head,
-    );
-  }
-
-  const listed = yield* git("check", "the branch's commits do not read", "rev-list", "--reverse", `${main}..${head}`);
-  const unsigned: Array<string> = [];
-
-  for (const sha of listed.split("\n").filter((line) => line !== "")) {
-    const noted = yield* sh(tree, "git", ["notes", "--ref=fabrika", "list", sha]);
-    const raw = yield* git("check", `${sha} does not read`, "cat-file", "commit", sha);
-
-    const author = yield* git("check", `${sha} does not read`, "log", "-1", "--format=%ae", sha);
-
-    if (noted.code !== 0 && author !== BOT_EMAIL && !/^gpgsig /m.test(raw.split("\n\n")[0] ?? "")) {
-      const subject = yield* git("check", `${sha} does not read`, "log", "-1", "--format=%s", sha);
-      unsigned.push(`${sha.slice(0, 8)} ${subject}`);
-    }
-  }
-
-  return unsigned;
-});
-
-// The body checks `queue` runs, alone: the leak grep on the title and description, each new exported name named
-// under `## New names`, and each `fabrika close ticket` line naming an open tracker ticket. A lead runs it after writing a body and before `queue`; it asks GitHub for reads only and changes nothing.
+// The merge gate (pr/Gate.ts) alone: every check `queue` and the other merge paths run first, so a body and its commits are known good before
+// the queue is asked. A lead runs it after writing a body and before `queue`; it asks GitHub for reads only and changes nothing.
 const checkCommand = Command.make(
   "check",
   { pr: PrNumber },
@@ -858,17 +880,23 @@ const checkCommand = Command.make(
     const checked = yield* Effect.gen(function* () {
       const found = yield* (yield* PullRequests).view(pr);
 
-      return { found, refusal: yield* Queue.body(env.MAIN, found) };
+      return { found, refusal: yield* Gate.before({ dir: env.MAIN, found, marksReady: true }) };
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
           PullRequestsGh.layer(env.GH_REPO, env.MAIN),
           PushesProcess.layer(HERE),
           TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
+          SignaturesGit.layer,
         ),
       ),
       Effect.mapError(
-        (e) => new Refused({ check: e instanceof LeakGrepRefused ? "leak" : "body", reason: e.reason, output: "" }),
+        (e) =>
+          new Refused({
+            check: e._tag === "LeakGrepRefused" ? "leak" : e._tag === "SignaturesError" ? "check" : "body",
+            reason: e.reason,
+            output: "",
+          }),
       ),
     );
 
@@ -876,19 +904,7 @@ const checkCommand = Command.make(
       return yield* new Refused({ check: "body", reason: `pr ${pr}: ${checked.refusal}`, output: "" });
     }
 
-    const unsigned = yield* unsignedCommits(env.MAIN, checked.found.oid);
-
-    if (unsigned.length > 0) {
-      return yield* new Refused({
-        check: "body",
-        reason: `pr ${pr}: ${unsigned.length} commit(s) since main are not signed or made by stepcommit.sh: ${unsigned.join("; ")}. Make it with \`stepcommit.sh --commit-only lead <ticket> "<subject>" <files>\` (\`--empty\` for no files), not a plain git commit.`,
-        output: "",
-      });
-    }
-
-    yield* Console.log(
-      `pr ${pr}: the body checks pass (leak grep on the title and description, ## New names, fabrika close ticket lines, every commit since main signed)`,
-    );
+    yield* Console.log(Gate.line(checked.found));
   }),
 );
 
@@ -911,12 +927,14 @@ const armCommand = Command.make(
           PushesProcess.layer(HERE),
           RunsGh.layer(env.GH_REPO, env.MAIN),
           ChecksGh.layer(env.GH_REPO),
+          TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
+          SignaturesGit.layer,
         ),
       ),
       Effect.mapError(refusedAt("arm")),
     );
 
-    yield* Console.log(Arm.line(armed));
+    yield* Console.log(Arr.join([...gateLines(pr, armed._tag === "merged"), Arm.line(armed)], "\n"));
   }),
 );
 
@@ -967,7 +985,7 @@ const mergeBy = Effect.fn("land.mergeBy")(function* (
     Effect.mapError(refusedAt("merge")),
   );
 
-  yield* Console.log(Merge.line(done));
+  yield* Console.log(Arr.join([...gateLines(pr, done._tag === "merged"), Merge.line(done)], "\n"));
 });
 
 const mergeCommand = Command.make(

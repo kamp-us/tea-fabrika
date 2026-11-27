@@ -16,6 +16,7 @@
     "./Settings": "./src/Settings.ts",
     "./Repository": "./src/Repository.ts",
     "./MergeCommit": "./src/MergeCommit.ts",
+    "./CommitEdit": "./src/CommitEdit.ts",
     "./memory": "./src/MemoryRepository.ts",
     "./process": "./src/ProcessRepository.ts",
     "./test": "./src/RepositoryTest.ts",

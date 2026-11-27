@@ -29,6 +29,7 @@ const EXPORTS = [
   "./Settings",
   "./Repository",
   "./MergeCommit",
+  "./CommitEdit",
   "./memory",
   "./process",
   "./test",
@@ -37,7 +38,7 @@ const EXPORTS = [
 ];
 
 // Plant: add a package of the repository (the shared test package) to the dev dependencies; add the npm package `diff` to
-// `dependencies`; leave `./Diff` out of the exports; export `./internal/object`; point `./MergeCommit` at a file that is not there.
+// `dependencies`; leave `./Diff` or `./CommitEdit` out of the exports; export `./internal/object`; point `./MergeCommit` at a file that is not there.
 it("K1 scenario: the manifest names no workspace package, has no dependencies, exports exactly the plan's list, and each export is a file", () => {
   const parsed = Schema.decodeUnknownSync(Manifest)(manifest);
 
