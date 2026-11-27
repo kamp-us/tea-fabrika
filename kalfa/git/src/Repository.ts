@@ -1,17 +1,19 @@
 /**
- * The service that reads commits and refs from one repository with no working copy, writes a commit and moves a ref, the failures it names, and `make`.
+ * The service that reads commits and refs from one repository with no working copy, writes a commit, moves a ref and fetches from a remote, the failures it names, and `make`.
  *
  * **Details**
  *
- * This file holds the contract and the one wrap every adapter gets, and nothing that runs git. A call never reads HEAD and never changes the files of a working copy. `writeCommit` adds one commit and `moveRef` moves one ref, and no other call writes. Each adapter is its own entry point, `memory` and `process`, and `test` holds the laws they all pass.
+ * This file holds the contract and the one wrap every adapter gets, and nothing that runs git. A call never reads HEAD and never changes the files of a working copy. `writeCommit` adds one commit and `moveRef` moves one ref, and `fetch` adds the objects of a remote's refs; no other call writes. Each adapter is its own entry point, `memory` and `process`, and `test` holds the laws they all pass.
  */
 import { Clock, Context, Effect, Option, Predicate, Schema } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
+import * as Credentials from "./Credentials.ts";
 import type { Diff, PatchId } from "./Diff.ts";
 import { byBytes, bytes } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
+import type * as Remote from "./Remote.ts";
 import * as Settings from "./Settings.ts";
 import { Path, TreeId } from "./Tree.ts";
 
@@ -365,6 +367,7 @@ type NewCommit = {
  * - `writeCommit` writes one commit and answers it. Its committer is the settings' one, at the clock's second and offset `+0000`. It fails when the message holds a NUL byte, when the object would pass `limits.bytes`, and when the tree is no tree or a parent is no commit. It moves no ref.
  * - `mergeTrees` merges the trees of `ours` and `theirs` over the tree of `mergeBase`, file by file, and answers the id of the merged tree, which the repository then holds. It fails `Conflict` naming each path that cannot be combined. It reads no history, so a shallow repository answers, and it moves no ref. Merging needs git 2.40 in the git adapter.
  * - `moveRef` points `ref` at `to`, making it or moving it, only if the ref is at `from` now: `Option.none()` means it must not exist. It fails `RefMoved` when it is elsewhere and `RefInTheWay` when another ref is in the way, and then leaves every ref as it was. A call that ends in `TimedOut` may have moved the ref, so read it again.
+ * - `fetch` reads the refs of a remote at `under` and below `under/`, by the remote's name or by its URL, and answers them sorted by their UTF-8 bytes. The repository then holds each answered commit and its history. No ref of this repository moves, and its config, refs and `shallow` file are as they were. `[]` means git proved the remote holds none. It asks the `Credentials` slot once, with the URL git will use (the configured one for a named remote), so its requirement is the slot. It fails with `NoSuchRemote`, `BadRemoteUrl`, `NoCredential`, `FetchFailed`, `HistoryTooShort` (this repository is shallow, or the remote's history is cut below an answered ref), `TooMany` and `RefNotCommit`, and never answers `[]` for a failure.
  *
  * In a shallow repository `walk`, `mergeBases` and `isAncestor` fail with `HistoryTooShort`.
  *
@@ -432,22 +435,46 @@ export class Repository extends Context.Service<
       readonly ours: CommitId;
       readonly theirs: CommitId;
     }) => Effect.Effect<TreeId, NoSuchCommit | Conflict | Fails>;
+    readonly fetch: (request: {
+      readonly remote: Remote.Remote;
+      readonly under: Ref.RefName;
+    }) => Effect.Effect<
+      ReadonlyArray<Ref.Ref>,
+      | Remote.NoSuchRemote
+      | Remote.BadRemoteUrl
+      | Credentials.NoCredential
+      | Remote.FetchFailed
+      | HistoryTooShort
+      | TooMany
+      | RefNotCommit
+      | Fails,
+      Credentials.Credentials
+    >;
   }
 >()("@kalfa/git/Repository") {}
 
 /**
- * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets, `rangePatchId`, which `make` writes once from `mergeBases` and `patchId`, and `readText`, which `make` writes once from `readFile`.
+ * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets, `rangePatchId`, which `make` writes once from `mergeBases` and `patchId`, and `readText`, which `make` writes once from `readFile`. `fetch` is two calls, since `make` asks the slot between them: `remoteUrl` finds the URL git would use, and `fetch` reads from it with the credential the slot gave. Neither holds the slot.
  *
  * @category models
  */
-export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "readText"> & {
+export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "readText" | "fetch"> & {
   readonly writeCommit: (
     commit: NewCommit & { readonly committer: Commit.Signature },
   ) => ReturnType<Repository["Service"]["writeCommit"]>;
+  /** The URL git would use for the remote: a named one's from config, and a URL as given, each checked. */
+  readonly remoteUrl: (
+    remote: Remote.Remote,
+  ) => Effect.Effect<Remote.Url, Remote.NoSuchRemote | Remote.BadRemoteUrl | Fails>;
+  readonly fetch: (request: {
+    readonly url: Remote.Url;
+    readonly under: Ref.RefName;
+    readonly credential: Option.Option<Credentials.Credential>;
+  }) => Effect.Effect<ReadonlyArray<Ref.Ref>, Remote.FetchFailed | HistoryTooShort | TooMany | RefNotCommit | Fails>;
 };
 
 /**
- * Wraps an adapter's twelve calls with a span each and the time limit, writes `rangePatchId` from two of them and `readText` from one, checks the size of an edit's contents, and gives each commit written its committer.
+ * Wraps an adapter's calls with a span each and the time limit, writes `rangePatchId` from two of them, `readText` from one and `fetch` from two, asks the `Credentials` slot once on each fetch, checks the size of an edit's contents, and gives each commit written its committer.
  *
  * **When to use**
  *
@@ -647,6 +674,29 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
       yield* Effect.annotateCurrentSpan({ "kalfa.git.tree": tree });
 
       return tree;
+    }),
+    fetch: Effect.fn("git.fetch")(function* (request: { readonly remote: Remote.Remote; readonly under: Ref.RefName }) {
+      // Neither the URL, the name nor the user name is an attribute: a URL can be a local path, and the user name is half of the credential.
+      yield* Effect.annotateCurrentSpan({
+        "kalfa.git.remote": Predicate.isTagged(request.remote, "Named") ? "named" : "url",
+        "kalfa.git.under": request.under,
+      });
+
+      // One time limit around the whole call, the slot's answer included, so a slow filler still ends.
+      const refs = yield* limited(
+        Effect.gen(function* () {
+          const url = yield* raw.remoteUrl(request.remote);
+          const slot = yield* Credentials.Credentials;
+          const credential = yield* slot.ask(url);
+          yield* Effect.annotateCurrentSpan({ "kalfa.git.credential": Option.isSome(credential) });
+
+          return yield* raw.fetch({ url, under: request.under, credential });
+        }),
+      );
+
+      yield* Effect.annotateCurrentSpan({ "kalfa.git.refs": refs.length });
+
+      return refs;
     }),
   };
 };

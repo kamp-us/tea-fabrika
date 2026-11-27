@@ -5,7 +5,7 @@
  *
  * A commit's id and a tree's id are computed as git computes them, so the same commit with the same files has the same id here and in a real repository. The store holds only what git's format can hold: a message is a `string`, so a commit that is not UTF-8 cannot be put in memory, and a path is a `Path`, so one git refuses cannot be put in a tree.
  */
-import { Context, Effect, Layer, Option, Ref as Cell, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Predicate, Ref as Cell, Result, Schema } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
@@ -15,6 +15,7 @@ import * as Lines from "./internal/lines.ts";
 import * as Lookup from "./internal/lookup.ts";
 import { byBytes, bytes, FOLDER, hashed, treeBytes, type Line } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
+import * as Remote from "./Remote.ts";
 import * as Repository from "./Repository.ts";
 import type * as Settings from "./Settings.ts";
 import * as Tree from "./Tree.ts";
@@ -222,6 +223,18 @@ export const point = (store: Store, ref: Ref.RefName, id: CommitId): Result.Resu
 };
 
 /**
+ * The remotes of a repository in memory: the names its config holds, each with a URL, and what each URL reaches, which is another store, read as it is at each fetch.
+ *
+ * @category models
+ */
+export interface Remotes {
+  readonly names: ReadonlyMap<Remote.Name, Remote.Url>;
+  readonly stores: ReadonlyMap<Remote.Url, Effect.Effect<Store>>;
+}
+
+const NO_REMOTES: Remotes = { names: new Map(), stores: new Map() };
+
+/**
  * Service that holds the store of a memory repository, so a test can read it and move a ref between two reads.
  *
  * @category services
@@ -311,19 +324,55 @@ const readCommit = (
       : Result.succeed(held),
   );
 
+// The ref `under` and every ref below `under/`, sorted by UTF-8 bytes. A ref that only shares text with `under` is not one.
+const refsAt = (store: Store, under: Ref.RefName): ReadonlyArray<Ref.Ref> =>
+  [...store.refs]
+    .filter(([name]) => name === under || name.startsWith(`${under}/`))
+    .sort(([a], [b]) => byBytes(a, b))
+    .map(([name, id]) => new Ref.Ref({ name, commit: id }));
+
 const readRefs = (
   store: Store,
   limits: Settings.Settings["limits"],
   under: Ref.RefName,
 ): Result.Result<ReadonlyArray<Ref.Ref>, Repository.TooMany> => {
-  const refs = [...store.refs]
-    .filter(([name]) => name === under || name.startsWith(`${under}/`))
-    .sort(([a], [b]) => byBytes(a, b))
-    .map(([name, id]) => new Ref.Ref({ name, commit: id }));
+  const refs = refsAt(store, under);
 
   return refs.length > limits.refs
     ? Result.fail(new Repository.TooMany({ limit: "refs", most: limits.refs }))
     : Result.succeed(refs);
+};
+
+// The store with every commit the tips reach in `there` that it lacks, each with its tree's files and blobs.
+const copied = (here: Store, there: Store, tips: ReadonlyArray<CommitId>): Store => {
+  const commits = new Map(here.commits);
+  const trees = new Map(here.trees);
+  const blobs = new Map(here.blobs);
+
+  for (const id of reach(there, tips)) {
+    const commit = there.commits.get(id);
+
+    if (commit === undefined || commits.has(id)) {
+      continue;
+    }
+
+    commits.set(id, commit);
+    const files = there.trees.get(commit.tree);
+
+    if (files !== undefined && !trees.has(commit.tree)) {
+      trees.set(commit.tree, files);
+
+      for (const entry of files.values()) {
+        const content = there.blobs.get(entry.blob);
+
+        if (content !== undefined) {
+          blobs.set(entry.blob, content);
+        }
+      }
+    }
+  }
+
+  return { ...here, commits, trees, blobs };
 };
 
 const walk = (
@@ -729,13 +778,14 @@ const merged = (
  *
  * **Details**
  *
- * Each call reads the store as it is then. The calls answer as git does and fail as the shared laws say. A write is one step on the store, so two writes never interleave. A merge works file by file: a path changed on both sides to different things is a conflict, even where git would merge the lines. It needs a `Digest`, which gives a written commit its id.
+ * Each call reads the store as it is then. The calls answer as git does and fail as the shared laws say. A write is one step on the store, so two writes never interleave. A merge works file by file: a path changed on both sides to different things is a conflict, even where git would merge the lines. It needs a `Digest`, which gives a written commit its id. A fetch reads another store named by `remotes`, as it is at that fetch, and copies what this store lacks; it has no tags and no transport.
  *
  * @category layers
  */
 export const layer = (
   store: Store,
   settings: Settings.Settings,
+  remotes: Remotes = NO_REMOTES,
 ): Layer.Layer<Repository.Repository | MemoryStore, never, Digest.Digest> =>
   Layer.effectContext(
     Effect.gen(function* () {
@@ -805,6 +855,41 @@ export const layer = (
         return id;
       });
 
+      // A name is looked up in the remotes this layer was given; a URL is answered as it is.
+      const remoteUrl = Effect.fnUntraced(function* (remote: Remote.Remote) {
+        if (Predicate.isTagged(remote, "Url")) {
+          return remote.url;
+        }
+
+        const url = remotes.names.get(remote.name);
+
+        return url === undefined ? yield* new Remote.NoSuchRemote({ remote: remote.name }) : url;
+      });
+
+      // The remote's store is read as it is now, and what this store lacks is copied into it as it is by then, so a write that came between is kept.
+      const fetch = Effect.fnUntraced(function* (request: { readonly url: Remote.Url; readonly under: Ref.RefName }) {
+        if ((yield* Cell.get(cell)).shallow.size > 0) {
+          return yield* new Repository.HistoryTooShort();
+        }
+
+        const source = remotes.stores.get(request.url);
+
+        if (source === undefined) {
+          return yield* new Remote.FetchFailed({ url: request.url, code: 128, stderr: "no repository at that URL" });
+        }
+
+        const there = yield* source;
+        const refs = refsAt(there, request.under);
+        const tips = refs.map((ref) => ref.commit);
+        yield* Cell.update(cell, (now) => copied(now, there, tips));
+
+        if ([...reach(there, tips)].some((id) => there.shallow.has(id))) {
+          return yield* new Repository.HistoryTooShort();
+        }
+
+        return refs.length > limits.refs ? yield* new Repository.TooMany({ limit: "refs", most: limits.refs }) : refs;
+      });
+
       const write = <A, E>(call: (held: Store) => Step<A, E>): Effect.Effect<A, E> =>
         Effect.flatMap(Cell.modify(cell, call), Effect.fromResult);
 
@@ -827,6 +912,8 @@ export const layer = (
                 Effect.flatMap((made) => write((held) => withCommit(held, made))),
               ),
             moveRef: (move) => write((held) => withRef(held, move)),
+            remoteUrl,
+            fetch,
             mergeTrees: Effect.fnUntraced(function* (merge) {
               const held = yield* Cell.get(cell);
               const files = yield* Effect.fromResult(merged(held, merge));

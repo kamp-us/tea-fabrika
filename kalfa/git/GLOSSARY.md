@@ -165,7 +165,7 @@ with no lines.
 _Avoid_: blob (every file is one), non-text
 
 **Credential**:
-What git hands a remote to log in on a fetch or a push: a user name and a password. It is asked for at each call.
+What git hands a remote to log in on a fetch or a push: a user name and a password. It is asked for at each call. A repository that fetches only from remotes with no login picks the one that gives none, by name.
 _Avoid_: token, access grant, login, key
 
 **Pre-push hook**:
