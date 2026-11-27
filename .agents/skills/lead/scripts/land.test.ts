@@ -799,3 +799,270 @@ describe("land.ts, today's tooling", () => {
     expect(got.calls.filter((c) => !c.startsWith("sign "))).toEqual(["push fabrikalfa/t652-fixture-wip HEAD"]);
   });
 });
+
+// R7: `land.ts review` (slice 1 of .kalfa/quests/review-record-PLAN.md). Git and the leak grep are real, on disposable repos; `gh` is a stub
+// that keeps what the record posts (a comment, a status) and gives it back the way GitHub lists a head's statuses.
+const reviewGh = `#!/bin/sh
+echo "gh $*" >>"$LAND_CALLS"
+case "$1 $2" in
+"pr view")
+  head=$(git -C "$LAND_QUEST" rev-parse HEAD)
+  printf '{"number":%s,"headRefName":"fabrikalfa/t2338-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":false,"title":"T2338 fixture: a review","body":"","mergeCommit":null,"mergeable":"MERGEABLE"}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" ;;
+"api -X")
+  case "$4" in
+  */comments) echo '{"id":1,"html_url":"https://github.com/owner/repo/pull/77#issuecomment-1"}' ;;
+  */statuses/*)
+    sha=\${4##*/}
+    shift 4
+    state=; description=; url=
+    while [ $# -gt 0 ]; do
+      case "$2" in
+      state=*) state=\${2#state=} ;;
+      description=*) description=\${2#description=} ;;
+      target_url=*) url=\${2#target_url=} ;;
+      esac
+      shift 2
+    done
+    n=$(( $(cat "$LAND_STATUSES/count" 2>/dev/null || echo 0) + 1 ))
+    echo "$n" >"$LAND_STATUSES/count"
+    echo "{\\"id\\":$n,\\"state\\":\\"$state\\",\\"context\\":\\"review\\",\\"description\\":\\"$description\\",\\"target_url\\":\\"$url\\",\\"creator\\":{\\"login\\":\\"fixture\\"}}" >>"$LAND_STATUSES/$sha"
+    echo '{}' ;;
+  esac ;;
+"api --paginate")
+  # args: api --paginate --slurp repos/owner/repo/commits/<sha>/statuses?per_page=100
+  sha=\${4#*commits/}
+  sha=\${sha%%/*}
+  printf '[['
+  [ ! -f "$LAND_STATUSES/$sha" ] || paste -sd, - <"$LAND_STATUSES/$sha" | tr -d '\\n'
+  printf ']]\\n' ;;
+esac
+`;
+
+const reviewing = () => {
+  const dir = mkdtempSync(join(tmpdir(), "land-review-"));
+  const [origin, quest] = [join(dir, "origin"), join(dir, "quest")];
+
+  const env = {
+    ...process.env,
+    PATH: `${join(dir, "bin")}:/usr/bin:/bin`,
+    HOME: join(dir, "home"),
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "user.useConfigOnly",
+    GIT_CONFIG_VALUE_0: "true",
+    GIT_AUTHOR_NAME: undefined,
+    GIT_AUTHOR_EMAIL: undefined,
+    GIT_COMMITTER_NAME: undefined,
+    GIT_COMMITTER_EMAIL: undefined,
+    EMAIL: undefined,
+    MAIN: quest,
+    BOXES: join(dir, "boxes"),
+    REMOTE: origin,
+    GH_REPO: "owner/repo",
+    FABRIKA_COAUTHOR: "Fixture <fixture@example.test>",
+    FABRIKA_LEAK_WORDS: join(dir, "words"),
+    LAND_CALLS: join(dir, "calls"),
+    LAND_QUEST: quest,
+    LAND_STATUSES: join(dir, "statuses"),
+    LAND_STATE: "OPEN",
+    TYPESAFE_API_KEY: undefined,
+  };
+
+  const git = (at: string, ...args: string[]) => {
+    const got = spawnSync(
+      "/usr/bin/git",
+      ["-C", at, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", ...args],
+      { encoding: "utf8", env, timeout: 10_000 },
+    );
+
+    expect(got.status, got.stderr).toBe(0);
+
+    return got.stdout.trim();
+  };
+
+  for (const folder of ["bin", "home", "origin", "boxes", "statuses"]) {
+    mkdirSync(join(dir, folder), { recursive: true });
+  }
+
+  writeFileSync(join(dir, "bin/gh"), reviewGh, { mode: 0o755 });
+  writeFileSync(join(dir, "words"), `${planted}\n`);
+  git(origin, "init", "-q", "--initial-branch=main");
+  writeFileSync(join(origin, "base.txt"), "base\n");
+  git(origin, "add", ".");
+  git(origin, "commit", "-qm", "base");
+  git(dir, "clone", "-q", origin, quest);
+  git(quest, "checkout", "-q", "-b", "fabrikalfa/t2338-fixture");
+
+  return {
+    git: (...args: string[]) => git(quest, ...args),
+    /** A commit on the branch that writes a file, and its sha. */
+    commit: (file: string, text: string) => {
+      writeFileSync(join(quest, file), text);
+      git(quest, "add", ".");
+      git(quest, "commit", "-qm", `write ${file}`);
+
+      return git(quest, "rev-parse", "HEAD");
+    },
+    /** Main moves on origin, in a file of its own. */
+    moveMain: (file: string) => {
+      writeFileSync(join(origin, file), "main moved\n");
+      git(origin, "add", ".");
+      git(origin, "commit", "-qm", `main writes ${file}`);
+    },
+    review: (...args: string[]) =>
+      spawnSync(process.execPath, [script, "review", "77", ...args], {
+        cwd: quest,
+        encoding: "utf8",
+        env: { ...env, ...(args.includes("--closed") ? { LAND_STATE: "CLOSED" } : {}) },
+        timeout: 60_000,
+      }),
+    closed: () => {
+      env.LAND_STATE = "CLOSED";
+    },
+    calls: () => (existsSync(env.LAND_CALLS) ? readFileSync(env.LAND_CALLS, "utf8").trim().split("\n") : []),
+    done: () => rmSync(dir, { recursive: true, force: true }),
+  };
+};
+
+const posts = (calls: ReadonlyArray<string>) => calls.filter((c) => c.startsWith("gh api -X POST"));
+
+describe("R7: land.ts review (slice 1)", () => {
+  // Plants: have a carry post a comment; have the second ask write again; print `recorded` for each; let a refusal exit 0.
+  it("scenario: a fresh record, then a carry over a merge of main, then the same ask again: one comment and two statuses in all, and each line says which", () => {
+    const r = reviewing();
+
+    try {
+      const first = r.commit("feature.txt", "the change\n");
+      const fresh = r.review("--reviewed", first, "--reviewer", "a fixture reviewer, session one");
+      expect(fresh.status, fresh.stderr).toBe(0);
+      expect(fresh.stdout.trim()).toBe(
+        `pr 77: review recorded on ${first.slice(0, 12)} (reviewed ${first.slice(0, 12)})`,
+      );
+      expect(posts(r.calls())).toHaveLength(2);
+
+      r.moveMain("other.txt");
+      r.git("fetch", "-q", "origin");
+      r.git("merge", "-q", "--no-edit", "origin/main");
+      const merged = r.git("rev-parse", "HEAD");
+      expect(r.git("rev-parse", "HEAD^1")).toBe(first);
+
+      const kept = r.review();
+      expect(kept.status, kept.stderr).toBe(0);
+
+      expect(kept.stdout.trim()).toBe(
+        `pr 77: review carried to ${merged.slice(0, 12)} from ${first.slice(0, 12)} (reviewed ${first.slice(0, 12)}), kept`,
+      );
+
+      // One more status, and no comment.
+      expect(posts(r.calls()).filter((c) => c.includes("/comments"))).toHaveLength(1);
+      expect(posts(r.calls()).filter((c) => c.includes("/statuses/"))).toHaveLength(2);
+
+      const again = r.review();
+      expect(again.status, again.stderr).toBe(0);
+      expect(again.stdout.trim()).toBe(`pr 77: review already recorded on ${merged.slice(0, 12)}`);
+      expect(posts(r.calls())).toHaveLength(3);
+    } finally {
+      r.done();
+    }
+  }, 120_000);
+
+  // Plants: map a refusal to success; post before the check; name no `--reviewed` in the carry's refusal.
+  it("scenario: each refusal exits 1 with `land: refused at the review check:` and writes nothing: a carry with no earlier approval names `--reviewed`; a reviewed head that is not in the history, is not a commit, holds another change or no change; a closed pull request; flags that do not come together; and a leak", () => {
+    const refusals: ReadonlyArray<{
+      readonly name: string;
+      readonly set: (r: ReturnType<typeof reviewing>) => ReadonlyArray<string>;
+      readonly says?: string;
+    }> = [
+      {
+        name: "a carry, and no earlier head holds an approval",
+        set: (r) => {
+          r.commit("feature.txt", "the change\n");
+
+          return [];
+        },
+        says: "--reviewed",
+      },
+      {
+        name: "a reviewed head that another branch holds",
+        set: (r) => {
+          r.git("checkout", "-q", "-b", "side", "origin/main");
+          // Another file and message, so the side commit is not the head's own commit made twice in one second.
+          const side = r.commit("side.txt", "the change\n");
+          r.git("checkout", "-q", "fabrikalfa/t2338-fixture");
+          r.commit("feature.txt", "the change\n");
+
+          return ["--reviewed", side, "--reviewer", "a fixture reviewer"];
+        },
+      },
+      {
+        name: "a reviewed head that is no commit here",
+        set: (r) => {
+          r.commit("feature.txt", "the change\n");
+
+          return ["--reviewed", "a".repeat(40), "--reviewer", "a fixture reviewer"];
+        },
+      },
+      {
+        name: "a reviewed head that holds another change",
+        set: (r) => {
+          const first = r.commit("feature.txt", "the change\n");
+          r.commit("feature.txt", "the change, and one more\n");
+
+          return ["--reviewed", first, "--reviewer", "a fixture reviewer"];
+        },
+      },
+      {
+        name: "a head that holds no change against main",
+        set: (r) => ["--reviewed", r.git("rev-parse", "HEAD"), "--reviewer", "a fixture reviewer"],
+      },
+      {
+        name: "a closed pull request",
+        set: (r) => {
+          const first = r.commit("feature.txt", "the change\n");
+          r.closed();
+
+          return ["--reviewed", first, "--reviewer", "a fixture reviewer"];
+        },
+      },
+      {
+        name: "a reviewed head with no reviewer",
+        set: (r) => ["--reviewed", r.commit("feature.txt", "the change\n")],
+        says: "--reviewer",
+      },
+      {
+        name: "a reviewer on a carry",
+        set: (r) => {
+          r.commit("feature.txt", "the change\n");
+
+          return ["--reviewer", "a fixture reviewer"];
+        },
+      },
+      {
+        name: "a reviewer's words the leak grep refuses",
+        set: (r) => ["--reviewed", r.commit("feature.txt", "the change\n"), "--reviewer", `a reviewer ${planted}`],
+      },
+    ];
+
+    for (const refusal of refusals) {
+      const r = reviewing();
+
+      try {
+        const args = refusal.set(r);
+        const got = r.review(...args);
+
+        expect(got.status, `${refusal.name}: ${got.stderr}`).toBe(1);
+        expect(got.stderr, refusal.name).toContain("land: refused at the review check: ");
+        expect(got.stdout, refusal.name).toBe("");
+        expect(posts(r.calls()), refusal.name).toEqual([]);
+        expect(got.stdout + got.stderr, refusal.name).not.toContain(planted);
+
+        if (refusal.says !== undefined) {
+          expect(got.stderr, refusal.name).toContain(refusal.says);
+        }
+      } finally {
+        r.done();
+      }
+    }
+  }, 180_000);
+});
