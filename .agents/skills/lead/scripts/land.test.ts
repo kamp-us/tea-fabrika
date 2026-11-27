@@ -1,7 +1,17 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as Sections from "./pr/Sections.ts";
@@ -125,10 +135,45 @@ type World = {
   readonly strangerFetch?: boolean;
   /** This many more copies of `command` run in the same checkout at the same moment, before the one this helper answers for. */
   readonly alongside?: number;
+  /** Settings the command's environment carries, such as `LAND_LOG_MINUTES`. */
+  readonly settings?: Readonly<Record<string, string>>;
+  /** `runs` in the main checkout is a file, so no record can be made under `runs/land`. */
+  readonly blockRecord?: boolean;
+};
+
+/** The fields of a record line that a law here reads. The record's own schema is the product's; a law at the command line reads the file as a person would. */
+const Row = Schema.Struct({
+  _tag: Schema.String,
+  attempt: Schema.String,
+  command: Schema.optional(Schema.String),
+  argv: Schema.optional(Schema.Array(Schema.String)),
+  check: Schema.optional(Schema.String),
+});
+
+type Row = typeof Row.Type;
+
+const RowLine = Schema.fromJsonString(Row);
+
+/** The lines `land.ts` left in `runs/land` of the main checkout, one list for each file. */
+const recordsIn = (main: string): Record<string, ReadonlyArray<Row>> => {
+  const folder = join(main, "runs/land");
+
+  return existsSync(folder) && readdirSync(folder).length > 0
+    ? Object.fromEntries(
+        readdirSync(folder).map((name) => [
+          name,
+          readFileSync(join(folder, name), "utf8")
+            .split("\n")
+            .filter((line) => line !== "")
+            .map((line) => Schema.decodeUnknownSync(RowLine)(line)),
+        ]),
+      )
+    : {};
 };
 
 const land = (world: World) => {
   const dir = mkdtempSync(join(tmpdir(), "land-"));
+  const main = join(dir, world.command ? "quest" : "main");
 
   try {
     const env = {
@@ -147,7 +192,7 @@ const land = (world: World) => {
       GIT_COMMITTER_NAME: undefined,
       GIT_COMMITTER_EMAIL: undefined,
       EMAIL: undefined,
-      MAIN: join(dir, world.command ? "quest" : "main"),
+      MAIN: main,
       LAND_DRAFT: world.draft ? "1" : "",
       LAND_STATE: world.state ?? "OPEN",
       LAND_MERGEABLE: world.mergeable ?? "MERGEABLE",
@@ -202,6 +247,13 @@ const land = (world: World) => {
     // GitHub serves a commit by its sha; a plain repo does only when told to.
     git(origin, "config", "uploadpack.allowAnySHA1InWant", "true");
     git(dir, "clone", "-q", origin, quest);
+    // As in the real checkout, where git ignores `runs/`: a command's record is no change to the tree.
+    appendFileSync(join(quest, ".git/info/exclude"), "runs\n");
+
+    if (world.blockRecord) {
+      writeFileSync(join(main, "runs"), "a file, not a folder");
+    }
+
     git(quest, "checkout", "-q", "-b", "fabrikalfa/t652-fixture");
     writeFileSync(join(quest, "quest.txt"), world.leak ? `the quest, with ${planted}\n` : "the quest\n");
     git(quest, "add", ".");
@@ -260,6 +312,7 @@ const land = (world: World) => {
         state: "",
         head: git(quest, "rev-parse", "HEAD"),
         recorded: existsSync(join(dir, "boxes/state/t652f.land.json")),
+        landed: recordsIn(main),
       };
     }
 
@@ -338,7 +391,14 @@ const land = (world: World) => {
     }
 
     const before = [git(quest, "rev-parse", "HEAD"), git(quest, "rev-parse", "refs/notes/fabrika")];
-    const ran = script_(...(world.command ?? ["run", "t652f", "652"]));
+
+    const ran = spawnSync(process.execPath, [script, ...(world.command ?? ["run", "t652f", "652"])], {
+      cwd: quest,
+      encoding: "utf8",
+      env: { ...env, ...world.settings },
+      timeout: 60_000,
+    });
+
     expect(ran.error).toBeUndefined();
     const calls = existsSync(env.LAND_CALLS) ? readFileSync(env.LAND_CALLS, "utf8").trim().split("\n") : [];
     const head = git(quest, "rev-parse", "HEAD");
@@ -369,6 +429,7 @@ const land = (world: World) => {
       state: readFileSync(join(dir, "boxes/state/t652f.md"), "utf8"),
       head,
       recorded: true,
+      landed: recordsIn(main),
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -798,4 +859,210 @@ describe("land.ts, today's tooling", () => {
     expect(got.code, got.err).toBe(0);
     expect(got.calls.filter((c) => !c.startsWith("sign "))).toEqual(["push fabrikalfa/t652-fixture-wip HEAD"]);
   });
+});
+
+/** What `land.ts --help` lists as subcommands, in the order it lists them. */
+const listed = (): ReadonlyArray<string> => {
+  const help = spawnSync(process.execPath, [script, "--help"], { encoding: "utf8", timeout: 60_000 });
+  const after = help.stdout.split("SUBCOMMANDS")[1] ?? "";
+
+  return after
+    .split("\n")
+    .map((line) => line.trim().split(/\s+/)[0] ?? "")
+    .filter((name) => name !== "");
+};
+
+/**
+ * Each subcommand of `land.ts` with a world that ends it fast, the files it writes in `runs/land` (a pull request's `<pr>.jsonl`, a
+ * quest's `quest-<name>.jsonl`) and how it ends there. `last` is the one reader, and writes none. A subcommand `--help` lists that
+ * has no row here fails the first law below, so an eleventh cannot go unrecorded by accident.
+ */
+const RECORDED: ReadonlyArray<{
+  readonly command: string;
+  readonly world: World;
+  readonly files: Readonly<Record<string, "done" | "refused">>;
+}> = [
+  {
+    command: "ready",
+    world: {
+      ...fine,
+      readyRefused: true,
+      readyBody: `T652 fixture: one quest\n\n${Sections.DRAFT_BODY}\n`,
+      command: ["check", "77"],
+    },
+    files: { "quest-t652f.jsonl": "refused" },
+  },
+  { command: "run", world: { ...fine, command: ["run", "nope", "1"] }, files: { "quest-nope.jsonl": "refused" } },
+  { command: "queue", world: { ...fine, state: "CLOSED", command: ["queue", "77"] }, files: { "77.jsonl": "refused" } },
+  { command: "wait", world: { ...fine, red: true, command: ["wait", "77"] }, files: { "77.jsonl": "refused" } },
+  { command: "check", world: { ...fine, state: "CLOSED", command: ["check", "77"] }, files: { "77.jsonl": "refused" } },
+  { command: "arm", world: { ...fine, state: "CLOSED", command: ["arm", "77"] }, files: { "77.jsonl": "refused" } },
+  {
+    command: "merge",
+    world: { ...fine, state: "CLOSED", command: ["merge", "77", "--admin"] },
+    files: { "77.jsonl": "refused" },
+  },
+  {
+    command: "admin",
+    world: { ...fine, state: "CLOSED", command: ["admin", "77", "--wait"] },
+    files: { "77.jsonl": "refused" },
+  },
+  {
+    command: "merged",
+    world: { ...fine, state: "CLOSED", command: ["merged", "77", "78"] },
+    files: { "77.jsonl": "done", "78.jsonl": "done" },
+  },
+  {
+    command: "close-named",
+    world: { ...fine, state: "CLOSED", command: ["close-named", "77"] },
+    files: { "77.jsonl": "done" },
+  },
+  { command: "last", world: { ...fine, command: ["last", "77"] }, files: {} },
+];
+
+describe("land.ts leaves a start and an end line for every command (the land record, ticket 2344)", () => {
+  // Plants: add a subcommand with no row (red: this law); leave one command unwrapped (red: its row, no started line).
+  it("L13 scenario: the subcommands --help lists are the ones the record's table names, so none is added unrecorded", () => {
+    expect(listed().toSorted()).toEqual(RECORDED.map((row) => row.command).toSorted());
+  }, 120_000);
+
+  for (const row of RECORDED) {
+    // Plants: leave this one subcommand unwrapped (red: no started line), or write its ending in another file (red: the name).
+    it(`L13 scenario: land.ts ${row.command} leaves ${Object.keys(row.files).length === 0 ? "no line of its own" : "a started line and one ending line in the file its key names"}`, () => {
+      const got = land(row.world);
+
+      // `last` is the reader: it ends well, and writes nothing.
+      if (Object.keys(row.files).length === 0) {
+        expect(got.code, got.err).toBe(0);
+      }
+
+      expect(
+        Object.keys(got.landed)
+          .filter((name) => name !== "quest-t652f.jsonl" || row.command === "ready")
+          .toSorted(),
+      ).toEqual(Object.keys(row.files).toSorted());
+
+      for (const [file, ends] of Object.entries(row.files)) {
+        const lines = got.landed[file] ?? [];
+        // `ready` is also the setup of every other world, so its own record is the one that holds its start.
+        const own = lines.filter((line) => line._tag === "started" && line.command === row.command);
+
+        expect(own, file).toHaveLength(1);
+        expect(lines.at(-1)?._tag, file).toBe(ends);
+        expect(
+          lines.filter((line) => line._tag !== "started" && line._tag !== "heartbeat").map((line) => line._tag),
+          file,
+        ).toEqual([ends]);
+        expect(own[0], file).toMatchObject({ argv: expect.arrayContaining([row.command]) });
+      }
+    }, 120_000);
+  }
+
+  // Plants: wrap only the success path (red: the refused rows); change the exit code, or what is printed, when the record cannot be
+  // written (red: the blocked run differs).
+  const ENDED: ReadonlyArray<{
+    readonly name: string;
+    readonly world: World;
+    readonly code: number;
+    readonly ends: "done" | "refused";
+  }> = [
+    { name: "a refusal", world: { ...fine, state: "CLOSED", command: ["check", "77"] }, code: 1, ends: "refused" },
+    { name: "a success", world: { ...fine, command: ["wait", "77"] }, code: 0, ends: "done" },
+    { name: "a missing ready file", world: { ...fine, command: ["run", "nope", "1"] }, code: 1, ends: "refused" },
+  ];
+
+  for (const row of ENDED) {
+    it(`L15 scenario: ${row.name} through the real land.ts ends its record with how it ended, and a record that cannot be written changes neither its exit code nor its output`, () => {
+      const normal = land(row.world);
+      const blocked = land({ ...row.world, blockRecord: true });
+
+      expect(normal.code, normal.err).toBe(row.code);
+      const file = Object.keys(normal.landed).find((name) => name !== "quest-t652f.jsonl") ?? "";
+      expect(normal.landed[file]?.at(-1)?._tag).toBe(row.ends);
+
+      // The same exit and the same output, and one more line on stderr that says the record is down.
+      expect(blocked.code, blocked.err).toBe(normal.code);
+      // Two runs of one world differ in the commits' hashes, which a clock sets.
+      const plain = (text: string) => text.replaceAll(/[0-9a-f]{40}/g, "<commit>");
+      expect(plain(blocked.out)).toBe(plain(normal.out));
+
+      const [had, has] = [
+        normal.err.split("\n").filter((line) => line !== ""),
+        blocked.err.split("\n").filter((line) => line !== ""),
+      ];
+
+      expect(has).toHaveLength(had.length + 1);
+      expect(has.filter((line) => !had.includes(line))).toHaveLength(1);
+      expect(blocked.landed).toEqual({});
+    }, 180_000);
+  }
+
+  // Plant: write a refusal's `output` into the record, as well as to stderr.
+  it("L3 scenario: [secrets] the output a refusal carries (the changed files of a dirty tree) is on stderr as before and never in the record", () => {
+    const got = land({ ...fine, dirty: true });
+
+    expect(got.code).toBe(1);
+    expect(got.err).toContain("quest.txt");
+    expect(JSON.stringify(got.landed)).not.toContain("quest.txt");
+    expect(got.landed["quest-t652f.jsonl"]?.at(-1)).toMatchObject({ _tag: "refused", check: "check" });
+  }, 120_000);
+
+  // Plant: delete the record's name check (red: a file is made for the name, outside runs/land).
+  it("L10 scenario: a quest name that is no plain name (a slash, `..`) leaves no record anywhere, costs one stderr line, and the command goes on to its own refusal", () => {
+    const dir = mkdtempSync(join(tmpdir(), "land-name-"));
+
+    try {
+      const main = join(dir, "main");
+      mkdirSync(join(main, "runs/land/quest-a"), { recursive: true });
+
+      const env = {
+        ...process.env,
+        MAIN: main,
+        BOXES: join(dir, "boxes"),
+        GH_REPO: "owner/repo",
+        REMOTE: join(dir, "origin"),
+        FABRIKA_COAUTHOR: "Fixture <fixture@example.test>",
+        TYPESAFE_API_KEY: undefined,
+      };
+
+      // `ready` on a tree that is no checkout: it refuses at once, whatever the quest is called.
+      const ready = (quest: string) =>
+        spawnSync(process.execPath, [script, "ready", quest, "--tree", join(dir, "nowhere")], {
+          encoding: "utf8",
+          env,
+          timeout: 60_000,
+        });
+
+      const plain = ready("t652f");
+      const bad = ready("a/../../escape");
+      const lines = (text: string) => text.split("\n").filter((line) => line !== "");
+
+      expect(plain.status).toBe(1);
+      expect(bad.status).toBe(1);
+      // The same refusal, and one line more: the record that could not be made.
+      expect(lines(bad.stderr)).toHaveLength(lines(plain.stderr).length + 1);
+      expect(readdirSync(join(main, "runs/land")).toSorted()).toEqual(["quest-a", "quest-t652f.jsonl"]);
+      // Nothing escaped through the folder the name walked into.
+      expect(readdirSync(dir).toSorted()).toEqual(["main"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  // Plant: accept 0 as a period (red: the first refusal).
+  it("L6 scenario: a LAND_LOG_MINUTES that is no whole number of at least 1 refuses the command at its start and names the variable; a good one runs it", () => {
+    for (const bad of ["0", "-3", "2.5", "abc"]) {
+      const got = land({ ...fine, command: ["check", "77"], settings: { LAND_LOG_MINUTES: bad } });
+
+      expect(got.code, bad).toBe(1);
+      expect(got.err, bad).toContain("LAND_LOG_MINUTES");
+      expect(
+        got.calls.filter((call) => call !== ""),
+        bad,
+      ).toEqual([]);
+    }
+
+    const good = land({ ...fine, command: ["check", "77"], settings: { LAND_LOG_MINUTES: "7" } });
+    expect(good.code, good.err).toBe(0);
+  }, 180_000);
 });
