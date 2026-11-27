@@ -7,6 +7,8 @@ import { Effect, Fiber, Layer, Option, Schema, Match } from "effect";
 import { TestClock } from "effect/testing";
 import { Checks, ChecksError, type Job } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
+import type { Close } from "./Closes.ts";
+import * as ClosesTest from "./ClosesTest.ts";
 import type { PullRequest } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
@@ -56,9 +58,12 @@ type World = {
   readonly required?: typeof Required.Type;
   readonly leak?: typeof Leak.Type;
   readonly open?: ReadonlyArray<number>;
+  /** The tickets this tooling already closed, as the record holds them. */
+  readonly closes?: ReadonlyArray<Close>;
   readonly failing?: {
     readonly prs?: PullRequestsTest.Failing;
     readonly tickets?: TicketsTest.Failing;
+    readonly closes?: string;
     readonly sweep?: string;
   };
 };
@@ -71,6 +76,7 @@ const memory = (w: World = {}) => {
   const remote = PushesTest.remote();
   const tracker = TicketsTest.world(w.open ?? []);
   const sweeps = SweepsTest.count();
+  const closes = ClosesTest.world(w.closes ?? []);
 
   const layer = Layer.mergeAll(
     PullRequestsTest.layer(github, w.failing?.prs),
@@ -78,9 +84,10 @@ const memory = (w: World = {}) => {
     ChecksTest.layer([job(w.required ?? "success")], ""),
     TicketsTest.layer(tracker, w.failing?.tickets),
     SweepsTest.layer(sweeps, w.failing?.sweep),
+    ClosesTest.layer(closes, w.failing?.closes),
   );
 
-  return { github, remote, tracker, sweeps, layer };
+  return { github, remote, tracker, sweeps, closes, layer };
 };
 
 const add = (m: ReturnType<typeof memory>) => Queue.add({ dir: ".", pr: 900 }).pipe(Effect.provide(m.layer));
@@ -723,6 +730,160 @@ describe("closeOnly: closes the named tickets and starts no sweep (a merge close
         );
         expect(done.lines.includes("pr 900: closed ticket 5")).toBe(lands && open);
         expect(m.sweeps.kicks).toBe(0);
+        // Plant: close a ticket and leave it out of the record, so the timer's pass closes it again after a reopen.
+        expect(m.closes.records.map((c) => c.ticket)).toEqual(lands && open ? [5] : []);
+      }),
+  );
+});
+
+describe("reconcile: the timer's pass closes each open ticket that the newest merges into main name, once; a ticket the record shows closed, or a person reopened, stays as it is", () => {
+  /** Pull requests merged into main (`base` main unless a row says otherwise), each with its description. */
+  const pulled = (
+    rows: ReadonlyArray<{ readonly number: number; readonly body: string; readonly base?: string }>,
+    w: World = {},
+  ) => {
+    const github = PullRequestsTest.world(
+      rows.map((row): PullRequest => ({
+        number: row.number,
+        head: `fabrikalfa/t${row.number}`,
+        oid: merged,
+        state: "MERGED",
+        draft: false,
+      })),
+    );
+
+    for (const row of rows) {
+      github.more.set(row.number, { base: row.base ?? "main", body: row.body, mergeCommit: merged });
+    }
+
+    const tracker = TicketsTest.world(w.open ?? []);
+    const closes = ClosesTest.world(w.closes ?? []);
+
+    const layer = Layer.mergeAll(
+      PullRequestsTest.layer(github, w.failing?.prs),
+      TicketsTest.layer(tracker, w.failing?.tickets),
+      ClosesTest.layer(closes, w.failing?.closes),
+    );
+
+    return { github, tracker, closes, layer };
+  };
+
+  const pass = (m: ReturnType<typeof pulled>, limit = 200) =>
+    Queue.reconcile({ repo, limit }).pipe(Effect.provide(m.layer));
+
+  // Plant: credit the oldest merge that names a ticket, or close a ticket a merge names again after the first close.
+  it.effect("vector: the newest merge that names a ticket is credited, and each open ticket closes once", () =>
+    Effect.gen(function* () {
+      const m = pulled(
+        [
+          { number: 901, body: "fabrika close ticket 5" },
+          { number: 900, body: "fabrika close ticket 5\nfabrika close ticket 6" },
+          { number: 899, body: "fabrika close ticket 7" },
+        ],
+        { open: [5, 6, 7] },
+      );
+
+      expect(yield* pass(m)).toEqual(["pr 901: closed ticket 5", "pr 900: closed ticket 6", "pr 899: closed ticket 7"]);
+      expect([...m.tracker.open]).toEqual([]);
+      expect(m.closes.records.map((c) => [c.pr, c.ticket, c.commit])).toEqual([
+        [901, 5, merged],
+        [900, 6, merged],
+        [899, 7, merged],
+      ]);
+      expect(JSON.stringify(m.tracker.posts.find((p) => p._tag === "comment"))).toContain("pull/901");
+
+      // The next pass finds each ticket in the record and makes no call.
+      expect(yield* pass(m)).toEqual([]);
+      expect(m.tracker.posts.map((p) => p._tag).at(-1)).toBe("list");
+      expect(m.closes.records).toHaveLength(3);
+    }),
+  );
+
+  // Plant: read every merge the list holds, not only the newest `limit`.
+  it.effect("vector: a limit reads the newest merges only, and a merge past it closes nothing", () =>
+    Effect.gen(function* () {
+      const m = pulled(
+        [
+          { number: 901, body: "fabrika close ticket 5" },
+          { number: 900, body: "fabrika close ticket 6" },
+          { number: 899, body: "fabrika close ticket 7" },
+        ],
+        { open: [5, 6, 7] },
+      );
+
+      expect(yield* pass(m, 2)).toEqual(["pr 901: closed ticket 5", "pr 900: closed ticket 6"]);
+      expect([...m.tracker.open]).toEqual([7]);
+    }),
+  );
+
+  // Plant: close a ticket the record shows closed, or one a merge into another branch names.
+  it.effect(
+    "vector: a ticket the record shows closed stays as a person left it, and a merge into another branch closes nothing",
+    () =>
+      Effect.gen(function* () {
+        const m = pulled(
+          [
+            { number: 901, body: "fabrika close ticket 5" },
+            { number: 902, body: "fabrika close ticket 8", base: "fabrikalfa/parent" },
+          ],
+          { open: [5, 8], closes: [{ at: "2026-11-26T00:00:00.000Z", pr: 900, ticket: 5, commit: merged }] },
+        );
+
+        expect(yield* pass(m)).toEqual([]);
+        expect([...m.tracker.open].sort((a, b) => a - b)).toEqual([5, 8]);
+        expect(m.tracker.posts.map((p) => p._tag)).toEqual(["list"]);
+      }),
+  );
+
+  // Plant: close on a tracker, record or merged list that did not answer, or say nothing about why.
+  it.effect("vector: a tracker, a record or a merged list that cannot be read closes nothing, and says why", () =>
+    Effect.gen(function* () {
+      const rows = [{ number: 901, body: "fabrika close ticket 5" }];
+
+      const noTracker = pulled(rows, { open: [5], failing: { tickets: { open: "tracker down" } } });
+      expect(yield* pass(noTracker)).toEqual(["cannot read the tracker; closed no tickets (tracker down)"]);
+      expect(noTracker.tracker.posts.map((p) => p._tag)).toEqual(["list"]);
+
+      const noRecord = pulled(rows, { open: [5], failing: { closes: "record down" } });
+      expect(yield* pass(noRecord)).toEqual(["cannot read the closes record; closed no tickets (record down)"]);
+      expect(noRecord.tracker.posts.map((p) => p._tag)).toEqual(["list"]);
+
+      const noList = pulled(rows, { open: [5], failing: { prs: { merged: "gh down" } } });
+      expect(yield* pass(noList)).toEqual(["cannot read the merged pull requests (gh down); closed no tickets"]);
+      expect(noList.tracker.posts).toEqual([]);
+    }),
+  );
+
+  // Plant: close a ticket twice when two merges name it, or close one that is recorded, open or not.
+  it.effect.prop(
+    "property: a pass closes exactly the named tickets that are open and not in the record, each once",
+    {
+      named: Schema.Array(Schema.Array(Schema.Literals([1, 2, 3, 4, 5]))),
+      open: Schema.Array(Schema.Literals([1, 2, 3, 4, 5])),
+      recorded: Schema.Array(Schema.Literals([1, 2, 3, 4, 5])),
+    },
+    ({ named, open, recorded }) =>
+      Effect.gen(function* () {
+        const m = pulled(
+          named.map((tickets, i) => ({
+            number: 900 + i,
+            body: tickets.map((t) => `fabrika close ticket ${t}`).join("\n"),
+          })),
+          {
+            open,
+            closes: recorded.map((ticket) => ({ at: "2026-11-26T00:00:00.000Z", pr: 1, ticket, commit: merged })),
+          },
+        );
+
+        yield* pass(m);
+
+        const want = new Set(named.flat().filter((t) => open.includes(t) && !recorded.includes(t)));
+        const closed = m.tracker.posts.flatMap((p) => (p._tag === "comment" ? [p.ticket] : []));
+        expect(new Set(closed)).toEqual(want);
+        expect(closed).toHaveLength(want.size);
+        expect([...m.tracker.open].sort((a, b) => a - b)).toEqual(
+          [...new Set(open)].filter((t) => !want.has(t)).sort((a, b) => a - b),
+        );
       }),
   );
 });

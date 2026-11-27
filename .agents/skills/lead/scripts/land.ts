@@ -27,19 +27,20 @@
 //       push         botpush.mjs, to the branch (to its -wip backup for a mid-quest handover, and
 //                    stop there)
 //       pr           open the PR from the body file, or update the open one
-//       queue        as `land.ts queue <pr> --wait` below
+//       queue        as `land.ts queue <pr> --wait-ci` below
 //
-//   land.ts queue <pr> [--wait] [--wait-minutes <n>] [--every-seconds <n>]
+//   land.ts queue <pr> [--wait-ci] [--wait-minutes <n>] [--every-seconds <n>]
 //     the lead session, for any pull request whose steps passed (pr/Queue.ts, a pull request whose steps passed lands on green CI and a clean leak check alone): refuses one
 //     that is closed or not into main; leak-greps its net change, each of its commits and
 //     its title and description, which become the squash commit's text; marks a draft ready for
 //     review, as `admin` does, which starts its real `ci-required`; reads `ci-required` at its
-//     head, once, or with --wait again each minute for up to an hour, in the background (a draft just
-//     marked ready has no `ci-required` yet, so give it --wait; a pull request that conflicts with main, or turns to
+//     head, once, or with --wait-ci again each minute for up to an hour, in the background (a draft just
+//     marked ready has no `ci-required` yet, so give it --wait-ci; a pull request that conflicts with main, or turns to
 //     conflict during the wait, exits 1 at once with the command that merges main in); then one
 //     `gh pr merge --squash --match-head-commit <head>`, which adds it to GitHub's merge queue.
 //     It prints `queued`, never `merged`: GitHub tests it on newest main and merges it later. No
-//     --admin, no --auto, no other merge method.
+//     --admin, no --auto, no other merge method. `--wait` is refused: it was renamed `--wait-ci`, which waits for
+//     `ci-required` and returns at `queued`, never at the merge.
 //
 //   land.ts wait <pr> [--wait-minutes <n>] [--every-seconds <n>]
 //     the one wait for CI, in place of a hand-written loop that picks a workflow run by head SHA (a ready
@@ -47,7 +48,7 @@
 //     `land.ts` itself reads, at the head the pull request holds on each read (default 60 minutes, every 60
 //     seconds), until it has ended; a push or an update-branch moves the head and the next read follows it.
 //     Prints the conclusion and exits 0 on success, 1 on any other (a cancelled one says so and names its
-//     run, a pull request that turns to conflict with main ends it at once). `queue --wait` and `admin
+//     run, a pull request that turns to conflict with main ends it at once). `queue --wait-ci` and `admin
 //     --wait` make this same wait before they act, and take the same two flags.
 //
 //   land.ts check <pr>
@@ -99,7 +100,8 @@
 //     each ticket its description names on a line of its own, `fabrika close ticket <N>`, with a
 //     comment naming the pull request and its merge commit (a merge closes only the tickets its pull request names with our own phrase), and starts one box cleanup sweep
 //     (`gcloop.ts kick`, box cleanup runs on a timer and after a merge, never on a step's start path), which removes the quest's boxes and worktree. Not merged: one line
-//     saying how it stands. Running it again closes nothing twice.
+//     saying how it stands. Running it again closes nothing twice. The timer's pass (gcloop.ts) closes the
+//     tickets a missed run leaves open, once each.
 //
 //   land.ts close-named <pr>...
 //     as `merged`, but only the ticket closes: no box cleanup sweep. For a pull request that merged
@@ -126,6 +128,7 @@ import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as RunsGh from "./ci/RunsGh.ts";
 import * as Arm from "./pr/Arm.ts";
 import * as BranchesGit from "./pr/BranchesGit.ts";
+import * as ClosesFs from "./pr/ClosesFs.ts";
 import * as Merge from "./pr/Merge.ts";
 import { PullRequests } from "./pr/PullRequests.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
@@ -689,6 +692,7 @@ const queueServices = (env: Env) =>
     PushesProcess.layer(HERE),
     ChecksGh.layer(env.GH_REPO),
     TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
+    ClosesFs.layer(`${env.BOXES}/state`),
     SweepsProcess.layer(HERE),
   );
 
@@ -769,16 +773,31 @@ const waitFlags = (fallback: Queue.Wait) => ({
   every: Flag.Int("every-seconds").pipe(Flag.withDefault(fallback.every)),
 });
 
+// `--wait` was renamed `--wait-ci`: it returns at "queued", not at the merge. The old flag stays only to refuse, by name.
 const queueCommand = Command.make(
   "queue",
-  { pr: PrNumber, wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)), ...waitFlags(Queue.QUEST_WAIT) },
-  Effect.fn("land.queueCommand")(function* ({ pr, wait, minutes, every }) {
-    yield* Console.log(Queue.line(yield* queue(yield* loadEnv, pr, wait ? { minutes, every } : undefined)));
+  {
+    pr: PrNumber,
+    waitCi: Flag.Boolean("wait-ci").pipe(Flag.withDefault(false)),
+    wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)),
+    ...waitFlags(Queue.QUEST_WAIT),
+  },
+  Effect.fn("land.queueCommand")(function* ({ pr, waitCi, wait, minutes, every }) {
+    if (wait) {
+      return yield* new Refused({
+        check: "queue",
+        reason:
+          "--wait is now --wait-ci. --wait-ci waits for ci-required and then says queued: it does not wait for the merge, which GitHub's queue does later.",
+        output: "",
+      });
+    }
+
+    yield* Console.log(Queue.line(yield* queue(yield* loadEnv, pr, waitCi ? { minutes, every } : undefined)));
   }),
 );
 
 // The one wait for CI: reads `ci-required` at the pull request's head as it stands on each read (a push or an
-// update-branch is followed), until it has ended, and says how. Exit 0 only on success. `queue --wait` and
+// update-branch is followed), until it has ended, and says how. Exit 0 only on success. `queue --wait-ci` and
 // `admin --wait` make the same wait; no hand-written loop picks a workflow run instead.
 const waitCommand = Command.make(
   "wait",

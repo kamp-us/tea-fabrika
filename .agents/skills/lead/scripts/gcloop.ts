@@ -19,6 +19,11 @@
 //                        before and after; then the lock goes
 //   status               the newest sweep that ran (not a skipped one), and `LATE` when it started
 //                        more than two periods ago, or none is recorded
+//   ticket pass          after its record, still under the lock: Queue.reconcile closes each open ticket
+//                        that one of the newest GC_RECONCILE_PRS merged pull requests names (default 200),
+//                        once; the record is BOXES/state/closes.jsonl. A sweep skipped behind a live holder
+//                        runs none, since the holder runs it. A merge that `land.ts merged` missed is closed
+//                        by the next sweep, and a ticket a person reopened after a close stays open.
 //
 // The timer is installed once per laptop, from the main checkout (the unit's template is ../gc.plist):
 //
@@ -60,6 +65,7 @@ import {
   Effect,
   Exit,
   FileSystem,
+  Layer,
   Path,
   Predicate,
   Result,
@@ -74,6 +80,10 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 
 import { variable } from "./drive.ts";
 import { spoken } from "./flow/Beat.ts";
+import * as ClosesFs from "./pr/ClosesFs.ts";
+import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import * as Queue from "./pr/Queue.ts";
+import * as TicketsCli from "./pr/TicketsCli.ts";
 
 // ---------------------------------------------------------------- the setting
 
@@ -81,6 +91,11 @@ import { spoken } from "./flow/Beat.ts";
  * env.sh's way of setting a lead value from outside works here too; launchd's unit carries it. */
 export const MINUTES = Config.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)), "GC_MINUTES").pipe(
   Config.withDefault(30),
+);
+
+/** How many of the newest merged pull requests each sweep's ticket pass reads (Queue.reconcile). A count, not a span of days: merges older than the newest this many are not read, so a laptop that sleeps past more merges than this loses the ones that fall out. From the environment, as MINUTES is. */
+export const RECONCILE_PRS = Config.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)), "GC_RECONCILE_PRS").pipe(
+  Config.withDefault(200),
 );
 
 /** The launchd job's name. */
@@ -302,17 +317,17 @@ const exec = Effect.fn("gcloop.exec")(function* (command: string, args: Readonly
   return { code: Number(code), out, err };
 }, Effect.scoped);
 
-/** MAIN and BOXES from env.sh, as every lead script finds them. */
+/** MAIN, BOXES and GH_REPO from env.sh, as every lead script finds them. */
 export const paths = Effect.fn("gcloop.paths")(
   function* () {
     const path = yield* Path.Path;
     const env = path.join(import.meta.dirname, "env.sh");
-    const r = yield* exec("sh", ["-c", '. "$0" && printf "%s\\n%s" "$MAIN" "$BOXES"', env]);
-    const [main = "", boxes = ""] = pipe(r.out, Str.split("\n"));
+    const r = yield* exec("sh", ["-c", '. "$0" && printf "%s\\n%s\\n%s" "$MAIN" "$BOXES" "$GH_REPO"', env]);
+    const [main = "", boxes = "", repo = ""] = pipe(r.out, Str.split("\n"));
 
-    return r.code === 0 && main !== "" && boxes !== ""
-      ? { main, boxes, state: path.join(boxes, "state") }
-      : yield* Broken.make({ reason: `env.sh gave no MAIN or BOXES: ${Str.trim(r.err)}` });
+    return r.code === 0 && main !== "" && boxes !== "" && repo !== ""
+      ? { main, boxes, repo, state: path.join(boxes, "state") }
+      : yield* Broken.make({ reason: `env.sh gave no MAIN, BOXES or GH_REPO: ${Str.trim(r.err)}` });
   },
   Effect.catchTag("PlatformError", () => Effect.fail(Broken.make({ reason: "env.sh could not run" }))),
 );
@@ -445,6 +460,8 @@ export interface Ask {
   /** How long gc may run before it is stopped: one period on the timer. */
   readonly limit: Duration.Duration;
   readonly pid: number;
+  /** The ticket pass: run under this sweep's lock, after its record, and never by a sweep that was skipped. */
+  readonly after?: Effect.Effect<void>;
 }
 
 const append = Effect.fn("gcloop.append")(
@@ -486,6 +503,12 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
     });
 
     yield* append(ask.state, done);
+
+    // The ticket pass runs under the lock this sweep holds, after its record. A skipped sweep runs none: the
+    // sweep that holds the lock runs it.
+    if (outcome._tag !== "skipped") {
+      yield* ask.after ?? Effect.void;
+    }
 
     return done;
   });
@@ -559,6 +582,35 @@ export const status = Effect.fn("gcloop.status")(function* (state: string, minut
   return says(yield* sweeps(state), now, minutes, going);
 });
 
+// ---------------------------------------------------------------- the ticket pass
+
+/**
+ * One ticket pass (Queue.reconcile), its lines printed when it ends. It never fails: a read that fails is a
+ * line. It is stopped at `within` (one period, as gc is), so a read that hangs cannot hold the sweep's lock
+ * past one period. A stopped pass says so, and the next sweep runs the pass again; a close it made before the
+ * stop is already in the record.
+ */
+export const reconcileTickets = (repo: string, limit: number, within: Duration.Duration) =>
+  Queue.reconcile({ repo, limit }).pipe(
+    Effect.timeoutOption(within),
+    Effect.flatMap(
+      Option.match({
+        onNone: () =>
+          Console.log(`tickets: stopped after ${spoken(Duration.toMillis(within))}; the next sweep goes on`),
+        // Serial on purpose: the lines print in the order the pass gave them.
+        onSome: (lines) => Effect.forEach(lines, (line) => Console.log(line), { concurrency: 1, discard: true }),
+      }),
+    ),
+  );
+
+/** The live services a ticket pass reads: GitHub through `gh`, the tracker through its own CLI, and the record beside gc's. */
+const ticketServices = (folders: { readonly main: string; readonly repo: string; readonly state: string }) =>
+  Layer.mergeAll(
+    PullRequestsGh.layer(folders.repo, folders.main),
+    TicketsCli.layer(folders.main, TicketsCli.defaultHome()),
+    ClosesFs.layer(folders.state),
+  );
+
 // ---------------------------------------------------------------- the commands
 
 const trigger = Flag.Literals("trigger", TRIGGERS).pipe(Flag.withDefault("hand" as const));
@@ -568,6 +620,7 @@ const sweepCommand = Command.make("sweep", { trigger }, ({ trigger }) =>
     const folders = yield* paths();
     const path = yield* Path.Path;
     const minutes = yield* MINUTES;
+    const limit = yield* RECONCILE_PRS;
     yield* sweep({
       state: folders.state,
       gc: ["nice", "-n", "15", "sh", path.join(import.meta.dirname, "box.sh"), "gc"],
@@ -575,6 +628,10 @@ const sweepCommand = Command.make("sweep", { trigger }, ({ trigger }) =>
       minutes,
       limit: Duration.minutes(minutes),
       pid: process.pid,
+      after: reconcileTickets(folders.repo, limit, Duration.minutes(minutes)).pipe(
+        Effect.provide(ticketServices(folders)),
+        Effect.provide(NodeServices.layer),
+      ),
     });
     yield* Console.log((yield* status(folders.state, minutes)).text);
   }),

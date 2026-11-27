@@ -61,6 +61,14 @@ export const QueueEntry = Schema.Struct({ number: Schema.Finite, state: Schema.S
 
 export type QueueEntry = typeof QueueEntry.Type;
 
+/**
+ * One merged pull request as the recent-merges list gives it: its number, its description, and the
+ * commit it merged at (the commit the close note names).
+ */
+export const Merged = Schema.Struct({ number: Schema.Finite, body: Schema.String, mergeCommit: Schema.String });
+
+export type Merged = typeof Merged.Type;
+
 /** What a new or edited pull request says: its title and its description. */
 export type Text = { readonly title: string; readonly body: string };
 
@@ -71,6 +79,11 @@ export class PullRequests extends Context.Service<
     readonly openOn: (branch: string) => Effect.Effect<Option.Option<PullRequest>, PullRequestsError>;
     /** Every pull request of the repo, open, closed and merged. Fails when one read cannot hold all. */
     readonly all: Effect.Effect<ReadonlyArray<PullRequest>, PullRequestsError>;
+    /**
+     * The pull requests merged into main, most recently updated first, at most `limit`. A merge is an
+     * update, so every recent merge is among the newest `limit` by update, whatever its age.
+     */
+    readonly merged: (limit: number) => Effect.Effect<ReadonlyArray<Merged>, PullRequestsError>;
     /** Opens a draft pull request from `branch` into main, and answers its number. */
     readonly draft: (branch: string, text: Text, head: string) => Effect.Effect<number, PullRequestsError>;
     /** Sets the title and description of pull request `number`. */

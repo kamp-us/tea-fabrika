@@ -6,6 +6,7 @@ import { ChildProcessSpawner } from "effect/process";
 import { type Given, lastLine, run } from "./command.ts";
 import {
   type Detail,
+  type Merged,
   Patch,
   type PullRequest,
   PullRequests,
@@ -30,6 +31,16 @@ const Listed = Schema.fromJsonString(
 );
 
 const FIELDS = "number,headRefName,headRefOid,state,isDraft";
+
+const MergedListed = Schema.fromJsonString(
+  Schema.Array(
+    Schema.Struct({
+      number: Schema.Finite,
+      body: Schema.String,
+      mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
+    }),
+  ),
+);
 
 const Viewed = Schema.fromJsonString(
   Schema.Struct({
@@ -170,6 +181,35 @@ export const make = (
         ? Effect.fail(PullRequestsError.make({ reason: `${LIMIT} or more pull requests: one read cannot hold all` }))
         : Effect.succeed(prs),
     );
+
+    // One list call, most recently updated first (a merge is an update, so every recent merge is in it). A row
+    // with no merge commit is left out: GitHub gives one to every merged pull request.
+    const merged = Effect.fn("PullRequestsGh.merged")(function* (limit: number) {
+      const out = yield* gh([
+        "pr",
+        "list",
+        "-R",
+        repo,
+        "--state",
+        "merged",
+        "--base",
+        "main",
+        "--search",
+        "sort:updated-desc",
+        "--limit",
+        String(limit),
+        "--json",
+        "number,body,mergeCommit",
+      ]);
+
+      const rows = yield* Schema.decodeEffect(MergedListed)(out.trim() || "[]").pipe(
+        Effect.mapError(() => PullRequestsError.make({ reason: "gh pr list answered a shape we do not read" })),
+      );
+
+      return rows.flatMap((row): ReadonlyArray<Merged> =>
+        row.mergeCommit === null ? [] : [{ number: row.number, body: row.body, mergeCommit: row.mergeCommit.oid }],
+      );
+    });
 
     const draft = Effect.fn("PullRequestsGh.draft")(
       function* (branch: string, text: Text, head: string) {
@@ -335,6 +375,7 @@ export const make = (
     return PullRequests.of({
       openOn,
       all,
+      merged,
       draft,
       edit,
       ready,

@@ -13,13 +13,30 @@
 //            squash pinned to that head, which adds it to the queue
 //   settle   later, one read of the pull request and no wait: merged -> close each ticket its
 //            description names (a merge closes only the tickets its pull request names with our own phrase) and start one box cleanup sweep (box cleanup runs on a timer and after a merge, never on a step's start path); else say how it stands
+//   reconcile the timer's pass (gcloop.ts, after each sweep): the newest merged pull requests, and the open tickets they name that the
+//            record (Closes.ts) does not hold yet, closed once each, so a missed `settle` is caught within one tick
 //
 // `add` answers "queued", never "merged": the merge is GitHub's, later. `settle` is how code learns
-// it happened. Read through its module: `Queue.add(...)`.
+// it happened. Read through its module: `Queue.add(...)`. Every close, by `settle`, `closeOnly` or
+// `reconcile`, is written to the record, so a ticket that a person reopens later is never closed again
+// by the timer.
 
-import { String as Str, pipe, Option, Array as Arr, Duration, Effect, Match, Schedule, Schema } from "effect";
+import {
+  String as Str,
+  pipe,
+  Option,
+  Array as Arr,
+  DateTime,
+  Duration,
+  Effect,
+  Match,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
 
 import { Checks, type ChecksError, type Job } from "../ci/Checks.ts";
+import { Closes } from "./Closes.ts";
 import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
 import { Detail, PullRequests, PullRequestsError } from "./PullRequests.ts";
@@ -411,6 +428,36 @@ export const Settled = Schema.TaggedUnion({
 
 export type Settled = typeof Settled.Type;
 
+/**
+ * Comments on ticket `n` and closes it, then records the close: the one close every path makes, so the
+ * record holds each ticket this tooling closed. Gives the line that says how it went. A failed comment or
+ * close is a line, never a failure, and it is not recorded, so a later pass tries that ticket again.
+ */
+const closeOne = Effect.fn("Queue.closeOne")(function* (repo: string, pr: number, commit: string, n: number) {
+  const tickets = yield* Tickets;
+  const closes = yield* Closes;
+  const said = (text: string) => `pr ${pr}: ${text}`;
+
+  const commented = yield* Effect.result(tickets.comment(n, closeNote(repo, pr, commit)));
+
+  if (Result.isFailure(commented)) {
+    return said(`ticket ${n} not closed, the comment failed: ${commented.failure.reason}`);
+  }
+
+  const closed = yield* Effect.result(tickets.close(n));
+
+  if (Result.isFailure(closed)) {
+    return said(`ticket ${n} not closed: ${closed.failure.reason}`);
+  }
+
+  const at = DateTime.formatIso(yield* DateTime.now);
+  const recorded = yield* Effect.result(closes.record({ at, pr, ticket: n, commit }));
+
+  return Result.isFailure(recorded)
+    ? said(`closed ticket ${n}, but the record was not written: ${recorded.failure.reason}`)
+    : said(`closed ticket ${n}`);
+});
+
 /** Closes each open ticket the merged description names; trouble is a line, never a failure. */
 const closeNamed = Effect.fn("Queue.closeNamed")(function* (repo: string, found: Detail, commit: string) {
   const tickets = yield* Tickets;
@@ -435,18 +482,7 @@ const closeNamed = Effect.fn("Queue.closeNamed")(function* (repo: string, found:
       continue;
     }
 
-    lines.push(
-      yield* tickets.comment(n, closeNote(repo, found.number, commit)).pipe(
-        Effect.matchEffect({
-          onFailure: (e) => Effect.succeed(said(`ticket ${n} not closed, the comment failed: ${e.reason}`)),
-          onSuccess: () =>
-            Effect.match(tickets.close(n), {
-              onFailure: (e) => said(`ticket ${n} not closed: ${e.reason}`),
-              onSuccess: () => said(`closed ticket ${n}`),
-            }),
-        }),
-      ),
-    );
+    lines.push(yield* closeOne(repo, found.number, commit, n));
   }
 
   return lines;
@@ -535,4 +571,57 @@ export const settle = Effect.fn("Queue.settle")(function* (a: { readonly repo: s
     commit: at.commit,
     lines: [`pr ${at.found.number}: merged at ${at.commit}`, ...closed, ...swept],
   });
+});
+
+// ---------------------------------------------------------------- the timer's pass
+
+/**
+ * The timer's pass (gcloop.ts runs it after each sweep, under the sweep's lock). Reads the newest `limit`
+ * pull requests merged into main, and closes each open ticket one of them names, once: a ticket the record
+ * already holds is left as it is, so a ticket a person reopened after this tooling closed it stays open.
+ * One read each of GitHub, the tracker and the record, however many pull requests there are, and no
+ * tracker read when no merge names a ticket. The newest merge that names a ticket is the one credited.
+ * A read that fails closes nothing and says why in one line; a close that fails is one line, and the next
+ * pass tries it again.
+ */
+export const reconcile = Effect.fn("Queue.reconcile")(function* (a: { readonly repo: string; readonly limit: number }) {
+  const listed = yield* Effect.result((yield* PullRequests).merged(a.limit));
+
+  if (Result.isFailure(listed)) {
+    return [`cannot read the merged pull requests (${listed.failure.reason}); closed no tickets`];
+  }
+
+  const named = listed.success.flatMap((pr) => namedTickets(pr.body).map((ticket) => ({ pr, ticket })));
+
+  if (named.length === 0) {
+    return [];
+  }
+
+  const open = yield* Effect.result((yield* Tickets).open);
+
+  if (Result.isFailure(open)) {
+    return [`cannot read the tracker; closed no tickets (${open.failure.reason})`];
+  }
+
+  const recorded = yield* Effect.result((yield* Closes).all);
+
+  if (Result.isFailure(recorded)) {
+    return [`cannot read the closes record; closed no tickets (${recorded.failure.reason})`];
+  }
+
+  // A ticket joins `done` once this pass has tried it, so an older merge that names it does not try again.
+  const done = new Set(recorded.success.map((close) => close.ticket));
+  const stillOpen = new Set(open.success);
+  const lines: Array<string> = [];
+
+  for (const { pr, ticket } of named) {
+    if (done.has(ticket) || !stillOpen.has(ticket)) {
+      continue;
+    }
+
+    done.add(ticket);
+    lines.push(yield* closeOne(a.repo, pr.number, pr.mergeCommit, ticket));
+  }
+
+  return lines;
 });

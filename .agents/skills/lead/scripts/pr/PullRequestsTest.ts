@@ -3,6 +3,7 @@ import { Array as Arr, Effect, Layer, Option, Schema } from "effect";
 // writes change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
 import {
   type Detail,
+  type Merged,
   type Patch,
   type PullRequest,
   PullRequests,
@@ -27,6 +28,7 @@ export type Failing = Partial<
   Record<
     | "openOn"
     | "all"
+    | "merged"
     | "draft"
     | "edit"
     | "ready"
@@ -84,6 +86,18 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
       openOn: (branch) =>
         Effect.map(fails("openOn"), () => Arr.findFirst(w.prs, (pr) => pr.head === branch && pr.state === "OPEN")),
       all: Effect.map(fails("all"), () => [...w.prs]),
+      merged: (limit) =>
+        Effect.map(fails("merged"), (): ReadonlyArray<Merged> =>
+          w.prs
+            .filter((pr) => pr.state === "MERGED" && (w.more.get(pr.number)?.base ?? "main") === "main")
+            .toSorted((a, b) => b.number - a.number)
+            .slice(0, limit)
+            .map((pr) => ({
+              number: pr.number,
+              body: w.more.get(pr.number)?.body ?? "",
+              mergeCommit: w.more.get(pr.number)?.mergeCommit ?? pr.oid,
+            })),
+        ),
       draft: (branch, text) =>
         Effect.map(fails("draft"), () => {
           const number = Math.max(0, ...Arr.map(w.prs, (pr) => pr.number)) + 1;
