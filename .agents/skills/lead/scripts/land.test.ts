@@ -140,7 +140,7 @@ type World = {
   /** `runs` in the main checkout is a file, so no record can be made under `runs/land`. */
   readonly blockRecord?: boolean;
   /** A second command, run right after `command` in the same checkout: it reads what the first left. */
-  readonly then?: ReadonlyArray<string>;
+  readonly afterwards?: ReadonlyArray<string>;
 };
 
 /** The fields of a record line that a law here reads. The record's own schema is the product's; a law at the command line reads the file as a person would. */
@@ -405,9 +405,14 @@ const land = (world: World) => {
     expect(ran.error).toBeUndefined();
 
     const next =
-      world.then === undefined
+      world.afterwards === undefined
         ? undefined
-        : spawnSync(process.execPath, [script, ...world.then], { cwd: quest, encoding: "utf8", env, timeout: 60_000 });
+        : spawnSync(process.execPath, [script, ...world.afterwards], {
+            cwd: quest,
+            encoding: "utf8",
+            env,
+            timeout: 60_000,
+          });
 
     const calls = existsSync(env.LAND_CALLS) ? readFileSync(env.LAND_CALLS, "utf8").trim().split("\n") : [];
     const head = git(quest, "rev-parse", "HEAD");
@@ -1021,21 +1026,21 @@ describe("land.ts leaves a start and an end line for every command (the land rec
   // Plants: read a pull request's number as a quest's name (red: no line for `77`); read a quest's name as a number; ignore --attempts
   // (red: the refusal of 0); read another file than the key's (red: no line).
   it("L14 scenario: land.ts last reads the record a command left, by pull request number or by quest name, and refuses --attempts below 1", () => {
-    const pr = land({ ...fine, state: "CLOSED", command: ["check", "77"], then: ["last", "77"] });
+    const pr = land({ ...fine, state: "CLOSED", command: ["check", "77"], afterwards: ["last", "77"] });
     expect(pr.next?.code, pr.next?.err).toBe(0);
     expect(pr.next?.out.trim().split("\n")).toHaveLength(1);
     expect(pr.next?.out).toContain("check 77");
 
-    const quest = land({ ...fine, command: ["run", "nope", "1"], then: ["last", "nope"] });
+    const quest = land({ ...fine, command: ["run", "nope", "1"], afterwards: ["last", "nope"] });
     expect(quest.next?.code, quest.next?.err).toBe(0);
     expect(quest.next?.out).toContain("run nope 1");
 
     // A quest that no command has run for has no record to read, and a number that no pull request has the same.
-    const none = land({ ...fine, command: ["check", "77"], then: ["last", "78"] });
+    const none = land({ ...fine, command: ["check", "77"], afterwards: ["last", "78"] });
     expect(none.next?.code).toBe(0);
     expect(none.next?.out).not.toContain("check 77");
 
-    const zero = land({ ...fine, command: ["check", "77"], then: ["last", "77", "--attempts", "0"] });
+    const zero = land({ ...fine, command: ["check", "77"], afterwards: ["last", "77", "--attempts", "0"] });
     expect(zero.next?.code).toBe(1);
     expect(zero.next?.err).toContain("--attempts");
   }, 180_000);
