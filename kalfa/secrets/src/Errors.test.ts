@@ -10,7 +10,7 @@ import {
   acceptedStoreIds,
   causeClasses,
   causes as drawnCauses,
-  fieldsOf,
+  sortedFields,
   type Plain,
   marker,
   nameTexture,
@@ -155,7 +155,7 @@ it.effect.prop(
           const named = `${reason._tag} over a ${each.id}`;
           const wire = write();
 
-          expect(fieldsOf(wire), `${named}: written`).toEqual([
+          expect(sortedFields(wire), `${named}: written`).toEqual([
             ["_tag", reason._tag],
             ["cause", "<redacted>"],
           ]);
@@ -166,7 +166,7 @@ it.effect.prop(
           const unavailable = new Errors.SecretsUnavailable({ secret, store, reason });
           const wrapped = json(Errors.SecretsUnavailable).write(unavailable);
 
-          const held = fieldsOf(wrapped);
+          const held = sortedFields(wrapped);
 
           expect(
             held.map(([key]) => key),
@@ -181,7 +181,7 @@ it.effect.prop(
             ["store", store],
           ]);
           expect(
-            fieldsOf(held.find(([key]) => key === "reason")?.[1] ?? null),
+            sortedFields(held.find(([key]) => key === "reason")?.[1] ?? null),
             `${named} held by SecretsUnavailable: the reason written`,
           ).toEqual([
             ["_tag", reason._tag],

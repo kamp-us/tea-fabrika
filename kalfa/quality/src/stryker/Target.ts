@@ -23,7 +23,7 @@ const lineStarts = (text: string): ReadonlyArray<number> => [
 ];
 
 /** Where a position (line and column from 0) is in the text, or nothing when the text has no such place. */
-const offsetOf = (starts: ReadonlyArray<number>, at: Position): number | undefined => {
+const offsetAt = (starts: ReadonlyArray<number>, at: Position): number | undefined => {
   const start = starts[at.line];
 
   return start === undefined ? undefined : start + at.column;
@@ -42,7 +42,7 @@ const folded = (text: string): { readonly text: string; readonly offsets: Readon
 };
 
 /** Where `snippet` (folded) occurs in the folded text, as [from, to) offsets of the original text, one per occurrence. */
-const spansOf = (text: string, snippet: string): ReadonlyArray<readonly [number, number]> => {
+const spansIn = (text: string, snippet: string): ReadonlyArray<readonly [number, number]> => {
   const { text: flat, offsets } = folded(text);
   const wanted = fold(snippet);
   const at: Array<number> = [];
@@ -71,7 +71,7 @@ const refuse = (reason: Refused["reason"], at: ReadonlyArray<Position> = []) =>
  */
 export const find = (text: string, made: ReadonlyArray<Made>, plant: Plant): Result.Result<Found, Refused> => {
   const starts = lineStarts(text);
-  const inside = plant.within === undefined ? undefined : spansOf(text, plant.within);
+  const inside = plant.within === undefined ? undefined : spansIn(text, plant.within);
 
   if (inside !== undefined && inside.length !== 1) {
     return refuse("within_not_once");
@@ -81,8 +81,8 @@ export const find = (text: string, made: ReadonlyArray<Made>, plant: Plant): Res
   const replacement = fold(plant.replacement);
 
   const matches = made.flatMap((mutant) => {
-    const from = offsetOf(starts, mutant.location.start);
-    const to = offsetOf(starts, mutant.location.end);
+    const from = offsetAt(starts, mutant.location.start);
+    const to = offsetAt(starts, mutant.location.end);
 
     if (from === undefined || to === undefined || mutant.mutatorName !== plant.mutator) {
       return [];

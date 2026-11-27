@@ -22,9 +22,10 @@ type Entry = string | { readonly text: string; readonly symlink: true };
 
 type Files = Readonly<Record<string, Entry>>;
 
-const textOf = (entry: Entry) => (typeof entry === "string" ? entry : entry.text);
+const entryText = (entry: Entry) => (typeof entry === "string" ? entry : entry.text);
 
 const missing = (method: string, path: string) =>
+  // oxlint-disable-next-line fabrika/no-hand-tag -- edge: Effect's PlatformError takes its system error tag as `_tag`
   PlatformError.systemError({ _tag: "NotFound", module: "FileSystem", method, pathOrDescriptor: path });
 
 export const world = (root: string, files: Files) => {
@@ -41,14 +42,14 @@ export const world = (root: string, files: Files) => {
       readFileString: (path) => {
         const entry = held.get(relative(path));
 
-        return entry === undefined ? Effect.fail(missing("readFileString", path)) : Effect.succeed(textOf(entry));
+        return entry === undefined ? Effect.fail(missing("readFileString", path)) : Effect.succeed(entryText(entry));
       },
       readFile: (path) => {
         const entry = held.get(relative(path));
 
         return entry === undefined
           ? Effect.fail(missing("readFile", path))
-          : Effect.succeed(new TextEncoder().encode(textOf(entry)));
+          : Effect.succeed(new TextEncoder().encode(entryText(entry)));
       },
       exists: (path) => Effect.succeed(held.has(relative(path)) || folder(path)),
     }),
@@ -105,7 +106,7 @@ const WORDS = [
 export const Words = Schema.Array(Schema.Literals(WORDS)).check(Schema.isBetweenLength(2, 8));
 
 /** A file name's slug from drawn words. */
-export const slugOf = (words: ReadonlyArray<string>) => words.slice(0, 3).join("-");
+export const slug = (words: ReadonlyArray<string>) => words.slice(0, 3).join("-");
 
 /** A file of `count` lines of `width` characters, each ending in a newline: `wc -l` counts `count` of them. */
 export const fileLines = (count: number, width: number) => `${"x".repeat(width)}\n`.repeat(count);

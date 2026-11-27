@@ -380,7 +380,7 @@ export const built = (id: FlowId, text: string): Effect.Effect<Built, never, Sco
     const object = id === "proof" ? proofFor("transport/other-key") : proofFor(FLOW_NAME);
     const values = id === "missing" ? { decoy: text } : { [ITEM]: text };
 
-    const environmentOf = () => {
+    const caseEnvironment = () => {
       switch (id) {
         case "store":
           return environment(
@@ -401,7 +401,7 @@ export const built = (id: FlowId, text: string): Effect.Effect<Built, never, Sco
       }
     };
 
-    const context = yield* Layer.build(environmentOf()).pipe(Effect.orDie);
+    const context = yield* Layer.build(caseEnvironment()).pipe(Effect.orDie);
 
     const facts = Context.getOrUndefined(context, MemoryStore.Recorded);
 
