@@ -1,6 +1,6 @@
 // F17: the types of fetch, its two raw calls, the slot and the layers that need a file system. Compile the exact expressions, never execute them.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Effect } from "effect";
+import type { Effect, Scope } from "effect";
 import { type Layer, type Option, type Redacted } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/process";
@@ -14,7 +14,8 @@ import type * as Repository from "./Repository.ts";
 type Fails = Repository.GitUnavailable | Repository.TimedOut;
 
 // Plant (F17): capture the slot at layer build, so `fetch` needs nothing and the `@ts-expect-error` goes unused; type the password `string`; add
-// `Scope` to `fetch`'s requirement; leave `HistoryTooShort` out of its errors.
+// `Scope` to the service's `fetch` requirement; leave `HistoryTooShort` out of its errors; type `stow`'s error `GitUnavailable | TimedOut`; leave `Raw["fetch"]`
+// answering the refs; take `Scope` out of `Raw["fetch"]`'s requirement.
 const calls = (repo: Repository.Repository["Service"], remote: Remote.Remote, text: string, under: RefName) => {
   expectTypeOf<Repository.Repository["Service"]["fetch"]>().toEqualTypeOf<
     (request: {
@@ -38,17 +39,23 @@ const calls = (repo: Repository.Repository["Service"], remote: Remote.Remote, te
     (remote: Remote.Remote) => Effect.Effect<Remote.Url, Remote.NoSuchRemote | Remote.BadRemoteUrl | Fails>
   >();
 
+  // The adapter's fetch answers what it read and the one step that adds it, and needs the scope `make` gives it.
   expectTypeOf<Repository.Raw["fetch"]>().toEqualTypeOf<
     (request: {
       readonly url: Remote.Url;
       readonly under: RefName;
       readonly credential: Option.Option<Credentials.Credential>;
     }) => Effect.Effect<
-      ReadonlyArray<Ref>,
+      Repository.Fetched,
       Remote.FetchFailed | Repository.HistoryTooShort | Repository.TooMany | Repository.RefNotCommit | Fails,
-      never
+      Scope.Scope
     >
   >();
+
+  expectTypeOf<Repository.Fetched["refs"]>().toEqualTypeOf<ReadonlyArray<Ref>>();
+
+  // The stow has no time limit, so it never fails `TimedOut`: its one failure is a disk that refuses.
+  expectTypeOf<Repository.Fetched["stow"]>().toEqualTypeOf<Effect.Effect<void, Repository.GitUnavailable>>();
 
   expectTypeOf<Credentials.Credential["password"]>().toEqualTypeOf<Redacted.Redacted<string>>();
   expectTypeOf(Credentials.none).toEqualTypeOf<Layer.Layer<Credentials.Credentials>>();
@@ -75,7 +82,7 @@ const layers = () => {
   expectTypeOf<Parameters<typeof MemoryRepository.layer>[2]>().toEqualTypeOf<MemoryRepository.Remotes | undefined>();
 };
 
-it("type: fetch asks the slot for its requirement and answers the refs and errors the plan gives; the raw calls hold no slot; /process needs a file system", () => {
+it("type: fetch asks the slot for its requirement and answers the refs and errors the plan gives; the raw fetch answers Fetched and needs a Scope, and its stow cannot time out; the raw calls hold no slot; /process needs a file system", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(calls).toBeFunction();
   expectTypeOf(layers).toBeFunction();

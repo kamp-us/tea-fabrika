@@ -1,10 +1,10 @@
 // Seeds in-memory stores for the laws of the in-memory adapter and the shared laws it runs: a history becomes a store with
 // its trees and ids computed as git computes them, its refs pointed and its shallow commits marked.
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Option, Ref as Cell, Schema } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
-import type { FetchSeeded, FetchSubject } from "./Fetch.test-support.ts";
+import { holdGate, type FetchSeeded, type FetchSubject } from "./Fetch.test-support.ts";
 import type { FileSpec, FlatSignature, History } from "./History.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
 import * as Ref from "./Ref.ts";
@@ -114,7 +114,8 @@ const ORIGIN = Schema.decodeUnknownSync(Remote.Name)("origin");
 
 /**
  * A subject for the laws of fetch: the remote and the local repository are two stores, the local one knows the remote by the name `origin` and
- * by one URL, and the remote store is read as it is at each fetch, so a law moves one of its refs between two fetches.
+ * by one URL, and the remote store is read as it is at each fetch, so a law moves one of its refs between two fetches. A fetch can be held in one place,
+ * the remote store's read: the read runs, and then waits.
  */
 export const memoryFetchSubject: FetchSubject = {
   seed: (remote, local, config) =>
@@ -124,9 +125,21 @@ export const memoryFetchSubject: FetchSubject = {
       const remoteContext = yield* Layer.build(MemoryRepository.layer(there.store, config));
       const remoteStore = Context.get(remoteContext, MemoryRepository.MemoryStore);
 
+      // The step the next read of the remote store waits in, once, if a law armed one.
+      const armed = yield* Cell.make<Option.Option<Effect.Effect<void>>>(Option.none());
+
+      const read = Effect.gen(function* () {
+        const held = yield* remoteStore.get;
+        const waiting = yield* Cell.getAndSet(armed, Option.none());
+
+        yield* Option.getOrElse(waiting, () => Effect.void);
+
+        return held;
+      });
+
       const remotes: MemoryRepository.Remotes = {
         names: new Map([[ORIGIN, REMOTE_URL]]),
-        stores: new Map([[REMOTE_URL, remoteStore.get]]),
+        stores: new Map([[REMOTE_URL, read]]),
       };
 
       const context = yield* Layer.build(MemoryRepository.layer(here.store, config, remotes));
@@ -144,6 +157,16 @@ export const memoryFetchSubject: FetchSubject = {
         shallow: Effect.map(store.get, (held) => held.shallow.size > 0),
         fingerprint: store.get,
         hidden: [],
+        holds: ["read"],
+        hold: () =>
+          Effect.gen(function* () {
+            const { gate, hold } = yield* holdGate;
+            yield* Cell.set(armed, Option.some(hold));
+
+            return gate;
+          }),
+        packs: Effect.succeed([]),
+        garbage: Effect.succeed(0),
         moveRemoteRef: (ref, commit) =>
           Effect.gen(function* () {
             const held = yield* remoteStore.get;

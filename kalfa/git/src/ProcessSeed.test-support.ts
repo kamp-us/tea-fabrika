@@ -2,12 +2,12 @@
 // history, the marks read back for the ids, git's own `shallow` file for a shallow history. Real git runs in
 // temp folders, so only an integration law imports this file.
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Config, Context, Effect, Layer, Predicate, Schema, type Scope, Stream } from "effect";
+import { Config, Context, Effect, Layer, Option, Predicate, Ref as Cell, Schema, type Scope, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as CommitId from "./CommitId.ts";
-import type { FetchSeeded, FetchSubject } from "./Fetch.test-support.ts";
+import { holdGate, type FetchSeeded, type FetchSubject, type Hold } from "./Fetch.test-support.ts";
 import type { FileSpec, FlatSignature, History } from "./History.test-support.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Remote from "./Remote.ts";
@@ -171,10 +171,11 @@ export const fastImport = (dir: string, stream: Uint8Array): Effect.Effect<Reado
     return ids;
   }).pipe(Effect.orDie);
 
-/** The service on the repository at `dir`, built with the real spawner and the real file system in the context. */
+/** The service on the repository at `dir`, built with the real spawner and the real file system in the context, or with `fileSystem` in its place. */
 export const openRepository = (
   dir: string,
   settings: Settings,
+  fileSystem: FileSystem.FileSystem | undefined = undefined,
 ): Effect.Effect<
   Repository.Repository["Service"],
   Repository.GitTooOld | Repository.NoRepository | Repository.GitUnavailable | Repository.TimedOut,
@@ -182,7 +183,7 @@ export const openRepository = (
 > =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const fs = yield* FileSystem.FileSystem;
+    const fs = fileSystem ?? (yield* FileSystem.FileSystem);
 
     const context = yield* Layer.build(
       ProcessRepository.layer({ path: dir, settings }).pipe(
@@ -212,7 +213,11 @@ const treeIds = (
           .map((line) => Schema.decodeUnknownSync(Tree.TreeId)(line)),
       );
 
-const seed = (history: History, settings: Settings): Effect.Effect<Seeded, never, Needs | Scope.Scope> =>
+const seed = (
+  history: History,
+  settings: Settings,
+  wrap: (fs: FileSystem.FileSystem) => FileSystem.FileSystem = (fs) => fs,
+): Effect.Effect<Seeded, never, Needs | Scope.Scope> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -228,7 +233,7 @@ const seed = (history: History, settings: Settings): Effect.Effect<Seeded, never
     }
 
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const repository = yield* Effect.orDie(openRepository(dir, settings));
+    const repository = yield* Effect.orDie(openRepository(dir, settings, wrap(fs)));
 
     const fingerprint = Effect.all(
       [git(dir, ["for-each-ref", "--format=%(objectname) %(refname)"]), git(dir, ["count-objects", "-v"])],
@@ -310,9 +315,17 @@ export const setConfigTable = (dir: string): Effect.Effect<void, never, Needs> =
 
 const urlFrom = (text: string): Remote.Url => Schema.decodeUnknownSync(Remote.Url)(text);
 
+/** The kind of pack file a rename moves in, by its new name. */
+const packKind = (to: string): Hold | undefined => {
+  const kind = to.slice(to.lastIndexOf(".") + 1);
+
+  return kind === "pack" || kind === "rev" || kind === "idx" ? kind : undefined;
+};
+
 /**
  * A subject for the laws of fetch: the remote and the local repository are two real bare repositories, and the local one's config names the remote
- * `origin`, by its path. The remote is also reached by its path and by a `file://` URL, with no name.
+ * `origin`, by its path. The remote is also reached by its path and by a `file://` URL, with no name. The local repository's file system is the real one,
+ * wrapped so a fetch can be held once after a call it names: the alternates file written, the stow's listing, and the rename of each pack file.
  */
 export const processFetchSubject: FetchSubject = {
   seed: (remote, local, settings) =>
@@ -320,8 +333,38 @@ export const processFetchSubject: FetchSubject = {
       const services = yield* Layer.build(NodeServices.layer);
 
       return yield* Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        const armed = yield* Cell.make<Option.Option<{ readonly at: Hold; readonly hold: Effect.Effect<void> }>>(
+          Option.none(),
+        );
+
+        // The call that matches the armed place runs, and then waits there, once.
+        const reached = (at: Hold | undefined) =>
+          Effect.gen(function* () {
+            const now = yield* Cell.get(armed);
+
+            if (at !== undefined && Option.isSome(now) && now.value.at === at) {
+              yield* Cell.set(armed, Option.none());
+              yield* now.value.hold;
+            }
+          });
+
+        const gated = (real: FileSystem.FileSystem): FileSystem.FileSystem => ({
+          ...real,
+          writeFileString: (path, data, options) =>
+            Effect.tap(real.writeFileString(path, data, options), () =>
+              reached(path.endsWith("/objects/info/alternates") ? "alternates" : undefined),
+            ),
+          readDirectory: (path, options) =>
+            Effect.tap(real.readDirectory(path, options), () =>
+              reached(path.endsWith("/objects/pack") ? "listing" : undefined),
+            ),
+          rename: (from, to) => Effect.tap(real.rename(from, to), () => reached(packKind(to))),
+        });
+
         const there = yield* seed(remote, settings);
-        const here = yield* seed(local, settings);
+        const here = yield* seed(local, settings, gated);
         const remoteDir = there.hidden[0] ?? "";
         const localDir = here.hidden[0] ?? "";
         yield* git(localDir, ["config", "remote.origin.url", remoteDir]);
@@ -347,6 +390,19 @@ export const processFetchSubject: FetchSubject = {
               Effect.asVoid,
               Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
             ),
+          holds: ["alternates", "listing", "pack", "rev", "idx"],
+          hold: (at) =>
+            Effect.gen(function* () {
+              const { gate, hold } = yield* holdGate;
+              yield* Cell.set(armed, Option.some({ at, hold }));
+
+              return gate;
+            }),
+          packs: Effect.orDie(fs.readDirectory(`${localDir}/objects/pack`)),
+          garbage: git(localDir, ["count-objects", "-v"]).pipe(
+            Effect.map((printed) => Number(/^garbage: (\d+)$/m.exec(printed)?.[1] ?? Number.NaN)),
+            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          ),
         };
 
         return seeded;

@@ -26,7 +26,7 @@ const TimeText = Schema.String.check(
  *
  * **Details**
  *
- * `commits` is the most commits one walk, or one merge-base answer, holds. `refs` is the most refs one `readRefs` answer holds. `bytes` is the most bytes one commit object holds, and the most stderr an error keeps. `files` is the most files one diff names, and a file that changes kind counts once. `diff` is the most bytes of file content one diff compares: each changed file's content before and after. `blob` is the most bytes of one file that `readFile` reads. `time` is the longest one call may take, as duration text above zero such as `"10 seconds"`. `kill` is how long git has to stop, once a call has run out of time, before it is killed, as duration text above zero such as `"5 seconds"`. A call that would pass a limit fails and never answers a cut list.
+ * `commits` is the most commits one walk, or one merge-base answer, holds. `refs` is the most refs one `readRefs` answer holds. `bytes` is the most bytes one commit object holds, and the most stderr an error keeps. `files` is the most files one diff names, and a file that changes kind counts once. `diff` is the most bytes of file content one diff compares: each changed file's content before and after. `blob` is the most bytes of one file that `readFile` reads. `time` is the longest one call may take, as duration text above zero such as `"10 seconds"`, except that a fetch's stow is never cut. `kill` is how long git has to stop, once a call has run out of time, before it is killed, as duration text above zero such as `"5 seconds"`. A call that would pass a limit fails and never answers a cut list.
  *
  * @category models
  */

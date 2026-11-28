@@ -7,12 +7,16 @@
 // that shares the text of `under`; (d) nothing; (f) the local repository holds part of the remote's history, and a branch of the same name
 // at another commit; (h) the remote by name; (i) a name with no remote; (j) by each URL; (k) a URL that reaches nothing; (l) a remote whose
 // history is cut; (m) a remote ref that moves; (n) one more ref than `limits.refs` and exactly that many; (o) a credential with
-// awkward text; (p) the slot fails; (q) the local repository is shallow.
+// awkward text; (p) the slot fails; (q) the local repository is shallow. F21 holds a fetch where the time limit can fire: (a) before the read answers, (b) after the
+// stow's listing, (c) after the `.pack` rename, (d) after the `.rev` rename, (e) after the `.idx` rename.
 import { describe, expect, it } from "@effect/vitest";
 import {
   Arbitrary,
   Cause,
+  Deferred,
+  Duration,
   Effect,
+  Fiber,
   Layer,
   Logger,
   Option,
@@ -24,6 +28,7 @@ import {
   Schema,
   type Scope,
 } from "effect";
+import { TestClock } from "effect/testing";
 import type * as CommitId from "./CommitId.ts";
 import * as Credentials from "./Credentials.ts";
 import {
@@ -57,6 +62,34 @@ import * as Tree from "./Tree.ts";
 // What a runner gives
 // ---------------------------------------------------------------------------------------------------------
 
+/** Where a subject can hold a fetch, each after the step it names has run: the remote's read, the alternates file, the stow's listing, and each rename of a pack's file. */
+export type Hold = "read" | "alternates" | "listing" | "pack" | "rev" | "idx";
+
+/** A hold the law waits at: `reached` ends when the fetch is there, and the fetch goes on after `open`. */
+export interface Gate {
+  readonly reached: Effect.Effect<void>;
+  readonly open: Effect.Effect<void>;
+}
+
+/** A drawn time limit in whole seconds, as F18 and F14 draw theirs. */
+const timeArb = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 3600 })));
+
+// Lets every fiber that can run, run, before the clock moves.
+const settle = Effect.forEach(Array.from({ length: 50 }), () => Effect.yieldNow, { concurrency: 1, discard: true });
+
+/** A gate, and the step the held fetch runs: it says it is there, and waits to be opened. */
+export const holdGate: Effect.Effect<{ readonly gate: Gate; readonly hold: Effect.Effect<void> }> = Effect.gen(
+  function* () {
+    const reached = yield* Deferred.make<void>();
+    const opened = yield* Deferred.make<void>();
+
+    return {
+      gate: { reached: Deferred.await(reached), open: Effect.asVoid(Deferred.succeed(opened, undefined)) },
+      hold: Effect.andThen(Deferred.succeed(reached, undefined), Deferred.await(opened)),
+    };
+  },
+);
+
 /** A local repository that fetches from a remote, and what the laws may look at. */
 export interface FetchSeeded {
   /** The local repository: the service the laws call `fetch` on. */
@@ -83,6 +116,14 @@ export interface FetchSeeded {
   readonly hidden: ReadonlyArray<string>;
   /** Points a ref of the remote at its commit `commit`, by index. */
   readonly moveRemoteRef: (ref: string, commit: number) => Effect.Effect<void>;
+  /** Every place this subject can hold a fetch of the local repository, in the order a fetch passes them. */
+  readonly holds: ReadonlyArray<Hold>;
+  /** Arms the next fetch of the local repository to wait at `at`, once, after the step it names has run. */
+  readonly hold: (at: Hold) => Effect.Effect<Gate>;
+  /** The names in the local repository's pack folder: none where there is no folder. */
+  readonly packs: Effect.Effect<ReadonlyArray<string>>;
+  /** How many files `git count-objects -v` calls garbage in the local repository: a pack with no index is one. None where there are no files. */
+  readonly garbage: Effect.Effect<number>;
 }
 
 export interface FetchSubject {
@@ -757,6 +798,117 @@ export const suite = (name: string, subject: FetchSubject, options: SuiteOptions
             "too-many",
             "too-short",
           ]);
+        }),
+      run,
+    );
+
+    // Plant (F21): copy the commits into the store before the limit ends, as a finalizer, so a fetch that timed out before its read answered adds commits, red at (a);
+    // run the stow inside the time limit (`Effect.timeoutOrElse` around it), so a limit that fires after the listing or a rename answers TimedOut, red at (b) to (e) and
+    // at (c) with a `.pack` and no `.idx`, garbage 1; drop the `pack.writeReverseIndex` pin, so no `.rev` is written, red on every git before 2.41 (the hold at (d) is never reached). F19 and F20 hold the rename order, not this law.
+    it.effect.prop(
+      "F21 cut short at every hold the subject has: before the read answers, the call fails TimedOut, each remote commit this repository lacked still reads NoSuchCommit and no pack file was added; at any hold inside or after the stow, the call answers the refs, every answered commit reads back, every pack the fetch added has its .pack, .rev and .idx, and git count-objects -v says garbage: 0; the carrier reached every hold its subject names",
+      { texture: textureArb, time: timeArb },
+      ({ texture, time }) =>
+        Effect.gen(function* () {
+          const carrier = fetchCarrier(texture);
+
+          // The time limit is drawn, so the clock moves by the limit the repository holds and by no number the law knows.
+          const scenario: Scenario = {
+            ...carrier.scenarios.plain,
+            local: EMPTY,
+            settings: settings({ time: `${time} seconds` }),
+          };
+
+          const under = "refs/heads/main";
+          const answered = refsModel(scenario.remote, under);
+          const slot = yield* recorder(Option.none());
+          const places: Array<Hold> = [];
+          let named: ReadonlyArray<Hold> = [];
+
+          // One fresh repository for each hold, since a fetch that answered has added what the next one would have added. The first seed says which holds there are.
+          for (let at = 0; at === 0 || at < named.length; at += 1) {
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const seeded = yield* subject.seed(scenario.remote, scenario.local, scenario.settings);
+                named = seeded.holds;
+                const hold = found(seeded.holds[at], "hold");
+                const place = `the hold at ${hold}`;
+                const before = yield* seeded.packs;
+
+                const missing = yield* Effect.filter(
+                  seeded.remoteIds,
+                  (id) => Effect.map(Effect.result(seeded.repository.readCommit(id)), Result.isFailure),
+                  { concurrency: 1 },
+                );
+
+                expect(missing.length, `${place}: the repository lacks the remote's commits`).toBeGreaterThan(0);
+
+                const gate = yield* seeded.hold(hold);
+                const fiber = yield* Effect.forkDetach(Effect.result(call(seeded, seeded.named, under, slot.layer)));
+
+                const there = yield* Effect.raceFirst(
+                  Effect.as(gate.reached, true),
+                  Effect.as(Fiber.await(fiber), false),
+                );
+
+                expect(there, `${place}: the fetch reached it`).toBe(true);
+
+                // The time limit fires while the fetch waits.
+                yield* settle;
+                yield* TestClock.adjust(Duration.seconds(time));
+                yield* settle;
+
+                if (hold === "read" || hold === "alternates") {
+                  const result = yield* Fiber.join(fiber);
+                  expect(Result.isFailure(result), `${place}: the call fails`).toBe(true);
+
+                  if (Result.isFailure(result)) {
+                    expectFailure(result.failure, Repository.TimedOut, {}, place);
+                  }
+
+                  for (const id of missing) {
+                    const read = yield* Effect.result(seeded.repository.readCommit(id));
+                    expect(Result.isFailure(read), `${place}: ${id} is still missing`).toBe(true);
+
+                    if (Result.isFailure(read)) {
+                      expect(Schema.is(Repository.NoSuchCommit)(read.failure), `${place}: ${id} is NoSuchCommit`).toBe(
+                        true,
+                      );
+                    }
+                  }
+
+                  expect(yield* seeded.packs, `${place}: no pack file was added`).toEqual(before);
+                } else {
+                  expect(fiber.pollUnsafe(), `${place}: the stow is not cut by the limit`).toBeUndefined();
+                  yield* gate.open;
+                  const result = yield* Fiber.join(fiber);
+                  expect(Result.isSuccess(result), `${place}: the call answers`).toBe(true);
+
+                  if (Result.isSuccess(result)) {
+                    expect(result.success, `${place}: the refs`).toEqual(modelRefs(seeded, answered));
+                  }
+
+                  yield* readBack(seeded, scenario, answered, place);
+
+                  const added = (yield* seeded.packs).filter(
+                    (name) => !before.includes(name) && name.startsWith("pack-"),
+                  );
+
+                  for (const stem of new Set(added.map((name) => name.replace(/\.[^.]+$/, "")))) {
+                    for (const kind of ["pack", "rev", "idx"]) {
+                      expect(added, `${place}: ${stem} has its .${kind}`).toContain(`${stem}.${kind}`);
+                    }
+                  }
+
+                  expect(yield* seeded.garbage, `${place}: git counts no garbage`).toBe(0);
+                }
+
+                places.push(hold);
+              }),
+            );
+          }
+
+          expect(places, "the carrier reached every hold its subject names").toEqual(named);
         }),
       run,
     );
