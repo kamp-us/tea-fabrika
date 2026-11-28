@@ -10,21 +10,23 @@ import * as change from "./change.ts";
 import type { Group } from "./check.ts";
 import { type SettingsError, stop } from "./error.ts";
 import type { Format } from "./format.ts";
-import { contents, type Names, repoPlace, userPlace } from "./place.ts";
+import { contents, inFile, type Names, repoPlace, userPlace } from "./place.ts";
 import { RemoveEmptyDir } from "./removeEmptyDir.ts";
 
 /** What one disk call is about: the edit it makes, and the file as a person reads it. */
 interface Call {
   readonly app: string;
   readonly kind: "set" | "remove";
+  /** Which file: the repo's or the user's. */
+  readonly file: Setting.File;
   readonly name: string;
   readonly names: Names;
   readonly edit: (text: string, names: Names) => Effect.Effect<string, SettingsError>;
 }
 
-/** The one error of a disk call: the file's own name, or another's, and the closing sentence that says the file was not changed. */
-const fail = (call: Call, reason: "read" | "write", text: string, cause?: unknown, file = call.name) =>
-  stop(call.app, reason, text, { file }, cause, `${call.name} was not changed.`);
+/** The one error of a disk call: the file's own name, or another's (its lock file), of the same kind, and the closing sentence that says the file was not changed. */
+const fail = (call: Call, reason: "read" | "write", text: string, cause?: unknown, name = call.name) =>
+  stop(call.app, reason, text, inFile(call.file, name), cause, `${call.name} was not changed.`);
 
 /** Why a write failed, as a sentence: a folder that is not there is the one reason a person can fix at once. */
 const unwritten = (call: Call, cause: PlatformError.PlatformError) =>
@@ -88,7 +90,12 @@ const take = (fs: FileSystem.FileSystem, call: Call, lock: string) =>
  * Runs the edit on the file's text under the lock: the answer goes into the lock, and one rename puts the lock over the file. Answers whether the file changed. An answer equal to the old text leaves the file alone.
  */
 const replace = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, call: Call, real: string, lock: string) {
-  const old = yield* contents(call.app, { path: real, name: call.name }, `${call.name} was not changed.`);
+  const old = yield* contents(
+    call.app,
+    { path: real, name: call.name, file: call.file },
+    `${call.name} was not changed.`,
+  );
+
   const next = yield* call.edit(old, call.names);
 
   if (next === old) {
@@ -156,7 +163,7 @@ const onDisk = Effect.fnUntraced(function* (call: Call, place: Place) {
 /** The two files' names a person reads, and the one file a call is about. */
 export interface Located {
   readonly names: Names;
-  readonly place: Place & { readonly name: string };
+  readonly place: Place & { readonly name: string; readonly file: Setting.File };
 }
 
 /**
@@ -178,7 +185,7 @@ export const locate = Effect.fnUntraced(function* (app: string, format: Format, 
  */
 const write = Effect.fnUntraced(function* (app: string, found: Located, kind: "set" | "remove", edit: Call["edit"]) {
   const { names, place } = found;
-  const changed = yield* onDisk({ app, kind, name: place.name, names, edit }, place);
+  const changed = yield* onDisk({ app, kind, file: place.file, name: place.name, names, edit }, place);
 
   yield* Effect.annotateCurrentSpan("kalfa.config.changed", changed);
 });

@@ -28,7 +28,7 @@ const update = Effect.fnUntraced(function* (setup: Setup, sinks: Sinks, held: He
       Effect.logWarning(error.message).pipe(
         Effect.annotateLogs({
           "kalfa.config.file": setup.names[file],
-          ...(error.line === undefined ? {} : { "kalfa.config.line": error.line }),
+          ...(error.place?.line === undefined ? {} : { "kalfa.config.line": error.place.line }),
         }),
         Effect.andThen(
           Effect.annotateCurrentSpan({ "kalfa.config.refused": true, "kalfa.config.reason": error.reason }),
@@ -50,7 +50,9 @@ export const follow = Effect.fnUntraced(function* (setup: Setup, sinks: Sinks, h
   const watches = yield* Effect.forEach(
     [
       { file: "repo" as const, place: repo },
-      ...(user.path === undefined ? [] : [{ file: "user" as const, place: { path: user.path, name: user.name } }]),
+      ...(user.path === undefined
+        ? []
+        : [{ file: "user" as const, place: { path: user.path, name: user.name, file: user.file } }]),
     ],
     ({ file, place }) =>
       Effect.map(Deferred.make<void>(), (ready) => ({

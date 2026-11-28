@@ -169,8 +169,11 @@ describe("S2, the start", () => {
 
           if (Schema.is(SettingGroup.SettingsError)(error)) {
             expect(error.reason).toBe("invalid");
-            expect(error.file, "names the file").toBe(".demo/demo.toml");
-            expect(error.line, "and the line of the key").toBe(drawn.pad + 2);
+            expect(error.place?._tag, "points at the repo file").toBe("repo");
+            expect(error.place, "at the line of the key").toMatchObject({
+              path: ".demo/demo.toml",
+              line: drawn.pad + 2,
+            });
           }
         }
       }),

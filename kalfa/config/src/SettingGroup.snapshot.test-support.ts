@@ -7,6 +7,7 @@
  */
 import { createHash } from "node:crypto";
 import { expect } from "@effect/vitest";
+import type * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import type { FileSystem, Path } from "effect";
 import {
   Cause,
@@ -38,7 +39,7 @@ import type { Settled } from "./internal/read.ts";
 import { hash, make, read } from "./internal/snapshot.ts";
 import { debounce, watched } from "./internal/window.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
-import { Reach } from "./SettingGroup.edit.test-support.ts";
+import { fileAt, Reach } from "./SettingGroup.edit.test-support.ts";
 import * as OldSnapshot from "./Snapshot.ts";
 import { Origin } from "./Sources.ts";
 
@@ -1218,6 +1219,9 @@ export const hiding = (draw: Draw, item: SettingGroup.Snapshot, secret: string):
 
 interface Refusal {
   readonly reason: string;
+  /** Where the fault is, as data. */
+  readonly place: Diagnostic.Place | undefined;
+  /** The file a person reads in the place, and its line: none for a variable's or a flag's place. */
   readonly file: string | undefined;
   readonly line: number | undefined;
   readonly message: string;
@@ -1260,7 +1264,7 @@ export const refusal = (exit: Exit.Exit<unknown, unknown>): Refusal => {
   expect(Exit.isFailure(exit), "the read fails").toBe(true);
 
   if (Exit.isSuccess(exit)) {
-    return { reason: "read", file: undefined, line: undefined, message: "", printed: "" };
+    return { reason: "read", place: undefined, file: undefined, line: undefined, message: "", printed: "" };
   }
 
   const errors = exit.cause.reasons.flatMap((reason) => (reason._tag === "Fail" ? [reason.error] : []));
@@ -1273,8 +1277,8 @@ export const refusal = (exit: Exit.Exit<unknown, unknown>): Refusal => {
   return Schema.is(SettingGroup.SettingsError)(error)
     ? {
         reason: error.reason,
-        file: error.file,
-        line: error.line,
+        place: error.place,
+        ...fileAt(error.place),
         message: error.message,
         printed: [
           Cause.pretty(exit.cause),
@@ -1284,7 +1288,7 @@ export const refusal = (exit: Exit.Exit<unknown, unknown>): Refusal => {
           written(error),
         ].join("\n"),
       }
-    : { reason: "not a SettingsError", file: undefined, line: undefined, message: "", printed: "" };
+    : { reason: "not a SettingsError", place: undefined, file: undefined, line: undefined, message: "", printed: "" };
 };
 
 // ---------------------------------------------------------------------------------------------

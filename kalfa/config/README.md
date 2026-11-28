@@ -122,6 +122,17 @@ A `read` refusal says why the read failed, from the failure's kind and its POSIX
   demo did not start.
 ```
 
+A refusal also says where the fault is as data, so a program never reads a message to find out. `place` is a `Diagnostic.Place`
+(`@kalfa/diagnostics/Diagnostic`) of the kind the fault has: the repo file (`repo`), the user file (`home`), an environment variable
+(`environment`) or a flag (`flag`), with a file's line when it is known. A required setting nothing sets points at the first file
+it may be set in, with no line, since that is where the fix goes. `message` is made from `fault`, `place` and `closing`.
+
+An error with a place also carries a diagnostic, read with `Diagnostic.fromError`: the code of its reason (`config/version`,
+`config/syntax`, `config/unknown-setting`, `config/scope`, `config/invalid`, `config/missing`, `config/read`, `config/edit` or
+`config/write`), its `fault` as the message, its place, and one fixed hint for the reason. The hint holds no app, value, path or
+login. A fault with no place carries none: a snapshot that does not fit, a typed name that is no setting. A running `version`
+that is not a version is the program's own mistake and stops the program with a defect, not a refusal.
+
 The error's `cause` is kept, as a `Hidden.Cause` (`@kalfa/diagnostics/Hidden`), since a platform error prints the path it failed on:
 no rendering shows it, and every codec, `Schema.toCodecJson` included, writes it as `<redacted>`. `SnapshotError`'s cause is held the same
 way. Code that must see a cause reads it on purpose with `Redacted.value`. Every refusal ends the span of its call: `config.layer`, `config.set`,

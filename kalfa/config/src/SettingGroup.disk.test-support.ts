@@ -10,10 +10,11 @@ import { inspect } from "node:util";
  * Every class is built from the drawn seeds in every run, none is left to chance, and each law keeps the ids it reached and fails when one is missing (slice 2's `Reach`). An id is the class and the case, as `u:home`.
  */
 import { expect } from "@effect/vitest";
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { Cause, ConfigProvider, Effect, Exit, FileSystem, Path, PlatformError, Result, Schema } from "effect";
 import { Setting, SettingGroup } from "./index.ts";
 import type * as MemoryFiles from "./MemoryFiles.test-support.ts";
-import { Draw } from "./SettingGroup.edit.test-support.ts";
+import { Draw, fileAt } from "./SettingGroup.edit.test-support.ts";
 
 export const ROOT = "/work";
 
@@ -206,6 +207,9 @@ export const Answer = Schema.TaggedUnion({
   done: {},
   failed: {
     reason: Schema.String,
+    /** Where the fault is, as data. */
+    place: Schema.UndefinedOr(Diagnostic.Place),
+    /** The file a person reads in the place, and its line: none for a variable's or a flag's place. */
     file: Schema.UndefinedOr(Schema.String),
     line: Schema.UndefinedOr(Schema.Int),
     message: Schema.String,
@@ -256,8 +260,8 @@ export const answer = (exit: Exit.Exit<void, unknown>): Answer => {
   return Schema.is(SettingGroup.SettingsError)(error)
     ? Answer.cases.failed.make({
         reason: error.reason,
-        file: error.file,
-        line: error.line,
+        place: error.place,
+        ...fileAt(error.place),
         message: error.message,
         printed: [
           Cause.pretty(exit.cause),
@@ -269,6 +273,7 @@ export const answer = (exit: Exit.Exit<void, unknown>): Answer => {
       })
     : Answer.cases.failed.make({
         reason: "not a SettingsError",
+        place: undefined,
         file: undefined,
         line: undefined,
         message: "",

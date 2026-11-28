@@ -18,6 +18,7 @@
 // Every law is a property over generated inputs, in memory, with the files in MemoryFiles.test-support.ts and Effect's
 // own `fromEnv` over a record for the environment.
 import { expect, it } from "@effect/vitest";
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { runsFor } from "@kampus/vitest";
 import {
   Cause,
@@ -35,6 +36,7 @@ import {
 } from "effect";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
+import { fileAt } from "./SettingGroup.edit.test-support.ts";
 
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
 
@@ -237,6 +239,9 @@ const start = (group: Group, scene: Scene) => {
 /** What a start left, as plain data: the one error's parts, or `started`. */
 interface Seen {
   readonly reason: string;
+  /** Where the fault is, as data. */
+  readonly place: Diagnostic.Place | undefined;
+  /** The file a person reads in the place, and its line: none for a variable's or a flag's place. */
   readonly file: string | undefined;
   readonly line: number | undefined;
   readonly message: string;
@@ -246,7 +251,7 @@ interface Seen {
 
 const seen = (exit: Exit.Exit<unknown, unknown>): Seen => {
   if (Exit.isSuccess(exit)) {
-    return { reason: "started", file: undefined, line: undefined, message: "", printed: "" };
+    return { reason: "started", place: undefined, file: undefined, line: undefined, message: "", printed: "" };
   }
 
   const errors = exit.cause.reasons.flatMap((reason) => (reason._tag === "Fail" ? [reason.error] : []));
@@ -260,12 +265,12 @@ const seen = (exit: Exit.Exit<unknown, unknown>): Seen => {
   return Schema.is(SettingGroup.SettingsError)(error)
     ? {
         reason: error.reason,
-        file: error.file,
-        line: error.line,
+        place: error.place,
+        ...fileAt(error.place),
         message: error.message,
         printed: [Cause.pretty(exit.cause), error.message, String(error.cause)].join("\n"),
       }
-    : { reason: "not a SettingsError", file: undefined, line: undefined, message: "", printed: "" };
+    : { reason: "not a SettingsError", place: undefined, file: undefined, line: undefined, message: "", printed: "" };
 };
 
 const mustStart = (exit: Exit.Exit<Loaded, unknown>): Loaded => {
@@ -296,8 +301,9 @@ const expectStop = (error: Seen, app: string, entry: Named, scope: Scope, label:
   const names = variable(app, entry);
 
   expect(error.reason, `${label}: ${error.message}`).toBe("scope");
-  expect(error.file, label).toBeUndefined();
-  expect(error.line, label).toBeUndefined();
+  expect(error.place, `${label}: the variable that names it is the place`).toEqual(
+    Diagnostic.Place.cases.environment.make({ name: names }),
+  );
   expect(error.message.startsWith(`${names}: ${name} may be set only in `), `${label}: ${error.message}`).toBe(true);
   expect(error.message.includes(`--${name}`), label).toBe(false);
   expect(error.message.endsWith(`${app} did not start.`), label).toBe(true);
@@ -767,6 +773,9 @@ it.effect.prop(
       );
 
       expect(flagged.reason).toBe("scope");
+      expect(flagged.place, "a flag handed for a file-only setting is the place").toEqual(
+        Diagnostic.Place.cases.flag.make({ name: `--${named(fileOnlyEntry)}` }),
+      );
       expect(flagged.message.startsWith(`--${named(fileOnlyEntry)}:`), flagged.message).toBe(true);
       expect(flagged.message.includes(variable(app, fileOnlyEntry))).toBe(false);
       reached.add("flag");

@@ -13,7 +13,7 @@ import { equal, prefix } from "./edit.ts";
 import { type SettingsError, stop } from "./error.ts";
 import { type Document, Fault, type Format } from "./format.ts";
 import { segments } from "./names.ts";
-import { type Names, parse } from "./place.ts";
+import { inFile, type Names, parse } from "./place.ts";
 
 /** The file an edit is about: which one, and the names a person reads for both. */
 interface Place {
@@ -67,7 +67,7 @@ const change = Effect.fnUntraced(function* (
   const closing = `${file} was not changed.`;
 
   const refuse = (reason: SettingsError["reason"], words: string, line?: number, cause?: unknown) =>
-    stop(app, reason, words, { file, line }, cause, closing);
+    stop(app, reason, words, inFile(place.file, file, line), cause, closing);
 
   // The setting is one of the group's, found by its name, and the file may hold it.
   const own = group.settings.find((s) => s.name === setting.name);
@@ -86,7 +86,7 @@ const change = Effect.fnUntraced(function* (
     onSome: (given) =>
       Schema.encodeUnknownEffect(Schema.toCodecJson(own.schema))(given).pipe(
         Effect.asSome,
-        Effect.mapError((error) => unfit(app, own, file, error.issue, closing)),
+        Effect.mapError((error) => unfit(app, own, place.file, file, error.issue, closing)),
       ),
   });
 
@@ -102,7 +102,7 @@ const change = Effect.fnUntraced(function* (
   });
 
   const path = segments(own.name);
-  const before = yield* Effect.fromResult(parse(app, format, file, text, closing));
+  const before = yield* Effect.fromResult(parse(app, format, { name: file, file: place.file }, text, closing));
 
   // The old value of this setting is left out: an edit is how a bad one is fixed or taken out.
   yield* whole(before.document, path);
@@ -128,7 +128,7 @@ const change = Effect.fnUntraced(function* (
     ),
   );
 
-  const after = yield* Effect.fromResult(parse(app, format, file, next, closing)).pipe(
+  const after = yield* Effect.fromResult(parse(app, format, { name: file, file: place.file }, next, closing)).pipe(
     Effect.mapError(() => refuse("edit", `changing ${own.name} would leave ${file} not valid ${format.name}.`)),
   );
 

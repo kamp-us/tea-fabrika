@@ -1,17 +1,17 @@
 /**
  * The whole-file check of a setting group: a file is read against the settings that may be set in it, and its first fault is the one error. It reads no file and starts nothing.
  */
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { Effect, Option, Predicate, Schema, SchemaAST, SchemaIssue, type SemVer } from "effect";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import type * as Setting from "../Declaration.ts";
-import { Origin } from "../Sources.ts";
 import { distance, drop, leaf, lineAt, type Path, same } from "./document.ts";
 import { prefix } from "./edit.ts";
-import { type Position, type SettingsError, stop } from "./error.ts";
+import { type SettingsError, stop } from "./error.ts";
 import type { Document } from "./format.ts";
 import { segments, variable } from "./names.ts";
-import type { Loaded, Names } from "./place.ts";
+import { inFile, type Loaded, type Names } from "./place.ts";
 
 export interface Group {
   readonly app: string;
@@ -21,7 +21,7 @@ export interface Group {
 /** The minimum version a repo asks for, and where it asks. */
 interface Minimum {
   readonly version: SemVer.SemVer;
-  readonly position: Position;
+  readonly place: Diagnostic.Place;
 }
 
 /** The minimum version the repo configuration asks for, or none. Fails when `<app>-version` does not read as a version. The message ends with `closing`, the start's own sentence when none is given. */
@@ -37,11 +37,11 @@ export const version = (
     return Result.succeed(Option.none());
   }
 
-  const position = { file: repo.name, line: lineAt(repo.document, [key]) };
+  const place = inFile("repo", repo.name, lineAt(repo.document, [key]));
 
   return Schema.decodeUnknownResult(Schema.SemVerFromString)(wanted).pipe(
-    Result.mapError(() => stop(app, "invalid", `${key} is not a version, as 1.2.3.`, position, undefined, closing)),
-    Result.map((asked) => Option.some({ version: asked, position })),
+    Result.mapError(() => stop(app, "invalid", `${key} is not a version, as 1.2.3.`, place, undefined, closing)),
+    Result.map((asked) => Option.some({ version: asked, place })),
   );
 };
 
@@ -129,7 +129,7 @@ const explain = (
   const own = settings.filter((s) => s.files.includes(file));
 
   const stopped = (reason: SettingsError["reason"], text: string, key: ReadonlyArray<string>) =>
-    stop(app, reason, text, { file: found.name, line: lineAt(found.document, key) }, undefined, closing);
+    stop(app, reason, text, inFile(file, found.name, lineAt(found.document, key)), undefined, closing);
 
   // A fault inside a setting's value (a member of a record, a field of a table) is the setting's own, at its own line: the member's key is part of the value, and a message never holds one.
   const holder = own.find((s) => reaches(s, path));
@@ -138,8 +138,8 @@ const explain = (
     const line = faultLine(found.document, path);
 
     return line === undefined
-      ? unfit(app, holder, found.name, issue, closing)
-      : refused(app, holder, Origin.cases.file.make({ file: found.name, line }), issue, closing);
+      ? unfit(app, holder, file, found.name, issue, closing)
+      : refused(app, holder, inFile(file, found.name, line), issue, closing);
   }
 
   if (own.some((s) => under(s, path))) {
@@ -225,20 +225,43 @@ const wanted = (s: Setting.Any, name: string, issue: SchemaIssue.Issue) => {
   return `${name} is not ${title ?? "a valid value"}.${tail}`;
 };
 
-/** The `invalid` error for a value its setting's schema refuses, naming where it was and never what it was. */
-export const refused = (app: string, s: Setting.Any, origin: Origin, issue: SchemaIssue.Issue, closing?: string) =>
-  Origin.matchOrElse(
-    origin,
-    {
-      file: ({ file, line }) => stop(app, "invalid", wanted(s, s.name, issue), { file, line }, undefined, closing),
-      default: () => stop(app, "invalid", wanted(s, s.name, issue), undefined, undefined, closing),
-    },
-    ({ name }) => stop(app, "invalid", wanted(s, name, issue), undefined, undefined, closing),
+/** The `invalid` error for a value its setting's schema refuses, naming where it was and never what it was. A variable's or a flag's message names it, and any other says the setting; with no place (a default its schema refuses) it names the setting and has none. */
+export const refused = (
+  app: string,
+  s: Setting.Any,
+  place: Diagnostic.Place | undefined,
+  issue: SchemaIssue.Issue,
+  closing?: string,
+) =>
+  stop(
+    app,
+    "invalid",
+    wanted(
+      s,
+      place === undefined
+        ? s.name
+        : Diagnostic.Place.match(place, {
+            repo: () => s.name,
+            home: () => s.name,
+            environment: ({ name }) => name,
+            flag: ({ name }) => name,
+          }),
+      issue,
+    ),
+    place,
+    undefined,
+    closing,
   );
 
 /** The `invalid` error for a value an edit was asked to write that its setting's schema refuses: the file is named, no line, and never the value. */
-export const unfit = (app: string, s: Setting.Any, file: string, issue: SchemaIssue.Issue, closing?: string) =>
-  stop(app, "invalid", wanted(s, s.name, issue), { file }, undefined, closing);
+export const unfit = (
+  app: string,
+  s: Setting.Any,
+  file: Setting.File,
+  name: string,
+  issue: SchemaIssue.Issue,
+  closing?: string,
+) => stop(app, "invalid", wanted(s, s.name, issue), inFile(file, name), undefined, closing);
 
 /** How a check of one file differs from the start's: the closing sentence, and one key left out. */
 interface Options {

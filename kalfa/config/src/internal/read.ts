@@ -1,6 +1,7 @@
 /**
  * Reading a setting group's files and resolving its settings from them: the steps a start and each later change to a file share, so the two cannot drift. A file is read, its minimum version checked (the repo's), and checked whole; then each setting takes the first source that holds it, by precedence, with its origin kept.
  */
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { Config, ConfigProvider, Effect, Option, Schema, SemVer } from "effect";
 import * as Rec from "effect/Record";
 import type * as Setting from "../Declaration.ts";
@@ -11,12 +12,18 @@ import { stop, unread } from "./error.ts";
 import type { Format } from "./format.ts";
 import { frozen } from "./frozen.ts";
 import { segments, variable } from "./names.ts";
-import { empty, type Loaded, load, type Names, type Place } from "./place.ts";
+import { empty, inFile, type Loaded, load, type Names, type Place } from "./place.ts";
 
-/** Where a configuration file is, and the name a person reads. The user's has no path where there is no home. */
+/** Where a configuration file is, the name a person reads, and which file it is. The user's has no path where there is no home. */
 interface Where {
   readonly path: string | undefined;
   readonly name: string;
+  readonly file: Setting.File;
+}
+
+/** A source that knows where it stands, as a person is told: the place of a value it holds. Kept beside `Source`, which is public and names a file by text only. */
+interface Placed extends Source {
+  readonly place: (origin: Origin) => Diagnostic.Place | undefined;
 }
 
 /** What a start and each later change share: the group, how its files are read, and the sources that are not files. */
@@ -57,11 +64,12 @@ const supported = Effect.fnUntraced(function* (setup: Setup, repo: Loaded) {
     return;
   }
 
-  const { version: asked, position } = minimum.value;
+  const { version: asked, place } = minimum.value;
 
+  // The running version is the program's own argument, so no person who edits a file can fix it: a bad one stops the program, and its text is not said.
   const running = yield* Schema.decodeUnknownEffect(Schema.SemVerFromString)(setup.version).pipe(
-    Effect.mapError(() =>
-      stop(app, "invalid", `${setup.version} is not a version, as 1.2.3.`, undefined, undefined, closing),
+    Effect.catch(() =>
+      Effect.die(new Error("The running app's version is not a version, as 1.2.3: pass one to SettingGroup.layer.")),
     ),
   );
 
@@ -70,22 +78,39 @@ const supported = Effect.fnUntraced(function* (setup: Setup, repo: Loaded) {
       app,
       "version",
       `this repo needs ${app} ${SemVer.format(asked)} or newer. You have ${SemVer.format(running)}.`,
-      position,
+      place,
       undefined,
       closing,
     );
   }
 });
 
+/** A file's source with the place of a value it holds: its file's kind, name and the value's line. A line of 0 is no line. */
+const inFiles = (file: Setting.File, source: Source): Placed => ({
+  ...source,
+  place: (origin) =>
+    Origin.matchOrElse(
+      origin,
+      { file: ({ file: name, line }) => inFile(file, name, line > 0 ? line : undefined) },
+      () => undefined,
+    ),
+});
+
 /** A text read as a variable's text is: one value, answered at every path the schema asks about. */
 export const textSource = (text: string) => ConfigProvider.make(() => Effect.succeed(ConfigProvider.makeValue(text)));
 
 /** The first source that holds the setting. */
-const holder = (setup: Setup, s: Setting.Any, sources: ReadonlyArray<Source>) =>
+const holder = (setup: Setup, s: Setting.Any, sources: ReadonlyArray<Placed>) =>
   Effect.findFirst(sources, (source) =>
     source.provider.load(segments(s.name)).pipe(
       Effect.map((node) => node !== undefined),
-      Effect.mapError((cause) => unread(setup.group.app, cause, { subject: s.name, closing: setup.closing })),
+      Effect.mapError((cause) =>
+        unread(setup.group.app, cause, {
+          subject: s.name,
+          place: Diagnostic.Place.cases.environment.make({ name: variable(setup.group.app, s.name) }),
+          closing: setup.closing,
+        }),
+      ),
     ),
   );
 
@@ -93,7 +118,7 @@ const holder = (setup: Setup, s: Setting.Any, sources: ReadonlyArray<Source>) =>
 const resolve = Effect.fnUntraced(function* (
   setup: Setup,
   s: Setting.Any,
-  files: Readonly<Record<Setting.File, Source>>,
+  files: Readonly<Record<Setting.File, Placed>>,
 ) {
   const { app } = setup.group;
   const { closing, names } = setup;
@@ -107,22 +132,24 @@ const resolve = Effect.fnUntraced(function* (
       app,
       "scope",
       `--${s.name}: ${s.name} may be set only in ${places(app, s, names)}.`,
-      undefined,
+      Diagnostic.Place.cases.flag.make({ name: `--${s.name}` }),
       undefined,
       closing,
     );
   }
 
   // A flag's text is read as a variable's is: one value, answered at every path the schema asks about.
-  const flag = Option.map(given, (text): Source => ({
+  const flag = Option.map(given, (text): Placed => ({
     provider: textSource(text),
     origin: () => Origin.cases.flag.make({ name: `--${s.name}` }),
+    place: () => Diagnostic.Place.cases.flag.make({ name: `--${s.name}` }),
   }));
 
   // An environment variable reads at its own name, so the origin names what was read.
-  const env: Source = {
+  const env: Placed = {
     provider: setup.provider.pipe(ConfigProvider.mapInput(() => [name])),
     origin: () => Origin.cases.env.make({ name }),
+    place: () => Diagnostic.Place.cases.environment.make({ name }),
   };
 
   // A file-only setting is never read from the environment: a variable that names it stops the start here, so the read below finds none. The check asks the source the read would ask, so it sees what the read would have taken, and it never decodes the text.
@@ -134,7 +161,7 @@ const resolve = Effect.fnUntraced(function* (
         app,
         "scope",
         `${name}: ${s.name} may be set only in ${places(app, s, names)}.`,
-        undefined,
+        Diagnostic.Place.cases.environment.make({ name }),
         undefined,
         closing,
       );
@@ -150,7 +177,8 @@ const resolve = Effect.fnUntraced(function* (
         app,
         "missing",
         `${s.name} is required, and nothing sets it. Set it in ${places(app, s, names)}.`,
-        undefined,
+        // Nothing set it, so the place says where the fix goes: the first file it may be set in, with no line.
+        inFile(s.files[0], names[s.files[0]]),
         undefined,
         closing,
       );
@@ -160,6 +188,7 @@ const resolve = Effect.fnUntraced(function* (
   }
 
   const origin = first.value.origin(segments(s.name));
+  const place = first.value.place(origin);
 
   // The value is decoded from the source that holds it and no other: a table that source holds comes whole, and a key it leaves out is not filled from a weaker one.
   const value = yield* Config.schema(s.schema, segments(s.name))
@@ -167,8 +196,8 @@ const resolve = Effect.fnUntraced(function* (
     .pipe(
       Effect.mapError((error) =>
         error.cause instanceof Schema.SchemaError
-          ? refused(app, s, origin, error.cause.issue, closing)
-          : unread(app, error.cause, { subject: s.name, closing }),
+          ? refused(app, s, place, error.cause.issue, closing)
+          : unread(app, error.cause, { subject: s.name, ...(place === undefined ? {} : { place }), closing }),
       ),
     );
 
@@ -187,12 +216,12 @@ export const readRepo = Effect.fnUntraced(function* (setup: Setup) {
 
 /** Reads the user configuration and checks it whole. No home means no user configuration, so there is no file to read. */
 export const readUser = Effect.fnUntraced(function* (setup: Setup) {
-  const { path, name } = setup.places.user;
+  const { path, name, file } = setup.places.user;
 
   const found: Loaded =
     path === undefined
       ? { name, document: empty }
-      : yield* load(setup.group.app, setup.format, { path, name }, setup.closing);
+      : yield* load(setup.group.app, setup.format, { path, name, file }, setup.closing);
 
   yield* check(setup.group, "user", found, setup.names, { closing: setup.closing });
 
@@ -201,7 +230,10 @@ export const readUser = Effect.fnUntraced(function* (setup: Setup) {
 
 /** Resolves every setting, in the group's order, from the two files as they are. */
 export const settle = Effect.fnUntraced(function* (setup: Setup, repo: Loaded, user: Loaded) {
-  const files = { repo: Sources.file(repo.name, repo.document), user: Sources.file(user.name, user.document) };
+  const files = {
+    repo: inFiles("repo", Sources.file(repo.name, repo.document)),
+    user: inFiles("user", Sources.file(user.name, user.document)),
+  };
 
   // One at a time, in the group's order: the first fault is the one that is reported.
   return yield* Effect.forEach(

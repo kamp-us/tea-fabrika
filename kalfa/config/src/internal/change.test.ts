@@ -9,6 +9,7 @@
 // text comes back and the law is red.
 import { inspect } from "node:util";
 import { expect, it } from "@effect/vitest";
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Result, Schema } from "effect";
 import { Setting, SettingGroup } from "../index.ts";
@@ -75,7 +76,7 @@ it.effect(
 
         expect(errors, `${name}: one error`).toHaveLength(1);
         expect(errors[0]?.reason, name).toBe("edit");
-        expect(errors[0]?.file, name).toBe(".demo/demo.toml");
+        expect(errors[0]?.place, name).toEqual(Diagnostic.Place.cases.repo.make({ path: ".demo/demo.toml" }));
       }
     }),
 );
