@@ -16,8 +16,8 @@ the user's. This plan replaces `file` and `line` with one `place`, a `Diagnostic
 each fault is found, where the kind is still known. The error gains a `diagnostic` getter that carries a declared
 `config/...` code, its fault sentence, its place and a fixed hint. Every message stays byte for byte what it is
 today. One pull request, about 140 product lines, plus new laws and a move of the existing laws from `file` and `line`
-to `place`. The exported list of codes, their full long texts and the law that every error carries one are
-https://github.com/kamp-us/tea-fabrika/issues/2099's, which waits on this one.
+to `place`. The exported list of codes, their full long texts and the law that every error with a place carries one
+are https://github.com/kamp-us/tea-fabrika/issues/2099's, which waits on this one.
 
 ```ts
 // The whole idea, a sketch. Nothing here was type-checked.
@@ -34,23 +34,29 @@ error.message      // "~/.demo/demo.toml, line 2: net.port is not ...\n  demo di
 error.diagnostic   // Diagnostic.carry(config/invalid, { message: fault, place, hint }), or undefined with no place
 ```
 
-## Calls under 80%, read these first
+## The lead's answers
 
-- **A missing required setting points at the first file it may be set in, with no line.** 70% sure. Nothing set it,
-  so it came from nowhere; the place is where the fix goes. The other way: place it at its variable,
-  `<APP>_<NAME>`, when a variable may set it, and at a file only for a file-only setting. I lean to the file because a
-  file is where a lasting fix goes and the message names the files first; a variable lasts one shell. Either way its
-  message keeps today's text, with no opening (see the shape). Open question 2.
+The plan waited on two questions. The lead answered both yes, so the build can start:
 
-Settled by reading, so not a doubt any more:
+1. **2099's third criterion narrows to "every settings error that has a place carries a diagnostic".** An error with
+   no place carries none, and `kalfa` ends that run with exit code 2. Why: decision 0084 already says a failure with
+   no diagnostic is exit code 2, and `kalfa/cli/src/internal/run.ts` already does that. The faults with no place are a
+   snapshot stream, a bad command line or a bug in the program: a run that did not finish. Giving them a made-up place
+   or making Diagnostics' place optional would go against settled rules (see the next list).
+2. **A missing required setting points at the first file it may be set in, with no line**, not at its `<APP>_<NAME>`
+   variable. Why: nothing set it, so the place says where the fix goes, and a file is where a lasting fix goes; a
+   variable lasts one shell. The message names the files first too. Its message keeps today's text, with no opening
+   (see the shape).
+
+Settled by reading:
 
 - **A fault with no place carries no diagnostic, and `kalfa` ends that run with exit code 2.** 85% sure. Decision
   0084 says "a subcommand that fails with an error that carries a diagnostic ends with exit code 1 ... Any other
   failure stays exit code 2", and `kalfa/cli/src/internal/run.ts` (`exitCode`, `failedWith`) prints
   `kalfa: <message>` and answers 2 for any failure it reads no diagnostic from. So the faults with no place (listed by
   file and line under "Where each place comes from") read as a run that did not finish, which is what they are: a
-  snapshot stream, a bad command line, a bug in the program. What is left for the owner is one yes or no on 2099's
-  third criterion, which today says every error carries one: open question 1. The other ways are worse under settled
+  snapshot stream, a bad command line, a bug in the program. 2099's third criterion, which today says every error
+  carries one, narrows to errors that have a place (the lead's answer 1). The other ways are worse under settled
   rules: `.` would make "the whole repo" also mean "nowhere", which 0088 rejected for "somewhere else", and a
   diagnostic with no place reopens Diagnostics' five fields.
 - **The codes start `config/`.** The Diagnostics README's example (`config/unknown-setting`) and the owner's answer
@@ -165,7 +171,7 @@ The kind is known where each fault is found, so each place is built there and no
 | a value refused from a source: `read.ts` `resolve`, through `check.ts` `refused` | the source's own: the file and line, `environment` with the variable's name, or `flag` with `--<name>` |
 | a file-only setting given a flag or named by a variable: `read.ts` `resolve` | `flag` `--<name>`, or `environment` `<APP>_<NAME>` |
 | the environment does not answer: `place.ts` `lookup`, `read.ts` `holder` and `resolve` | `environment`: `HOME`, `<APP>_HOME`, or the setting's variable |
-| a required setting nothing sets: `read.ts` `resolve` | the first file the setting may be set in, no line (open question 2) |
+| a required setting nothing sets: `read.ts` `resolve` | the first file the setting may be set in, no line (the lead's answer 2) |
 | an edit that cannot be made as one key, or would change other data: `change.ts:118-136` | the file's kind; the key's line for a conflict, else no line |
 | a value `config set` was given that the schema refuses: `Cli.ts:136`, through `check.ts` `unfit` | the kind of the file `--file` or the setting picked, no line |
 | an edit of a setting that is not the group's: `change.ts:76` | the file's kind, no line |
@@ -369,8 +375,8 @@ the search and moves any other read the same way; `TomlParser.test.ts` reads the
   in `error.ts` with one-sentence long texts, and carries them; 2099 owns the exported list for `Subcommand.make`, the
   full long texts, and its law that every error carries a diagnostic. Order: this ticket first, as 2099 says. 2099's
   third criterion reads "a law fails when an error the new API can fail with carries no diagnostic"; under this plan
-  the faults listed with no place carry none, so that criterion needs narrowing to errors that have a place (open
-  question 1). 2099's second criterion names "a mistyped key (reported by `kalfa config`)": that is this plan's
+  the faults listed with no place carry none, so that criterion narrows to "every settings error that has a place
+  carries a diagnostic" (the lead's answer 1). 2099's second criterion names "a mistyped key (reported by `kalfa config`)": that is this plan's
   `config/unknown-setting`.
 
 - **https://github.com/kamp-us/tea-fabrika/issues/2057** (a start ignores keys other packages own) changes
@@ -470,11 +476,10 @@ Estimate: 5 steps, $50
 ## Records
 
 - `kalfa/config/README.md`, in the files table.
-- A comment on https://github.com/kamp-us/tea-fabrika/issues/2099, by the lead, once open question 1 is answered:
-  its third criterion narrowed, or kept with the choice the owner makes.
-- No decision record if the owner takes the two leans: they follow 0084, 0088 and the answer on 1751. If he answers
-  open question 1 no (every error carries one, so a place must be found for each, or Diagnostics' place becomes
-  optional), that answer is a decision, recorded with the `adr` skill before the build.
+- A comment on https://github.com/kamp-us/tea-fabrika/issues/2099, by the lead: its third criterion narrowed to
+  "every settings error that has a place carries a diagnostic", with an error with no place ending the run with exit
+  code 2 (the lead's answer 1).
+- No decision record: the lead's two answers follow 0084, 0088 and the answer on 1751.
 
 ## What fact is lost if it is not recorded now
 
@@ -494,8 +499,9 @@ code could also put `file` back beside `place` for convenience; the class's doc 
 
 ## Open questions
 
-1. Narrow 2099's third criterion to "every error that has a place carries a diagnostic", so the faults with no place (snapshot, typed name in `config`) exit 2 as decision 0084 and `run.ts` already do? Lean yes, 85%.
-2. Missing required setting: place = first file it may be set in, no line (not its `<APP>_<NAME>` variable)? Lean yes, 70%.
+None.
+
+The lead answered both earlier questions; see "The lead's answers" at the top.
 
 ## Findings
 

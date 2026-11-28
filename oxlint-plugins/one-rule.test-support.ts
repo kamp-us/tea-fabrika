@@ -54,16 +54,51 @@ const withoutComments = (text: string): string => {
   return out;
 };
 
-/** One rule's blocks out of the config text (comments allowed): its base entry, if any, and each override that names it. */
-export const ruleBlocks = (text: string, rule: string) => {
+/**
+ * Every name oxlint 1.90 reads as one rule. `typescript/no-restricted-imports` and the bare `no-restricted-imports` are `eslint/no-restricted-imports`: set
+ * in a later block under any of the three, the later entry replaces the earlier one whole. A rule that is not listed has its own name only.
+ */
+const NAMES: Readonly<Record<string, ReadonlyArray<string>>> = {
+  "eslint/no-restricted-imports": [
+    "eslint/no-restricted-imports",
+    "typescript/no-restricted-imports",
+    "no-restricted-imports",
+  ],
+};
+
+/** The entry a block writes for `rule`, under whichever of its names it uses, or none. A block that names it twice throws: which entry oxlint keeps is not for a law to rely on. */
+const ruleEntry = (named: Readonly<Record<string, unknown>>, rule: string): ReadonlyArray<unknown> => {
+  const used = Arr.filter(NAMES[rule] ?? [rule], (name) => Rec.has(named, name));
+
+  if (used.length > 1) {
+    throw new Error(`a block names ${rule} twice, as ${used.join(" and ")}`);
+  }
+
+  return Arr.map(used, (name) => named[name]);
+};
+
+/** One rule's blocks out of the config text (comments allowed): its base entry, if any, and each override that names it, each written back under `rule`. */
+export const ruleBlocks = (
+  text: string,
+  rule: string,
+): {
+  readonly rules: Readonly<Record<string, unknown>>;
+  readonly overrides: ReadonlyArray<{
+    readonly files: ReadonlyArray<string>;
+    readonly excludeFiles?: ReadonlyArray<string>;
+    readonly rules: Readonly<Record<string, unknown>>;
+  }>;
+} => {
   const { rules = {}, overrides = [] } = decode(withoutComments(text));
 
   return {
-    rules: Rec.has(rules, rule) ? { [rule]: rules[rule] } : {},
+    rules: Arr.match(ruleEntry(rules, rule), { onEmpty: () => ({}), onNonEmpty: ([entry]) => ({ [rule]: entry }) }),
     overrides: Arr.flatMap(overrides, ({ files, excludeFiles, rules: named }) =>
-      Rec.has(named, rule)
-        ? [{ files, ...(excludeFiles === undefined ? {} : { excludeFiles }), rules: { [rule]: named[rule] } }]
-        : [],
+      Arr.map(ruleEntry(named, rule), (entry) => ({
+        files,
+        ...(excludeFiles === undefined ? {} : { excludeFiles }),
+        rules: { [rule]: entry },
+      })),
     ),
   };
 };

@@ -1,11 +1,11 @@
 # @kalfa/git
 
-Read commits, refs and changes from a git repository that has no working copy, write a commit, move a ref, merge trees and
-rebase a branch's own commits onto a new base. One service, `Repository`, with ten read calls and five write calls, helpers that
-write a merge commit and the commit of an edit, two adapters that answer the calls, and the laws both adapters pass.
+Read commits, refs and changes from a git repository that has no working copy, write a commit, move a ref, merge trees,
+rebase a branch's own commits onto a new base and fetch from a remote. One service, `Repository`, with ten read calls, five write calls
+and `fetch`, helpers that write a merge commit and the commit of an edit, two adapters that answer the calls, and the laws both adapters pass.
 
-It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef`, `mergeTrees`, `editTree` and `rebase` change the
-repository, and none sends anything to a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
+It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef`, `mergeTrees`, `editTree`, `rebase` and `fetch` change the
+repository, and `fetch` adds objects and nothing else: no ref moves, and its config, refs and `shallow` file are as they were. Nothing changes a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
 so anything can import it.
 
 ## The ten read calls
@@ -55,6 +55,59 @@ const program = Effect.gen(function* () {
 A call never answers a guess. A shallow repository fails `walk`, `mergeBases`, `isAncestor` and `rangePatchId` with
 `HistoryTooShort`. An answer past a limit fails with `TooMany`, `TooLarge` or `DiffTooLarge`, never a cut list. A ref that is
 symbolic, or points at a tag, a tree or a blob, fails `readRefs` with `RefNotCommit`.
+
+## Fetch
+
+```ts
+import { Effect, Schema } from "effect";
+import * as Credentials from "@kalfa/git/Credentials";
+import * as Ref from "@kalfa/git/Ref";
+import * as Remote from "@kalfa/git/Remote";
+import * as Repository from "@kalfa/git/Repository";
+
+const program = Effect.gen(function* () {
+  const repo = yield* Repository.Repository;
+  const under = Schema.decodeSync(Ref.RefName)("refs/heads/main");
+  const [main] = yield* repo.fetch({ remote: Remote.named(Schema.decodeSync(Remote.Name)("origin")), under });
+  return main; // Ref | undefined: the remote's refs at and below `under`, sorted by UTF-8 bytes; [] means the remote holds none
+}).pipe(Effect.provide(Credentials.none)); // a local path, a remote in memory, a public remote
+```
+
+`fetch({ remote, under })` reads the remote's refs at `under` and every ref below `under/`, by the remote's name in this
+repository's config or by its URL, and answers them. The repository then holds each answered commit and its history. It moves
+no ref and changes no config. `[]` means git proved the remote holds none, and a call that cannot tell fails, so `[]` is never
+a failure. A push that deletes a ref can trust it.
+
+- **The slot.** A fetch asks the `Credentials` slot once, with the URL git will use, so the call's requirement is the slot,
+  and the program picks a filler at its top, by name. `Credentials.none` gives no credential. A repository that fetches only
+  from remotes that need none picks it. In this version the git adapter does not hand a credential to git, so a remote that
+  needs one fails `FetchFailed`.
+- **The remote.** `Remote.named(name)` or `Remote.url(url)`. A URL is `https://host[:port]/path`, `file:///abs/path` or an
+  absolute path. It holds no user, password, query or fragment, no space, backslash or control character, and its host is what the
+  URL parser reads from the text, compared with the text's capital letters A to Z lowered (a capital letter is accepted; no default
+  port written out, an international name as `xn--`), so no character the parser drops, maps or decodes can hide a host. A file URL's
+  path does not start with two slashes. `http://`, `ssh://`,
+  `git@host:path`, `ext::`, `fd::` and relative paths are refused. A named remote's URL is the configured text exactly: no
+  `insteadOf` applies.
+- **Failures.** `NoSuchRemote` for a name this repository has no remote for, `BadRemoteUrl` for a named remote whose config
+  holds several URLs or one that is refused (it never holds the configured text, which may hold a password), `NoCredential`,
+  `FetchFailed` with git's exit code and what it said, `HistoryTooShort` when this repository is shallow or the remote's history
+  is cut below an answered ref, `TooMany` past `limits.refs`, and `RefNotCommit` for a remote ref at a tag.
+- **One span,** `git.fetch`, with `kalfa.git.remote` (`named` or `url`), `kalfa.git.under`, `kalfa.git.credential` and, on an
+  answer, `kalfa.git.refs`. It holds no URL, name, path or user name.
+- **Memory.** The in-memory adapter reads another store named by the `Remotes` its layer was given, as it is at each fetch.
+  It has no tags and no transport.
+- **Git.** The transfer runs in a fresh git directory made for the call, inside the repository's own, so no key of the
+  repository's config (`url.<base>.insteadOf`, `remote.<url>.uploadpack`, `credential.helper`, `http.*`) acts on it. Its own
+  object folder borrows the repository's through `objects/info/alternates`, so git asks the remote only for what is missing.
+  It runs `git fetch --no-tags --no-write-fetch-head --update-shallow` with `transfer.unpackLimit=1` and
+  `protocol.allow=never`, so only a local path, a `file://` URL and `https` are reached, and a refspec that writes the
+  remote's refs under `refs/fetched/` in that directory only. A pack is renamed into the repository only after a good answer,
+  `.idx` last, so a fetch that fails leaves the repository as it was. The folder is removed after every ending, each removal bounded by
+  `limits.kill`, and a removal that fails never changes what the call answered. A call ends within `limits.time` plus two
+  `limits.kill` waits: a transfer that ignores the first signal holds its own scope for one, and the removal waits at most another. A hard kill of the process leaves one
+  `kalfa-fetch-*` folder in the git directory, which git ignores. A remote with a cut history, and a repository that is
+  shallow, fail `HistoryTooShort` and leave the repository as it was.
 
 ## Write a commit and move a ref
 
@@ -187,15 +240,15 @@ adapter reads none, and the app owns its bare repository.
   and a tree's id are computed as git computes them, so the same commit with the same files has the same id here and
   in a real repository.
 - `@kalfa/git/process` runs the git binary (2.38 or newer) on a bare repository, through Effect's
-  `ChildProcessSpawner`. It writes a commit with `hash-object -t commit -w --stdin`, from the same bytes the memory
+  `ChildProcessSpawner` and `FileSystem`. It writes a commit with `hash-object -t commit -w --stdin`, from the same bytes the memory
   adapter hashes, so one commit has one id in both, moves a ref with `update-ref --no-deref`, and merges with
   `merge-tree` (git 2.40 for that call only). The app provides the Node spawner at the top. Every command runs with `--git-dir`, with no
   replacement objects, no hooks and no config of the machine, and with only `PATH` and a pinned set of variables.
 
 ```ts
 ProcessRepository.layer({ path: "repo.git", settings });
-// Layer<Repository, GitTooOld | NoRepository | GitUnavailable | TimedOut, ChildProcessSpawner>
-MemoryRepository.layer(store, settings);
+// Layer<Repository, GitTooOld | NoRepository | GitUnavailable | TimedOut, ChildProcessSpawner | FileSystem>
+MemoryRepository.layer(store, settings, remotes);
 // Layer<Repository | MemoryStore, never, Digest>
 ```
 
@@ -397,7 +450,8 @@ call always ends.
 ## The laws
 
 `@kalfa/git/test` holds `RepositoryTest.suite`, the laws every adapter passes, with its `Subject`, `Seeded` and
-`SuiteOptions` types and `settings`. `@kalfa/git/test/History` holds the `History` and `Node` types and the `textureArb`
+`SuiteOptions` types and `settings`, and `FetchTest`, the laws of `fetch`, which an adapter that fetches runs beside it with a
+`FetchSubject` of its own: `FetchTest.suite("name", subject, { runs, timeout })`. `@kalfa/git/test/History` holds the `History` and `Node` types and the `textureArb`
 and `shapes` that draw the histories. A new adapter writes a `Subject` that seeds a history into its own kind of store,
 with each node's `files` in each commit's tree, answers each commit's tree id in `Seeded.trees`, and runs
 `RepositoryTest.suite("name", subject, { runs, timeout })` in its own test file. `@effect/vitest` and `vitest` are
@@ -405,6 +459,6 @@ optional peers, needed only by `/test`.
 
 ## What it never does
 
-It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and sends nothing
-to a remote. It imports no Node module and no package of its repo. No message, name, email, path, line or file
-content is ever a span attribute: the diff's span says how many files and lines, the range's span names its merge base, and a read's span says whether there is a file and how big it is, and an edit's span says how many changes. A failed span's exception carries the reason chain, since `GitUnavailable`'s `cause` is its `reason`: a git that cannot start names the command it was given there, the repository path included, and that command carries no environment and no secret. Squash, fetch and push come in later tickets of this package.
+It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and a fetch's objects. It reads a
+remote and changes nothing on it: only a push will change one. It imports no Node module and no package of its repo. No message, name, email, path, line or file
+content is ever a span attribute: the diff's span says how many files and lines, the range's span names its merge base, and a read's span says whether there is a file and how big it is, and an edit's span says how many changes. A failed span's exception carries the reason chain, since `GitUnavailable`'s `cause` is its `reason`: a git that cannot start names the command it was given there, the repository path included, and that command carries no environment and no secret. Squash and push come in later tickets of this package.

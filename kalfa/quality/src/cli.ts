@@ -51,7 +51,7 @@ const catalogAt = Effect.fnUntraced(function* (root: string, catalog: string) {
   const path = yield* Path.Path;
   const url = yield* path.toFileUrl(path.resolve(root, catalog));
   const failed = () => new NoCatalog({ catalog });
-  // Edge (a Promise API, marked as `next/` marks one): the catalog is a module the repo names, so it can only be imported by a path known at run time
+  // oxlint-disable-next-line fabrika/no-promises -- edge: the catalog is a module the repo names, so it can only be imported by a path known at run time
   const loaded = yield* Effect.tryPromise({ try: () => import(url.href), catch: failed });
 
   return yield* Predicate.hasProperty(loaded, "default")

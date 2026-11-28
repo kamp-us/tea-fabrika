@@ -4,9 +4,11 @@ import { Context, Effect, Layer, Schema } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
+import type { FetchSeeded, FetchSubject } from "./Fetch.test-support.ts";
 import type { FileSpec, FlatSignature, History } from "./History.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
 import * as Ref from "./Ref.ts";
+import * as Remote from "./Remote.ts";
 import * as Repository from "./Repository.ts";
 import type { Subject } from "./RepositoryTest.ts";
 import * as Tree from "./Tree.ts";
@@ -100,5 +102,60 @@ export const memorySubject: Subject = {
         fingerprint: Context.get(context, MemoryRepository.MemoryStore).get,
         hidden: [],
       };
+    }).pipe(Effect.provide(Digest.layerWebCrypto)),
+};
+
+/** The remote's one URL, and the name this repository holds for it. */
+const REMOTE_URL = Schema.decodeUnknownSync(Remote.Url)("https://remote.test/r.git");
+
+const NOWHERE_URL = Schema.decodeUnknownSync(Remote.Url)("https://nowhere.test/r.git");
+
+const ORIGIN = Schema.decodeUnknownSync(Remote.Name)("origin");
+
+/**
+ * A subject for the laws of fetch: the remote and the local repository are two stores, the local one knows the remote by the name `origin` and
+ * by one URL, and the remote store is read as it is at each fetch, so a law moves one of its refs between two fetches.
+ */
+export const memoryFetchSubject: FetchSubject = {
+  seed: (remote, local, config) =>
+    Effect.gen(function* () {
+      const there = yield* build(remote);
+      const here = yield* build(local);
+      const remoteContext = yield* Layer.build(MemoryRepository.layer(there.store, config));
+      const remoteStore = Context.get(remoteContext, MemoryRepository.MemoryStore);
+
+      const remotes: MemoryRepository.Remotes = {
+        names: new Map([[ORIGIN, REMOTE_URL]]),
+        stores: new Map([[REMOTE_URL, remoteStore.get]]),
+      };
+
+      const context = yield* Layer.build(MemoryRepository.layer(here.store, config, remotes));
+      const store = Context.get(context, MemoryRepository.MemoryStore);
+
+      const seeded: FetchSeeded = {
+        repository: Context.get(context, Repository.Repository),
+        remote: Context.get(remoteContext, Repository.Repository),
+        ids: here.ids,
+        remoteIds: there.ids,
+        named: Remote.named(ORIGIN),
+        configured: REMOTE_URL,
+        urls: [Remote.url(REMOTE_URL)],
+        nowhere: NOWHERE_URL,
+        shallow: Effect.map(store.get, (held) => held.shallow.size > 0),
+        fingerprint: store.get,
+        hidden: [],
+        moveRemoteRef: (ref, commit) =>
+          Effect.gen(function* () {
+            const held = yield* remoteStore.get;
+
+            const moved = yield* Effect.orDie(
+              Effect.fromResult(MemoryRepository.point(held, refNameFrom(ref), idAt(there.ids, commit))),
+            );
+
+            yield* remoteStore.set(moved);
+          }),
+      };
+
+      return seeded;
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
 };
