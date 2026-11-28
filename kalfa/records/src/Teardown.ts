@@ -5,18 +5,18 @@
  * asynchronously on macOS, so output that Node has not written yet is lost: `check runbook | head` could show
  * fewer lines than were printed. This teardown writes an empty string to each stream and exits in the last
  * callback, since a write ends only when everything written before it has. A reader that closes early (`EPIPE`, as
- * in `check | head`) is the reader's business and leaves the run's code. Any other stream error ends the run 2.
+ * in `check | head`) is the reader's business and leaves the run's code. A stream error before the run ends ends it 2.
  */
 import { Exit, Predicate } from "effect";
 import type { Runtime } from "effect";
 
 /** What a stream's `error` event carries: Node says an `Error`, and the teardown reads a string, `null` or nothing just as safely. */
-type Failure = Error | string | null | undefined;
+type Raised = Error | string | null | undefined;
 
 /** One standard stream, as much of Node's as the teardown uses: `process.stdout` and `process.stderr` fit it. */
 interface Stream {
   readonly write: (chunk: string, done: (error?: Error | null) => void) => boolean;
-  readonly on: (event: "error", listener: (error: Failure) => void) => void;
+  readonly on: (event: "error", listener: (error: Raised) => void) => void;
 }
 
 /**
