@@ -373,6 +373,8 @@ const TRANSFER_PINS = [
   "protocol.file.allow=always",
   "protocol.https.allow=always",
   "transfer.unpackLimit=1",
+  // A `.rev` beside each pack, as git 2.41 and later write by default, so every machine moves the same three files.
+  "pack.writeReverseIndex=true",
 ].flatMap((pin) => ["-c", pin]);
 
 const TRANSFER_FLAGS = [
@@ -468,6 +470,7 @@ const fetchedRefs = (
 
 // The pack the transfer left in its own object folder moves into the repository's: its `.pack`, its `.rev` if git wrote one, and its `.idx` last,
 // since git finds a pack by its `.idx`, so a reader never sees half of one. A half-written `tmp_pack_*` is no pack, and stays to be removed.
+// `make` runs it once, after the read answered, outside the time limit and with interrupts held off, so no fetch is cut between its files.
 const adopt = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, from: string, into: string) {
   const packs = `${from}/objects/pack`;
   const names = yield* fs.readDirectory(packs);
@@ -924,60 +927,53 @@ const calls = (
       );
     }),
     // The transfer runs in a fresh git directory made for the call, with its own object folder that borrows the repository's, so no key of the
-    // repository's config acts on it and nothing but a whole pack, renamed in after a good answer, ever lands in the repository.
+    // repository's config acts on it and nothing but a whole pack, renamed in by `make` after a good answer, ever lands in the repository.
     fetch: ({ url, under }) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const { format, gitDir, objects } = yield* probed(run);
-          const dir = yield* folder(gitDir);
-          const fresh = `${dir}/fetch.git`;
-          const there = disk.runIn(fresh);
+      Effect.gen(function* () {
+        const { format, gitDir, objects } = yield* probed(run);
+        const dir = yield* folder(gitDir);
+        const fresh = `${dir}/fetch.git`;
+        const there = disk.runIn(fresh);
 
-          yield* Effect.flatMap(
-            there(["init", "--bare", "--quiet", "--template=", `--object-format=${format}`]),
-            succeeded,
-          );
-          yield* Effect.mapError(
-            disk.fs.writeFileString(`${fresh}/objects/info/alternates`, `${objects}\n`),
-            unreadable,
-          );
+        yield* Effect.flatMap(
+          there(["init", "--bare", "--quiet", "--template=", `--object-format=${format}`]),
+          succeeded,
+        );
+        yield* Effect.mapError(disk.fs.writeFileString(`${fresh}/objects/info/alternates`, `${objects}\n`), unreadable);
 
-          // `GIT_ASKPASS` set to nothing, so git never prompts. The refspec is a glob, so it matches `<under>-2` too, which the read back leaves out.
-          const moved = yield* disk.runIn(fresh, { GIT_ASKPASS: "" })([
-            ...TRANSFER_PINS,
-            ...TRANSFER_FLAGS,
-            "--",
-            url,
-            `+${under}*:${SCRATCH}${under}*`,
-          ]);
+        // `GIT_ASKPASS` set to nothing, so git never prompts. The refspec is a glob, so it matches `<under>-2` too, which the read back leaves out.
+        const moved = yield* disk.runIn(fresh, { GIT_ASKPASS: "" })([
+          ...TRANSFER_PINS,
+          ...TRANSFER_FLAGS,
+          "--",
+          url,
+          `+${under}*:${SCRATCH}${under}*`,
+        ]);
 
-          if (moved.code !== 0) {
-            return yield* new Remote.FetchFailed({ url, code: moved.code, stderr: moved.stderr });
-          }
+        if (moved.code !== 0) {
+          return yield* new Remote.FetchFailed({ url, code: moved.code, stderr: moved.stderr });
+        }
 
-          yield* whole(there);
+        yield* whole(there);
 
-          const printed = yield* Effect.flatMap(
-            there([
-              "for-each-ref",
-              `--count=${limits.refs + 1}`,
-              "--format=%(objectname) %(objecttype) %(symref) %(refname)",
-              `${SCRATCH}${under}`,
-            ]),
-            succeeded,
-          );
+        const printed = yield* Effect.flatMap(
+          there([
+            "for-each-ref",
+            `--count=${limits.refs + 1}`,
+            "--format=%(objectname) %(objecttype) %(symref) %(refname)",
+            `${SCRATCH}${under}`,
+          ]),
+          succeeded,
+        );
 
-          const refs = yield* Effect.fromResult(fetchedRefs(yield* stdoutText(printed)));
+        const refs = yield* Effect.fromResult(fetchedRefs(yield* stdoutText(printed)));
 
-          if (refs.length > limits.refs) {
-            return yield* new Repository.TooMany({ limit: "refs", most: limits.refs });
-          }
+        if (refs.length > limits.refs) {
+          return yield* new Repository.TooMany({ limit: "refs", most: limits.refs });
+        }
 
-          yield* adopt(disk.fs, fresh, objects);
-
-          return refs;
-        }),
-      ),
+        return { refs, adopt: adopt(disk.fs, fresh, objects) };
+      }),
     moveRef: Effect.fnUntraced(function* (move) {
       yield* known(run, [move.to]);
 

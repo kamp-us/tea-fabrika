@@ -92,7 +92,8 @@ a failure. A push that deletes a ref can trust it.
 - **Failures.** `NoSuchRemote` for a name this repository has no remote for, `BadRemoteUrl` for a named remote whose config
   holds several URLs or one that is refused (it never holds the configured text, which may hold a password), `NoCredential`,
   `FetchFailed` with git's exit code and what it said, `HistoryTooShort` when this repository is shallow or the remote's history
-  is cut below an answered ref, `TooMany` past `limits.refs`, and `RefNotCommit` for a remote ref at a tag.
+  is cut below an answered ref, `TooMany` past `limits.refs`, and `RefNotCommit` for a remote ref at a tag. A failure adds no
+  commit, `TimedOut` included.
 - **One span,** `git.fetch`, with `kalfa.git.remote` (`named` or `url`), `kalfa.git.under`, `kalfa.git.credential` and, on an
   answer, `kalfa.git.refs`. It holds no URL, name, path or user name.
 - **Memory.** The in-memory adapter reads another store named by the `Remotes` its layer was given, as it is at each fetch.
@@ -100,12 +101,16 @@ a failure. A push that deletes a ref can trust it.
 - **Git.** The transfer runs in a fresh git directory made for the call, inside the repository's own, so no key of the
   repository's config (`url.<base>.insteadOf`, `remote.<url>.uploadpack`, `credential.helper`, `http.*`) acts on it. Its own
   object folder borrows the repository's through `objects/info/alternates`, so git asks the remote only for what is missing.
-  It runs `git fetch --no-tags --no-write-fetch-head --update-shallow` with `transfer.unpackLimit=1` and
+  It runs `git fetch --no-tags --no-write-fetch-head --update-shallow` with `transfer.unpackLimit=1`,
+  `pack.writeReverseIndex=true` (so every git from 2.38 on writes a `.rev` beside each pack, as git 2.41 and later do by default) and
   `protocol.allow=never`, so only a local path, a `file://` URL and `https` are reached, and a refspec that writes the
-  remote's refs under `refs/fetched/` in that directory only. A pack is renamed into the repository only after a good answer,
-  `.idx` last, so a fetch that fails leaves the repository as it was. The folder is removed after every ending, each removal bounded by
+  remote's refs under `refs/fetched/` in that directory only. The time limit covers the call up to the adopt, which then
+  moves each pack into the repository only after a good answer: `.pack`, `.rev` if git wrote one, and `.idx` last. The adopt
+  is one step that neither the limit nor an interrupt cuts, so a fetch that fails adds nothing and one that answers adds every
+  commit it answered. A disk that refuses a rename part way fails `GitUnavailable` and can leave one `.pack` with no `.idx`,
+  which no reader uses; it never leaves an `.idx` without its `.pack`. The folder is removed after every ending, each removal bounded by
   `limits.kill`, and a removal that fails never changes what the call answered. A call ends within `limits.time` plus two
-  `limits.kill` waits: a transfer that ignores the first signal holds its own scope for one, and the removal waits at most another. A hard kill of the process leaves one
+  `limits.kill` waits plus the adopt: a transfer that ignores the first signal holds its own scope for one, and the removal waits at most another. A hard kill of the process leaves one
   `kalfa-fetch-*` folder in the git directory, which git ignores. A remote with a cut history, and a repository that is
   shallow, fail `HistoryTooShort` and leave the repository as it was.
 

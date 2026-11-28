@@ -890,10 +890,8 @@ export const layer = (
           return yield* new Repository.TooMany({ limit: "refs", most: limits.refs });
         }
 
-        // Only a good answer adds commits, as the process adapter renames its pack in only after one.
-        yield* Cell.update(cell, (now) => copied(now, there, tips));
-
-        return refs;
+        // Only a good answer adds commits: `make` runs `adopt` after the read answered.
+        return { refs, adopt: Cell.update(cell, (now) => copied(now, there, tips)) };
       });
 
       const write = <A, E>(call: (held: Store) => Step<A, E>): Effect.Effect<A, E> =>
