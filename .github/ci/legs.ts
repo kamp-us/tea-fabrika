@@ -118,22 +118,83 @@ export const seconds = (files: readonly string[], table: Readonly<Record<string,
 };
 
 /**
+ * The count search: the fewest of 1 to `most` legs whose longest share fits `limit`, and whether one
+ * does. When none does, the count with the shortest longest share, the fewest of those.
+ */
+const search = (
+  files: readonly string[],
+  most: number,
+  limit: number,
+  table: Readonly<Record<string, number>>,
+): { readonly count: number; readonly fits: boolean } => {
+  let shortest: { readonly count: number; readonly longest: number } | undefined;
+
+  for (let count = 1; count <= Math.min(most, files.length); count++) {
+    const longest = Math.max(...split(files, count, table).map((leg) => seconds(leg, table)));
+
+    if (longest <= limit) {
+      return { count, fits: true };
+    }
+
+    if (shortest === undefined || longest < shortest.longest) {
+      shortest = { count, longest };
+    }
+  }
+
+  return { count: shortest?.count ?? 0, fits: false };
+};
+
+/**
+ * The fewest legs past `most` whose longest share fits `limit`, or undefined when no count does: the
+ * count the planner wants above the cap. A file alone over the limit fits no count, so the scan is
+ * skipped then. A share is a leg's seconds, counted as `seconds` counts them.
+ */
+const fitPast = (
+  files: readonly string[],
+  most: number,
+  limit: number,
+  table: Readonly<Record<string, number>>,
+): number | undefined => {
+  const unmeasured = median(Rec.values(table));
+  const share = (leg: readonly string[]) => leg.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
+
+  if (files.some((path) => share([path]) > limit)) {
+    return undefined;
+  }
+
+  for (let count = most + 1; count <= files.length; count++) {
+    if (split(files, count, table).every((leg) => share(leg) <= limit)) {
+      return count;
+    }
+  }
+
+  return undefined;
+};
+
+/**
  * The fewest legs, up to `most`, whose longest share fits `limit` seconds. When no count fits (one
  * file alone is over), the fewest that make the longest share as short as it gets. No file, no leg.
+ * When the cap holds the count below the fewest that fit, and that is why a leg runs past `limit`, it
+ * prints one warning line that names both counts. A cap of 0 switches its kind off (the visual rule
+ * does that), so it is no cap and prints nothing. When one file alone is over the limit, no count
+ * fits and no cap is to blame, so it prints nothing either.
  */
 export const fewest = (files: readonly string[], most: number, limit: number, table = measured): number => {
-  const tried = Array.from({ length: Math.min(most, files.length) }, (_, i) => {
-    const count = i + 1;
+  const capped = search(files, most, limit, table);
 
-    return { count, longest: Math.max(...split(files, count, table).map((leg) => seconds(leg, table))) };
-  });
+  if (capped.fits) {
+    return capped.count;
+  }
 
-  const shortest = tried.reduce<(typeof tried)[number] | undefined>(
-    (best, next) => (best === undefined || next.longest < best.longest ? next : best),
-    undefined,
-  );
+  const wanted = most > 0 ? fitPast(files, most, limit, table) : undefined;
 
-  return (tried.find((next) => next.longest <= limit) ?? shortest)?.count ?? 0;
+  if (wanted !== undefined) {
+    console.log(
+      `::warning::legs: the cap held the count at ${most}, but the planner wanted ${wanted}, so a leg runs past its limit`,
+    );
+  }
+
+  return capped.count;
 };
 
 /** The events on the merge line, each of which runs only what its change reaches. */

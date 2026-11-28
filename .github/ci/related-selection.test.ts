@@ -28,7 +28,7 @@ const options = { arbitrary: { seed: 119120, runs: 100, size: 100 } };
 
 const sizing: Sizing = {
   "next-integration": { most: 5, limit: 100 },
-  tooling: { most: 2, limit: 200 },
+  tooling: { most: 4, limit: 200 },
   table: {},
 };
 
@@ -68,7 +68,7 @@ it.prop(
 
     expect(new Set(all).size).toBe(all.length);
 
-    expect(Object.keys(result.legs).length).toBeLessThanOrEqual(7);
+    expect(Object.keys(result.legs).length).toBeLessThanOrEqual(sizing["next-integration"].most + sizing.tooling.most);
 
     expect(Object.keys(result.legs).length === 0).toBe(integration + tooling === 0);
 
@@ -197,7 +197,7 @@ const envOf = (event: string, decoy: string) => ({
   HEAD,
   BASE,
   MOST_INTEGRATION: "5",
-  MOST_TOOLING: "2",
+  MOST_TOOLING: "4",
   LIMIT_INTEGRATION: "17",
   LIMIT_TOOLING: "30",
 });
@@ -737,7 +737,7 @@ const selectorRun = (given: Selected) => {
       BASE: base,
       HEAD: head,
       MOST_INTEGRATION: "5",
-      MOST_TOOLING: "2",
+      MOST_TOOLING: "4",
       LIMIT_INTEGRATION: "17",
       LIMIT_TOOLING: "30",
       RECORD: record,

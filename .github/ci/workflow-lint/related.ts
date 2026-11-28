@@ -99,7 +99,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
 
   const env = map(set?.["env"]);
   require(env["MOST_INTEGRATION"] === 5 &&
-    env["MOST_TOOLING"] === 2 &&
+    env["MOST_TOOLING"] === 4 &&
     env["LIMIT_INTEGRATION"] === 17 &&
     env["LIMIT_TOOLING"] === 30 &&
     set?.["timeout-minutes"] === 5 &&
