@@ -10,8 +10,8 @@
  * file that holds the text, `const TAG = "_tag"; {[TAG]: x}`, which writes the same key. A computed key it cannot read
  * (a parameter, a call, an imported constant) passes. It misses a write through a member, `x._tag = "a"`.
  *
- * The one option, `allow`, lists files the rule skips: exact paths from where oxlint runs, as `pnpm lint` names them,
- * with no leading `./` and no absolute path. A file that stores any fact and knows no cases, such as a log, holds `_tag`
+ * The one option, `allow`, lists files the rule skips: exact paths from where oxlint runs, as it names them when run at the
+ * top of a project, with no leading `./` and no absolute path. A file that stores any fact and knows no cases, such as a log, holds `_tag`
  * as an open string and is listed there. Oxlint checks the option against the schema below, and fails the whole run on a
  * bad one before it reads any file.
  */
@@ -80,7 +80,7 @@ export const noHandTag: CreateRule = {
       {
         type: "object",
         properties: {
-          // Files from where oxlint runs, as `pnpm lint` names them: no leading `./`, no absolute path.
+          // Files from where oxlint runs, as it names them when run at the top of a project: no leading `./`, no absolute path.
           allow: { type: "array", items: { type: "string", pattern: "^(?!\\./|/)" } },
         },
         additionalProperties: false,

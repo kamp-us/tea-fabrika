@@ -1,6 +1,6 @@
-// What the rules share: asking a piece of syntax the same question the old GritQL patterns asked. They worked on
-// text-like shapes, so `Effect.all(x)` matched and `Effect?.all(x)`, `Effect.all<T>(x)` and `x.Effect.all(y)` did not. The
-// rules keep that exactly: a name is read as it is written, through the file's own imports where a rule says so.
+// What the rules share: asking a piece of syntax which name it writes. A name is read as it is written, so `Effect.all(x)`
+// matches and `Effect?.all(x)`, `Effect.all<T>(x)` and `x.Effect.all(y)` do not, through the file's own imports where a
+// rule says so.
 import type { Context, ESTree, Variable, Visitor } from "@oxlint/plugins";
 
 type Source = Context["sourceCode"];
@@ -93,9 +93,9 @@ export const grouped = (source: Source, node: Node): number => {
 };
 
 /**
- * The linted file's path from where oxlint runs, with `/` between folders: `next/apps/fabrika/brain.ts`.
- * `pnpm lint` runs at the top of the repo, so a rule's edge list names a file by its whole path
- * there. Run from anywhere else, no file is an edge, so the rule fires more, never less.
+ * The linted file's path from where oxlint runs, with `/` between folders: `src/ledger/Log.ts`. Oxlint run at the top of
+ * a project names a file by its whole path from there, so a rule option that lists files names them that way. Run from
+ * anywhere else, no listed file matches, so a rule that skips listed files fires more, never less.
  */
 export const pathIn = (context: Context): string => {
   const from = context.cwd.endsWith("/") ? context.cwd : `${context.cwd}/`;
