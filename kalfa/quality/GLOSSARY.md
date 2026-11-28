@@ -106,3 +106,8 @@ _Avoid_: map size, line cap, length check
 **Diagnostic**:
 What a rule reports about one place in the code. Diagnostics' word.
 _Avoid_: finding, violation, lint error, warning
+
+**Edge**:
+One line where the platform demands what a rule refuses, such as running an Effect or answering a Promise, marked where
+it stands by a disable comment that gives its reason.
+_Avoid_: exception, escape hatch, boundary
