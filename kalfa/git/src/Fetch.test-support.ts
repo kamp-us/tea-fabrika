@@ -71,6 +71,9 @@ export interface Gate {
   readonly open: Effect.Effect<void>;
 }
 
+/** A drawn time limit in whole seconds, as F18 and F14 draw theirs. */
+const timeArb = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 3600 })));
+
 // Lets every fiber that can run, run, before the clock moves.
 const settle = Effect.forEach(Array.from({ length: 50 }), () => Effect.yieldNow, { concurrency: 1, discard: true });
 
@@ -801,15 +804,19 @@ export const suite = (name: string, subject: FetchSubject, options: SuiteOptions
 
     // Plant (F21): copy the commits into the store before the limit ends, as a finalizer, so a fetch that timed out before its read answered adds commits, red at (a);
     // run the adopt inside the time limit (`Effect.timeoutOrElse` around it), so a limit that fires after the listing or a rename answers TimedOut, red at (b) to (e) and
-    // at (c) with a `.pack` and no `.idx`, garbage 1; rename the `.idx` before the `.rev`, so a limit that fires after the `.idx` rename leaves a pack with no `.rev`, red at
-    // (d); drop the `pack.writeReverseIndex` pin, so no `.rev` is written, red on every git before 2.41 (the hold at (d) is never reached).
+    // at (c) with a `.pack` and no `.idx`, garbage 1; drop the `pack.writeReverseIndex` pin, so no `.rev` is written, red on every git before 2.41 (the hold at (d) is never reached). F19 and F20 hold the rename order, not this law.
     it.effect.prop(
       "F21 cut short at every hold the subject has: before the read answers, the call fails TimedOut, each remote commit this repository lacked still reads NoSuchCommit and no pack file was added; at any hold inside or after the adopt, the call answers the refs, every answered commit reads back, every pack the fetch added has its .pack, .rev and .idx, and git count-objects -v says garbage: 0; the carrier reached every hold its subject names",
-      { texture: textureArb },
-      ({ texture }) =>
+      { texture: textureArb, time: timeArb },
+      ({ texture, time }) =>
         Effect.gen(function* () {
           const carrier = fetchCarrier(texture);
-          const scenario: Scenario = { ...carrier.scenarios.plain, local: EMPTY };
+          // The time limit is drawn, so the clock moves by the limit the repository holds and by no number the law knows.
+          const scenario: Scenario = {
+            ...carrier.scenarios.plain,
+            local: EMPTY,
+            settings: settings({ time: `${time} seconds` }),
+          };
           const under = "refs/heads/main";
           const answered = refsModel(scenario.remote, under);
           const slot = yield* recorder(Option.none());
@@ -846,7 +853,7 @@ export const suite = (name: string, subject: FetchSubject, options: SuiteOptions
 
                 // The time limit fires while the fetch waits.
                 yield* settle;
-                yield* TestClock.adjust(Duration.seconds(10));
+                yield* TestClock.adjust(Duration.seconds(time));
                 yield* settle;
 
                 if (hold === "read" || hold === "alternates") {
