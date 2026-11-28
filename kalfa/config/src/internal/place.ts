@@ -1,17 +1,25 @@
 /**
  * Where an app's configuration files are, and how each is read: the repo's at `<repo>/.<app>/<app>.<extension>`, the user's at `$<APP>_HOME/<app>.<extension>` or else `$HOME/.<app>/<app>.<extension>`.
  */
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { type ConfigProvider, Effect, FileSystem, Path } from "effect";
 import * as Result from "effect/Result";
 import type * as Setting from "../Declaration.ts";
 import { stop, unread } from "./error.ts";
 import type { Document, Format } from "./format.ts";
 
-/** Where a file is read from, and the name a person reads. */
+/** Where a file is read from, the name a person reads, and whether it is the repo's or the user's. */
 export interface Place {
   readonly path: string;
   readonly name: string;
+  readonly file: Setting.File;
 }
+
+/** A configuration file's place: `repo` for the repo file, `home` for the user file, with its line when known. */
+export const inFile = (file: Setting.File, name: string, line?: number): Diagnostic.Place =>
+  file === "repo"
+    ? Diagnostic.Place.cases.repo.make({ path: name, ...(line === undefined ? {} : { line }) })
+    : Diagnostic.Place.cases.home.make({ path: name, ...(line === undefined ? {} : { line }) });
 
 export interface Loaded {
   readonly name: string;
@@ -24,7 +32,9 @@ export type Names = Readonly<Record<Setting.File, string>>;
 const lookup = (app: string, provider: ConfigProvider.ConfigProvider, name: string, closing?: string) =>
   provider.load([name]).pipe(
     Effect.map((node) => node?.value),
-    Effect.mapError((cause) => unread(app, cause, { subject: name, closing })),
+    Effect.mapError((cause) =>
+      unread(app, cause, { subject: name, place: Diagnostic.Place.cases.environment.make({ name }), closing }),
+    ),
   );
 
 /** The folder and the file name of an app's configuration, `.<app>` and `<app>.<extension>`: the one rule for a path and for the name a person reads. */
@@ -51,7 +61,12 @@ export const repoPlace = Effect.fnUntraced(function* (app: string, format: Forma
   const path = yield* Path.Path;
   const { folder, file } = parts(app, format);
 
-  return { path: path.join(repo, folder, file), name: shown(app, format).repo, folder: path.join(repo, folder) };
+  return {
+    path: path.join(repo, folder, file),
+    name: shown(app, format).repo,
+    folder: path.join(repo, folder),
+    file: "repo" as const,
+  };
 });
 
 /**
@@ -70,26 +85,27 @@ export const userPlace = Effect.fnUntraced(function* (
   const { folder, file } = parts(app, format);
 
   return moved !== undefined
-    ? { path: path.join(moved, file), name: homeName(app, format), folder: undefined }
+    ? { path: path.join(moved, file), name: homeName(app, format), folder: undefined, file: "user" as const }
     : {
         path: home === undefined ? undefined : path.join(home, folder, file),
         name: shown(app, format).user,
         folder: home === undefined ? undefined : path.join(home, folder),
+        file: "user" as const,
       };
 });
 
 export const empty: Document = { value: {}, spans: [] };
 
 /** Parses one file's text. Fails as `syntax` with the parser's line. The message ends with `closing`, the start's own sentence when none is given. */
-export const parse = (app: string, format: Format, name: string, text: string, closing?: string) =>
+export const parse = (app: string, format: Format, at: Pick<Place, "name" | "file">, text: string, closing?: string) =>
   Result.mapBoth(format.parse(text), {
-    onSuccess: (document): Loaded => ({ name, document }),
+    onSuccess: (document): Loaded => ({ name: at.name, document }),
     onFailure: (fault) =>
       stop(
         app,
         "syntax",
         `this is not valid ${format.name}.`,
-        { file: name, line: fault._tag === "Value" ? undefined : fault.line },
+        inFile(at.file, at.name, fault._tag === "Value" ? undefined : fault.line),
         fault.cause,
         closing,
       ),
@@ -105,7 +121,7 @@ export const contents = Effect.fnUntraced(function* (app: string, place: Place, 
       Effect.catchTag("PlatformError", (cause) =>
         cause.reason._tag === "NotFound"
           ? Effect.succeed("")
-          : Effect.fail(unread(app, cause, { position: { file: place.name }, closing })),
+          : Effect.fail(unread(app, cause, { place: inFile(place.file, place.name), closing })),
       ),
     );
 });
@@ -114,5 +130,5 @@ export const contents = Effect.fnUntraced(function* (app: string, place: Place, 
 export const load = Effect.fnUntraced(function* (app: string, format: Format, place: Place, closing?: string) {
   const text = yield* contents(app, place, closing);
 
-  return yield* Effect.fromResult(parse(app, format, place.name, text, closing));
+  return yield* Effect.fromResult(parse(app, format, place, text, closing));
 });

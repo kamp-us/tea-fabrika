@@ -133,7 +133,14 @@ export const config = <const App extends string>(
         .pipe(
           Effect.mapError((error) =>
             error.cause instanceof Schema.SchemaError
-              ? unfit(app, setting, found.place.name, error.cause.issue, `The ${chosen} configuration was not changed.`)
+              ? unfit(
+                  app,
+                  setting,
+                  chosen,
+                  found.place.name,
+                  error.cause.issue,
+                  `The ${chosen} configuration was not changed.`,
+                )
               : unread(app, error.cause, {
                   subject: setting.name,
                   closing: `The ${chosen} configuration was not changed.`,
