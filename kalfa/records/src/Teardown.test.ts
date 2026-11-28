@@ -104,7 +104,7 @@ const Issue = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("codeless"),
     // A plain `Error` is made from the message; the rest are thrown as they are.
-    error: Schema.Union([Schema.String, Schema.Null, Schema.Undefined, Schema.Int]),
+    error: Schema.Union([Schema.String, Schema.Null, Schema.Undefined]),
     wrapped: Schema.Boolean,
   }),
 ]);
