@@ -106,6 +106,10 @@ CommitEditTest.suite("process", processSubject, { runs: 6, timeout: 1_800_000 })
 // Plant (F5): keep each answer by URL and `under` in the layer. Plant (F6): fetch before the slot is asked. Plant (F7): put the user name in a span,
 // a log line or `FetchFailed.stderr`. Plant (F8): put the URL in the span; write `fetch` with `Effect.fnUntraced`. Plant (F9): rename the pack into the
 // repository before the shallow check and the limit check, so a commit of a fetch that failed `HistoryTooShort` or `TooMany` reads back.
+// Plant (F21), on real git, each red on its own hold: leave the adopt inside the time limit, as it was before ticket 2385, so a limit that fires after the listing or a
+// rename answers `TimedOut`, red at `listing`, `pack`, `rev` and `idx`, with a `.pack` and no `.idx` and garbage 1 at `pack`; rename the `.idx` before the `.rev`, so a pack
+// has no `.rev` at the `idx` hold, red there; drop `pack.writeReverseIndex=true` from the transfer's pins, so on a git before 2.41 no `.rev` is written, the `rev` hold is never
+// reached and the law says so. The holds are the real file system wrapped in ProcessSeed.test-support.ts: the k-th call of a kind runs, then waits for the law to open it.
 FetchTest.suite("process", processFetchSubject, { runs: 3, timeout: 1_800_000 });
 
 const signature = (flat: FlatSignature): Commit.Signature =>
