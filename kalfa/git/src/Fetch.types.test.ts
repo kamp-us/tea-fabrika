@@ -14,7 +14,7 @@ import type * as Repository from "./Repository.ts";
 type Fails = Repository.GitUnavailable | Repository.TimedOut;
 
 // Plant (F17): capture the slot at layer build, so `fetch` needs nothing and the `@ts-expect-error` goes unused; type the password `string`; add
-// `Scope` to the service's `fetch` requirement; leave `HistoryTooShort` out of its errors; type `adopt`'s error `GitUnavailable | TimedOut`; leave `Raw["fetch"]`
+// `Scope` to the service's `fetch` requirement; leave `HistoryTooShort` out of its errors; type `stow`'s error `GitUnavailable | TimedOut`; leave `Raw["fetch"]`
 // answering the refs; take `Scope` out of `Raw["fetch"]`'s requirement.
 const calls = (repo: Repository.Repository["Service"], remote: Remote.Remote, text: string, under: RefName) => {
   expectTypeOf<Repository.Repository["Service"]["fetch"]>().toEqualTypeOf<
@@ -54,8 +54,8 @@ const calls = (repo: Repository.Repository["Service"], remote: Remote.Remote, te
 
   expectTypeOf<Repository.Fetched["refs"]>().toEqualTypeOf<ReadonlyArray<Ref>>();
 
-  // The adopt has no time limit, so it never fails `TimedOut`: its one failure is a disk that refuses.
-  expectTypeOf<Repository.Fetched["adopt"]>().toEqualTypeOf<Effect.Effect<void, Repository.GitUnavailable>>();
+  // The stow has no time limit, so it never fails `TimedOut`: its one failure is a disk that refuses.
+  expectTypeOf<Repository.Fetched["stow"]>().toEqualTypeOf<Effect.Effect<void, Repository.GitUnavailable>>();
 
   expectTypeOf<Credentials.Credential["password"]>().toEqualTypeOf<Redacted.Redacted<string>>();
   expectTypeOf(Credentials.none).toEqualTypeOf<Layer.Layer<Credentials.Credentials>>();
@@ -82,7 +82,7 @@ const layers = () => {
   expectTypeOf<Parameters<typeof MemoryRepository.layer>[2]>().toEqualTypeOf<MemoryRepository.Remotes | undefined>();
 };
 
-it("type: fetch asks the slot for its requirement and answers the refs and errors the plan gives; the raw fetch answers Fetched and needs a Scope, and its adopt cannot time out; the raw calls hold no slot; /process needs a file system", () => {
+it("type: fetch asks the slot for its requirement and answers the refs and errors the plan gives; the raw fetch answers Fetched and needs a Scope, and its stow cannot time out; the raw calls hold no slot; /process needs a file system", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(calls).toBeFunction();
   expectTypeOf(layers).toBeFunction();

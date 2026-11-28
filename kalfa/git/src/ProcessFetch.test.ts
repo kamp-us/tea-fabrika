@@ -129,7 +129,7 @@ type Removal = "removes" | "fails" | "hangs";
 /** The packs a fetch leaves in the fresh directory, in no helpful order, beside a half-written one. */
 const LISTING = ["pack-1.idx", "tmp_pack_x", "pack-1.pack", "pack-1.rev"];
 
-/** The same pack as git writes it before 2.41 without the pin: no `.rev`, so the adopt has two renames. */
+/** The same pack as git writes it before 2.41 without the pin: no `.rev`, so the stow has two renames. */
 const LISTING_NO_REV = ["pack-1.idx", "tmp_pack_x", "pack-1.pack"];
 
 /** Where the file system waits, after the call it names has run: the packs' listing, or the rename of a `.pack`, a `.rev` or an `.idx`. */
@@ -660,7 +660,7 @@ const REMOVALS: ReadonlyArray<Removal> = ["removes", "fails", "hangs"];
 // Plant (F14): read exit 1 as an answer; remove the folder only after an answer; use `makeTempDirectoryScoped`, whose release dies on a failing
 // remove; let the removal's failure replace the call's own; leave the release unbounded, so a hanging removal holds the call; bound the release at two kill waits, so a hanging removal after a stubborn transfer holds the call a wait too long.
 it.effect.prop(
-  "F14 the folder is released after every ending: an answer, FetchFailed with exit 1 and with exit 128, TooMany, HistoryTooShort, RefNotCommit and TimedOut; a removal that fails or hangs past limits.kill never changes the call's own answer or failure, and the call ends within limits.time plus two limits.kill waits and the adopt, a transfer that ignores the first signal holding its own scope for one and a removal that hangs for another",
+  "F14 the folder is released after every ending: an answer, FetchFailed with exit 1 and with exit 128, TooMany, HistoryTooShort, RefNotCommit and TimedOut; a removal that fails or hangs past limits.kill never changes the call's own answer or failure, and the call ends within limits.time plus two limits.kill waits and the stow, a transfer that ignores the first signal holding its own scope for one and a removal that hangs for another",
   { time: int(2, 3600), share: int(0, 3600) },
   ({ time, share }) =>
     Effect.gen(function* () {
@@ -717,7 +717,7 @@ it.effect.prop(
 
           expect(
             fiber.pollUnsafe(),
-            `${place}: the call has ended within limits.time plus two limits.kill waits and the adopt`,
+            `${place}: the call has ended within limits.time plus two limits.kill waits and the stow`,
           ).toBeDefined();
           const result = yield* Fiber.join(fiber);
           reached.push(place);
@@ -742,7 +742,7 @@ it.effect.prop(
   { arbitrary: { runs: 20, seed: 119120 } },
 );
 
-/** The `.pack`, `.rev` and `.idx` of `pack-1`, moved from the fresh folder into the repository's own, in the order the adopt moves them. */
+/** The `.pack`, `.rev` and `.idx` of `pack-1`, moved from the fresh folder into the repository's own, in the order the stow moves them. */
 const MOVES = (fresh: string, kinds: ReadonlyArray<string>): ReadonlyArray<readonly [string, string]> =>
   kinds.map((kind) => [`${fresh}/objects/pack/pack-1.${kind}`, `${OBJECTS}/pack/pack-1.${kind}`] as const);
 
@@ -751,7 +751,7 @@ const renamesMade = (events: ReadonlyArray<Event>): ReadonlyArray<readonly [stri
 
 const ANSWER: World = { ...GOOD, refs: `${ID} commit  refs/fetched/refs/heads/main\n` };
 
-/** Each pack the stand-in lists, and the holds that fall inside a fetch's adopt for it: after the listing, and after each rename but the last (the last rename's hold falls after the adopt's work, before the call answers). */
+/** Each pack the stand-in lists, and the holds that fall inside a fetch's stow for it: after the listing, and after each rename but the last (the last rename's hold falls after the stow's work, before the call answers). */
 const PACKS: ReadonlyArray<readonly [label: string, listing: ReadonlyArray<string>, kinds: ReadonlyArray<string>]> = [
   ["a pack with a .rev", LISTING, ["pack", "rev", "idx"]],
   ["a pack with no .rev", LISTING_NO_REV, ["pack", "idx"]],
@@ -759,9 +759,9 @@ const PACKS: ReadonlyArray<readonly [label: string, listing: ReadonlyArray<strin
 
 const HOLDS: ReadonlyArray<Hold> = ["listing", "pack", "rev", "idx"];
 
-// Plant (F19): leave `adopt` inside the time limit, as it is before this change, so the limit firing at (b) to (e) answers `TimedOut`; wrap each rename alone in
-// `Effect.uninterruptible`, so (c) and (d) answer `TimedOut`; remove the folder in a finalizer that runs before the adopt, so (c) finds the pack's files gone; rename the
-// `.rev` whether or not the listing has it, so a pack with no `.rev` is renamed three times, (h) red; run the adopt after the call's own ending whatever it was, so (a) renames.
+// Plant (F19): leave `stow` inside the time limit, as it is before this change, so the limit firing at (b) to (e) answers `TimedOut`; wrap each rename alone in
+// `Effect.uninterruptible`, so (c) and (d) answer `TimedOut`; remove the folder in a finalizer that runs before the stow, so (c) finds the pack's files gone; rename the
+// `.rev` whether or not the listing has it, so a pack with no `.rev` is renamed three times, (h) red; run the stow after the call's own ending whatever it was, so (a) renames.
 it.effect.prop(
   "F19 a fetch cut short on the stand-in spawner and the recording file system: the limit firing before the read answers fails TimedOut with no rename made; the limit firing after the listing and after each rename answers the refs, with the renames .pack, .rev, .idx in that order (.pack, .idx for a listing with no .rev), all before the folder's removal, which happens once; a caller's interrupt at the listing and after the first two renames ends the call only after every rename was made",
   { time: int(2, 3600), share: int(0, 3600) },
@@ -790,11 +790,11 @@ it.effect.prop(
         reached.push("(a)");
       }
 
-      // (b) to (e) the limit fires inside or after the adopt, and (f) the caller interrupts inside it.
+      // (b) to (e) the limit fires inside or after the stow, and (f) the caller interrupts inside it.
       for (const [label, listing, kinds] of PACKS) {
         for (const hold of HOLDS.filter((at) => at === "listing" || kinds.includes(at))) {
           for (const by of ["the limit", "an interrupt"] as const) {
-            // An interrupt is tried where an adopt still has a rename to make: not after the last one.
+            // An interrupt is tried where a stow still has a rename to make: not after the last one.
             if (by === "an interrupt" && hold === kinds.at(-1)) {
               continue;
             }
@@ -812,7 +812,7 @@ it.effect.prop(
             }
 
             yield* settle;
-            expect(fiber.pollUnsafe(), `${place}: the call is still in its adopt`).toBeUndefined();
+            expect(fiber.pollUnsafe(), `${place}: the call is still in its stow`).toBeUndefined();
             yield* disk.gate.open;
 
             if (interrupting === undefined) {
@@ -850,10 +850,10 @@ it.effect.prop(
   { arbitrary: { runs: 20, seed: 119120 } },
 );
 
-// Plant (F20): ignore each rename's failure and go on, so the `.idx` lands without its `.rev` and the call answers the refs; map the adopt's failure to the refs answer;
+// Plant (F20): ignore each rename's failure and go on, so the `.idx` lands without its `.rev` and the call answers the refs; map the stow's failure to the refs answer;
 // stop at the first failure but rename the `.idx` first.
 it.effect.prop(
-  "F20 a refused rename: when the disk refuses the k-th rename of the adopt, the call fails GitUnavailable, the renames made are a prefix of .pack, .rev, .idx (of .pack, .idx for a listing with no .rev), so no .idx is renamed without its .pack and .rev, and the folder is removed once",
+  "F20 a refused rename: when the disk refuses the k-th rename of the stow, the call fails GitUnavailable, the renames made are a prefix of .pack, .rev, .idx (of .pack, .idx for a listing with no .rev), so no .idx is renamed without its .pack and .rev, and the folder is removed once",
   { time: int(2, 3600) },
   ({ time }) =>
     Effect.gen(function* () {
@@ -878,7 +878,7 @@ it.effect.prop(
           );
           expect(
             events.filter((event) => event.op === "refusedRename").length,
-            `${place}: the adopt stopped at the refusal`,
+            `${place}: the stow stopped at the refusal`,
           ).toBe(1);
           expect(events.at(-1)?.op, `${place}: the folder is removed last`).toBe("remove");
           expect(events.filter((event) => event.op === "remove").length, `${place}: the folder is removed once`).toBe(

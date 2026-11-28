@@ -325,7 +325,7 @@ const packKind = (to: string): Hold | undefined => {
 /**
  * A subject for the laws of fetch: the remote and the local repository are two real bare repositories, and the local one's config names the remote
  * `origin`, by its path. The remote is also reached by its path and by a `file://` URL, with no name. The local repository's file system is the real one,
- * wrapped so a fetch can be held once after a call it names: the alternates file written, the adopt's listing, and the rename of each pack file.
+ * wrapped so a fetch can be held once after a call it names: the alternates file written, the stow's listing, and the rename of each pack file.
  */
 export const processFetchSubject: FetchSubject = {
   seed: (remote, local, settings) =>

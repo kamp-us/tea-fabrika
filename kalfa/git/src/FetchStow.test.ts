@@ -1,7 +1,7 @@
-// F18: what `make` does with the two parts of an adapter's fetch, on a stand-in `Raw` whose `fetch` and `adopt` hold at a gate. The read (`fetch`) runs inside
-// the time limit; the `adopt` it hands back runs once, after the read answered, outside the limit and with interrupts held off, so no fetch is cut between
-// its files. The stand-in writes each step it takes to a log, and the scope it was given closes after the adopt. No git runs here: the laws of what a real
-// adapter's adopt does are in ProcessFetch.test.ts and, on real git, in ProcessRepository.integration.test.ts.
+// F18: what `make` does with the two parts of an adapter's fetch, on a stand-in `Raw` whose `fetch` and `stow` hold at a gate. The read (`fetch`) runs inside
+// the time limit; the `stow` it hands back runs once, after the read answered, outside the limit and with interrupts held off, so no fetch is cut between
+// its files. The stand-in writes each step it takes to a log, and the scope it was given closes after the stow. No git runs here: the laws of what a real
+// adapter's stow does are in ProcessFetch.test.ts and, on real git, in ProcessRepository.integration.test.ts.
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, Deferred, Duration, Effect, Exit, Fiber, Ref as Cell, Result, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
@@ -33,10 +33,10 @@ const gate = Effect.gen(function* () {
   return { reached, opened, hold: Effect.andThen(Deferred.succeed(reached, undefined), Deferred.await(opened)) };
 });
 
-/** What the stand-in's read does, and what its adopt does. */
+/** What the stand-in's read does, and what its stow does. */
 interface Script {
   readonly read: "answers" | "holds" | "fails";
-  readonly adopt: "ends" | "holds" | "fails";
+  readonly stow: "ends" | "holds" | "fails";
 }
 
 const unused = (): Effect.Effect<never> => Effect.die("this law calls nothing but a fetch");
@@ -49,21 +49,21 @@ const open = (script: Script, time: number, id: string) =>
     const log = yield* Cell.make<ReadonlyArray<string>>([]);
     const note = (step: string) => Cell.update(log, (all) => [...all, step]);
     const reading = yield* gate;
-    const adopting = yield* gate;
+    const stowing = yield* gate;
     const answered = [new Ref.Ref({ name: under, commit: Schema.decodeUnknownSync(CommitId)(id) })];
 
-    const adopt: Effect.Effect<void, Repository.GitUnavailable> = Effect.gen(function* () {
-      yield* note("adopt started");
+    const stow: Effect.Effect<void, Repository.GitUnavailable> = Effect.gen(function* () {
+      yield* note("stow started");
 
-      if (script.adopt === "holds") {
-        yield* adopting.hold;
+      if (script.stow === "holds") {
+        yield* stowing.hold;
       }
 
-      if (script.adopt === "fails") {
+      if (script.stow === "fails") {
         return yield* refused;
       }
 
-      yield* note("adopt ended");
+      yield* note("stow ended");
     });
 
     const raw: Repository.Raw = {
@@ -97,38 +97,38 @@ const open = (script: Script, time: number, id: string) =>
 
           yield* note("read answered");
 
-          return { refs: answered, adopt };
+          return { refs: answered, stow };
         }),
     };
 
     const repo = Repository.make(raw, settings({ time: `${time} seconds` }));
 
-    return { repo, log: Cell.get(log), reading, adopting, answered };
+    return { repo, log: Cell.get(log), reading, stowing, answered };
   });
 
 const ask = (repo: Repository.Repository["Service"]) =>
   Effect.result(repo.fetch({ remote: Remote.named(ORIGIN), under }).pipe(Effect.provide(Credentials.none)));
 
 const STEPS = {
-  clean: ["read started", "read answered", "adopt started", "adopt ended", "scope closed"],
+  clean: ["read started", "read answered", "stow started", "stow ended", "scope closed"],
   cutInRead: ["read started", "scope closed"],
-  refusedAdopt: ["read started", "read answered", "adopt started", "scope closed"],
+  refusedStow: ["read started", "read answered", "stow started", "scope closed"],
 } as const;
 
-// Plant (F18): keep `adopt` inside `limited`, wrapped in `Effect.uninterruptible`, so the limit firing in the adopt answers `TimedOut` after it ran, "the limit fires
-// in the adopt" red; run `adopt` interruptibly outside the limit, so a caller's interrupt cuts it, "the caller interrupts in the adopt" red; run `adopt` in a finalizer
+// Plant (F18): keep `stow` inside `limited`, wrapped in `Effect.uninterruptible`, so the limit firing in the stow answers `TimedOut` after it ran, "the limit fires
+// in the stow" red; run `stow` interruptibly outside the limit, so a caller's interrupt cuts it, "the caller interrupts in the stow" red; run `stow` in a finalizer
 // after every ending, so the limit firing in the read, and a read that fails, run it, "the limit fires in the read" and "the read fails" red; run it with `Effect.ignore`,
-// so a refused adopt answers the refs, "the adopt fails" red; run it before the read's answer or twice, the log's order or count red.
+// so a refused stow answers the refs, "the stow fails" red; run it before the read's answer or twice, the log's order or count red.
 it.effect.prop(
-  "F18 make adopts once and never cuts it: the limit firing in fetch answers TimedOut and adopt never runs; the limit firing in adopt lets it end and the call answers the refs; a caller interrupt in adopt lets it end; adopt runs once, only after fetch answered; the scope fetch was given closes after adopt ends, and on every failure",
+  "F18 make stows once and never cuts it: the limit firing in fetch answers TimedOut and stow never runs; the limit firing in stow lets it end and the call answers the refs; a caller interrupt in stow lets it end; stow runs once, only after fetch answered; the scope fetch was given closes after stow ends, and on every failure",
   { time: int(2, 3600), id: commitIdArb },
   ({ time, id }) =>
     Effect.gen(function* () {
       const reached: Array<string> = [];
 
-      // The limit fires while the read holds: the call fails `TimedOut`, the adopt never ran, and the scope closed.
+      // The limit fires while the read holds: the call fails `TimedOut`, the stow never ran, and the scope closed.
       {
-        const { repo, log, reading } = yield* open({ read: "holds", adopt: "ends" }, time, id);
+        const { repo, log, reading } = yield* open({ read: "holds", stow: "ends" }, time, id);
         const fiber = yield* Effect.forkDetach(ask(repo));
         yield* Deferred.await(reading.reached);
         yield* settle;
@@ -147,66 +147,66 @@ it.effect.prop(
           );
         }
 
-        expect(yield* log, "the limit fires in the read: adopt never runs, and the scope closes").toEqual(
+        expect(yield* log, "the limit fires in the read: stow never runs, and the scope closes").toEqual(
           STEPS.cutInRead,
         );
         reached.push("the limit fires in the read");
       }
 
-      // The limit fires while the adopt holds: nothing cuts it, so it ends and the call answers the refs.
+      // The limit fires while the stow holds: nothing cuts it, so it ends and the call answers the refs.
       {
-        const { repo, log, adopting, answered } = yield* open({ read: "answers", adopt: "holds" }, time, id);
+        const { repo, log, stowing, answered } = yield* open({ read: "answers", stow: "holds" }, time, id);
         const fiber = yield* Effect.forkDetach(ask(repo));
-        yield* Deferred.await(adopting.reached);
+        yield* Deferred.await(stowing.reached);
         yield* settle;
         yield* TestClock.adjust(Duration.seconds(time));
         yield* settle;
         yield* TestClock.adjust(Duration.seconds(time));
         yield* settle;
 
-        expect(fiber.pollUnsafe(), "the limit fires in the adopt: the call is still in it").toBeUndefined();
-        expect(yield* log, "the scope stays open while the adopt runs").not.toContain("scope closed");
+        expect(fiber.pollUnsafe(), "the limit fires in the stow: the call is still in it").toBeUndefined();
+        expect(yield* log, "the scope stays open while the stow runs").not.toContain("scope closed");
 
-        yield* Deferred.succeed(adopting.opened, undefined);
+        yield* Deferred.succeed(stowing.opened, undefined);
         const result = yield* Fiber.join(fiber);
 
-        expect(Result.isSuccess(result), "the limit fires in the adopt: the call answers").toBe(true);
+        expect(Result.isSuccess(result), "the limit fires in the stow: the call answers").toBe(true);
 
         if (Result.isSuccess(result)) {
-          expect(result.success, "the limit fires in the adopt: it answers the read's refs").toEqual(answered);
+          expect(result.success, "the limit fires in the stow: it answers the read's refs").toEqual(answered);
         }
 
-        expect(yield* log, "the read answered, the adopt ran once to its end, then the scope closed").toEqual(
+        expect(yield* log, "the read answered, the stow ran once to its end, then the scope closed").toEqual(
           STEPS.clean,
         );
-        reached.push("the limit fires in the adopt");
+        reached.push("the limit fires in the stow");
       }
 
-      // A caller interrupts while the adopt holds: it ends, and only then does the interrupt land.
+      // A caller interrupts while the stow holds: it ends, and only then does the interrupt land.
       {
-        const { repo, log, adopting } = yield* open({ read: "answers", adopt: "holds" }, time, id);
+        const { repo, log, stowing } = yield* open({ read: "answers", stow: "holds" }, time, id);
         const fiber = yield* Effect.forkDetach(ask(repo));
-        yield* Deferred.await(adopting.reached);
+        yield* Deferred.await(stowing.reached);
         const interrupting = yield* Effect.forkDetach(Fiber.interrupt(fiber));
         yield* settle;
 
-        expect(fiber.pollUnsafe(), "the caller interrupts in the adopt: the call is still in it").toBeUndefined();
+        expect(fiber.pollUnsafe(), "the caller interrupts in the stow: the call is still in it").toBeUndefined();
 
-        yield* Deferred.succeed(adopting.opened, undefined);
+        yield* Deferred.succeed(stowing.opened, undefined);
         yield* Fiber.join(interrupting);
         const exit = yield* Fiber.await(fiber);
 
         expect(
           Exit.isFailure(exit) && Exit.hasInterrupts(exit),
-          "the caller interrupts in the adopt: it answers nothing",
+          "the caller interrupts in the stow: it answers nothing",
         ).toBe(true);
-        expect(yield* log, "the adopt ran to its end, then the scope closed").toEqual(STEPS.clean);
-        reached.push("the caller interrupts in the adopt");
+        expect(yield* log, "the stow ran to its end, then the scope closed").toEqual(STEPS.clean);
+        reached.push("the caller interrupts in the stow");
       }
 
-      // The read fails: the adopt never runs and the scope closes.
+      // The read fails: the stow never runs and the scope closes.
       {
-        const { repo, log } = yield* open({ read: "fails", adopt: "ends" }, time, id);
+        const { repo, log } = yield* open({ read: "fails", stow: "ends" }, time, id);
         const result = yield* ask(repo);
 
         expect(Result.isFailure(result), "the read fails: the call fails").toBe(true);
@@ -215,33 +215,31 @@ it.effect.prop(
           expectFailure(result.failure, Remote.FetchFailed, { url: URL, code: 128 }, "the read fails");
         }
 
-        expect(yield* log, "the read fails: adopt never runs, and the scope closes").toEqual(STEPS.cutInRead);
+        expect(yield* log, "the read fails: stow never runs, and the scope closes").toEqual(STEPS.cutInRead);
         reached.push("the read fails");
       }
 
-      // The adopt fails: the call fails with it, never answering the refs, and the scope closes.
+      // The stow fails: the call fails with it, never answering the refs, and the scope closes.
       {
-        const { repo, log } = yield* open({ read: "answers", adopt: "fails" }, time, id);
+        const { repo, log } = yield* open({ read: "answers", stow: "fails" }, time, id);
         const result = yield* ask(repo);
 
-        expect(Result.isFailure(result), "the adopt fails: the call fails").toBe(true);
+        expect(Result.isFailure(result), "the stow fails: the call fails").toBe(true);
 
         if (Result.isFailure(result)) {
-          expect(result.failure, "the adopt fails: with the adopt's own failure").toEqual(refused);
+          expect(result.failure, "the stow fails: with the stow's own failure").toEqual(refused);
         }
 
-        expect(yield* log, "the adopt fails: it ran once, never ended, and the scope closes").toEqual(
-          STEPS.refusedAdopt,
-        );
-        reached.push("the adopt fails");
+        expect(yield* log, "the stow fails: it ran once, never ended, and the scope closes").toEqual(STEPS.refusedStow);
+        reached.push("the stow fails");
       }
 
       expect(reached, "the law reached every hold").toEqual([
         "the limit fires in the read",
-        "the limit fires in the adopt",
-        "the caller interrupts in the adopt",
+        "the limit fires in the stow",
+        "the caller interrupts in the stow",
         "the read fails",
-        "the adopt fails",
+        "the stow fails",
       ]);
     }),
   { arbitrary: { runs: 50, seed: 119120 } },

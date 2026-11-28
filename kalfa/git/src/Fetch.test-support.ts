@@ -8,7 +8,7 @@
 // at another commit; (h) the remote by name; (i) a name with no remote; (j) by each URL; (k) a URL that reaches nothing; (l) a remote whose
 // history is cut; (m) a remote ref that moves; (n) one more ref than `limits.refs` and exactly that many; (o) a credential with
 // awkward text; (p) the slot fails; (q) the local repository is shallow. F21 holds a fetch where the time limit can fire: (a) before the read answers, (b) after the
-// adopt's listing, (c) after the `.pack` rename, (d) after the `.rev` rename, (e) after the `.idx` rename.
+// stow's listing, (c) after the `.pack` rename, (d) after the `.rev` rename, (e) after the `.idx` rename.
 import { describe, expect, it } from "@effect/vitest";
 import {
   Arbitrary,
@@ -62,7 +62,7 @@ import * as Tree from "./Tree.ts";
 // What a runner gives
 // ---------------------------------------------------------------------------------------------------------
 
-/** Where a subject can hold a fetch, each after the step it names has run: the remote's read, the alternates file, the adopt's listing, and each rename of a pack's file. */
+/** Where a subject can hold a fetch, each after the step it names has run: the remote's read, the alternates file, the stow's listing, and each rename of a pack's file. */
 export type Hold = "read" | "alternates" | "listing" | "pack" | "rev" | "idx";
 
 /** A hold the law waits at: `reached` ends when the fetch is there, and the fetch goes on after `open`. */
@@ -803,20 +803,22 @@ export const suite = (name: string, subject: FetchSubject, options: SuiteOptions
     );
 
     // Plant (F21): copy the commits into the store before the limit ends, as a finalizer, so a fetch that timed out before its read answered adds commits, red at (a);
-    // run the adopt inside the time limit (`Effect.timeoutOrElse` around it), so a limit that fires after the listing or a rename answers TimedOut, red at (b) to (e) and
+    // run the stow inside the time limit (`Effect.timeoutOrElse` around it), so a limit that fires after the listing or a rename answers TimedOut, red at (b) to (e) and
     // at (c) with a `.pack` and no `.idx`, garbage 1; drop the `pack.writeReverseIndex` pin, so no `.rev` is written, red on every git before 2.41 (the hold at (d) is never reached). F19 and F20 hold the rename order, not this law.
     it.effect.prop(
-      "F21 cut short at every hold the subject has: before the read answers, the call fails TimedOut, each remote commit this repository lacked still reads NoSuchCommit and no pack file was added; at any hold inside or after the adopt, the call answers the refs, every answered commit reads back, every pack the fetch added has its .pack, .rev and .idx, and git count-objects -v says garbage: 0; the carrier reached every hold its subject names",
+      "F21 cut short at every hold the subject has: before the read answers, the call fails TimedOut, each remote commit this repository lacked still reads NoSuchCommit and no pack file was added; at any hold inside or after the stow, the call answers the refs, every answered commit reads back, every pack the fetch added has its .pack, .rev and .idx, and git count-objects -v says garbage: 0; the carrier reached every hold its subject names",
       { texture: textureArb, time: timeArb },
       ({ texture, time }) =>
         Effect.gen(function* () {
           const carrier = fetchCarrier(texture);
+
           // The time limit is drawn, so the clock moves by the limit the repository holds and by no number the law knows.
           const scenario: Scenario = {
             ...carrier.scenarios.plain,
             local: EMPTY,
             settings: settings({ time: `${time} seconds` }),
           };
+
           const under = "refs/heads/main";
           const answered = refsModel(scenario.remote, under);
           const slot = yield* recorder(Option.none());
@@ -877,7 +879,7 @@ export const suite = (name: string, subject: FetchSubject, options: SuiteOptions
 
                   expect(yield* seeded.packs, `${place}: no pack file was added`).toEqual(before);
                 } else {
-                  expect(fiber.pollUnsafe(), `${place}: the adopt is not cut by the limit`).toBeUndefined();
+                  expect(fiber.pollUnsafe(), `${place}: the stow is not cut by the limit`).toBeUndefined();
                   yield* gate.open;
                   const result = yield* Fiber.join(fiber);
                   expect(Result.isSuccess(result), `${place}: the call answers`).toBe(true);
