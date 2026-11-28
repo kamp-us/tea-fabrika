@@ -15,6 +15,7 @@ const IMPORTS: ReadonlyArray<readonly [header: string, imports: boolean]> = [
   ['import * as Effect from "effect/Effect";', true],
   ['import { Schema } from "effect/Schema";', true],
   ['import { "effect" as Effect } from "./other.ts";', true],
+  ['import { "effect" as Effect, other } from "./other.ts";', true],
   ['import { Effect } from "@effect/platform";', false],
   ['import { Effect } from "./effect.ts";', false],
   ["", false],

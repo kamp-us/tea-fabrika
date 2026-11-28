@@ -31,7 +31,24 @@ it("O3 pinned: no-context-tag refuses Context.Tag, Context.GenericTag and Effect
     ['export const f = other.Context.Tag("f");', 0],
     ["// Context.Tag in a comment", 0],
     ['export const g = "Context.Tag";', 0],
+    // A computed member and an optional one are not the plain member the rule reads.
+    ["export const h = Context[Tag];", 0],
+    ['export const i = Effect?.Service("i");', 0],
   ]);
+});
+
+it("O3 pinned: no-context-tag refuses the JSX member Context.Tag once, at the opening tag, and passes another module's", () => {
+  check(
+    "no-context-tag",
+    noContextTag,
+    [
+      ['import { Context } from "effect";', 0],
+      ["export const a = <Context.Tag />;", 1],
+      ["export const b = <Context.Tag></Context.Tag>;", 1],
+      ["export const c = <Other.Tag />;", 0],
+    ],
+    { filename: "src/a.tsx" },
+  );
 });
 
 it("O3 pinned: no-data-taggederror refuses Data.TaggedError in values and types, and passes other modules' TaggedError", () => {

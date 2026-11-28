@@ -56,6 +56,9 @@ const NEIGHBORS: ReadonlyArray<(spelling: Spelling, i: number) => string> = [
   (_, i) => `const n${i} = git.squash(x);`,
   (_, i) => `const n${i} = Mine.squash(x);`,
   (_, i) => `const n${i} = mine(x);`,
+  // The object of the member is a call, or a member of something that is not `Cause`.
+  (_, i) => `const n${i} = make().squash(x);`,
+  (_, i) => `const n${i} = Mine.Other.squash(x);`,
   (s, i) => `const n${i} = (${s.local}: { squash: (u: unknown) => unknown }) => ${s.local}.squash(x);`,
   (s, i) => `function n${i}(${s.local}: (u: unknown) => unknown) { return ${s.local}(x); }`,
   (s, i) => `const n${i} = () => { const ${s.local} = { squash: (u: unknown) => u }; return ${s.local}.squash(x); };`,
