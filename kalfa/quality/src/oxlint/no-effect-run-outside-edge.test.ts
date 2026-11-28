@@ -7,7 +7,8 @@
 //
 // Plants, each run once on no-effect-run-outside-edge.ts and undone:
 // - drop `runSyncExitWith` from the list: its line stops firing;
-// - match member calls only: a bare `runFork(e)` stops firing.
+// - match member calls only: a bare `runFork(e)` stops firing;
+// - drop the `callee.property.type === "Identifier"` check: a private member call `this.#runSync(e)` fires.
 import { it } from "@effect/vitest";
 import { Array as Arr } from "effect";
 import * as Effect from "effect/Effect";
@@ -44,6 +45,8 @@ const PASSES: ReadonlyArray<string> = [
   "Effect.succeed(1);",
   "runtime.runLater(e);",
   "Effect.runnable(e);",
+  // A private member is a name of its class, not the run function of the same name.
+  "export class Own { #runSync(e: unknown) { return e; } m(e: unknown) { return this.#runSync(e); } }",
 ];
 
 it("O5 no-effect-run-outside-edge: refuses every run name the installed Effect exports, in every call form, and passes runMain", () => {

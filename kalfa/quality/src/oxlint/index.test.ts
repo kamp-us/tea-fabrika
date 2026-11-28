@@ -7,8 +7,11 @@
 // Plants, each run once and undone:
 // - O13: name the plugin `kalfa` in index.ts; name it `@kalfa`; drop `no-hand-tag` from `rules`; add a twelfth key;
 // - O12: write `@kalfa/quality/no-cause-squash` into that rule's message by hand; put `(#2736)` back into
-//   `no-throw-in-effect-gen`'s message; put "which the owner reads" back into `no-effect-run-outside-edge`'s.
+//   `no-throw-in-effect-gen`'s message; put "which the owner reads" back into `no-effect-run-outside-edge`'s; put `(#2736)`
+//   into the `tryPromise` message of `no-effect-promise` and `next/AGENTS.md` into the `as never as T` message of
+//   `no-type-assertions`: a rule that writes several messages has one firing line for each, and all are read.
 import { it } from "@effect/vitest";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { expect } from "vitest";
 import plugin from "./index.ts";
@@ -28,10 +31,16 @@ it("O13 pinned: the plugin is named @kalfa/quality and holds exactly the eleven 
 it("O12 every message is neutral, and a disable line in one names the rule as context.id gives it", () => {
   fc.assert(
     fc.property(fc.constantFrom(...RULES), (name) => {
-      const { code, reports } = FIRING[name];
-      const written = messages(name, plugin.rules[name]!, code, reports);
+      const written = Arr.flatMap(FIRING[name], ({ code, reports }) => {
+        const found = messages(name, plugin.rules[name]!, code, reports);
 
-      expect(written).toHaveLength(reports);
+        expect(found).toHaveLength(reports);
+
+        return found;
+      });
+
+      // Each firing line reaches a message of its own, so none goes unread.
+      expect(new Set(written).size).toBe(FIRING[name].length);
 
       for (const message of written) {
         expect(message).not.toMatch(OURS);

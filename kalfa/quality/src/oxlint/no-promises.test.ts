@@ -4,12 +4,14 @@
 // from the installed `effect` at test time: `Effect.promise`, `Effect.tryPromise`, each `*Promise` export of `Schema` and each
 // `*AsyncIterable*` export of `Stream`. The four spellings are (h1) the module name as written, (h2) a renamed named import,
 // (h3) a module namespace and (h4) the member imported by its own name. A call two names deep (`X.Effect.promise()`) is the
-// README's known miss, so it is never drawn. Each generated file holds every call once, each under a drawn spelling.
+// README's known miss, so it is never drawn. Each generated file holds every call once, each under a drawn spelling, and
+// imports from `effect` only the module names it draws, so a module name written without its import (h1) is drawn too.
 //
 // Plants, each run once on no-promises.ts and undone:
 // - drop `toAsyncIterableEffect` from the list: its line stops firing;
 // - read only the names in `MODULES`, not the file's Effect imports: the (h2) and (h3) spellings stop firing;
-// - refuse every `.catch`: `Effect.catch(...)` fires.
+// - refuse every `.catch`: `Effect.catch(...)` fires;
+// - empty `MODULES`: the module name written in a file that does not import it stops firing.
 import { it } from "@effect/vitest";
 import { Array as Arr } from "effect";
 import * as Schema from "effect/Schema";
@@ -76,13 +78,15 @@ const PASSES: ReadonlyArray<Line> = [
 ];
 
 const generated = fc.record({
+  // The module names the file imports from `effect`: none, some or all. A name left out is written with no import.
+  imported: fc.subarray<Part>(["Effect", "Schema", "Stream"]),
   forms: fc.array(fc.nat({ max: 3 }), { minLength: CALLS.length, maxLength: CALLS.length }),
   alias: fc.stringMatching(/^[a-z]{2,6}$/).map((word) => `K${word}`),
 });
 
 it("O8 no-promises: refuses every Promise shape and each Promise call of the installed Effect in its four spellings", () => {
   fc.assert(
-    fc.property(generated, ({ forms, alias }) => {
+    fc.property(generated, ({ imported, forms, alias }) => {
       const calls = Arr.map(CALLS, ([part, name], i) => {
         const [header, callee] = spellings(part, name, `${alias}${i}`)[forms[i]!]!;
         const text = `export const c${i} = ${callee}(p);`;
@@ -91,7 +95,7 @@ it("O8 no-promises: refuses every Promise shape and each Promise call of the ins
       });
 
       const lines: ReadonlyArray<Line> = [
-        ['import { Effect, Schema, Stream } from "effect";', 0],
+        ...(imported.length === 0 ? [] : [[`import { ${Arr.join(imported, ", ")} } from "effect";`, 0] satisfies Line]),
         ["declare const p: Promise<number>;", 0],
         ...Arr.flatMap(calls, ({ header }): ReadonlyArray<Line> => (header === null ? [] : [[header, 0]])),
         ...SHAPES,

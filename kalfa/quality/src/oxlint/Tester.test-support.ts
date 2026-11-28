@@ -1,6 +1,6 @@
 // What the rule laws share: one `RuleTester` wired to run each case at once, so a failure throws into fast-check and
 // shrinks; a way to state a generated file as lines, each with the number of reports the rule makes on it; a way to
-// read the messages a rule writes; and one firing line for each of the eleven rules. It holds no law: vitest runs no
+// read the messages a rule writes; and the firing lines of the eleven rules. It holds no law: vitest runs no
 // `*.test-support.ts` file, so the laws that read the messages are in `index.test.ts`.
 import type { CreateRule, Rule } from "@oxlint/plugins";
 import { Array as Arr } from "effect";
@@ -130,41 +130,61 @@ interface Firing {
   readonly reports: number;
 }
 
-/** A firing line for each rule, written from its top comment: the smallest file the rule refuses. */
-export const FIRING: Readonly<Record<RuleName, Firing>> = {
-  "effect-functions": {
-    code: 'import { Effect } from "effect";\nexport const f = () => Effect.void.pipe(Effect.withSpan("s"));',
-    reports: 1,
-  },
-  "no-cause-squash": {
-    code: 'import { Cause } from "effect";\nexport const f = (c: Cause.Cause<unknown>) => Cause.squash(c);',
-    reports: 1,
-  },
-  "no-context-tag": {
-    code: 'import { Context } from "effect";\nexport const A = Context.Tag("a");',
-    reports: 1,
-  },
-  "no-data-taggederror": {
-    code: 'import { Data } from "effect";\nexport class A extends Data.TaggedError("A") {}',
-    reports: 1,
-  },
-  "no-effect-promise": {
-    code: 'import { Effect } from "effect";\nexport const a = Effect.promise(() => Promise.resolve(1));',
-    reports: 1,
-  },
-  "no-effect-run-outside-edge": {
-    code: 'import { Effect } from "effect";\nexport const a = Effect.runPromise(Effect.void);',
-    reports: 1,
-  },
-  "no-hand-tag": { code: 'export const a = { _tag: "x" };', reports: 1 },
-  "no-promises": { code: "export const a = async () => 1;", reports: 1 },
-  "no-raw-try-catch": {
-    code: 'import { Effect } from "effect";\nexport const e = Effect.void;\ntry { e; } catch { e; }',
-    reports: 1,
-  },
-  "no-throw-in-effect-gen": {
-    code: 'import { Effect } from "effect";\nexport const a = Effect.gen(function* () { throw new Error("a"); });',
-    reports: 1,
-  },
-  "no-type-assertions": { code: "declare const x: number;\nexport const a = x as unknown as string;", reports: 1 },
+/** The first line of a file that imports Effect, the way most of the firing lines below do. */
+const EFFECT = 'import { Effect } from "effect";';
+
+/**
+ * Each rule's firing lines, written from its top comment: for each message the rule writes, the smallest file that makes
+ * it write that one. A rule with one message has one line, and a rule with several has one for each, so a law that reads
+ * every line reads every message.
+ */
+export const FIRING: Readonly<Record<RuleName, ReadonlyArray<Firing>>> = {
+  "effect-functions": [
+    { code: `${EFFECT}\nexport const f = () => Effect.void.pipe(Effect.withSpan("s"));`, reports: 1 },
+  ],
+  "no-cause-squash": [
+    {
+      code: 'import { Cause } from "effect";\nexport const f = (c: Cause.Cause<unknown>) => Cause.squash(c);',
+      reports: 1,
+    },
+  ],
+  "no-context-tag": [
+    { code: 'import { Context } from "effect";\nexport const A = Context.Tag("a");', reports: 1 },
+    { code: 'import { Context } from "effect";\nexport const A = Context.GenericTag("a");', reports: 1 },
+    { code: `${EFFECT}\nexport const A = Effect.Service("a");`, reports: 1 },
+  ],
+  "no-data-taggederror": [
+    { code: 'import { Data } from "effect";\nexport class A extends Data.TaggedError("A") {}', reports: 1 },
+  ],
+  "no-effect-promise": [
+    { code: `${EFFECT}\nexport const a = Effect.promise(() => Promise.resolve(1));`, reports: 1 },
+    { code: `${EFFECT}\nexport const a = Effect.tryPromise(() => Promise.resolve(1));`, reports: 1 },
+  ],
+  "no-effect-run-outside-edge": [{ code: `${EFFECT}\nexport const a = Effect.runPromise(Effect.void);`, reports: 1 }],
+  "no-hand-tag": [{ code: 'export const a = { _tag: "x" };', reports: 1 }],
+  "no-promises": [
+    { code: "export const a = async () => 1;", reports: 1 },
+    { code: "declare const p: Promise<number>;\nexport const a = await p;", reports: 1 },
+    { code: "declare const p: Promise<number>;\nexport {};\nfor await (const x of [p]) { void x; }", reports: 1 },
+    { code: 'export const a = import("./a.ts");', reports: 1 },
+    { code: "export const a = new Promise<number>(() => undefined);", reports: 1 },
+    {
+      code: 'import { tryPromise } from "effect/Effect";\ndeclare const p: () => unknown;\nexport const a = tryPromise(p);',
+      reports: 1,
+    },
+    { code: `${EFFECT}\ndeclare const p: () => unknown;\nexport const a = Effect.promise(p);`, reports: 1 },
+    { code: "export const a = Promise.resolve(1);", reports: 1 },
+    { code: "declare const p: Promise<number>;\nexport const a = p.then((x) => x);", reports: 1 },
+    { code: "declare const p: Promise<number>;\nexport const a = p.catch(() => 0);", reports: 1 },
+  ],
+  "no-raw-try-catch": [{ code: `${EFFECT}\nexport const e = Effect.void;\ntry { e; } catch { e; }`, reports: 1 }],
+  "no-throw-in-effect-gen": [
+    { code: `${EFFECT}\nexport const a = Effect.gen(function* () { throw new Error("a"); });`, reports: 1 },
+  ],
+  "no-type-assertions": [
+    { code: "declare const x: number;\nexport const a = x as unknown as string;", reports: 1 },
+    { code: "declare const x: number;\nexport const a = x as never as string;", reports: 1 },
+    { code: "declare const x: number;\nexport const a = x as any;", reports: 1 },
+    { code: "declare const x: number;\nexport const a = <string>x;", reports: 1 },
+  ],
 };

@@ -5,7 +5,9 @@
 //
 // Plants, each run once on the rule's file or on `internal/Syntax.ts` and undone:
 // - stop visiting `TSQualifiedName` in `banNames`: the type lines stop firing;
-// - drop the `isWritten` check: the planted `Data.TaggedError = f;` fires.
+// - drop the `isWritten` check: the planted `Data.TaggedError = f;` fires;
+// - drop `dotted`'s `node.property.type !== "Identifier"` check: a private member `Data.#TaggedError` (and `Context.#Tag`)
+//   reads as the plain member of the same name and fires.
 import { it } from "@effect/vitest";
 import { noContextTag } from "./no-context-tag.ts";
 import { noDataTaggederror } from "./no-data-taggederror.ts";
@@ -34,6 +36,8 @@ it("O3 pinned: no-context-tag refuses Context.Tag, Context.GenericTag and Effect
     // A computed member and an optional one are not the plain member the rule reads.
     ["export const h = Context[Tag];", 0],
     ['export const i = Effect?.Service("i");', 0],
+    // A private member is not the plain member of the same name: `#Tag` is a name of the class, not of `Context`.
+    ["export class P { static #Tag = 1; static m(Context: P) { return Context.#Tag; } }", 0],
   ]);
 });
 
@@ -66,5 +70,7 @@ it("O3 pinned: no-data-taggederror refuses Data.TaggedError in values and types,
     ['export class C extends Schema.TaggedError<C>()("C", {}) {}', 0],
     ["// Data.TaggedError in a comment", 0],
     ['export const text = "Data.TaggedError";', 0],
+    // A private member of a value named `Data`: not `Data.TaggedError`.
+    ["export class P { static #TaggedError = 1; static m(Data: P) { return Data.#TaggedError; } }", 0],
   ]);
 });

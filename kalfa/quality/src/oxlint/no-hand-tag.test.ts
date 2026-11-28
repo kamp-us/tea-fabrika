@@ -7,6 +7,7 @@
 // Plants, each run once on no-hand-tag.ts and undone:
 // - ignore the option: the listed file fires (O6);
 // - compare the path's last part only: `other/ledger/Log.ts` stops firing (O6);
+// - match a listed path as the end of the file's: `x/src/ledger/Log.ts` stops firing when `src/ledger/Log.ts` is listed (O6);
 // - skip the file's constants: `{ [TAG]: x }` stops firing (O6);
 // - drop `additionalProperties: false` from the schema: `{ alow: [...] }` is taken (O7);
 // - drop the item pattern: `./x.ts` is taken (O7).
@@ -62,16 +63,18 @@ const HEADER: ReadonlyArray<string> = [
   'let LET = "_tag";',
 ];
 
-const LISTED = "src/ledger/Log.ts";
-
-/** Files that end like the listed one and are another file. */
-const OTHERS: ReadonlyArray<string> = [
+/** Files that share their ending, their start or a part with each other: a listed one passes, an unlisted one does not. */
+const PATHS: ReadonlyArray<string> = [
+  "src/ledger/Log.ts",
+  "x/src/ledger/Log.ts",
+  "ledger/Log.ts",
+  "Log.ts",
   "other/ledger/Log.ts",
   "src/Log.ts",
-  "ledger/Log.ts",
   "src/ledger/Log.tsx",
   "src/ledger/log.ts",
   "src/ledger/Log.ts.ts",
+  "src/ledger/Log.ts/Log.ts",
 ];
 
 /** Paths an option may hold: from where oxlint runs, with no leading `./` and no absolute path. */
@@ -80,26 +83,24 @@ const path = fc.stringMatching(/^[a-z][a-z0-9/.-]{0,20}$/);
 const generated = fc.record({
   fire: fc.nat({ max: FIRES.length - 1 }),
   pass: fc.nat({ max: PASSES.length - 1 }),
-  file: fc.oneof(fc.constant(LISTED), fc.constantFrom(...OTHERS)),
-  more: fc.array(
-    path.filter((value) => value !== LISTED),
-    { maxLength: 3 },
-  ),
+  file: fc.constantFrom(...PATHS),
+  // What the option lists: some of the look-alike paths, and any other paths.
+  allow: fc.array(fc.oneof(fc.constantFrom(...PATHS), path), { maxLength: 4 }),
 });
 
 it("O6 no-hand-tag keys: refuses each way of writing a `_tag` key, passes a read and a maker, and skips exactly the listed files", () => {
   fc.assert(
-    fc.property(generated, ({ fire, pass, file, more }) => {
+    fc.property(generated, ({ fire, pass, file, allow }) => {
       const lines = (reports: number): ReadonlyArray<Line> => [
         ...Arr.map(HEADER, (text): Line => [text, 0]),
         [FIRES[fire]!, reports],
         [PASSES[pass]!, 0],
       ];
 
-      // A listed file reports nothing, and every other file reports the key, however the list is filled.
-      check("no-hand-tag", noHandTag, lines(file === LISTED ? 0 : 1), {
+      // A listed file reports nothing, and every other file reports the key, whatever else the list holds.
+      check("no-hand-tag", noHandTag, lines(allow.includes(file) ? 0 : 1), {
         filename: file,
-        options: [{ allow: [LISTED, ...more] }],
+        options: [{ allow }],
       });
       // With no file listed, every file reports.
       check("no-hand-tag", noHandTag, lines(1), { filename: file });
