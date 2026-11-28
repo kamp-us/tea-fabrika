@@ -24,7 +24,7 @@ requests: the package first, then the switch.
 // kalfa/quality/src/oxlint/index.ts: what any repo loads.
 import type { Plugin } from "@oxlint/plugins";
 const plugin: Plugin = {
-  meta: { name: "@kalfa/quality" }, // the open question below; every code reads `<name>(<rule>)`
+  meta: { name: "@kalfa/quality" }, // the lead's answer, below; every code reads `@kalfa/quality(<rule>)`
   rules: { "effect-functions": effectFunctions, "no-promises": noPromises, /* ...the other nine */ },
 };
 export default plugin;
@@ -38,28 +38,56 @@ export default plugin;
 // oxlint-disable-next-line @kalfa/quality/no-promises -- edge: a Durable Object answers a Promise
 ```
 
+## The lead's answer: the plugin is named `@kalfa/quality`
+
+The plan waited on this one question, and the lead answered it so the build can start. The plugin's `meta.name` is
+`@kalfa/quality`, so a rule reads `@kalfa/quality/<rule>` in a config and a disable comment, and its code prints as
+`@kalfa/quality(<rule>)`.
+
+- **Why:** it matches the package that ships it, so a reader who sees the code knows what to install. It also leaves
+  `kalfa/` free for other kalfa plugins later.
+- **Cost:** 7 more characters than `fabrika/` on each of the about 670 disable lines.
+- **Undo:** easy before release. A new name changes `index.ts`, law O13, and the rename command's target, and the
+  second pull request's rename runs again. After the second pull request lands, a change is one more mechanical rename.
+- No config alias can keep `fabrika/` names working instead (the review's tryout): `fabrika` is our own plugin's
+  name, so the old names have to move either way.
+
+Where it lands in this plan: `index.ts`'s `meta.name`; law O13, which pins it in the first pull request; law M1, which
+reads it from the real oxlint in the second; the rename command's target; every config key, disable line and ledger
+code in the second pull request; the package README's load section.
+
 ## Calls under 80%, read these first
 
-- **The plugin's name, `@kalfa/quality`, 70% sure.** It is the one open question below. The build can start on the
-  lean: a different answer changes the name in `index.ts` and the rename command's target, before the second pull
-  request's rename runs. No config alias can keep `fabrika/` names working instead (the review's tryout): `fabrika` is
-  our own plugin's name, so the old names have to move.
 - **Two pull requests, not one, 75% sure.** The first adds about 1,000 lines of rule code, nearly all copied. The
   second is the switch plus a mechanical rename across about 190 files. In one diff the rename hides the new code from
   the review. The review of this plan kept the split.
 
-## Ticket 2369, the dropped test-file import bans
+## Ticket 2369 landed first
 
-This plan does not fix https://github.com/kamp-us/tea-fabrika/issues/2369, and it does not wait for it. 85% sure.
+https://github.com/kamp-us/tea-fabrika/issues/2369 landed on main in
+https://github.com/kamp-us/tea-fabrika/pull/2381, before this plan's build. This branch has merged it. What it means
+here:
 
-- The new test files in `kalfa/quality/src/oxlint/` sit under `kalfa/quality/**`, so they share the hole until #2369
-  lands, as the stryker and vitest test files do today.
-- #2369's fix adds a block for `kalfa/quality`'s test files after Q8. Its glob reaches the new test files with no edit
-  here.
-- This plan's own import block (law O15) leaves test files out, as V3 does, and repeats every entry of every earlier
-  block that reaches its files. So it already passes the check #2369 adds: "a later block never drops an earlier
-  block's import bans for the same files".
-- Either order works. Whichever lands second rebases on `.oxlintrc.json`, and the lead reruns `pnpm lint`.
+- `oxlint-plugins/config-blocks.test.ts` now asks oxlint whether every import ban still holds for every tracked file.
+  It reaches the new files in `kalfa/quality/src/oxlint/` with no edit, so it is a second guard on law O15: O15's
+  block must repeat every ban of every earlier block that reaches its files (Q8 and the root), or that test is red.
+- The kalfa product block is now `kalfa/*/src/**` (law K1 in that test), so the Effect rules this plan moves are on in
+  `kalfa/quality/src/**`, including the new rule files themselves. The first finding of the earlier draft is fixed
+  (Findings).
+- M2 reads its on and off paths from the config as it is on main after #2369, not from the older block list.
+
+## Main's root links, after pull request 2384
+
+https://github.com/kamp-us/tea-fabrika/pull/2384 made `lint:reach` treat every `kalfa/*` package as a start and
+dropped the root `package.json` links that no root code imports. Checked against this plan:
+
+- **Pull request 1** adds no root line and needs none. `kalfa/quality` is a start, so it passes `lint:reach` with no
+  user.
+- **Pull request 2** still adds `"@kalfa/quality": "workspace:*"` to the root. 90% sure. The root `.oxlintrc.json`
+  names `@kalfa/quality/oxlint` in `jsPlugins`, and oxlint resolves that name from the repo root through
+  `node_modules/@kalfa/quality`. That is root-level code loading the package by name, which is the case #2384 keeps a
+  link for. Without it, `pnpm lint` cannot load the config (M1's second plant). The doubt: a later cleanup that only
+  greps imports may drop it, so the line's reason goes in the pull request body.
 
 ## How others do it
 
@@ -113,6 +141,7 @@ kalfa/quality/src/oxlint/
   effect-functions.ts ... no-type-assertions.ts    one file per rule, named for its rule
   <rule>.test.ts                each rule's laws, in process through RuleTester
   Tester.test-support.ts        one RuleTester wired to vitest, and one firing line per rule for law O12
+  index.test.ts                 the plugin's own laws: O12 (neutral messages) and O13 (its name and its rules)
 ```
 
 `package.json` gains `"./oxlint": "./src/oxlint/index.ts"`, a description that names `/oxlint`, and `oxlint` and
@@ -203,7 +232,7 @@ option shape gets through quietly. The only option forms are: none (`"error"`), 
 ```
 
 - **The root `package.json`** gains `"@kalfa/quality": "workspace:*"`, so the config's specifier resolves from the top
-  of the repo.
+  of the repo. The root config loads the package by name, so this is a link #2384's rule keeps (its own section).
 - **Our plugin** loses the eleven rules from `oxlint-plugins/index.ts`, their files, and their five test files. Their
   rule laws are the package's now. Their settings laws, which paths each rule is on in, move to one new file,
   `oxlint-plugins/quality-rules.test.ts`.
@@ -357,7 +386,7 @@ pull request.
 
 ## Laws
 
-Laws O1 to O12 and O15 are the first pull request's, M1 to M12 the second's. Each generated law runs 100 cases in
+Laws O1 to O13 and O15 are the first pull request's, M1 to M12 the second's. Each generated law runs 100 cases in
 memory on every pull request. Each rule law runs in process through `RuleTester` with neutral file names (`src/a.ts`),
 the rule's cases copied from today's tests and from `plants.test.ts`, never the repo's config.
 
@@ -374,8 +403,9 @@ the rule's cases copied from today's tests and from `plants.test.ts`, never the 
 | O9, `no-raw-try-catch` refuses a `try/catch` only in a file that imports Effect (the barrel, a subpath, a string-named specifier), and passes `try/finally` and a file with no Effect import | test | pinned: each import form once, with and without a catch | drop the import gate: a plain file's `try/catch` fires, red; report `try/catch/finally` too: red | kalfa/quality/src/oxlint/no-raw-try-catch.test.ts |
 | O10, `no-throw-in-effect-gen` refuses a `throw` at any (c) depth inside `Effect.gen(...)`, `Effect.fn(...)` and `Effect.fn("name")(...)`, and passes one outside any Effect body. 100 runs | test | fc.record: a (c) depth and a body form | (c) look at the nearest call only: a `throw` inside a nested arrow passes, red; drop the curried form: `Effect.fn("n")(function* ...)` passes, red | kalfa/quality/src/oxlint/no-throw-in-effect-gen.test.ts |
 | O11, `no-type-assertions` refuses `as any`, `as unknown as T` and `as never as T` with at most one pair of parentheses around the inner cast, and `<T>x`; it passes `as const`, one `as T` and `as (any)` | test | pinned: each form once | make `grouped(...) <= 1` into `=== 0`: `(x as unknown) as T` passes, red; drop the `TSTypeAssertion` visitor: red | kalfa/quality/src/oxlint/no-type-assertions.test.ts |
-| O12, every message is neutral: for each (i) fire, the message holds none of `fabrika`, `owner`, `FateWireCode`, `ticket`, `Tier`, a `#` followed by digits, a `P` followed by digits (a plan item), `next/`, `packages/`, `apps/`, `.kalfa/`, `oxlint-plugins/`; and a message that shows a disable line names the rule as `context.id` gives it (`rule-to-test/<rule>` under RuleTester). 100 runs | test | fc.constantFrom: (i) the eleven firing lines | (i) write `@kalfa/quality/no-cause-squash` into its message by hand: red; put `(#2736)` back into `no-throw-in-effect-gen`'s message: red; put "which the owner reads" back into `no-effect-run-outside-edge`'s: red | kalfa/quality/src/oxlint/Tester.test-support.ts |
-| O15, what `/oxlint` ships imports no kalfa package and no path into `oxlint-plugins/`, and keeps every entry of Q8 and the blocks before it | lint | lint | add `import * as Hidden from "@kalfa/diagnostics/Hidden"` to `no-promises.ts`: `pnpm lint` red; import `../../../../oxlint-plugins/match.ts` from `internal/Syntax.ts`: red; the same kalfa import in a test file of the folder stays green | .oxlintrc.json |
+| O12, every message is neutral: for each (i) fire, the message holds none of `fabrika`, `owner`, `FateWireCode`, `ticket`, `Tier`, a `#` followed by digits, a `P` followed by digits (a plan item), `next/`, `packages/`, `apps/`, `.kalfa/`, `oxlint-plugins/`; and a message that shows a disable line names the rule as `context.id` gives it (`rule-to-test/<rule>` under RuleTester). 100 runs | test | fc.constantFrom: (i) the eleven firing lines | (i) write `@kalfa/quality/no-cause-squash` into its message by hand: red; put `(#2736)` back into `no-throw-in-effect-gen`'s message: red; put "which the owner reads" back into `no-effect-run-outside-edge`'s: red | kalfa/quality/src/oxlint/index.test.ts |
+| O13, the plugin is named `@kalfa/quality` (the lead's answer) and holds exactly the eleven rules: `index.ts`'s default export has `meta.name` equal to `@kalfa/quality` and its `rules` keys equal the eleven names | test | pinned: the name and the eleven names | name the plugin `kalfa` in `index.ts`: red; name it `@kalfa`: red; drop `no-hand-tag` from `rules`: red; add a twelfth key: red | kalfa/quality/src/oxlint/index.test.ts |
+| O15, what `/oxlint` ships imports no kalfa package and no path into `oxlint-plugins/`, and keeps every entry of Q8 and the blocks before it | lint | lint | add `import * as Hidden from "@kalfa/diagnostics/Hidden"` to `no-promises.ts`: `pnpm lint` red; import `../../../../oxlint-plugins/match.ts` from `internal/Syntax.ts`: red; the same kalfa import in a test file of the folder stays green; write O15's block without Q8's entries: `oxlint-plugins/config-blocks.test.ts` red | .oxlintrc.json |
 | M1, the real oxlint loads the package by name through our config and reports its rules under `@kalfa/quality`: a planted `await` in a `next/` file fires as `@kalfa/quality(no-promises)`, a disable naming `@kalfa/quality/no-promises` silences its line with no unused report, and nothing fires as `fabrika(<moved rule>)` | test | scenario: one `plant.ts` run over M2's planted files | drop `@kalfa/quality/oxlint` from `jsPlugins`: the config does not load, red; drop the `node_modules/@kalfa/quality` link from `plant.ts`: red; name the plugin `kalfa` in the package's `index.ts`: the code reads `kalfa(no-promises)`, red | oxlint-plugins/quality-rules.test.ts |
 | M2, our settings scope each moved rule as before: for each of the eleven, one firing line at a path where today's config turns it on fires, and the same line at a path where it is off (a test file, today's version, a folder no block names) does not. A rule missing from the package's `index.ts` fails here, since the config names it | test | pinned: one on-path and one off-path per rule, read from today's `.oxlintrc.json` blocks | drop `@kalfa/quality/no-promises` from the `next/**` block: red; leave `@kalfa/quality/effect-functions` on in kalfa's test block: red; drop `no-hand-tag` from the package's `index.ts`: the config does not load, red | oxlint-plugins/quality-rules.test.ts |
 | M3, our settings give `no-hand-tag` its one allowed file: `next/packages/libfabrika/src/ledger/Log.ts` passes, and `next/packages/libfabrika/src/ledger/Other.ts` with the same line fires | test | scenario: the two files in one run | drop the option from the `next/**` block: `Log.ts` fires, red | oxlint-plugins/quality-rules.test.ts |
@@ -405,7 +435,7 @@ Where a copied law trips a rule, the tests step fixes the law, never the rule.
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| kalfa/quality/src/oxlint/index.ts | build | 45 | new: the plugin, `meta.name` and the eleven rules |
+| kalfa/quality/src/oxlint/index.ts | build | 45 | new: the plugin, `meta.name: "@kalfa/quality"` (the lead's answer) and the eleven rules |
 | kalfa/quality/src/oxlint/internal/Syntax.ts | build | 150 | new: the nine helpers the rules use, copied from `oxlint-plugins/match.ts` |
 | kalfa/quality/src/oxlint/effect-functions.ts | build | 120 | new: copy, neutral comment, the message rewritten |
 | kalfa/quality/src/oxlint/no-cause-squash.ts | build | 115 | new: copy, neutral message naming `context.id` |
@@ -422,7 +452,8 @@ Where a copied law trips a rule, the tests step fixes the law, never the rule.
 | kalfa/quality/README.md | build | docs | the opening says three subpaths; a new `/oxlint` section: how a repo loads it, each rule in one line, `no-hand-tag`'s option, the edge disable shape, that the rules assume Effect v4, `no-promises`' four spellings and its known two-deep miss, the four oxlint facts from the tryout, and a row per file |
 | kalfa/quality/GLOSSARY.md | build | docs | Edge, under Lint (New names) |
 | kalfa/quality/src/oxlint/effect-functions.test.ts kalfa/quality/src/oxlint/no-cause-squash.test.ts kalfa/quality/src/oxlint/no-context-tag.test.ts kalfa/quality/src/oxlint/no-effect-promise.test.ts kalfa/quality/src/oxlint/no-effect-run-outside-edge.test.ts kalfa/quality/src/oxlint/no-hand-tag.test.ts kalfa/quality/src/oxlint/no-promises.test.ts kalfa/quality/src/oxlint/no-raw-try-catch.test.ts kalfa/quality/src/oxlint/no-throw-in-effect-gen.test.ts kalfa/quality/src/oxlint/no-type-assertions.test.ts | tests | tests | new: O1 to O11 (`no-data-taggederror`'s lines sit in `no-context-tag.test.ts`, law O3) |
-| kalfa/quality/src/oxlint/Tester.test-support.ts | tests | tests | new: one `RuleTester` wired to vitest, the eleven firing lines, and O12 |
+| kalfa/quality/src/oxlint/Tester.test-support.ts | tests | tests | new: one `RuleTester` wired to vitest and the eleven firing lines; no law, since vitest runs no `*.test-support.ts` file |
+| kalfa/quality/src/oxlint/index.test.ts | tests | tests | new: O12 and O13 |
 | .oxlintrc.json | tests | tests | O15: one `no-restricted-imports` block for `kalfa/quality/src/oxlint/**`, test files left out, after V4 |
 | pnpm-lock.yaml | tests | tests | the two new dev dependencies, written with one `pnpm install --offline` |
 
@@ -431,7 +462,7 @@ Where a copied law trips a rule, the tests step fixes the law, never the rule.
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
 | .oxlintrc.json | tests | tests | commit 1: the package in `jsPlugins`. After the lead's rename: `no-hand-tag`'s `allow` in the `next/**` block (the rename gives every key its new name) |
-| package.json | tests | tests | `"@kalfa/quality": "workspace:*"` beside the other kalfa packages |
+| package.json | tests | tests | `"@kalfa/quality": "workspace:*"` beside the four kalfa links main keeps: the root `.oxlintrc.json` loads the package by name, so #2384's rule keeps this link |
 | pnpm-lock.yaml | tests | tests | the root's new link, with one `pnpm install --offline` |
 | oxlint-plugins/index.ts | tests | tests | commit 2: the eleven imports and keys out |
 | oxlint-plugins/effect-functions.ts oxlint-plugins/no-cause-squash.ts oxlint-plugins/no-context-tag.ts oxlint-plugins/no-data-taggederror.ts oxlint-plugins/no-effect-promise.ts oxlint-plugins/no-effect-run-outside-edge.ts oxlint-plugins/no-hand-tag.ts oxlint-plugins/no-promises.ts oxlint-plugins/no-raw-try-catch.ts oxlint-plugins/no-throw-in-effect-gen.ts oxlint-plugins/no-type-assertions.ts | tests | tests | commit 2: deleted with `git rm`: the package holds them |
@@ -452,6 +483,7 @@ Where a copied law trips a rule, the tests step fixes the law, never the rule.
 | .agents/skills/lead/scripts/replay.ts | build | 6 | the oxlint check's `matches` and archive take `kalfa/quality/src/oxlint/`; the lint world links `node_modules/@kalfa/quality` to this checkout's package |
 | AGENTS.md next/AGENTS.md | build | docs | the checks table's trigger row names `kalfa/quality/src/oxlint/**`; next/'s edge line reworded if the rename left it reading wrong |
 | .kalfa/quests/kalfa-quality-vitest-PLAN.md .github/ci/l11-source.fixture | tests | none | not changed, nor any other `.kalfa/quests/*-PLAN.md` or `*.fixture`: records and saved bytes |
+| oxlint-plugins/config-blocks.test.ts | tests | none | not changed: #2369's import-ban check, O15's second guard; it reaches the new files by itself |
 | oxlint-plugins/match.ts oxlint-plugins/inner-cause.ts oxlint-plugins/lint.ts oxlint-plugins/no-sleep-on-test-clock.test.ts oxlint-plugins/one-machine-per-file.test.ts pnpm-workspace.yaml vendor/anti-slop/src/effect vendor/anti-slop/src/effect/ next-ledger.json | tests | none | not changed: named above as sources or prior art; the catalog already holds `oxlint` and `@oxlint/plugins` 1.90.0 |
 | next/apps/fabrika/src/exam/ oxlint-plugins/ | tests | none | folders, named in the text; only the files listed above in them change |
 | .agents/skills/lead/SKILL.md | lead | none | not changed: cited for the mechanical branch |
@@ -534,7 +566,10 @@ its own diff, which is safe to run twice.
   rule, and the line's waiver names that rule. The rename makes the change.
 - **Quest plans and fixtures keep the old names.** 90% sure. A plan records what was planned then, and a fixture is
   bytes a test reads.
-- **#2369 is neither fixed nor waited for.** 85% sure (its own section).
+- **The plugin is named `@kalfa/quality`.** The lead's answer, not a plan call (its own section).
+- **#2369 landed first, and this plan needs no change for it beyond M2's paths and O15's second guard.** 90% sure
+  (its own section).
+- **The root keeps an `@kalfa/quality` link in the second pull request, after #2384.** 90% sure (its own section).
 - **Is this a setting?** `allow` is one, set in our `.oxlintrc.json`. The plugin's name is not: oxlint already lets a
   config rename it with an alias. The run names and Promise calls are not: they are Effect's API, and O5 and O8 pin
   them to the installed version. The messages are not: a setting that rewrites a message would hide what the rule
@@ -542,10 +577,12 @@ its own diff, which is safe to run twice.
 
 ## Validation
 
-- **Pull request 1, tests step:** `nice -n 15 pnpm exec vitest run` on the ten rule test files, red on the branch head
-  since the rule files do not exist; it says so in its plant record. `pnpm lint` shows O15's plants red once the
-  build's files exist.
-- **Pull request 1, build step:** the same files green; each plant above run once and undone; `pnpm lint` green.
+- **Pull request 1, tests step:** `nice -n 15 pnpm exec vitest run` on the ten rule test files and `index.test.ts`, red
+  on the branch head since the rule files do not exist; it says so in its plant record. `pnpm lint` shows O15's
+  plants red once the build's files exist.
+- **Pull request 1, build step:** the same files green, so O13 holds the name `@kalfa/quality`; each plant above run
+  once and undone; `pnpm lint` green; `oxlint-plugins/config-blocks.test.ts` green, O15's second guard. The README's
+  load section names the plugin `@kalfa/quality` and its codes `@kalfa/quality(<rule>)`.
 - **Pull request 1, lead:** one typecheck; `--changed` is refused, since `.oxlintrc.json` and a manifest changed, so
   the lead names the files above.
 - **Pull request 2, tests step, commit 1:** `pnpm lint` green. `nice -n 15 pnpm exec vitest run` on
@@ -566,7 +603,8 @@ its own diff, which is safe to run twice.
 
 1. Pull request 1, the package: about 1,000 product lines (the eleven rules 795, `internal/Syntax.ts` 150,
    `index.ts` 45, `package.json` 12), nearly all copied, plus the README section, one glossary line, eleven new test
-   files and one lint block. It lands whole: any repo can load the entry point, and nothing of ours changes yet.
+   files, one test-support file and one lint block. It lands whole: any repo can load the entry point, and nothing of
+   ours changes yet.
 2. Pull request 2, the switch: about 6 product lines written by a step (`replay.ts`), plus docs, the tests step's two
    commits (the config, the two CI tools, the deleted rules and tests, the laws) and the lead's rename command over
    about 190 files, which no step writes by hand. It lands whole: the rename and the switch must land together, or
@@ -601,9 +639,10 @@ Estimate: 9 steps, $67
 - **The glossary line** for Edge.
 - **`oxlint-plugins/README.md`**, trimmed in the second pull request; the pattern docs and `next/AGENTS.md` renamed by
   the command.
-- No decision record: the protocol on issue 1763 and the owner's answers there are the decisions. If the owner's answer
-  on the plugin's name is not the lean, the lead records it on the ticket and in the package README; it rises to a
-  decision only if he says so, since a config alias can rename the plugin locally at any time.
+- No decision record: the protocol on issue 1763 and the owner's answers there are the decisions. The plugin's name
+  is the lead's answer (its own section). The lead records it on the ticket, and the package README states it with
+  its reason and that a config alias renames it locally. It rises to a decision only if the owner says so: it is easy
+  to change before release.
 
 ## What fact is lost if it is not recorded now
 
@@ -624,29 +663,21 @@ plan's map comment and a line on #2245 keep.
   ship `.ts`; here it only works through a workspace link.
 - Whether the `edges` step's new key misses a real ask. M7 covers moved, new and third-plugin edges; a reworded
   reason on a moved line still asks, as before.
+- Wrong, and corrected in the amendment: law O12 sat in `Tester.test-support.ts`, which vitest never runs (its
+  include globs take `*.test.ts` only), so O12 would never have run. It moved to `index.test.ts`, beside O13.
 - Wrong, and corrected after review: an earlier draft keyed both CI tools on a rule's name without its plugin and
   said no ledger holds two rules sharing a name. `next-ledger.json` holds 12 `vitest(no-hooks)` rows, and
   `jest(no-hooks)` exists, so that key would have let a swap through.
 
 ## Open questions
 
-1. Plugin name: `@kalfa/quality` (lean, 65%), `@kalfa`, `kalfa` or `quality`? Sets every code
-   (`@kalfa/quality(no-promises)`) and all ~670 disable lines. For the lean: it names the package a reader installs,
-   and leaves room if another kalfa package ships rules. Against it: ESLint's exact form for a scoped package is
-   `@kalfa` (from `@kalfa/eslint-plugin`); `@kalfa/quality` is ESLint's `@scope/name` form, which a package named
-   `@kalfa/eslint-plugin-quality` would get. `quality` would follow Diagnostics' rule that a code starts with its
-   subcommand's root name, since `kalfa quality` exists, but it is a common word another plugin could take. Cost of the
-   lean: 7 more characters than `fabrika/` per disable line. What would settle it: whether lint codes count as kalfa
-   Diagnostics codes (then `quality`), or whether a second kalfa package will ship lint rules (then `@kalfa/quality`
-   over `@kalfa`).
+None.
 
 ## Findings
 
-1. **Five of the moved rules never reach `kalfa/quality`, `kalfa/records` or `kalfa/secrets`.** The `.oxlintrc.json`
-   block that turns `no-promises`, `no-effect-run-outside-edge`, `effect-functions`, `no-cause-squash` and
-   `no-hand-tag` on for kalfa (near line 742) lists `kalfa/cli/src/**`, `kalfa/config/src/**`, `kalfa/config/*.ts`,
-   `kalfa/diagnostics/src/**`, `kalfa/git/src/**`, `kalfa/github/src/**`, `kalfa/ledger/src/**`,
-   `kalfa/markdown/src/**`, `kalfa/permissions/src/**` and `kalfa/transport/src/**`, and no other block sets those
-   rules for the three packages left out. So their product code is held to none of the five. Not checked: whether it
-   was left out on purpose, as the Stryker layer's real Promises might need. Worth one ticket that adds them with a
-   count of what fires first. This plan keeps the scope as it is (M2).
+1. **Fixed on main since the first draft.** The draft found that five of the moved rules (`no-promises`,
+   `no-effect-run-outside-edge`, `effect-functions`, `no-cause-squash` and `no-hand-tag`) never reached
+   `kalfa/quality`, `kalfa/records` or `kalfa/secrets`: the kalfa product block listed ten packages by name and left
+   those three out. #2369's pull request, https://github.com/kamp-us/tea-fabrika/pull/2381, made the block
+   `kalfa/*/src/**` and added law K1 in `oxlint-plugins/config-blocks.test.ts`, which holds that every kalfa package's
+   product files are reached. Nothing is left for a ticket. M2 reads the scope as main has it now.

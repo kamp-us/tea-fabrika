@@ -327,6 +327,29 @@ def raw_renames(left, right, moved):
         allowed.setdefault(line, []).append(before[line][:start] + b.group() + before[line][end:])
     return all(a == b or b in allowed.get(i, []) for i, (a, b) in enumerate(zip(before, after)))
 
+def without_comments(text):
+    out = []; at = 0
+    while at < len(text):
+        if text[at] == '"':
+            end = at + 1
+            while text[end] != '"': end += 2 if text[end] == "\\" else 1
+            out.append(text[at:end + 1]); at = end + 1
+        elif text.startswith("//", at):
+            end = text.find("\n", at); at = len(text) if end == -1 else end
+        elif text.startswith("/*", at):
+            at = text.index("*/", at) + 2
+        else:
+            out.append(text[at]); at += 1
+    return "".join(out)
+
+def overrides(raw):
+    # The overrides of a lint config, each named by its `files` (and its `excludeFiles`): a block that
+    # is gone takes its rules with it, and no law may fail for it.
+    try: data = json.loads(without_comments(raw.decode()))
+    except (UnicodeError, ValueError, IndexError): return None
+    return Counter(json.dumps(o.get("files")) + (" except " + json.dumps(o["excludeFiles"]) if "excludeFiles" in o else "")
+                   for o in data.get("overrides", []) if isinstance(o, dict))
+
 def tree(ref):
     entries = {}
     for row in git("ls-tree", "-r", "-z", "--full-tree", ref).split(b"\0"):
@@ -386,6 +409,11 @@ try:
         clear = file not in unsafe and regular(current) and (
             (prior is None and test_file and clean_new_file(right)) or
             (regular(prior) and prior[:2] == current[:2] and (left == right or (test_file and raw_renames(left, right, moved)))))
+        if file.endswith(".oxlintrc.json") and file not in unsafe:
+            old_blocks, new_blocks = overrides(left), overrides(right)
+            if old_blocks is None or new_blocks is None: hit(file, "unreadable lint config", "a hand check")
+            else:
+                for block in (old_blocks - new_blocks): hit(file, "removed override", block)
         if not clear:
             position = next((i for i, (a, b) in enumerate(zip(old, new)) if a[0] != b[0]), min(len(old), len(new)))
             line = new[min(position, len(new) - 1)][1] if new else (old[min(position, len(old) - 1)][1] if old else 1)

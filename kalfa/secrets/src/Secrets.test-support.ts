@@ -570,7 +570,7 @@ export const writtenExit = (failures: Plain, exit: Exit.Exit<unknown, unknown>):
   );
 
 /** The keys and values a wire object holds, sorted by key: what a law compares, so no tagged object is written by hand. */
-export const fieldsOf = (wire: Schema.Json): ReadonlyArray<readonly [string, Schema.Json]> =>
+export const sortedFields = (wire: Schema.Json): ReadonlyArray<readonly [string, Schema.Json]> =>
   Object.entries(Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(wire)).toSorted(
     ([left], [right]) => (left < right ? -1 : left > right ? 1 : 0),
   );

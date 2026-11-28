@@ -5,6 +5,7 @@
 import { Effect, FileSystem, Layer, PlatformError } from "effect";
 
 const missing = (method: string, path: string) =>
+  // oxlint-disable-next-line fabrika/no-hand-tag -- edge: Effect's PlatformError takes its system error tag as `_tag`
   PlatformError.systemError({ _tag: "NotFound", module: "FileSystem", method, pathOrDescriptor: path });
 
 /** `files` maps an absolute path to its text. A folder exists when a file is under it. */

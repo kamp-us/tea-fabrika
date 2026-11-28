@@ -4,6 +4,7 @@ import { expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema, type Context, type Effect, type Layer, type Option } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
 import type * as Digest from "effect/crypto/Digest";
+import type * as FileSystem from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/process";
 import type { Commit, Signature } from "./Commit.ts";
 import type * as CommitEdit from "./CommitEdit.ts";
@@ -125,19 +126,19 @@ const rangesAndDiffs = (
   return [written, named, spread];
 };
 
-// Plant (T3): require `FileSystem` in `/process`.
+// Plant (T3): drop `FileSystem` from what `/process` requires, so its fetch has nowhere to make its folder and the equality fails.
 const layers = () => {
   expectTypeOf<ReturnType<typeof ProcessRepository.layer>>().toEqualTypeOf<
     Layer.Layer<
       Repository.Repository,
       Repository.GitTooOld | Repository.NoRepository | Repository.GitUnavailable | Repository.TimedOut,
-      ChildProcessSpawner.ChildProcessSpawner
+      ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
     >
   >();
 };
 
 // Plant (T6): give `MemoryRepository.layer` no requirement, so its `Digest` need is gone and the equality fails; or
-// require `FileSystem` in `/process`.
+// drop `FileSystem` from what `/process` requires.
 const layersWithDigest = () => {
   expectTypeOf<ReturnType<typeof MemoryRepository.layer>>().toEqualTypeOf<
     Layer.Layer<Repository.Repository | MemoryRepository.MemoryStore, never, Digest.Digest>
@@ -146,7 +147,7 @@ const layersWithDigest = () => {
     Layer.Layer<
       Repository.Repository,
       Repository.GitTooOld | Repository.NoRepository | Repository.GitUnavailable | Repository.TimedOut,
-      ChildProcessSpawner.ChildProcessSpawner
+      ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
     >
   >();
 };

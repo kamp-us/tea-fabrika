@@ -17,7 +17,7 @@ export const maxLines = 200;
 const MAP = /^([^/]+\/)?AGENTS\.md$/;
 
 /** The lines of a text as `wc -l` counts them: its newlines, and one more for a last line with none. */
-const linesOf = (text: string) => {
+const countLines = (text: string) => {
   const pieces = text.split("\n").length;
 
   return text.endsWith("\n") || text === "" ? pieces - 1 : pieces;
@@ -38,7 +38,7 @@ export const check = Effect.fnUntraced(function* (root: string) {
   const files = yield* read(root, paths);
 
   return files.flatMap(({ path, text }) => {
-    const lines = linesOf(text);
+    const lines = countLines(text);
 
     return lines > maxLines ? [Finding.cases.map.make({ path, lines, max: maxLines })] : [];
   });

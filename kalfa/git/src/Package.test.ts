@@ -32,6 +32,8 @@ const EXPORTS = [
   "./Repository",
   "./MergeCommit",
   "./CommitEdit",
+  "./Remote",
+  "./Credentials",
   "./memory",
   "./process",
   "./test",
@@ -40,7 +42,7 @@ const EXPORTS = [
 ];
 
 // Plant: add a package of the repository (the shared test package) to the dev dependencies; add the npm package `diff` to
-// `dependencies`; leave `./Diff` or `./CommitEdit` out of the exports; export `./internal/object`; point `./MergeCommit` at a file that is not there.
+// `dependencies`; leave `./Diff`, `./CommitEdit`, `./Remote` or `./Credentials` out of the exports; export `./internal/object`; point `./MergeCommit` at a file that is not there.
 it("K1 scenario: the manifest names no workspace package, has no dependencies, exports exactly the plan's list, and each export is a file", () => {
   const parsed = Schema.decodeUnknownSync(Manifest)(manifest);
 
@@ -109,9 +111,9 @@ it("K3 scenario: no file of the package names a signature for a human being; the
   }
 });
 
-// Plant: export one more helper from either entry.
+// Plant: export one more helper from either entry; leave `FetchTest` out of `/test`.
 it("K4 scenario: the public test entries export only what a caller needs", () => {
-  expect(Object.keys(RepositoryTest).sort(), "/test").toEqual(["settings", "suite"]);
+  expect(Object.keys(RepositoryTest).sort(), "/test").toEqual(["FetchTest", "settings", "suite"]);
   expect(Object.keys(HistoryTest).sort(), "/test/History").toEqual(["shapes", "textureArb"]);
 });
 

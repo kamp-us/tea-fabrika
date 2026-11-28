@@ -14,7 +14,8 @@ import { Array as Arr, pipe, Predicate, Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app or a tool. */
-const STARTS = ["apps/*", "oxlint-plugins", ".github/ci"];
+// kalfa packages are built ahead of their users, as next/ is.
+const STARTS = ["apps/*", "oxlint-plugins", ".github/ci", "kalfa/*"];
 
 /** next/ is left out while it grows: Tier 1 builds a piece before its app names it. */
 const LEFT_OUT = /^next\//;

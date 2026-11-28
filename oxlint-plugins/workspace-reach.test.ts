@@ -33,7 +33,7 @@ const run = (files: Readonly<Record<string, string>>) => {
   return { status: ran.status, said: ran.stdout + ran.stderr };
 };
 
-const WORKSPACE = "packages:\n  - apps/*\n  - packages/*\n  - programs/*\n  - next/packages/*\n";
+const WORKSPACE = "packages:\n  - apps/*\n  - packages/*\n  - kalfa/*\n  - programs/*\n  - next/packages/*\n";
 
 const pkg = (name: string, deps: readonly string[] = []) =>
   JSON.stringify({ name, dependencies: Rec.fromEntries(Arr.map(deps, (d) => [d, "workspace:*"])) });
@@ -94,6 +94,17 @@ describe("a workspace package", () => {
       "next/packages/early/package.json": pkg("early"),
     });
 
+    expect(status).toBe(0);
+  });
+
+  it("scenario: a kalfa package nothing depends on passes, since kalfa packages are built ahead of their users", () => {
+    const { status, said } = run({
+      "pnpm-workspace.yaml": WORKSPACE,
+      "package.json": pkg("root"),
+      "kalfa/early/package.json": pkg("early"),
+    });
+
+    expect(said).toContain("1 packages, every one reached");
     expect(status).toBe(0);
   });
 

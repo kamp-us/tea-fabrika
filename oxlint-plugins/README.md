@@ -9,7 +9,7 @@ node oxlint-plugins/lint.ts packages/x      # the same oxlint step on one folder
 
 `exact-versions.ts` is not an oxlint rule: `pnpm lint` runs it to refuse any ranged npm version in a tracked `package.json` or `pnpm-workspace.yaml`.
 
-`workspace-reach.ts` is not an oxlint rule either: `pnpm lint` runs it to refuse a workspace package of today's version that no app, tutorial, tool or the root `package.json` reaches through its dependencies, so a part nothing uses cannot stay. `next/` is left out while Tier 1 builds pieces before their app names them.
+`workspace-reach.ts` is not an oxlint rule either: `pnpm lint` runs it to refuse a workspace package of today's version that no app, tutorial, tool or the root `package.json` reaches through its dependencies, so a part nothing uses cannot stay. A kalfa package is a start, since it is built ahead of its users, so nothing has to name it. `next/` is left out while Tier 1 builds pieces before their app names them.
 
 Run oxlint and oxfmt through `lint.ts` and `format.ts`, not on their own. These two pin the one config at the top of the repo and turn off nested configs and outside ignore files, so a plain file cannot take a folder out of the checks. `lint.ts` also fails when a `.gitignore` hides a tracked file.
 

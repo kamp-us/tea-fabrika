@@ -144,7 +144,7 @@ const sits = (mutant: Reported, target: Found): boolean =>
   mutant.location.end.line === target.endLine &&
   mutant.location.end.column === target.endColumn + 1;
 
-const targetOf = (report: Report, target: Found): Reported | undefined =>
+const reportedMutant = (report: Report, target: Found): Reported | undefined =>
   report.files[target.file]?.mutants.find((mutant) => sits(mutant, target));
 
 /**
@@ -153,7 +153,7 @@ const targetOf = (report: Report, target: Found): Reported | undefined =>
  * @category utils
  */
 export const answer = (report: Report, target: Found, law: Law): Answer => {
-  const mutant = targetOf(report, target);
+  const mutant = reportedMutant(report, target);
 
   if (mutant === undefined) {
     return Answer.cases.not_run.make({});
@@ -222,7 +222,7 @@ export const record = (
   report: Report,
   ran: { readonly seconds: number; readonly node: string; readonly stryker: string },
 ): Line => {
-  const mutant = targetOf(report, target);
+  const mutant = reportedMutant(report, target);
 
   const beside = (report.files[target.file]?.mutants ?? []).filter(
     (other) => other !== mutant && inside(other, target),
