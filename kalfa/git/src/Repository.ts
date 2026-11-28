@@ -388,7 +388,7 @@ type NewCommit = {
  * - `rebase` makes a new commit for each of the own commits of a branch, on `onto`, and answers them oldest first. The own commits are those `commit` reaches that neither `upstream` nor `onto` reaches. Each new commit keeps the old one's author and message and has the settings' committer at one whole second for all. It fails `CannotRebase` naming every merge commit among the own commits, else every root, `Conflict` naming the paths of the first commit whose files cannot be combined, and `NulInMessage` or `TooLargeToWrite` before any commit is written. The old commits stay as they were and no ref moves. It is one call of the service, with one span and one time limit.
  * - `mergeTrees` merges the trees of `ours` and `theirs` over the tree of `mergeBase`, file by file, and answers the id of the merged tree, which the repository then holds. It fails `Conflict` naming each path that cannot be combined. It reads no history, so a shallow repository answers, and it moves no ref. Merging needs git 2.40 in the git adapter.
  * - `moveRef` points `ref` at `to`, making it or moving it, only if the ref is at `from` now: `Option.none()` means it must not exist. It fails `RefMoved` when it is elsewhere and `RefInTheWay` when another ref is in the way, and then leaves every ref as it was. A call that ends in `TimedOut` may have moved the ref, so read it again.
- * - `fetch` reads the refs of a remote at `under` and below `under/`, by the remote's name or by its URL, and answers them sorted by their UTF-8 bytes. The repository then holds each answered commit and its history. No ref of this repository moves, and its config, refs and `shallow` file are as they were. `[]` means git proved the remote holds none. It asks the `Credentials` slot once, with the URL git will use (the configured one for a named remote), so its requirement is the slot. It fails with `NoSuchRemote`, `BadRemoteUrl`, `NoCredential`, `FetchFailed`, `HistoryTooShort` (this repository is shallow, or the remote's history is cut below an answered ref), `TooMany` and `RefNotCommit`, and never answers `[]` for a failure. A fetch that fails adds no commit, `TimedOut` included. The time limit covers the fetch up to adopting the objects; adopting is one step that neither the limit nor an interrupt cuts, so once it starts the call answers the refs, a few renames past `limits.time` at most. A disk that refuses a rename part way fails `GitUnavailable` and can leave one `.pack` that no reader uses, never an `.idx` without its `.pack`. A call interrupted from outside answers nothing and may have added a whole pack.
+ * - `fetch` reads the refs of a remote at `under` and below `under/`, by the remote's name or by its URL, and answers them sorted by their UTF-8 bytes. The repository then holds each answered commit and its history. No ref of this repository moves, and its config, refs and `shallow` file are as they were. `[]` means git proved the remote holds none. It asks the `Credentials` slot once, with the URL git will use (the configured one for a named remote), so its requirement is the slot. It fails with `NoSuchRemote`, `BadRemoteUrl`, `NoCredential`, `FetchFailed`, `HistoryTooShort` (this repository is shallow, or the remote's history is cut below an answered ref), `TooMany` and `RefNotCommit`, and never answers `[]` for a failure. A fetch that fails adds no commit, `TimedOut` included. The time limit covers the fetch up to stowing the objects; stowing is one step that neither the limit nor an interrupt cuts, so once it starts the call answers the refs, a few renames past `limits.time` at most. A disk that refuses a rename part way fails `GitUnavailable` and can leave one `.pack` that no reader uses, never an `.idx` without its `.pack`. A call interrupted from outside answers nothing and may have added a whole pack.
  *
  * In a shallow repository `walk`, `mergeBases` and `isAncestor` fail with `HistoryTooShort`.
  *
@@ -496,18 +496,18 @@ export class Repository extends Context.Service<
  *
  * **Details**
  *
- * `make` runs `adopt` once, after the read answered, outside the time limit and with interrupts held off, so no fetch is cut between its files. `adopt` never fails `TimedOut`: its one failure is a disk that refuses.
+ * `make` runs `stow` once, after the read answered, outside the time limit and with interrupts held off, so no fetch is cut between its files. `stow` never fails `TimedOut`: its one failure is a disk that refuses.
  *
  * @category models
  */
 export interface Fetched {
   readonly refs: ReadonlyArray<Ref.Ref>;
   /** Adds the fetched objects to the repository whole. */
-  readonly adopt: Effect.Effect<void, GitUnavailable>;
+  readonly stow: Effect.Effect<void, GitUnavailable>;
 }
 
 /**
- * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets, `rangePatchId`, which `make` writes once from `mergeBases` and `patchId`, `readText`, which `make` writes once from `readFile`, and `rebase`, which `make` writes once from `walk`, `mergeTrees` and `writeCommit`. `fetch` is two calls, since `make` asks the slot between them: `remoteUrl` finds the URL git would use, and `fetch` reads from it with the credential the slot gave and answers a `Fetched`: the refs it read and the one `adopt` step that `make` runs. Neither holds the slot.
+ * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets, `rangePatchId`, which `make` writes once from `mergeBases` and `patchId`, `readText`, which `make` writes once from `readFile`, and `rebase`, which `make` writes once from `walk`, `mergeTrees` and `writeCommit`. `fetch` is two calls, since `make` asks the slot between them: `remoteUrl` finds the URL git would use, and `fetch` reads from it with the credential the slot gave and answers a `Fetched`: the refs it read and the one `stow` step that `make` runs. Neither holds the slot.
  *
  * @category models
  */
@@ -519,7 +519,7 @@ export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "
   readonly remoteUrl: (
     remote: Remote.Remote,
   ) => Effect.Effect<Remote.Url, Remote.NoSuchRemote | Remote.BadRemoteUrl | Fails>;
-  /** Reads the remote and checks what came. Anything it holds open (the git adapter's folder) lives in the scope `make` gives, so it is released after `adopt`. */
+  /** Reads the remote and checks what came. Anything it holds open (the git adapter's folder) lives in the scope `make` gives, so it is released after `stow`. */
   readonly fetch: (request: {
     readonly url: Remote.Url;
     readonly under: Ref.RefName;
@@ -557,7 +557,7 @@ const committerAt = (settings: Settings.Settings): Effect.Effect<Commit.Signatur
  *
  * **Details**
  *
- * A span is named `git.<call>`. Its attributes follow OpenTelemetry's version control names where they exist and `kalfa.git.*` where they do not. No message, name, email or path is ever an attribute. A call that runs past the time limit is interrupted and fails with `TimedOut`, except that a fetch's adopt is never cut. `writeCommit` fails before the adapter runs when the message holds a NUL byte or the object would pass `limits.bytes`, so every commit written can be read back, and it hands the adapter the settings' committer at the clock's whole second and offset `+0000`. `rebase` does the same checks for every new commit before it writes any, with the committer's time read once.
+ * A span is named `git.<call>`. Its attributes follow OpenTelemetry's version control names where they exist and `kalfa.git.*` where they do not. No message, name, email or path is ever an attribute. A call that runs past the time limit is interrupted and fails with `TimedOut`, except that a fetch's stow is never cut. `writeCommit` fails before the adapter runs when the message holds a NUL byte or the object would pass `limits.bytes`, so every commit written can be read back, and it hands the adapter the settings' committer at the clock's whole second and offset `+0000`. `rebase` does the same checks for every new commit before it writes any, with the committer's time read once.
  *
  * @category constructors
  */
@@ -750,7 +750,7 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
 
       const refs = yield* Effect.scoped(
         Effect.gen(function* () {
-          // The time limit covers everything up to the adopt, the slot's answer included, so a slow filler still ends.
+          // The time limit covers everything up to the stow, the slot's answer included, so a slow filler still ends.
           const fetched = yield* limited(
             Effect.gen(function* () {
               const url = yield* raw.remoteUrl(request.remote);
@@ -762,8 +762,8 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
             }),
           );
 
-          // Adopting is one step that neither the limit nor an interrupt cuts. A rename Node has started cannot be called back, so a limit here would only make the answer disagree with the disk.
-          yield* Effect.uninterruptible(fetched.adopt);
+          // Stowing is one step that neither the limit nor an interrupt cuts. A rename Node has started cannot be called back, so a limit here would only make the answer disagree with the disk.
+          yield* Effect.uninterruptible(fetched.stow);
 
           return fetched.refs;
         }),

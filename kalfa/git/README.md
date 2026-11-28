@@ -104,13 +104,13 @@ a failure. A push that deletes a ref can trust it.
   It runs `git fetch --no-tags --no-write-fetch-head --update-shallow` with `transfer.unpackLimit=1`,
   `pack.writeReverseIndex=true` (so every git from 2.38 on writes a `.rev` beside each pack, as git 2.41 and later do by default) and
   `protocol.allow=never`, so only a local path, a `file://` URL and `https` are reached, and a refspec that writes the
-  remote's refs under `refs/fetched/` in that directory only. The time limit covers the call up to the adopt, which then
-  moves each pack into the repository only after a good answer: `.pack`, `.rev` if git wrote one, and `.idx` last. The adopt
+  remote's refs under `refs/fetched/` in that directory only. The time limit covers the call up to the stow, which then
+  moves each pack into the repository only after a good answer: `.pack`, `.rev` if git wrote one, and `.idx` last. The stow
   is one step that neither the limit nor an interrupt cuts, so a fetch that fails adds nothing and one that answers adds every
   commit it answered. A disk that refuses a rename part way fails `GitUnavailable` and can leave one `.pack` with no `.idx`,
   which no reader uses; it never leaves an `.idx` without its `.pack`. The folder is removed after every ending, each removal bounded by
   `limits.kill`, and a removal that fails never changes what the call answered. A call ends within `limits.time` plus two
-  `limits.kill` waits plus the adopt: a transfer that ignores the first signal holds its own scope for one, and the removal waits at most another. A hard kill of the process leaves one
+  `limits.kill` waits plus the stow: a transfer that ignores the first signal holds its own scope for one, and the removal waits at most another. A hard kill of the process leaves one
   `kalfa-fetch-*` folder in the git directory, which git ignores. A remote with a cut history, and a repository that is
   shallow, fail `HistoryTooShort` and leave the repository as it was.
 

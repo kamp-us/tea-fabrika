@@ -471,7 +471,7 @@ const fetchedRefs = (
 // The pack the transfer left in its own object folder moves into the repository's: its `.pack`, its `.rev` if git wrote one, and its `.idx` last,
 // since git finds a pack by its `.idx`, so a reader never sees half of one. A half-written `tmp_pack_*` is no pack, and stays to be removed.
 // `make` runs it once, after the read answered, outside the time limit and with interrupts held off, so no fetch is cut between its files.
-const adopt = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, from: string, into: string) {
+const stow = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, from: string, into: string) {
   const packs = `${from}/objects/pack`;
   const names = yield* fs.readDirectory(packs);
 
@@ -972,7 +972,7 @@ const calls = (
           return yield* new Repository.TooMany({ limit: "refs", most: limits.refs });
         }
 
-        return { refs, adopt: adopt(disk.fs, fresh, objects) };
+        return { refs, stow: stow(disk.fs, fresh, objects) };
       }),
     moveRef: Effect.fnUntraced(function* (move) {
       yield* known(run, [move.to]);

@@ -183,10 +183,10 @@ What fills the credential slot: one that gives no credential, for a local path o
 access grant. The program picks it by name.
 _Avoid_: provider, backend, plugin
 
-**Adopt**:
+**Stow**:
 The last step of a fetch: it makes the fetched objects part of the repository whole, after every check passed. No time limit
 and no interrupt cuts it.
-_Avoid_: land (Delivery's word), install, commit
+_Avoid_: adopt (Reconciliation's word), land (Delivery's word), install, commit
 
 **Pre-push hook**:
 A check that reads what a push would send and can stop it before anything leaves. Every push runs one; a repository
