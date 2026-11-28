@@ -6,6 +6,9 @@
 // Plants, each run once on the rule's file or on `internal/Syntax.ts` and undone:
 // - stop visiting `TSQualifiedName` in `banNames`: the type lines stop firing;
 // - drop the `isWritten` check: the planted `Data.TaggedError = f;` fires;
+// - make `isWritten` answer `false` for an update, an array pattern or a rest element (`return true` into `return false`): the
+//   writes `Context.Tag++`, `[Context.Tag] = f` and `[...Context.Tag] = f` fire;
+// - drop the `ObjectPattern` check of `isWritten`'s `Property` case: the value `{ a: Context.Tag }` stops firing;
 // - drop `dotted`'s `node.property.type !== "Identifier"` check: a private member `Data.#TaggedError` (and `Context.#Tag`)
 //   reads as the plain member of the same name and fires.
 import { it } from "@effect/vitest";
@@ -29,6 +32,17 @@ it("O3 pinned: no-context-tag refuses Context.Tag, Context.GenericTag and Effect
     // What passes: the v4 form, a write, another module's `Tag`, a member two names deep, a comment and a string.
     ['export const d = Context.Service("d");', 0],
     ["Context.Tag = f;", 0],
+    // A write in any other form: compound, update, a destructuring target, a loop target. A use as a value is not a write.
+    ["Context.Tag += f;", 0],
+    ["Context.Tag++;", 0],
+    ["[Context.Tag] = f;", 0],
+    ["[...Context.Tag] = f;", 0],
+    ["[Context.Tag = 1] = f;", 0],
+    ["({ a: Context.Tag } = f);", 0],
+    ["({ ...Context.Tag } = f);", 0],
+    ["for (Context.Tag of f) {}", 0],
+    ["for (Context.Tag in f) {}", 0],
+    ["export const o = { a: Context.Tag };", 1],
     ['export const e = Other.Tag("e");', 0],
     ['export const f = other.Context.Tag("f");', 0],
     ["// Context.Tag in a comment", 0],

@@ -4,7 +4,8 @@
 //
 // Plants, each run once on no-type-assertions.ts and undone:
 // - make `grouped(source, inner) <= 1` into `=== 0`: `(x as unknown) as T` stops firing;
-// - drop the `TSTypeAssertion` visitor: `<string>x` stops firing.
+// - drop the `TSTypeAssertion` visitor: `<string>x` stops firing;
+// - report a double cast whose inner type is no top or bottom type (`message !== null` into `true`): `x as number as number` fires.
 import { it } from "@effect/vitest";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { check } from "./Tester.test-support.ts";
@@ -23,5 +24,7 @@ it("O11 pinned: no-type-assertions refuses as any, the double casts and angle br
     ["export const h = x as number;", 0],
     ["export const i = x as (any);", 0],
     ["export const j = ((x as unknown)) as string;", 0],
+    // A double cast through a named type is not the refused laundering, so only the plain cast of each is looked at.
+    ["export const k = x as number as number;", 0],
   ]);
 });
