@@ -38,4 +38,5 @@ const plugin: Plugin = {
   },
 };
 
+// oxlint-disable-next-line import/no-default-export -- edge: oxlint loads a plugin by its default export
 export default plugin;

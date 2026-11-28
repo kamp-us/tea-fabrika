@@ -4247,6 +4247,92 @@
       }
     },
     {
+      // O15 (@kalfa/quality/oxlint): what the folder ships imports no kalfa package and no path into oxlint-plugins/, so any repo can load the entry point alone. Its laws may import the package by its own name, so its tests and test support are left out. It repeats V3's entries (which repeat Q8's) and adds its own.
+      "files": ["kalfa/quality/src/oxlint/**"],
+      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx", "kalfa/**/*.test-support.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kalfa/*", "@kalfa/*/**"],
+                "message": "O15 (@kalfa/quality/oxlint): what this folder ships imports no kalfa package, so any repo can load the entry point alone. Its laws may import the package by its own name."
+              },
+              {
+                "group": ["**/oxlint-plugins/**"],
+                "message": "O15 (@kalfa/quality/oxlint): what this folder ships imports no path into oxlint-plugins/. The package carries its own copy of the helpers its rules share, in internal/Syntax.ts."
+              },
+              {
+                "group": ["@kampus/*", "@tea-fabrika/*"],
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality reaches no product. It imports no @kampus or @tea-fabrika package; the repo's own values come in through its Settings, handed in at the edge."
+              },
+              {
+                "group": ["**/next/**", "**/packages/**", "**/.github/**"],
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+              },
+              {
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // D13 and D14 (@kalfa/diagnostics says what a diagnostic is and nothing about printing one): its source imports no kalfa or repo package and no path out of the package, no Node module in either spelling,
       // never prints (no Console, Stdio, Terminal, no console) and never picks an exit code (no process, no Runtime, no @effect/platform-node, whose runMain sets one). The global object is refused too, so
       // `globalThis.process` is no way round. Its tests are left out. An override replaces a rule's options, so this repeats the base entries and adds its own.
