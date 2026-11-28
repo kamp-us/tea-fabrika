@@ -3,13 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Our testing, linting and formatting tooling, one subpath per tool: /stryker, the plant runner (a Stryker-made mutant named by its code shape, with the law that must kill it), and /vitest, the test helpers (the test depth, the Recorder, the Stub and the test database).",
+  "description": "Our testing, linting and formatting tooling, one subpath per tool: /stryker, the plant runner (a Stryker-made mutant named by its code shape, with the law that must kill it), /vitest, the test helpers (the test depth, the Recorder, the Stub and the test database), and /oxlint, the Effect lint rules an oxlint config loads as one plugin.",
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "exports": {
     "./vitest": "./src/vitest/index.ts",
     "./vitest/TestDatabase": "./src/vitest/TestDatabase.ts",
+    "./oxlint": "./src/oxlint/index.ts",
     "./stryker": "./src/stryker/index.ts",
     "./stryker/Run": "./src/stryker/Run.ts",
     "./stryker/Settings": "./src/stryker/Settings.ts",
@@ -22,12 +23,17 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
+    "@oxlint/plugins": "catalog:",
     "@stryker-mutator/core": "catalog:",
     "@stryker-mutator/instrumenter": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "oxlint": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@oxlint/plugins": {
+      "optional": true
+    },
     "@stryker-mutator/core": {
       "optional": true
     },
@@ -36,17 +42,22 @@
     },
     "@stryker-mutator/vitest-runner": {
       "optional": true
+    },
+    "oxlint": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@oxlint/plugins": "catalog:",
     "@stryker-mutator/core": "catalog:",
     "@stryker-mutator/instrumenter": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
+    "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

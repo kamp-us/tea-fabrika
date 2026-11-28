@@ -1,9 +1,9 @@
 # @kalfa/quality
 
-Our testing, linting and formatting tooling, one subpath per tool. So far two subpaths exist:
-`@kalfa/quality/stryker`, the plant runner, and `@kalfa/quality/vitest`, the test helpers. The package
-is private, imports no product code and no path into the repo (lint holds that), and reads every
-repo-specific value as data from its edge.
+Our testing, linting and formatting tooling, one subpath per tool. So far three subpaths exist:
+`@kalfa/quality/stryker`, the plant runner, `@kalfa/quality/vitest`, the test helpers, and
+`@kalfa/quality/oxlint`, the Effect lint rules. The package is private, imports no product code and no
+path into the repo (lint holds that), and reads every repo-specific value as data from its edge.
 
 ## A plant
 
@@ -115,6 +115,112 @@ makes a plant answer at all, and the report path and sandbox folder are a scoped
 | `src/stryker/MutantsMemory.ts` | the stand-in the laws run on |
 | `src/stryker/Run.ts` | `plant` and `survey` |
 | `src/cli.ts` | the `quality` command |
+
+## Lint rules
+
+`@kalfa/quality/oxlint` is one oxlint plugin that holds eleven rules for Effect code. It imports no other kalfa
+package and no path into any repo (lint holds that), so a repo can load it alone. Its rules assume Effect v4: they
+ban `Context.Tag`, `Context.GenericTag` and `Effect.Service` because v4 has none of them.
+
+### Load it
+
+```jsonc
+// .oxlintrc.json
+{
+  "jsPlugins": ["@kalfa/quality/oxlint"],
+  "rules": {
+    "@kalfa/quality/no-promises": "error",
+    "@kalfa/quality/no-hand-tag": ["error", { "allow": ["src/ledger/Log.ts"] }]
+  }
+}
+```
+
+The plugin is named `@kalfa/quality`, so a rule reads `@kalfa/quality/<rule>` in a config and in a disable comment, and
+its code prints as `@kalfa/quality(<rule>)`. The name matches the package that ships it, so a reader who sees the code
+knows what to install, and it leaves `kalfa/` free for other kalfa plugins. A config can still rename the plugin locally
+with oxlint's alias form, and a rule's message then names the rule the way the config wrote it.
+
+Oxlint resolves the specifier through `node_modules`, so the package has to be linked there. The package ships
+TypeScript, which Node strips only outside `node_modules`: it loads through a workspace link, and a copy from a registry
+would need a build to JavaScript first.
+
+### The rules
+
+| Rule | What it refuses |
+|---|---|
+| `effect-functions` | a named function whose returned Effect is wrapped in `Effect.withSpan`: use `Effect.fn("name")` |
+| `no-cause-squash` | Effect's `Cause.squash`: read the typed failure with `findErrorOption` |
+| `no-context-tag` | `Context.Tag`, `Context.GenericTag` and `Effect.Service`, in values and types |
+| `no-data-taggederror` | `Data.TaggedError`, in values and types: an error is a `Schema.TaggedError` |
+| `no-effect-promise` | `Effect.promise` and any `Effect.tryPromise` that is not one plain `{ try, catch }` object |
+| `no-effect-run-outside-edge` | a call to any of Effect's run functions, a runtime's methods included |
+| `no-hand-tag` | a hand-written `_tag` key, type member or class field: Schema writes it |
+| `no-promises` | `async`, `await`, `new Promise`, `.then`, `import()` and Effect's own Promise calls |
+| `no-raw-try-catch` | a `try/catch` in a file that imports Effect |
+| `no-throw-in-effect-gen` | a `throw` inside `Effect.gen`, `Effect.fn` or `Effect.fn("name")` |
+| `no-type-assertions` | `as any`, `as unknown as T`, `as never as T` and `<T>x` |
+
+Each rule's file opens with what it refuses, what passes and what it misses.
+
+### The edge
+
+An edge is one line where the platform demands what a rule refuses, such as running an Effect or answering a Promise. It
+is marked where it stands, with a disable comment that gives its reason:
+
+```ts
+// oxlint-disable-next-line @kalfa/quality/no-promises -- edge: a Durable Object answers a Promise
+```
+
+`no-promises`, `no-effect-run-outside-edge` and `no-cause-squash` show this shape in their messages, built from the
+rule's own name.
+
+### `no-hand-tag`'s option
+
+`allow` lists the files the rule skips, as exact paths from where oxlint runs, with no leading `./` and no absolute path.
+The option is for a file that stores any fact and knows no cases, such as a log. With no option, no file is skipped.
+
+| Option | Taken |
+|---|---|
+| none, `["error"]` | yes: no file is skipped |
+| `["error", {}]`, `["error", { "allow": [] }]` | yes: no file is skipped |
+| `["error", { "allow": ["src/ledger/Log.ts"] }]` | yes: that file is skipped |
+| `allow` that is not a list, an item that is not a string, an item that starts with `./` or `/`, any other key | no: the run fails before it reads a file |
+
+### `no-promises` and the four spellings
+
+The rule matches Effect's Promise calls by how they are written, not by type. It sees four spellings:
+
+1. the module name as written: `Effect.promise(...)`, `Schema.decodePromise(...)`, `Stream.toAsyncIterable(...)`;
+2. a renamed named import: `import { Effect as E } from "effect"`, then `E.promise(...)`;
+3. a module namespace: `import * as E from "effect/Effect"`, then `E.promise(...)`;
+4. the member imported by its own name: `import { tryPromise } from "effect/Effect"`, then `tryPromise(...)`.
+
+**A known miss:** a call two names deep, `import * as X from "effect"`, then `X.Effect.promise(...)`. The object of the
+call is a member, not a name. A check that reads types catches it.
+
+### What oxlint 1.90.0 does that its docs do not say plainly
+
+These were tried against the installed version, and the laws lean on them. Oxlint's JS plugins are alpha.
+
+- **A rule with no `meta.schema` refuses every option**, and the whole run fails with "does not accept options". With a
+  schema, oxlint checks the options against it and fails the run on a bad one, before it reads any file. `RuleTester`
+  does the same check.
+- **`context.id` is the rule's full name as the config wrote it.** A config alias makes it `<alias>/<rule>`, and
+  `RuleTester` makes it `rule-to-test/<rule>`. A message that names its rule reads `context.id`.
+- **A disable comment that names a rule that no longer exists is reported as unused**, and the line's report comes back.
+  So a stale name fails `pnpm lint` by itself.
+- **`RuleTester` does not read disable comments.** A law about one runs through the real oxlint.
+
+### Where the code is
+
+| File | Job |
+|---|---|
+| `src/oxlint/index.ts` | the plugin: its name and the eleven rules |
+| `src/oxlint/internal/Syntax.ts` | what the rules share: dotted names, plain calls, parentheses, imports, ancestors |
+| `src/oxlint/<rule>.ts` | one file per rule, named for it |
+| `src/oxlint/<rule>.test.ts` | each rule's laws, in process through `RuleTester` |
+| `src/oxlint/index.test.ts` | the plugin's own laws: its name and rules, and its neutral messages |
+| `src/oxlint/Tester.test-support.ts` | one `RuleTester`, a way to state a file as lines, and one firing line per rule |
 
 ## Test helpers
 

@@ -1,0 +1,192 @@
+// What the rules share: asking a piece of syntax which name it writes. A name is read as it is written, so `Effect.all(x)`
+// matches and `Effect?.all(x)`, `Effect.all<T>(x)` and `x.Effect.all(y)` do not, through the file's own imports where a
+// rule says so.
+import type { Context, ESTree, Variable, Visitor } from "@oxlint/plugins";
+
+type Source = Context["sourceCode"];
+
+export type Node = ESTree.Node;
+
+/** `Context.Tag` for that plain member, `process.env.X` for a longer one. `null` for any other shape. */
+export const dotted = (node: Node): string | null => {
+  if (node.type === "Identifier" || node.type === "JSXIdentifier") {
+    return node.name;
+  }
+
+  if (node.type === "TSQualifiedName") {
+    const left = dotted(node.left);
+
+    return left === null ? null : `${left}.${node.right.name}`;
+  }
+
+  if (node.type === "JSXMemberExpression") {
+    const object = dotted(node.object);
+
+    return object === null ? null : `${object}.${node.property.name}`;
+  }
+
+  if (node.type !== "MemberExpression" || node.computed || node.optional) {
+    return null;
+  }
+
+  if (node.property.type !== "Identifier") {
+    return null;
+  }
+
+  const object = dotted(node.object);
+
+  return object === null ? null : `${object}.${node.property.name}`;
+};
+
+/** The written name of a call that carries no type arguments and no `?.`: `Effect.all`, `tell`. */
+export const plainCall = (node: Node): string | null =>
+  node.type === "CallExpression" && !node.optional && node.typeArguments == null ? dotted(node.callee) : null;
+
+/** A plain member on the left of a write: `a.b = 1`, `a.b++`, `[a.b] = c`, `for (a.b of c)`. */
+const isWritten = (node: Node): boolean => {
+  // SAFETY: oxlint hands every visited node its `parent`, and a written member always sits inside another node.
+  const { parent } = node as Node & { readonly parent: Node };
+
+  switch (parent.type) {
+    case "AssignmentExpression":
+    case "AssignmentPattern":
+    case "ForInStatement":
+    case "ForOfStatement":
+      return parent.left === node;
+    case "UpdateExpression":
+    case "ArrayPattern":
+    case "RestElement":
+      return true;
+    case "Property":
+      return parent.value === node && parent.parent.type === "ObjectPattern";
+    default:
+      return false;
+  }
+};
+
+/** The pairs of parentheses written around a node, not counting a call's own. */
+export const grouped = (source: Source, node: Node): number => {
+  let pairs = 0;
+  let before = source.getTokenBefore(node);
+  let after = source.getTokenAfter(node);
+
+  while (before?.value === "(" && after?.value === ")") {
+    pairs++;
+    before = source.getTokenBefore(before);
+    after = source.getTokenAfter(after);
+  }
+
+  // SAFETY: a node a rule visits is never the Program itself here, so oxlint has set its `parent`.
+  const { parent } = node as Node & { readonly parent: Node };
+
+  if ((parent.type === "CallExpression" || parent.type === "NewExpression") && pairs > 0) {
+    const sole = parent.arguments.length === 1 && parent.arguments[0] === node;
+    const close = source.getLastToken(parent);
+    const comma = close !== null && source.getTokenBefore(close)?.value === ",";
+
+    if (sole && !comma) {
+      pairs--;
+    }
+  }
+
+  return pairs;
+};
+
+/**
+ * The linted file's path from where oxlint runs, with `/` between folders: `src/ledger/Log.ts`. Oxlint run at the top of
+ * a project names a file by its whole path from there, so a rule option that lists files names them that way. Run from
+ * anywhere else, no listed file matches, so a rule that skips listed files fires more, never less.
+ */
+export const pathIn = (context: Context): string => {
+  const from = context.cwd.endsWith("/") ? context.cwd : `${context.cwd}/`;
+
+  return context.filename.startsWith(from) ? context.filename.slice(from.length) : context.filename;
+};
+
+/** The import an identifier is bound to: its source and the name it imports (`*` for a namespace). `null` for anything that is not an import. */
+export const imported = (variable: Variable | undefined): { readonly from: string; readonly name: string } | null => {
+  const def = variable?.defs[0];
+
+  if (def === undefined || def.type !== "ImportBinding" || def.parent?.type !== "ImportDeclaration") {
+    return null;
+  }
+
+  const from = def.parent.source.value;
+  const spec = def.node;
+
+  if (spec.type === "ImportNamespaceSpecifier") {
+    return { from, name: "*" };
+  }
+
+  if (spec.type === "ImportSpecifier") {
+    return { from, name: spec.imported.type === "Identifier" ? spec.imported.name : String(spec.imported.value) };
+  }
+
+  return null;
+};
+
+/** The local names a file imports from Effect: `Effect` in `import {Effect} from "effect"`. */
+export const effectNames = (program: ESTree.Program): ReadonlySet<string> => {
+  const names = new Set<string>();
+
+  for (const statement of program.body) {
+    if (statement.type !== "ImportDeclaration") {
+      continue;
+    }
+
+    const from = statement.source.value;
+
+    if (from !== "effect" && !from.startsWith("effect/") && !from.startsWith("@effect/")) {
+      continue;
+    }
+
+    for (const spec of statement.specifiers) {
+      names.add(spec.local.name);
+    }
+  }
+
+  return names;
+};
+
+/** Each ancestor of a node, nearest first. */
+export function* ancestors(node: Node): Generator<Node> {
+  // SAFETY: oxlint sets `parent` on every node it visits, and it is null only on the Program.
+  let at = (node as Node & { readonly parent?: Node | null }).parent;
+
+  while (at != null) {
+    yield at;
+    // SAFETY: each ancestor oxlint hands back carries its own `parent`, null once the walk reaches the Program.
+    at = (at as Node & { readonly parent?: Node | null }).parent;
+  }
+}
+
+/**
+ * A rule that refuses any plain use of some dotted names, in values and in types. The messages are made from the rule's
+ * own name as the context gives it, so a message that shows how to mark an exception stays right under any plugin name.
+ */
+export const banNames =
+  (messages: (id: string) => Readonly<Record<string, string>>) =>
+  (context: Context): Visitor => {
+    const named = messages(context.id);
+
+    const check = (node: Node) => {
+      const name = dotted(node);
+      const message = name === null ? undefined : named[name];
+
+      if (message !== undefined && !isWritten(node)) {
+        context.report({ node, message });
+      }
+    };
+
+    return {
+      MemberExpression: check,
+      TSQualifiedName: check,
+      // `<Redacted.value />`. The opening tag is enough: a closing tag says it a second time.
+      JSXMemberExpression(node) {
+        // SAFETY: a JSX member name always sits inside an opening or closing tag, which oxlint gives as its `parent`.
+        if ((node as Node & { readonly parent: Node }).parent.type !== "JSXClosingElement") {
+          check(node);
+        }
+      },
+    };
+  };
