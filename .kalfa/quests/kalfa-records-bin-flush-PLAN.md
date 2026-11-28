@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds ticket 2302, the records bin waits for its output before it exits; body d32947be3223
 Plancheck-Version: 3
 
 # Plan: Records' bin writes all of its output before it exits (ticket 2302)
