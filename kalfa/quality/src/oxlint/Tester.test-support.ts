@@ -2,7 +2,7 @@
 // shrinks; a way to state a generated file as lines, each with the number of reports the rule makes on it; a way to
 // read the messages a rule writes; and one firing line for each of the eleven rules. It holds no law: vitest runs no
 // `*.test-support.ts` file, so the laws that read the messages are in `index.test.ts`.
-import type { Context, CreateRule } from "@oxlint/plugins";
+import type { CreateRule, Rule } from "@oxlint/plugins";
 import { Array as Arr } from "effect";
 import { RuleTester } from "oxlint/plugins-dev";
 
@@ -43,7 +43,10 @@ export const check = (name: string, rule: CreateRule, lines: ReadonlyArray<Line>
   };
 
   const kept = Arr.flatMap(lines, ([text, reports]) => (reports === 0 ? [text] : []));
-  const reported = Arr.flatMap(lines, ([, reports], i) => Arr.replicate({ line: i + 1, message: ANY }, reports));
+
+  const reported = Arr.flatMap(lines, ([, reports], i) =>
+    Array.from({ length: reports }, () => ({ line: i + 1, message: ANY })),
+  );
 
   tester.run(name, rule, {
     valid: kept.length === 0 ? [] : [{ code: Arr.join(kept, "\n"), ...at }],
@@ -63,31 +66,30 @@ export const check = (name: string, rule: CreateRule, lines: ReadonlyArray<Line>
   });
 };
 
-/** What the context holds under a key a proxy is asked for: the member of that name, or nothing. */
-// SAFETY: a proxy is asked for any key, and reading a key the context lacks gives undefined, which is what the proxy hands back.
-const held = (context: Context, key: string | symbol) => context[key as keyof Context];
-
 /**
  * Every message a rule writes on one file. The file must report exactly `reports` times, which the tester holds;
  * the rule is run under a name of `rule-to-test/<name>`, the id a rule reads from its context here.
  */
-export const messages = (name: string, rule: CreateRule, code: string, reports: number, setting: Setting = {}) => {
+export const messages = (name: string, rule: Rule, code: string, reports: number, setting: Setting = {}) => {
   const seen: Array<string> = [];
+
+  const { create } = rule;
+
+  if (create === undefined) {
+    throw new Error(`${name} is a rule with no create`);
+  }
 
   const watched: CreateRule = {
     ...rule,
-    create: (context) =>
-      rule.create(
-        new Proxy(context, {
-          get: (target, key) =>
-            key === "report"
-              ? (diagnostic: Parameters<typeof target.report>[0]) => {
-                  seen.push(String("message" in diagnostic ? diagnostic.message : ""));
-                  target.report(diagnostic);
-                }
-              : held(target, key),
-        }),
-      ),
+    create: (context) => {
+      const report = (diagnostic: Parameters<typeof context.report>[0]) => {
+        seen.push(String("message" in diagnostic ? diagnostic.message : ""));
+        context.report(diagnostic);
+      };
+
+      // The rule gets the context itself, with `report` one that also keeps what it is told.
+      return create(Object.create(context, { report: { value: report } }));
+    },
   };
 
   tester.run(name, watched, {
