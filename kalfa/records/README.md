@@ -37,7 +37,8 @@ node kalfa/records/src/bin.ts check runbook    one check by name: map or runbook
 Run it in the repo's root: the tracked files come from `git ls-files -s` in the working folder.
 `@kalfa/records/cli` exports the `effect/cli` command, and `"kalfa": { "cli": "./cli" }` in
 `package.json` lets a `kalfa` command find it, as `@kalfa/quality` does. `src/bin.ts` is the edge that
-runs it with Node's file system and git.
+runs it with Node's file system and git. A long output piped to another program is written whole before the
+command exits, and a reader that closes early, as in `check runbook | head -n 1`, does not change the exit code.
 
 ## Public modules
 
