@@ -415,33 +415,9 @@ importers:
       '@kalfa/config':
         specifier: workspace:*
         version: link:kalfa/config
-      '@kalfa/diagnostics':
-        specifier: workspace:*
-        version: link:kalfa/diagnostics
       '@kalfa/git':
         specifier: workspace:*
         version: link:kalfa/git
-      '@kalfa/github':
-        specifier: workspace:*
-        version: link:kalfa/github
-      '@kalfa/ledger':
-        specifier: workspace:*
-        version: link:kalfa/ledger
-      '@kalfa/markdown':
-        specifier: workspace:*
-        version: link:kalfa/markdown
-      '@kalfa/permissions':
-        specifier: workspace:*
-        version: link:kalfa/permissions
-      '@kalfa/records':
-        specifier: workspace:*
-        version: link:kalfa/records
-      '@kalfa/secrets':
-        specifier: workspace:*
-        version: link:kalfa/secrets
-      '@kalfa/transport':
-        specifier: workspace:*
-        version: link:kalfa/transport
       '@kampus/vitest':
         specifier: workspace:*
         version: link:next/packages/vitest
