@@ -46,12 +46,15 @@ class Held {
   started = 0;
   finished = 0;
   failed = 0;
+  /** What the teardown wrote to this stream, chunk by chunk. */
+  readonly chunks: Array<string> = [];
 
-  write(_chunk: string, done: Done): boolean {
+  write(chunk: string, done: Done): boolean {
     this.waiting.push({ done, ours: this.running });
 
     if (this.running) {
       this.started++;
+      this.chunks.push(chunk);
     }
 
     return true;
@@ -242,7 +245,8 @@ const counted = (law: keyof typeof tally, kind: string): void => {
 
 // B1. Plants: (h) call `onExit(code)` straight away and skip the writes: it is called while standard output is held; (i) wait for
 // standard output only, and start standard error's write with no wait: it is called while standard error is held; (j) call
-// `onExit` only when the callback has no error: it is never called; call it in both callbacks: it is called twice.
+// `onExit` only when the callback has no error: it is never called; call it in both callbacks: it is called twice; (k) write
+// a text in place of `""` to either stream (`Teardown.ts:54`): that stream's chunks are not all empty.
 it.prop(
   "B1 property: onExit runs exactly once, and only after both streams have written everything they held and everything the teardown wrote",
   { scene: Scene },
@@ -275,6 +279,12 @@ it.prop(
     expect(call?.waiting.stderr, "standard error holds no write when onExit runs").toBe(0);
     expect(call?.finished.stdout, "the teardown waited on standard output").toBeGreaterThan(0);
     expect(call?.finished.stderr, "the teardown waited on standard error").toBeGreaterThan(0);
+    expect(stdout.chunks, "the teardown wrote only empty chunks to standard output").toSatisfy(
+      (chunks: ReadonlyArray<string>) => chunks.every((chunk) => chunk === ""),
+    );
+    expect(stderr.chunks, "the teardown wrote only empty chunks to standard error").toSatisfy(
+      (chunks: ReadonlyArray<string>) => chunks.every((chunk) => chunk === ""),
+    );
   },
   { arbitrary: { seed: SEED, runs: RUNS } },
 );

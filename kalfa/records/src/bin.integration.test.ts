@@ -34,8 +34,8 @@ it.live(
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
-// B5. The bin keeps its codes. Plants: make the teardown answer 1 for anything that is not 0, and `check nope` ends 1; drop the
-// `isSuccess` check, and a failure that is not a success crashes the teardown or ends 1.
+// B5. The bin keeps its codes. Plant: make the teardown answer 1 for anything that is not 0, and `check nope` ends 1. Dropping
+// the `isSuccess` check is no plant here: a failed `Exit` has no `value`, and `bin.ts` turns `check nope` into a success of 2.
 const CLEAN = [["check"], ["check", "runbook"]] as const;
 
 for (const args of CLEAN) {
