@@ -29,6 +29,9 @@ const SPELLINGS: ReadonlyArray<(alias: string) => { readonly header: string; rea
   (alias) => ({ header: `import * as ${alias} from "effect/Effect";`, local: alias }),
 ];
 
+/** One binding of Effect in a file: its import line and the name it is then written with. */
+type Binding = ReturnType<(typeof SPELLINGS)[number]>;
+
 /** Where a named function holds its body: every place the rule counts as named. */
 const PLACES: ReadonlyArray<(body: string) => string> = [
   (body) => `export const a = () => ${body};`,
@@ -106,7 +109,7 @@ it("O1 effect-functions: refuses a span wrapper a named function returns, in eve
     fc.property(generated, ({ spellings, alias, place, wrapper, span, base, at, passes }) => {
       const bindings = Arr.dedupeWith(
         Arr.map(spellings, (spelling, i) => spelling(`${alias}${i}`)),
-        (a, b) => a.header === b.header,
+        (a: Binding, b: Binding) => a.header === b.header,
       );
 
       const local = (n: number) => bindings[n % bindings.length]!.local;
