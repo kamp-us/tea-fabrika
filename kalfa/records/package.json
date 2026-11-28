@@ -19,6 +19,7 @@
     "yaml": "catalog:"
   },
   "peerDependencies": {
+    "@effect/platform-node": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
