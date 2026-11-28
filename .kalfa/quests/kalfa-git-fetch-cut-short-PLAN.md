@@ -15,7 +15,7 @@ pull request says `Closes #2385` and `Refs #1938`, and carries no `fabrika close
 const refs = yield* Effect.scoped(
   Effect.gen(function* () {
     const fetched = yield* limited(read); // url, slot, transfer, checks: TimedOut can only happen here
-    yield* Effect.uninterruptible(fetched.adopt); // .pack, .rev, .idx renamed in; never cut
+    yield* Effect.uninterruptible(fetched.stow); // .pack, .rev, .idx renamed in; never cut
     return fetched.refs;
   }),
 );
@@ -24,10 +24,10 @@ const refs = yield* Effect.scoped(
 
 ## Doubts, read first
 
-- **A stuck disk can now hold a fetch past `limits.time`, 85%.** The adopt step has no bound. A bound would not help: an
+- **A stuck disk can now hold a fetch past `limits.time`, 85%.** The stow step has no bound. A bound would not help: an
   `fs.rename` that Node has started cannot be stopped (it has no abort signal, and Effect's `effectify` only stops
   waiting for its callback), so a bound would answer `TimedOut` while the rename still lands later. That is bug 2 again.
-  What would settle it: a real case of a local rename that hangs. The adopt is a directory listing and three renames on
+  What would settle it: a real case of a local rename that hangs. The stow is a directory listing and three renames on
   one file system.
 - **A rename the disk refuses part way can still leave one `.pack` with no `.idx`, 85%.** The fix covers the time limit
   and an outside interrupt, which are the two bugs. A refused rename (a disk fault) fails `GitUnavailable` and may leave
@@ -39,9 +39,9 @@ const refs = yield* Effect.scoped(
 
 ## Records read
 
-- `kalfa/git/src/ProcessRepository.ts`: `adopt` (renames `.pack`, `.rev` if listed, `.idx` last, per pack name),
+- `kalfa/git/src/ProcessRepository.ts`: `stow` (renames `.pack`, `.rev` if listed, `.idx` last, per pack name),
   `folder` (the call's `kalfa-fetch-*` folder, released after every ending, bounded by `limits.kill`), and `fetch`
-  (probe, folder, `init`, alternates, transfer, `whole`, `for-each-ref`, the refs limit, then `adopt`, all inside
+  (probe, folder, `init`, alternates, transfer, `whole`, `for-each-ref`, the refs limit, then `stow`, all inside
   `Effect.scoped`).
 - `kalfa/git/src/Repository.ts`: `make`'s `limited` (one `Effect.timeoutOrElse`), its `fetch` (one limit around
   `remoteUrl`, the slot and `raw.fetch`), the `fetch` contract line and `Raw`.
@@ -71,7 +71,7 @@ const refs = yield* Effect.scoped(
 - A scratch tryout on git 2.40.1 (not committed): a fetch with `-c transfer.unpackLimit=1 -c pack.writeReverseIndex=true`
   writes `pack-*.rev`; without the pin it writes none. Two fresh directories fetching the same remote got the same pack
   name.
-- Background only, not cited in the repo: a model of the adopt steps and a replay on real git, which found both bugs.
+- Background only, not cited in the repo: a model of the stow steps and a replay on real git, which found both bugs.
 
 ## How others do it
 
@@ -84,7 +84,7 @@ const refs = yield* Effect.scoped(
   `timeout` races, so the step has to be outside the race for the answer to match what happened.
 - **Elm and Erlang/OTP** (not fetched, from memory). Elm has no answer here; its effects are the runtime's. In OTP, a
   `gen_server:call` that times out says nothing about whether the server did the work, and the usual way to make a file
-  change safe is to write a temporary file and `file:rename` it in, so the change is one step. The adopt is that one
+  change safe is to write a temporary file and `file:rename` it in, so the change is one step. The stow is that one
   step, made of three renames, so we make the three act as one.
 - **The industry** (gRPC's deadline guide, fetched): the server keeps going after the client's deadline, and "the server
   application is responsible for stopping any activity it has spawned". A deadline that fires while work is landing
@@ -98,18 +98,18 @@ const refs = yield* Effect.scoped(
 ```ts
 // A sketch.
 /**
- * What an adapter's `fetch` read and checked, and the one step that adds it to the repository. `make` runs `adopt` once,
+ * What an adapter's `fetch` read and checked, and the one step that adds it to the repository. `make` runs `stow` once,
  * after the read answered, outside the time limit and with interrupts held off, so no fetch is cut between its files.
  */
 export interface Fetched {
   readonly refs: ReadonlyArray<Ref.Ref>;
   /** Adds the fetched objects to the repository whole. It cannot time out, so its only failure is a disk that refuses. */
-  readonly adopt: Effect.Effect<void, GitUnavailable>;
+  readonly stow: Effect.Effect<void, GitUnavailable>;
 }
 
 export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "readText" | "rebase" | "fetch"> & {
   // ...writeCommit and remoteUrl as today...
-  /** Reads the remote and checks what came. Anything it holds open (the git adapter's folder) lives in the scope `make` gives, so it is released after `adopt`. */
+  /** Reads the remote and checks what came. Anything it holds open (the git adapter's folder) lives in the scope `make` gives, so it is released after `stow`. */
   readonly fetch: (request: {
     readonly url: Remote.Url;
     readonly under: Ref.RefName;
@@ -118,7 +118,7 @@ export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "
 };
 ```
 
-`adopt` fails `GitUnavailable` only, never `TimedOut`: the type says the step has no time limit. The service's `fetch`
+`stow` fails `GitUnavailable` only, never `TimedOut`: the type says the step has no time limit. The service's `fetch`
 type does not change (F17 holds it).
 
 `make`'s `fetch`:
@@ -130,7 +130,7 @@ fetch: Effect.fn("git.fetch")(function* (request) {
 
   const refs = yield* Effect.scoped(
     Effect.gen(function* () {
-      // The time limit covers everything up to the adopt, the slot's answer included, so a slow filler still ends.
+      // The time limit covers everything up to the stow, the slot's answer included, so a slow filler still ends.
       const fetched = yield* limited(
         Effect.gen(function* () {
           const url = yield* raw.remoteUrl(request.remote);
@@ -141,9 +141,9 @@ fetch: Effect.fn("git.fetch")(function* (request) {
         }),
       );
 
-      // Adopting is one step that neither the limit nor an interrupt cuts. A rename Node has started cannot be called
+      // Stowing is one step that neither the limit nor an interrupt cuts. A rename Node has started cannot be called
       // back, so a limit here would only make the answer disagree with the disk.
-      yield* Effect.uninterruptible(fetched.adopt);
+      yield* Effect.uninterruptible(fetched.stow);
 
       return fetched.refs;
     }),
@@ -158,36 +158,36 @@ The race inside `limited` waits for its loser to end before it answers, so the f
 scope, still runs after the transfer's own scope has closed, as F14 needs.
 
 The contract line for `fetch` gains, in plain words: "A fetch that fails adds no commit, `TimedOut` included. The time
-limit covers the fetch up to adopting the objects; adopting is one step that neither the limit nor an interrupt cuts, so
+limit covers the fetch up to stowing the objects; stowing is one step that neither the limit nor an interrupt cuts, so
 once it starts the call answers the refs, a few renames past `limits.time` at most. A disk that refuses a rename part
 way fails `GitUnavailable` and can leave one `.pack` that no reader uses, never an `.idx` without its `.pack`. A call
 interrupted from outside answers nothing and may have added a whole pack." `make`'s doc ("A call that runs past the time
-limit is interrupted") gets the same exception for `fetch`'s adopt.
+limit is interrupted") gets the same exception for `fetch`'s stow.
 
 ### `ProcessRepository.ts`
 
 - `fetch` drops its own `Effect.scoped`: the folder is acquired in the scope `make` gives. It does every step as
-  today up to the refs limit, then returns `{ refs, adopt: adopt(disk.fs, fresh, objects) }` instead of running `adopt`.
+  today up to the refs limit, then returns `{ refs, stow: stow(disk.fs, fresh, objects) }` instead of running `stow`.
   The comment above it says the pack is renamed in by `make`, after the read answered.
-- `adopt` is unchanged: per pack name, `.pack`, `.rev` if listed, `.idx` last.
+- `stow` is unchanged: per pack name, `.pack`, `.rev` if listed, `.idx` last.
 - `TRANSFER_PINS` gains `pack.writeReverseIndex=true`, so every git from 2.38 on writes a `.rev` beside each fetched pack,
   as git 2.41 and later do by default. Then the rename order between `.idx` and `.rev` matters on every machine, and the
   laws see it on every machine.
 
 ### `MemoryRepository.ts`
 
-`fetch` does its checks as today, then returns `{ refs, adopt: Cell.update(cell, (now) => copied(now, there, tips)) }`.
-The comment becomes: "Only a good answer adds commits: `make` runs `adopt` after the read answered." The copy reads the
-store as it is when `adopt` runs, so a write that came between is kept, as today.
+`fetch` does its checks as today, then returns `{ refs, stow: Cell.update(cell, (now) => copied(now, there, tips)) }`.
+The comment becomes: "Only a good answer adds commits: `make` runs `stow` after the read answered." The copy reads the
+store as it is when `stow` runs, so a write that came between is kept, as today.
 
 ### Docs
 
-- `kalfa/git/README.md`, Fetch section, the Git bullet: the `.rev` pin; the adopt runs after the time limit and is never
+- `kalfa/git/README.md`, Fetch section, the Git bullet: the `.rev` pin; the stow runs after the time limit and is never
   cut, so a failure adds nothing; the one disk-fault exception; "A call ends within `limits.time` plus two `limits.kill`
-  waits" gains "plus the adopt". The Failures bullet: `TimedOut` adds nothing.
-- `kalfa/git/src/Settings.ts`: `time` "is the longest one call may take" gains ", except that a fetch's adopt is never
+  waits" gains "plus the stow". The Failures bullet: `TimedOut` adds nothing.
+- `kalfa/git/src/Settings.ts`: `time` "is the longest one call may take" gains ", except that a fetch's stow is never
   cut".
-- `kalfa/git/GLOSSARY.md`: the word **Adopt** (New names).
+- `kalfa/git/GLOSSARY.md`: the word **Stow** (New names).
 
 ## One value traced through
 
@@ -197,10 +197,10 @@ A fetch of `refs/heads/main` by name, `limits.time` 10 seconds, the remote ahead
 2. `raw.fetch` probes, makes `kalfa-fetch-7` in the scope, runs `init`, writes the alternates file, and runs the
    transfer. git writes `pack-ab12.pack`, `pack-ab12.rev` (the pin) and `pack-ab12.idx` into the folder's object folder.
 3. `whole` passes, `for-each-ref` prints one ref, one is within `limits.refs`. `raw.fetch` returns
-   `{ refs: [main at c3], adopt }` at 9.8 s. `limited` answers; the limit's sleep is interrupted.
-4. `make` runs `adopt` with interrupts held off. The listing, then `.pack` renamed in at 9.9 s. The disk stalls; 10 s
+   `{ refs: [main at c3], stow }` at 9.8 s. `limited` answers; the limit's sleep is interrupted.
+4. `make` runs `stow` with interrupts held off. The listing, then `.pack` renamed in at 9.9 s. The disk stalls; 10 s
    passes. Nothing is racing any more, so nothing fires. `.rev` at 10.3 s, `.idx` at 10.4 s.
-5. `adopt` ends; `make` returns `[main at c3]`. The scope closes and removes `kalfa-fetch-7`, now empty of pack files.
+5. `stow` ends; `make` returns `[main at c3]`. The scope closes and removes `kalfa-fetch-7`, now empty of pack files.
 6. `readCommit(c3)` finds it. `objects/pack` holds `pack-ab12.pack`, `.rev` and `.idx`. A reader that listed the folder
    at 10.0 s saw no `pack-ab12.idx` and so no pack, which is git's own rule.
 
@@ -208,7 +208,7 @@ Today at step 4 the limit fires at 10 s: the call answers `TimedOut`, the releas
 `.idx` inside, and `pack-ab12.pack` stays for good with no index (bug 1). With the stall after the `.idx` instead, the call
 answers `TimedOut` and `readCommit(c3)` finds it (bug 2).
 
-Had the transfer taken past 10 s at step 2, `limited` answers `TimedOut`, `adopt` never runs, and the scope removes the
+Had the transfer taken past 10 s at step 2, `limited` answers `TimedOut`, `stow` never runs, and the scope removes the
 folder with the pack in it: nothing was added.
 
 ## Generators
@@ -218,13 +218,13 @@ reaches.
 
 - (a) the limit fires before the read has answered: the transfer hangs on the stand-in; on real git, a hold after the
   alternates file is written; in memory, a hold in the remote store's read.
-- (b) the limit fires after the adopt's listing, before any rename.
+- (b) the limit fires after the stow's listing, before any rename.
 - (c) the limit fires after the `.pack` rename, before the `.rev`.
 - (d) the limit fires after the `.rev` rename, before the `.idx`.
 - (e) the limit fires after the `.idx` rename, before the call answers.
-- (f) the caller interrupts the fetch at a hold inside the adopt, at (b), (c) or (d).
+- (f) the caller interrupts the fetch at a hold inside the stow, at (b), (c) or (d).
 - (g) the disk refuses the first, the second or the third rename.
-- (h) git wrote no `.rev`: the stand-in's listing has only `.pack` and `.idx`, so the adopt has two renames.
+- (h) git wrote no `.rev`: the stand-in's listing has only `.pack` and `.idx`, so the stow has two renames.
 
 Each hold is a gate in a file system wrapper (stand-in or real `NodeFileSystem`), or in the memory remote's read: the
 k-th operation runs, then waits on a `Deferred`. The law waits until the gate is reached, moves the test clock by
@@ -234,15 +234,15 @@ k-th operation runs, then waits on a `Deferred`. The law waits until the gate is
 
 | Law | Kind | Generator | Plant |
 |---|---|---|---|
-| F18 `make` adopts once and never cuts it: on a stand-in `Raw` whose `fetch` and `adopt` hold at a gate, the limit firing in `fetch` answers `TimedOut` and `adopt` never runs; the limit firing in `adopt` lets it end and the call answers the refs; a caller interrupt in `adopt` lets it end; `adopt` runs once, only after `fetch` answered; the scope `fetch` was given closes after `adopt` ends, and on every failure (new file `kalfa/git/src/FetchAdopt.test.ts`) | test, 50 runs | Effect Arbitrary: Schema.Int | Keep `adopt` inside `limited`, wrapped in `Effect.uninterruptible`, (e) red: it answers `TimedOut` after `adopt` ran; run `adopt` interruptibly outside the limit, (f) red; run `adopt` in a finalizer after every ending, (a) red; run it with `Effect.ignore`, so its failure answers the refs, red |
-| F19 on the stand-in spawner and the recording file system, the limit firing at each hold: at (a) the call fails `TimedOut` and no rename was made; at (b) to (e) the call answers the refs, the renames are `.pack`, `.rev`, `.idx` in that order, all three before the folder's removal, which happens once; with a listing of no `.rev`, the renames are `.pack`, `.idx`; at (f) the interrupted call made all its renames before it ended (`ProcessFetch.test.ts`) | test, 20 runs | Effect Arbitrary: Schema.Int | Today's code (`adopt` inside the limit), (b), (c), (d) and (e) red; `Effect.uninterruptible` around each rename alone, (c) and (d) red; remove the folder in a finalizer that runs before `adopt`, (c) red; rename the `.rev` whether or not it was listed, (h) red |
-| F20 a refused rename: when the disk refuses the k-th rename of the adopt, the call fails `GitUnavailable`, the renames made are a prefix of `.pack`, `.rev`, `.idx`, so no `.idx` is renamed without its `.pack` and `.rev`, and the folder is removed once (`ProcessFetch.test.ts`) | test, 20 runs | Effect Arbitrary: Schema.Int | Ignore each rename's failure and go on, so the `.idx` lands without its `.rev`, (g) red; map the adopt's failure to the refs answer, (g) red |
-| F21 cut short at every hold the subject has, in both adapters: before the read answers (a), the call fails `TimedOut`, each remote commit the repository lacked still reads `NoSuchCommit`, and no pack file was added; at any hold inside or after the adopt, (b) to (e) on real git, the call answers the refs and every answered commit reads back; every pack the fetch added has its `.pack`, `.rev` and `.idx`, and `git count-objects -v` says `garbage: 0`; the carrier reached every hold its subject names (`Fetch.test-support.ts`, run by `Fetch.test.ts` on memory and the integration file on real git) | test, default runs | Effect Arbitrary: textureArb | Today's code on real git, (c) red (a `.pack` with no `.idx`, garbage 1) and (e) red (`TimedOut` with the tip readable); rename `.idx` before `.rev`, (d) red on every git, since the pin writes a `.rev`; copy the commits in memory before the limit ends, as a finalizer, (a) red |
+| F18 `make` stows once and never cuts it: on a stand-in `Raw` whose `fetch` and `stow` hold at a gate, the limit firing in `fetch` answers `TimedOut` and `stow` never runs; the limit firing in `stow` lets it end and the call answers the refs; a caller interrupt in `stow` lets it end; `stow` runs once, only after `fetch` answered; the scope `fetch` was given closes after `stow` ends, and on every failure (new file `kalfa/git/src/FetchStow.test.ts`) | test, 50 runs | Effect Arbitrary: Schema.Int | Keep `stow` inside `limited`, wrapped in `Effect.uninterruptible`, (e) red: it answers `TimedOut` after `stow` ran; run `stow` interruptibly outside the limit, (f) red; run `stow` in a finalizer after every ending, (a) red; run it with `Effect.ignore`, so its failure answers the refs, red |
+| F19 on the stand-in spawner and the recording file system, the limit firing at each hold: at (a) the call fails `TimedOut` and no rename was made; at (b) to (e) the call answers the refs, the renames are `.pack`, `.rev`, `.idx` in that order, all three before the folder's removal, which happens once; with a listing of no `.rev`, the renames are `.pack`, `.idx`; at (f) the interrupted call made all its renames before it ended (`ProcessFetch.test.ts`) | test, 20 runs | Effect Arbitrary: Schema.Int | Today's code (`stow` inside the limit), (b), (c), (d) and (e) red; `Effect.uninterruptible` around each rename alone, (c) and (d) red; remove the folder in a finalizer that runs before `stow`, (c) red; rename the `.rev` whether or not it was listed, (h) red |
+| F20 a refused rename: when the disk refuses the k-th rename of the stow, the call fails `GitUnavailable`, the renames made are a prefix of `.pack`, `.rev`, `.idx`, so no `.idx` is renamed without its `.pack` and `.rev`, and the folder is removed once (`ProcessFetch.test.ts`) | test, 20 runs | Effect Arbitrary: Schema.Int | Ignore each rename's failure and go on, so the `.idx` lands without its `.rev`, (g) red; map the stow's failure to the refs answer, (g) red |
+| F21 cut short at every hold the subject has, in both adapters: before the read answers (a), the call fails `TimedOut`, each remote commit the repository lacked still reads `NoSuchCommit`, and no pack file was added; at any hold inside or after the stow, (b) to (e) on real git, the call answers the refs and every answered commit reads back; every pack the fetch added has its `.pack`, `.rev` and `.idx`, and `git count-objects -v` says `garbage: 0`; the carrier reached every hold its subject names (`Fetch.test-support.ts`, run by `Fetch.test.ts` on memory and the integration file on real git) | test, default runs | Effect Arbitrary: textureArb | Today's code on real git, (c) red (a `.pack` with no `.idx`, garbage 1) and (e) red (`TimedOut` with the tip readable); rename `.idx` before `.rev`, (d) red on every git, since the pin writes a `.rev`; copy the commits in memory before the limit ends, as a finalizer, (a) red |
 | F10 (changed) the transfer's pins hold `-c pack.writeReverseIndex=true` beside the four it has (`ProcessFetch.test.ts`) | test, default runs | scenario: one fetch by name on the stand-in | Drop the pin, red; on git older than 2.41 F21's `.rev` check then turns red too |
-| F17 (changed) `Raw["fetch"]` answers `Fetched` and needs `Scope`; `Fetched["adopt"]` is `Effect<void, GitUnavailable>`, with no `TimedOut`; the service's `fetch` type is as it was (`Fetch.types.test.ts`) | type | type | Type `adopt`'s error as `GitUnavailable \| TimedOut`, red; leave `Raw["fetch"]` answering the refs, red; add `Scope` to the service's `fetch`, red |
+| F17 (changed) `Raw["fetch"]` answers `Fetched` and needs `Scope`; `Fetched["stow"]` is `Effect<void, GitUnavailable>`, with no `TimedOut`; the service's `fetch` type is as it was (`Fetch.types.test.ts`) | type | type | Type `stow`'s error as `GitUnavailable \| TimedOut`, red; leave `Raw["fetch"]` answering the refs, red; add `Scope` to the service's `fetch`, red |
 
 F14 stays as it is: its `TimedOut` cases hang in the transfer, which is class (a), and its bound holds because the stand-in's
-adopt takes no time. Its title gains "plus the adopt" to match the README.
+stow takes no time. Its title gains "plus the stow" to match the README.
 
 **Where each runs.** F17 to F20 and F21 on memory run on every pull request. F21 on real git is in
 `kalfa/git/src/ProcessRepository.integration.test.ts`, which the laptop refuses by name: it runs in the lead's proof run
@@ -263,13 +263,13 @@ clock.
 
 | File | Owner | Product lines expected | What changes |
 |---|---|---|---|
-| `kalfa/git/src/Repository.ts` | build | 35 | `Fetched`; `Raw["fetch"]` answers it and needs `Scope`; `make`'s `fetch` runs `adopt` outside the limit, uninterruptible; the `fetch` contract line and `make`'s doc |
-| `kalfa/git/src/ProcessRepository.ts` | build | 12 | `fetch` returns `{ refs, adopt }` and takes its folder from `make`'s scope; the `.rev` pin; comments |
-| `kalfa/git/src/MemoryRepository.ts` | build | 6 | `fetch` returns `{ refs, adopt }`; the comment |
+| `kalfa/git/src/Repository.ts` | build | 35 | `Fetched`; `Raw["fetch"]` answers it and needs `Scope`; `make`'s `fetch` runs `stow` outside the limit, uninterruptible; the `fetch` contract line and `make`'s doc |
+| `kalfa/git/src/ProcessRepository.ts` | build | 12 | `fetch` returns `{ refs, stow }` and takes its folder from `make`'s scope; the `.rev` pin; comments |
+| `kalfa/git/src/MemoryRepository.ts` | build | 6 | `fetch` returns `{ refs, stow }`; the comment |
 | `kalfa/git/src/Settings.ts` | build | 1 | the `time` doc line |
 | `kalfa/git/README.md` | build | docs | the Fetch section's Git and Failures bullets |
-| `kalfa/git/GLOSSARY.md` | build | docs | the word Adopt |
-| `kalfa/git/src/FetchAdopt.test.ts` | tests | tests | new: F18 |
+| `kalfa/git/GLOSSARY.md` | build | docs | the word Stow |
+| `kalfa/git/src/FetchStow.test.ts` | tests | tests | new: F18 |
 | `kalfa/git/src/ProcessFetch.test.ts` | tests | tests | F19, F20, F10's pin, F14's title, the recording file system's holds and refused renames |
 | `kalfa/git/src/Fetch.test-support.ts` | tests | tests | F21; `FetchSeeded` gains `holds`, `hold` and `packs` |
 | `kalfa/git/src/Fetch.types.test.ts` | tests | tests | F17 |
@@ -295,15 +295,15 @@ clock.
 
 ## Is this a setting?
 
-- The adopt's bound: no setting, because there is no bound. A bound would make the answer lie (Doubts). Every other
+- The stow's bound: no setting, because there is no bound. A bound would make the answer lie (Doubts). Every other
   limit stays a setting.
 - The `.rev` pin: not a setting. It fixes what files a fetch writes so readers and laws see one shape on every git; a
   setting would bring back the machine-dependent case the ticket names.
-- Where the time limit ends (before the adopt): not a setting. It is what the contract promises.
+- Where the time limit ends (before the stow): not a setting. It is what the contract promises.
 
 ## New names
 
-- **Adopt** (`kalfa/git/GLOSSARY.md`, context git): "The last step of a fetch: it makes the fetched objects part of the
+- **Stow** (`kalfa/git/GLOSSARY.md`, context git): "The last step of a fetch: it makes the fetched objects part of the
   repository whole, after every check passed. No time limit and no interrupt cuts it." _Avoid_: land (Delivery's word),
   install, commit.
 - `Fetched` is a code name for what an adapter's fetch hands back; it names no new thing beyond Fetch, so it gets no
@@ -311,7 +311,7 @@ clock.
 
 ## Validation
 
-- tests step: each law file alone, such as `nice -n 15 pnpm exec vitest run kalfa/git/src/FetchAdopt.test.ts`, then
+- tests step: each law file alone, such as `nice -n 15 pnpm exec vitest run kalfa/git/src/FetchStow.test.ts`, then
   `ProcessFetch.test.ts`, `Fetch.test.ts` and `Fetch.types.test.ts`, each red for its row's reason before the build. F18
   and F17 are red because `Fetched` does not exist yet; F19 and F21 on memory are red where the row says. Each plant by
   hand, undone. The integration file is not run here.
@@ -328,7 +328,7 @@ size: the doubt is the hooks for real git in `ProcessSeed.test-support.ts`, whic
 file system. About 4 agent hours. Steps: tests, build, one review, and one likely send-back, at about $12 a step on list
 prices, as the credential plan priced its steps.
 
-1. Slice 1, the adopt outside the time limit, both adapters, the `.rev` pin and its laws: 54 lines
+1. Slice 1, the stow outside the time limit, both adapters, the `.rev` pin and its laws: 54 lines
 
 Estimate: 4 steps, $48
 
@@ -336,7 +336,7 @@ Estimate: 4 steps, $48
 
 - That a local rename never hangs for good. If one does, a fetch now hangs with it, where today it answers `TimedOut`
   (Doubts). No law can show this, since no stand-in hang is real.
-- A disk fault part way through the adopt is covered only by the stand-in (F20). Real git is never made to refuse.
+- A disk fault part way through the stow is covered only by the stand-in (F20). Real git is never made to refuse.
 - `git gc` or `git repack` in the same repository during a fetch, and a crash of the machine: neither is in any law, as
   the ticket says.
 - That git from 2.38 to 2.40 honors `-c pack.writeReverseIndex=true` through `fetch`'s index-pack child. Tried only on
@@ -348,19 +348,19 @@ Estimate: 4 steps, $48
 
 ## Calls taken
 
-- **The lead's lean: the adopt runs outside the time limit and uninterruptible, 85%.** Why: it fixes both bugs with one
+- **The lead's lean: the stow runs outside the time limit and uninterruptible, 85%.** Why: it fixes both bugs with one
   change of shape, keeps "only a good answer adds commits" true in both adapters, and makes the order (`make` checks,
-  then adopts) something an adapter cannot get wrong. Cost: a fetch can end a few renames past `limits.time`, and a stuck
+  then stows) something an adapter cannot get wrong. Cost: a fetch can end a few renames past `limits.time`, and a stuck
   disk holds it. The other path, saying in the contract that a late `TimedOut` may leave a whole pack (as `moveRef`
   does), was not taken: it still leaves bug 1 to fix on its own, and it makes every caller re-read after a `TimedOut`.
-- **`make` runs the adopt, not the adapter, 85%.** Passing the limit into `Raw["fetch"]` would let an adapter put the
-  adopt inside it again, and no type would catch it. With `Fetched`, the only way to add objects is the step `make` runs.
+- **`make` runs the stow, not the adapter, 85%.** Passing the limit into `Raw["fetch"]` would let an adapter put the
+  stow inside it again, and no type would catch it. With `Fetched`, the only way to add objects is the step `make` runs.
 - **Plain `Effect.uninterruptible`, not just outside the limit, 90%.** An outside interrupt between renames is bug 1
   again by another road.
 - **No cleanup after a refused rename, 85%** (Doubts).
 - **The `.rev` pin in the product, not only in the tests, 85%.** The transfer reads no outside config, so no test can
   turn `.rev` on without it; and it gives every machine one file shape.
-- **F21 in the shared suite with subject-given holds, 80%.** Memory has one hold, (a), since its adopt is one step; the
+- **F21 in the shared suite with subject-given holds, 80%.** Memory has one hold, (a), since its stow is one step; the
   law then states the same promise for both, and real git adds (b) to (e).
 
 ## Open questions
