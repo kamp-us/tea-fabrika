@@ -20,6 +20,7 @@
 // under test. A law builds one scene for each class it lists from the drawn seeds and fails when a class was not reached.
 // Each names its plant: break one thing, run the law, see it red, undo it.
 import { expect, it } from "@effect/vitest";
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Option, Schema } from "effect";
 import {
@@ -68,6 +69,7 @@ import {
 import { config } from "./Cli.ts";
 import { type Setting, SettingGroup } from "./index.ts";
 import { debounce } from "./internal/window.ts";
+import { filePlace } from "./SettingGroup.edit.test-support.ts";
 import { LOOSE, looseSetting } from "./SettingGroup.text.test-support.ts";
 
 const readJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
@@ -159,8 +161,7 @@ it.effect.prop(
           .map((e) => e.spec.name);
 
         expect(out.reason, `${id}: the reason`).toBe("unknown");
-        expect(out.file, `${id}: the file`).toBe(names.repo);
-        expect(out.line, `${id}: the line`).toBe(key?.line);
+        expect(out.place, `${id}: the repo file at the key's line`).toEqual(filePlace("repo", names.repo, key?.line));
         expect(
           unknownTexts(near, key?.spec.name ?? "").map(
             (text) => `${names.repo}, line ${key?.line}: ${text}\n  ${closing(s.app)}`,
@@ -248,8 +249,7 @@ it.effect.prop(
           const near = nearest(declared, name);
 
           expect(out.reason, `get ${JSON.stringify(name)}: the reason`).toBe("unknown");
-          expect(out.file, `get ${JSON.stringify(name)}: no file`).toBeUndefined();
-          expect(out.line, `get ${JSON.stringify(name)}: no line`).toBeUndefined();
+          expect(out.place, `get ${JSON.stringify(name)}: a typed name has no place`).toBeUndefined();
           expect(
             unknownTexts(declared, name).map((text) => `${text}\n  Nothing was read.`),
             `get ${JSON.stringify(name)}: the message`,
@@ -414,7 +414,7 @@ it.effect.prop(
 
           expect(out.reason, `set:invalid ${kind}: the reason`).toBe("invalid");
           // The file is named as the write would name it, and every other message of the run names it: `~/...` or `$<APP>_HOME/...`.
-          expect(out.file, `set:invalid ${kind}: the file`).toBe(names[file]);
+          expect(out.place, `set:invalid ${kind}: the file, no line`).toEqual(filePlace(file, names[file]));
           expect(out.message, `set:invalid ${kind}: opens with the file`).toMatch(
             new RegExp(`^${escaped(names[file])}: `, "u"),
           );
@@ -437,7 +437,7 @@ it.effect.prop(
           const out = failure(ran);
 
           expect(out.reason, `${sub}:unknown: the reason`).toBe("unknown");
-          expect(out.file, `${sub}:unknown: no file`).toBeUndefined();
+          expect(out.place, `${sub}:unknown: a typed name has no place`).toBeUndefined();
           expect(
             unknownTexts(declared, typed).map((text) => `${text}\n  Nothing was changed.`),
             `${sub}:unknown: the message`,
@@ -1133,6 +1133,9 @@ it.effect.prop(
         const out = failure(ran);
 
         expect(out.reason, `${args.join(" ")}: the reason`).toBe("read");
+        expect(out.place, `${args.join(" ")}: the variable the environment did not answer for`).toEqual(
+          Diagnostic.Place.cases.environment.make({ name: home }),
+        );
         expect(
           out.message.startsWith(`${home} could not be read, because the environment did not answer.`),
           `${args.join(" ")}: names ${home}: ${out.message}`,

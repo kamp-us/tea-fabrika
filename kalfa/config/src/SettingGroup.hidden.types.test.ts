@@ -19,7 +19,7 @@ const hiddenTypes = (raw: Error) => {
   // @ts-expect-error a raw error is no cause: a cause is made hidden first
   const rawSnapshot = new SnapshotError({ message: "m", cause: raw });
   // @ts-expect-error a raw error is no cause of a settings error either
-  const rawSettings = new SettingGroup.SettingsError({ reason: "read", message: "m", cause: raw });
+  const rawSettings = new SettingGroup.SettingsError({ reason: "read", fault: "f", closing: "c", cause: raw });
 
   expectTypeOf([none, hidden, rawSnapshot, rawSettings]).toBeArray();
 };

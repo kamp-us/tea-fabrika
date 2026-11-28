@@ -199,8 +199,10 @@ it.effect.prop(
       const nothing = refusal(yield* Effect.exit(openInbox(group, [], { ending: true })));
 
       expect(nothing.reason).toBe("snapshot");
-      expect(nothing.file, "no file").toBeUndefined();
-      expect(nothing.line, "no line").toBeUndefined();
+      expect(
+        nothing.place,
+        "no place: the stream ended before a snapshot, and no file, variable or flag is at fault",
+      ).toBeUndefined();
       expect(nothing.message).toBe(`no snapshot came before the stream ended.\n  ${closing}`);
       reach.mark("empty");
 
@@ -212,8 +214,7 @@ it.effect.prop(
         const found = refusal(yield* Effect.exit(openInbox(rig.group, [one.input])));
 
         expect(found.reason, `${one.id} ${one.label}`).toBe("snapshot");
-        expect(found.file, `${one.id}: no file`).toBeUndefined();
-        expect(found.line, `${one.id}: no line`).toBeUndefined();
+        expect(found.place, `${one.id}: no place`).toBeUndefined();
         expect(found.message, `${one.id} ${one.label}`).toBe(`${one.message}\n  ${closing}`);
         reach.mark(one.id);
       }

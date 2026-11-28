@@ -29,6 +29,9 @@
 //   the `true` mark is lost and `fileOnly` twice compiles; (b) key `Flags` and `FlagValues` by every setting's name, so
 //   the record that names a file-only setting compiles; (c) type `Setting.live` as returning `Setting<N, A, true>`, so a
 //   file-only setting that is made live loses its mark.
+// - P8 (ticket 2000): (a) keep `file: Schema.optional(Schema.String)` beside `place`: the key line fails; (b) type the
+//   `diagnostic` getter `Diagnostic.Carried`: the exact-type line fails; (c) type `place` as `Schema.Unknown`: the
+//   `@ts-expect-error` on an environment place with a line is unused.
 // - RF7 (ticket 1995): keep `cause: Schema.optional(Schema.Defect())` in `SettingsError`: the two `@ts-expect-error`
 //   lines compile, so their directives are unused, and the exact-type line fails.
 // - T6, one at a time, each on `Declaration.ts`: (a) type `make`'s schema as `C` again; (b) drop the brand line of
@@ -38,6 +41,7 @@
 //   line; (g) before the last branch, accept an object that is no function and whose every field is plain data; (h) drop
 //   the record line, so every record falls to the last branch.
 import { expectTypeOf, it } from "@effect/vitest";
+import type * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { Context, Effect, type FileSystem, Option, type Path, Redacted, Schema } from "effect";
 import type * as Digest from "effect/crypto/Digest";
 import type * as Duration from "effect/Duration";
@@ -586,18 +590,55 @@ it("T9 type: a disk set and remove each answer an Effect of nothing, failing onl
 // RF7: the cause of a `SettingsError` is hidden in a `Redacted`. A program makes one with no cause or with `Redacted.make`
 // of the failure, and a raw cause does not compile. This function is never called.
 const errors = () => [
-  new SettingGroup.SettingsError({ reason: "read", message: "m" }),
-  new SettingGroup.SettingsError({ reason: "read", message: "m", cause: Redacted.make(new Error("x")) }),
-  new SettingGroup.SettingsError({ reason: "read", message: "m", cause: undefined }),
+  new SettingGroup.SettingsError({ reason: "read", fault: "f", closing: "c" }),
+  new SettingGroup.SettingsError({ reason: "read", fault: "f", closing: "c", cause: Redacted.make(new Error("x")) }),
+  new SettingGroup.SettingsError({ reason: "read", fault: "f", closing: "c", cause: undefined }),
 
   // @ts-expect-error RF7: a raw failure is not a hidden one
-  new SettingGroup.SettingsError({ reason: "read", message: "m", cause: new Error("x") }),
+  new SettingGroup.SettingsError({ reason: "read", fault: "f", closing: "c", cause: new Error("x") }),
 
   // @ts-expect-error RF7: a text is not a hidden one
-  new SettingGroup.SettingsError({ reason: "read", message: "m", cause: "x" }),
+  new SettingGroup.SettingsError({ reason: "read", fault: "f", closing: "c", cause: "x" }),
 ];
 
 it("RF7 type: a SettingsError's cause is a Redacted of anything, or none, and a raw cause does not compile", () => {
   expectTypeOf(errors).toBeFunction();
   expectTypeOf<SettingGroup.SettingsError["cause"]>().toEqualTypeOf<Redacted.Redacted<unknown> | undefined>();
+});
+
+// P8: a settings error holds its place and its diagnostic as data. `place` is a `Diagnostic.Place` or nothing, `diagnostic`
+// the carried diagnostic or nothing, `fault` and `closing` are the two sentences the message is made from, and the old
+// `file` and `line` are gone. A place checks its own kind: an environment variable takes no line. This function is never
+// called.
+const placed = () => [
+  new SettingGroup.SettingsError({ reason: "invalid", fault: "f", closing: "c" }),
+  new SettingGroup.SettingsError({
+    reason: "invalid",
+    fault: "f",
+    closing: "c",
+    place: { _tag: "environment", name: "DEMO_NET_PORT" },
+  }),
+  new SettingGroup.SettingsError({
+    reason: "invalid",
+    fault: "f",
+    closing: "c",
+    place: { _tag: "home", path: "~/.demo/demo.toml", line: 2 },
+  }),
+
+  new SettingGroup.SettingsError({
+    reason: "invalid",
+    fault: "f",
+    closing: "c",
+    // @ts-expect-error P8: an environment variable has no line
+    place: { _tag: "environment", name: "DEMO_NET_PORT", line: 1 },
+  }),
+];
+
+it("P8 type: a SettingsError's place is a Diagnostic.Place or none, its diagnostic is the carried one or none, fault and closing are text, `file` and `line` are gone, and an environment place with a line does not compile", () => {
+  expectTypeOf(placed).toBeFunction();
+  expectTypeOf<SettingGroup.SettingsError["place"]>().toEqualTypeOf<Diagnostic.Place | undefined>();
+  expectTypeOf<SettingGroup.SettingsError["diagnostic"]>().toEqualTypeOf<Diagnostic.Carried | undefined>();
+  expectTypeOf<SettingGroup.SettingsError["fault"]>().toEqualTypeOf<string>();
+  expectTypeOf<SettingGroup.SettingsError["closing"]>().toEqualTypeOf<string>();
+  expectTypeOf<Extract<keyof SettingGroup.SettingsError, "file" | "line">>().toEqualTypeOf<never>();
 });

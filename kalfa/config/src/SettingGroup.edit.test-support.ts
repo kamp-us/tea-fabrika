@@ -7,6 +7,7 @@ import { inspect } from "node:util";
  * The classes (a) to (y) are the plan's "Generators, slice 2". Every class is built from the drawn seeds in every run, so none is left to chance; a law keeps the ids it reached and `Reach.done` fails when one is missing.
  */
 import { expect } from "@effect/vitest";
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { Cause, ConfigProvider, Effect, Exit, Layer, Predicate, Schema } from "effect";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
@@ -43,6 +44,22 @@ export class Reach<Id extends string> {
     ).toEqual([]);
   }
 }
+
+/**
+ * The file a person reads in a place and the line in it, which an error's `file` and `line` said before ticket 2000: a file's place is its path and line, and a variable's or a flag's place is no file. One helper, so every law that read `file` and `line` moves by the same rule. A law that must hold the place itself reads `error.place`.
+ */
+export const fileAt = (
+  place: Diagnostic.Place | undefined,
+): { readonly file: string | undefined; readonly line: number | undefined } =>
+  place === undefined || place._tag === "environment" || place._tag === "flag"
+    ? { file: undefined, line: undefined }
+    : { file: place.path, line: place.line };
+
+/** The place of a fault found in a configuration file, written from the plan's table and never from the code under test: `repo` for the repo file, `home` for the user file, with the line when there is one. */
+export const filePlace = (file: Setting.File, name: string, line?: number): Diagnostic.Place =>
+  file === "repo"
+    ? Diagnostic.Place.cases.repo.make({ path: name, ...(line === undefined ? {} : { line }) })
+    : Diagnostic.Place.cases.home.make({ path: name, ...(line === undefined ? {} : { line }) });
 
 // ---------------------------------------------------------------------------------------------
 // Draws: Effect Schemas, so each has its own Arbitrary.
@@ -1013,8 +1030,7 @@ const outcome = (exit: Exit.Exit<string, unknown>): Outcome => {
   return Schema.is(SettingGroup.SettingsError)(error)
     ? Outcome.cases.error.make({
         reason: error.reason,
-        file: error.file,
-        line: error.line,
+        ...fileAt(error.place),
         message: error.message,
         printed: [
           Cause.pretty(exit.cause),
@@ -1296,9 +1312,7 @@ export const startRefusal = (exit: Exit.Exit<unknown, unknown>) => {
 
   const error = errors[0];
 
-  return Schema.is(SettingGroup.SettingsError)(error)
-    ? { reason: error.reason, file: error.file, line: error.line }
-    : undefined;
+  return Schema.is(SettingGroup.SettingsError)(error) ? { reason: error.reason, ...fileAt(error.place) } : undefined;
 };
 
 /** (q) A fault at the edited setting itself: a bad old value, as a position the set and the remove can both read. */

@@ -17,6 +17,7 @@
 // class it lists from the drawn seeds, and fails when a class was not reached. The texts a refusal must say are written
 // there from the plan's tables, never from the code under test.
 import { expect, it } from "@effect/vitest";
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { runsFor } from "@kampus/vitest";
 import { Cause, ConfigProvider, Effect, Exit, Option, Redacted, Schema } from "effect";
 import {
@@ -31,6 +32,7 @@ import {
   FaultDraw,
   type FaultId,
   failing,
+  homeVariable,
   plant,
   fileText,
   placement,
@@ -70,6 +72,7 @@ import {
   variable,
 } from "./Cli.refusals.test-support.ts";
 import { SettingGroup } from "./index.ts";
+import { filePlace } from "./SettingGroup.edit.test-support.ts";
 
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
 
@@ -104,8 +107,9 @@ it.effect.prop(
         const found = refusal(observed);
 
         expect(found.reason, `(${one.id}) the reason`).toBe("invalid");
-        expect(found.file, `(${one.id}) the file`).toBe(repoName(draw));
-        expect(found.line, `(${one.id}) the line is the fault's own, never 0`).toBe(placed.line);
+        expect(found.place, `(${one.id}) the place is the repo file at the fault's own line, never 0`).toEqual(
+          filePlace("repo", repoName(draw), placed.line),
+        );
         expect(found.message, `(${one.id}) the message`).toBe(
           `${repoName(draw)}, line ${placed.line}: ${settingName(draw)} is not ${one.tail}\n  ${draw.app} did not start.`,
         );
@@ -147,7 +151,9 @@ it.effect.prop(
         const found = refusal(observed);
 
         expect(found.reason, `(${one.id}) the reason`).toBe("invalid");
-        expect(found.line, `(${one.id}) the line`).toBe(keyLine(draw));
+        expect(found.place, `(${one.id}) the place is the repo file at the key's line`).toEqual(
+          filePlace("repo", repoName(draw), keyLine(draw)),
+        );
         expect(found.message, `(${one.id}) the message`).toBe(
           `${repoName(draw)}, line ${keyLine(draw)}: ${settingName(draw)} is not ${one.tail}\n  ${draw.app} did not start.`,
         );
@@ -212,6 +218,7 @@ it.effect.prop(
       );
 
       expect(inFile.reason, "file: the reason").toBe("invalid");
+      expect(inFile.place, "file: the place").toEqual(filePlace("repo", repoName(draw), keyLine(draw)));
       expect(inFile.message, "file").toBe(
         `${repoName(draw)}, line ${keyLine(draw)}: ${name} ${wanted}\n  ${draw.app} did not start.`,
       );
@@ -222,16 +229,18 @@ it.effect.prop(
       );
 
       expect(byVariable.reason, "variable: the reason").toBe("invalid");
-      expect(byVariable.file, "variable: no file").toBeUndefined();
-      expect(byVariable.line, "variable: no line").toBeUndefined();
+      expect(byVariable.place, "variable: the place is the variable").toEqual(
+        Diagnostic.Place.cases.environment.make({ name: variable(draw) }),
+      );
       expect(byVariable.message, "variable").toBe(`${variable(draw)} ${wanted}\n  ${draw.app} did not start.`);
       reach.mark("variable");
 
       const byFlag = refusal(yield* startOn(group, { env, flags: { [name]: Option.some(one.text) }, repo: draw.repo }));
 
       expect(byFlag.reason, "flag: the reason").toBe("invalid");
-      expect(byFlag.file, "flag: no file").toBeUndefined();
-      expect(byFlag.line, "flag: no line").toBeUndefined();
+      expect(byFlag.place, "flag: the place is the flag").toEqual(
+        Diagnostic.Place.cases.flag.make({ name: `--${name}` }),
+      );
       expect(byFlag.message, "flag").toBe(`--${name} ${wanted}\n  ${draw.app} did not start.`);
       reach.mark("flag");
 
@@ -240,8 +249,7 @@ it.effect.prop(
       const byEdit = refusal(yield* edited(group, setting, "", refusedValue(one)));
 
       expect(byEdit.reason, "edit: the reason").toBe("invalid");
-      expect(byEdit.file, "edit: the file").toBe(repoName(draw));
-      expect(byEdit.line, "edit: no line").toBeUndefined();
+      expect(byEdit.place, "edit: the repo file, no line").toEqual(filePlace("repo", repoName(draw)));
       expect(byEdit.message, "edit").toBe(unchanged);
       reach.mark("edit");
 
@@ -255,8 +263,7 @@ it.effect.prop(
       const bySet = refusal(onTheDisk);
 
       expect(bySet.reason, "disk: the reason").toBe("invalid");
-      expect(bySet.file, "disk: the file").toBe(repoName(draw));
-      expect(bySet.line, "disk: no line").toBeUndefined();
+      expect(bySet.place, "disk: the repo file, no line").toEqual(filePlace("repo", repoName(draw)));
       expect(bySet.message, "disk").toBe(unchanged);
       expect(onTheDisk.files, "disk: the file is as it was").toEqual(present);
       reach.mark("disk");
@@ -306,8 +313,9 @@ it.effect.prop(
           const at = `${site} (${id})`;
 
           expect(found.reason, `${at}: the reason`).toBe("read");
-          expect(found.file, `${at}: the file`).toBe(siteWords(draw, site).file);
-          expect(found.line, `${at}: no line`).toBeUndefined();
+          expect(found.place, `${at}: the file a read was refused, no line`).toEqual(
+            filePlace(site === "home" || site === "app-home" ? "user" : "repo", siteWords(draw, site).file),
+          );
           expect(found.message, `${at}: the message`).toBe(readMessage(draw, site, fault.because));
 
           for (const folder of [draw.home, draw.repo, draw.moved]) {
@@ -326,6 +334,14 @@ it.effect.prop(
 // ---------------------------------------------------------------------------------------------
 // RF4, an environment read says why
 // ---------------------------------------------------------------------------------------------
+
+/** The variable each site could not read: `<APP>_HOME`, `HOME`, or the setting's own variable (the message names the setting for the last two). */
+const ENVIRONMENT_NAMES: Readonly<Record<EnvironmentSite, (draw: RuleDraw) => string>> = {
+  "app-home": homeVariable,
+  home: () => "HOME",
+  holder: variable,
+  resolve: variable,
+};
 
 // Plants: (z) quote the `SourceError`'s message as the reason; treat every `ConfigError` in `resolve` as `invalid`: the
 // fourth site reads `invalid`; keep today's text at `lookup` alone; keep today's text at `holder` alone.
@@ -347,8 +363,9 @@ it.effect.prop(
         const found = refusal(observed);
 
         expect(found.reason, `${site}: the reason`).toBe("read");
-        expect(found.file, `${site}: no file`).toBeUndefined();
-        expect(found.line, `${site}: no line`).toBeUndefined();
+        expect(found.place, `${site}: the variable the environment did not answer for`).toEqual(
+          Diagnostic.Place.cases.environment.make({ name: ENVIRONMENT_NAMES[site](draw) }),
+        );
         expect(found.message, `${site}: the message`).toBe(environmentMessage(draw, site));
 
         for (const text of printed(observed)) {
@@ -589,9 +606,17 @@ it.prop(
   { raw: Schema.Unknown.check(Schema.makeFilter((raw) => raw !== undefined)) },
   ({ raw }) => {
     // SAFETY: none, on purpose. The cast is the law: a type that stops a raw cause at compile time is not enough where a program casts past it, so the constructor must refuse it when it runs.
-    expect(() => new SettingGroup.SettingsError({ reason: "read", message: "m", cause: raw as never })).toThrow();
+    expect(
+      () => new SettingGroup.SettingsError({ reason: "read", fault: "f", closing: "c", cause: raw as never }),
+    ).toThrow();
 
-    const kept = new SettingGroup.SettingsError({ reason: "read", message: "m", cause: Redacted.make(raw) });
+    const kept = new SettingGroup.SettingsError({
+      reason: "read",
+      fault: "f",
+      closing: "c",
+      cause: Redacted.make(raw),
+    });
+
     const cause: unknown = kept.cause;
 
     expect(Redacted.isRedacted(cause)).toBe(true);

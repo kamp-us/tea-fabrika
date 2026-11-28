@@ -264,8 +264,7 @@ it.effect.prop(
         const found = refusal(yield* Effect.exit(readItem(rig.group, one.input, closing)));
 
         expect(found.reason, `${one.id} ${one.label}`).toBe("snapshot");
-        expect(found.file, `${one.id} ${one.label}: no file`).toBeUndefined();
-        expect(found.line, `${one.id} ${one.label}: no line`).toBeUndefined();
+        expect(found.place, `${one.id} ${one.label}: no place`).toBeUndefined();
         expect(found.message, `${one.id} ${one.label}`).toBe(`${one.message}\n  ${closing}`);
         reach.mark(one.id);
       }

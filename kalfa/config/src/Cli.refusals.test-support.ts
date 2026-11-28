@@ -9,6 +9,7 @@ import { inspect } from "node:util";
  * drawn seeds, never the cross product, and `Reach.done` fails when a class was not reached.
  */
 import { expect } from "@effect/vitest";
+import type * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import {
   Cause,
   ConfigProvider,
@@ -27,7 +28,7 @@ import {
 import { run, type World } from "./Cli.test-support.ts";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
-import { Reach } from "./SettingGroup.edit.test-support.ts";
+import { fileAt, Reach } from "./SettingGroup.edit.test-support.ts";
 
 export { Reach };
 
@@ -129,7 +130,7 @@ export const settingName = (draw: RuleDraw) => `${draw.words[0]}.${draw.words[1]
 /** The environment variable that sets a setting: `DEMO_NET_PORT`. */
 export const variable = (draw: RuleDraw) => [draw.app, ...settingName(draw).split(".")].join("_").toUpperCase();
 
-const homeVariable = (draw: RuleDraw) => `${draw.app.toUpperCase()}_HOME`;
+export const homeVariable = (draw: RuleDraw) => `${draw.app.toUpperCase()}_HOME`;
 
 export const repoName = (draw: RuleDraw) => `.${draw.app}/${draw.app}.toml`;
 
@@ -615,6 +616,8 @@ interface Scene {
   readonly provider?: ConfigProvider.ConfigProvider;
   readonly flags?: Readonly<Record<string, Option.Option<string>>>;
   readonly repo: string;
+  /** The running app's version, `1.2.3` when left out. */
+  readonly version?: string;
 }
 
 /** The start on a scene. */
@@ -624,7 +627,11 @@ export const startOn = (group: AnyGroup, scene: Scene) => {
   return Effect.gen(function* () {
     const exit = yield* Effect.scoped(
       Layer.build(
-        SettingGroup.layer(group, { version: VERSION, repo: scene.repo, flags: { ...scene.flags } }).pipe(
+        SettingGroup.layer(group, {
+          version: scene.version ?? VERSION,
+          repo: scene.repo,
+          flags: { ...scene.flags },
+        }).pipe(
           Layer.provide(
             MemoryFiles.layer({
               files: scene.files ?? {},
@@ -675,12 +682,18 @@ export const onDisk = (
   }).pipe(rec.under);
 };
 
-/** `SettingGroup.edit(...).set` on a text, in memory. */
-export const edited = (group: AnyGroup, setting: Setting.Any, text: string, value: unknown) => {
+/** `SettingGroup.edit(...).set` on a text, in memory, of the repo file or the user file. */
+export const edited = (
+  group: AnyGroup,
+  setting: Setting.Any,
+  text: string,
+  value: unknown,
+  file: Setting.File = "repo",
+) => {
   const rec = recording();
 
   return Effect.gen(function* () {
-    const exit = yield* Effect.exit(SettingGroup.edit(group, text, "repo").set(setting, value));
+    const exit = yield* Effect.exit(SettingGroup.edit(group, text, file).set(setting, value));
 
     return { exit, spans: rec.spans, logs: rec.logs, files: {}, stdout: "" } satisfies Observed;
   }).pipe(rec.under);
@@ -703,6 +716,9 @@ export const command = (world: World, args: ReadonlyArray<string>) =>
 interface Refusal {
   readonly error: SettingGroup.SettingsError;
   readonly reason: string;
+  /** Where the fault is, as data. */
+  readonly place: Diagnostic.Place | undefined;
+  /** The file a person reads in the place, and its line: none for a variable's or a flag's place. */
   readonly file: string | undefined;
   readonly line: number | undefined;
   readonly message: string;
@@ -724,7 +740,7 @@ export const refusal = (observed: Observed): Refusal => {
     return expect.fail("the failure is no SettingsError");
   }
 
-  return { error, reason: error.reason, file: error.file, line: error.line, message: error.message };
+  return { error, reason: error.reason, place: error.place, ...fileAt(error.place), message: error.message };
 };
 
 /** Every text a run can print: the error as each rendering writes it, each span's name, attributes and ended exit, and each log line. */

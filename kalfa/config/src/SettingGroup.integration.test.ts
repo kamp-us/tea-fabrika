@@ -7,6 +7,7 @@ import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, FileSystem, Path, Schema } from "effect";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
+import { fileAt } from "./SettingGroup.edit.test-support.ts";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
@@ -39,7 +40,7 @@ const outcome = (exit: Exit.Exit<{ values: Record<string, unknown>; origins: Rec
   const error = exit.cause.reasons.flatMap((reason) => (reason._tag === "Fail" ? [reason.error] : []))[0];
 
   return Schema.is(SettingGroup.SettingsError)(error)
-    ? { failed: { reason: error.reason, file: error.file, line: error.line, message: error.message } }
+    ? { failed: { reason: error.reason, ...fileAt(error.place), message: error.message } }
     : { failed: { reason: "not a SettingsError" } };
 };
 

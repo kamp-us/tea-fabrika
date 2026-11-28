@@ -9,14 +9,16 @@
 // bare `Schema.Redacted(Schema.Defect())` writes as the placeholder; so none of them can see the leak. These laws draw the cause as the code of a caller
 // that has not hidden it twice makes it: a raw failure, as `stop` takes it, and `stop` hides it once.
 import { expect, it } from "@effect/vitest";
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, PlatformError, Redacted, Result, Schema } from "effect";
 import { SettingGroup } from "./index.ts";
 import { stop, unread } from "./internal/error.ts";
 import { forms, HiddenDraw, OldSnapshotError, Reach } from "./SettingGroup.snapshot.test-support.ts";
 
-/** The two fields of an error that the laws read: its message and its cause, whatever it holds. */
-const Parts = Schema.Struct({ message: Schema.String, cause: Schema.optional(Schema.Unknown) });
+/** The field of an error that the laws read off its wire: its cause, whatever it holds. */
+// The cause alone: a settings error holds `fault`, `closing` and `place` and makes its message, so the message is read from the error, not from its wire.
+const Parts = Schema.Struct({ cause: Schema.optional(Schema.Unknown) });
 
 const parts = Schema.decodeUnknownSync(Parts);
 
@@ -87,8 +89,14 @@ const makers = (app: string, id: Class, secret: string) => {
       name: "SettingsError from a failed read",
       schema: SettingGroup.SettingsError,
       error: PlatformError.isPlatformError(cause)
-        ? unread(app, cause, { position: { file: "demo.toml" } })
-        : stop(app, "read", "demo.toml could not be read.", { file: "demo.toml" }, cause),
+        ? unread(app, cause, { place: Diagnostic.Place.cases.repo.make({ path: "demo.toml" }) })
+        : stop(
+            app,
+            "read",
+            "demo.toml could not be read.",
+            Diagnostic.Place.cases.repo.make({ path: "demo.toml" }),
+            cause,
+          ),
     },
     {
       name: "SnapshotError",
@@ -155,9 +163,10 @@ it.effect.prop(
           const named = `${name} over a ${id}`;
           const wire = Schema.encodeUnknownSync(Schema.toCodecJson(schema))(error);
 
-          const back = parts(Schema.decodeUnknownSync(Schema.toCodecJson(schema))(wire));
+          const read = Schema.decodeUnknownSync(Schema.toCodecJson(schema))(wire);
+          const back = parts(read);
 
-          expect(back.message, `${named}: the message`).toBe(error.message);
+          expect(read.message, `${named}: the message`).toBe(error.message);
           expect(Redacted.isRedacted(back.cause), `${named}: the cause read back is hidden`).toBe(true);
           expect(
             Redacted.isRedacted(back.cause) ? Redacted.value(back.cause) : "not hidden",

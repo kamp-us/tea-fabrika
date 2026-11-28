@@ -16,6 +16,7 @@
 // Each law is a property over generated inputs; B7 and B11 are scenarios, as the plan says. The files live in
 // MemoryFiles.test-support.ts, which R1 checks against a real temp folder.
 import { describe, expect, it } from "@effect/vitest";
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { Recorder, runsFor } from "@kampus/vitest";
 import {
   Cause,
@@ -37,6 +38,7 @@ import {
 } from "effect";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
+import { fileAt, filePlace } from "./SettingGroup.edit.test-support.ts";
 
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
 
@@ -235,6 +237,9 @@ const start = (group: Group, scene: Scene) => {
 /** What a start left, as plain data: the one error's parts, or `started`. */
 interface Seen {
   readonly reason: string;
+  /** Where the fault is, as data. */
+  readonly place: Diagnostic.Place | undefined;
+  /** The file a person reads in the place, and its line: none for a variable's or a flag's place. */
   readonly file: string | undefined;
   readonly line: number | undefined;
   readonly message: string;
@@ -244,7 +249,7 @@ interface Seen {
 
 const seen = (exit: Exit.Exit<unknown, unknown>): Seen => {
   if (Exit.isSuccess(exit)) {
-    return { reason: "started", file: undefined, line: undefined, message: "", printed: "" };
+    return { reason: "started", place: undefined, file: undefined, line: undefined, message: "", printed: "" };
   }
 
   const errors = exit.cause.reasons.flatMap((reason) => (reason._tag === "Fail" ? [reason.error] : []));
@@ -258,12 +263,12 @@ const seen = (exit: Exit.Exit<unknown, unknown>): Seen => {
   return Schema.is(SettingGroup.SettingsError)(error)
     ? {
         reason: error.reason,
-        file: error.file,
-        line: error.line,
+        place: error.place,
+        ...fileAt(error.place),
         message: error.message,
         printed: [Cause.pretty(exit.cause), error.message, String(error.cause)].join("\n"),
       }
-    : { reason: "not a SettingsError", file: undefined, line: undefined, message: "", printed: "" };
+    : { reason: "not a SettingsError", place: undefined, file: undefined, line: undefined, message: "", printed: "" };
 };
 
 const mustStart = (exit: Exit.Exit<{ values: Record<string, unknown>; origins: Record<string, unknown> }, unknown>) => {
@@ -706,8 +711,7 @@ const faulted = Effect.fnUntraced(function* (given: FaultCase) {
       error,
       want: {
         reason: given.repo === "read" ? "read" : repo.reason,
-        file: repoFile(app).name,
-        line: given.repo === "read" ? undefined : repo.line,
+        place: filePlace("repo", repoFile(app).name, given.repo === "read" ? undefined : repo.line),
       },
     };
   }
@@ -717,13 +721,19 @@ const faulted = Effect.fnUntraced(function* (given: FaultCase) {
       error,
       want: {
         reason: given.user === "read" ? "read" : user.reason,
-        file: userFile(app).name,
-        line: given.user === "read" ? undefined : user.line,
+        place: filePlace("user", userFile(app).name, given.user === "read" ? undefined : user.line),
       },
     };
   }
 
-  return { error, want: { reason: given.env === "missing" ? "missing" : "invalid", file: undefined, line: undefined } };
+  // A required setting nothing sets points at the first file it may be set in, with no line; a refused variable points at the variable.
+  return {
+    error,
+    want:
+      given.env === "missing"
+        ? { reason: "missing", place: filePlace("repo", repoFile(app).name) }
+        : { reason: "invalid", place: Diagnostic.Place.cases.environment.make({ name: variable(app, NET) }) },
+  };
 });
 
 // Plant: check the user configuration before the repo configuration.
@@ -735,16 +745,9 @@ it.effect.prop(
       const { error, want } = yield* faulted(input);
       expect(error.reason).toBe(want.reason);
 
-      if (input.repo !== "none" || input.user !== "none") {
-        expect(error.file).toBe(want.file);
+      expect(error.place, "the place of the first fault").toEqual(want.place);
 
-        if (want.line !== undefined) {
-          expect(error.line).toBe(want.line);
-        }
-      } else {
-        // The environment's fault names the variable, in no file.
-        expect(error.file).not.toBe(repoFile(input.app).name);
-        expect(error.file).not.toBe(userFile(input.app).name);
+      if (input.repo === "none" && input.user === "none") {
         expect(error.message).toContain(variable(input.app, input.env === "missing" ? NEED : NET));
       }
     }),
@@ -1060,6 +1063,9 @@ it.effect.prop(
 
         if (place === "env") {
           expect(error.message).toContain(variable(app, target));
+          expect(error.place, "a refused variable points at the variable").toEqual(
+            Diagnostic.Place.cases.environment.make({ name: variable(app, target) }),
+          );
         } else {
           expect(error.file).toBe((place === "repo" ? repoFile(app) : userFile(app)).name);
           expect(error.line).toBe(pad + 2);
@@ -1086,6 +1092,9 @@ it.effect(
       const absent = yield* start(both, { disk: { files: {} } });
       const lacking = seen(absent.exit);
       expect(lacking.reason).toBe("missing");
+      expect(lacking.place, "a required setting nothing sets points at its first file, with no line").toEqual(
+        filePlace("repo", repoFile(app).name),
+      );
       expect(lacking.message).toContain(named(entry));
       expect(lacking.message).toContain(variable(app, entry));
       expect(namesRepo(lacking.message, app)).toBe(true);
@@ -1094,6 +1103,7 @@ it.effect(
       // A setting that only the user file may set names no repo file.
       const lackingUser = seen((yield* start(onlyUser, { disk: { files: {} } })).exit);
       expect(lackingUser.reason).toBe("missing");
+      expect(lackingUser.place, "its first file is the user file").toEqual(filePlace("user", userFile(app).name));
       expect(lackingUser.message).toContain(userFile(app).name);
       expect(namesRepo(lackingUser.message, app)).toBe(false);
 

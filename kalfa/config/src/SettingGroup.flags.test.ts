@@ -17,6 +17,7 @@
 // Every law is a property over generated inputs, in memory; F10 is a scenario, as the plan says. The files live in
 // MemoryFiles.test-support.ts. F4 runs Effect's own parser, `Command.runWith`, on the in-memory services its doc names.
 import { describe, expect, it } from "@effect/vitest";
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 import { runsFor } from "@kampus/vitest";
 import {
   Cause,
@@ -40,6 +41,7 @@ import * as CommandSpec from "effect/cli/CommandSpec";
 import { ChildProcessSpawner } from "effect/process";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
+import { fileAt } from "./SettingGroup.edit.test-support.ts";
 
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
 
@@ -273,6 +275,9 @@ const startFromArguments = (group: Group, scene: Scene, args: ReadonlyArray<stri
 /** What a start left, as plain data: the one error's parts, or `started`. */
 interface Seen {
   readonly reason: string;
+  /** Where the fault is, as data. */
+  readonly place: Diagnostic.Place | undefined;
+  /** The file a person reads in the place, and its line: none for a variable's or a flag's place. */
   readonly file: string | undefined;
   readonly line: number | undefined;
   readonly message: string;
@@ -282,7 +287,7 @@ interface Seen {
 
 const seen = (exit: Exit.Exit<unknown, unknown>): Seen => {
   if (Exit.isSuccess(exit)) {
-    return { reason: "started", file: undefined, line: undefined, message: "", printed: "" };
+    return { reason: "started", place: undefined, file: undefined, line: undefined, message: "", printed: "" };
   }
 
   const errors = exit.cause.reasons.flatMap((reason) => (reason._tag === "Fail" ? [reason.error] : []));
@@ -296,12 +301,12 @@ const seen = (exit: Exit.Exit<unknown, unknown>): Seen => {
   return Schema.is(SettingGroup.SettingsError)(error)
     ? {
         reason: error.reason,
-        file: error.file,
-        line: error.line,
+        place: error.place,
+        ...fileAt(error.place),
         message: error.message,
         printed: [Cause.pretty(exit.cause), error.message, String(error.cause)].join("\n"),
       }
-    : { reason: "not a SettingsError", file: undefined, line: undefined, message: "", printed: "" };
+    : { reason: "not a SettingsError", place: undefined, file: undefined, line: undefined, message: "", printed: "" };
 };
 
 const mustStart = (exit: Exit.Exit<Loaded, unknown>): Loaded => {
@@ -765,8 +770,9 @@ it.effect.prop(
 
         const error = seen(exit);
         expect(error.reason, refused.kind).toBe("invalid");
-        expect(error.file).toBeUndefined();
-        expect(error.line).toBeUndefined();
+        expect(error.place, "a refused flag is the place").toEqual(
+          Diagnostic.Place.cases.flag.make({ name: `--${name}` }),
+        );
         expect(mentions(error.message, `--${name}`), error.message).toBe(true);
         expect(error.message.endsWith(`${app} did not start.`)).toBe(true);
       }
@@ -1041,8 +1047,9 @@ it.effect.prop(
       const given = seen((yield* start(group, { disk, env, flags: { ...other, [name]: Option.some(flagText) } })).exit);
 
       expect(given.reason).toBe("scope");
-      expect(given.file).toBeUndefined();
-      expect(given.line).toBeUndefined();
+      expect(given.place, "a flag handed for a file-only setting is the place").toEqual(
+        Diagnostic.Place.cases.flag.make({ name: `--${name}` }),
+      );
       expect(mentions(given.message, `--${name}`), given.message).toBe(true);
       expect(given.message.includes(variable(app, target))).toBe(false);
       expect(given.message.endsWith(`${app} did not start.`)).toBe(true);
